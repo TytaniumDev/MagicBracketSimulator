@@ -1,0 +1,1193 @@
+Language 'en-US' loaded successfully.
+(ThreadUtil first call): Running on a machine with 16 cpu core(s)
+Read cards: 32039 archived files in 0 ms (25 parts) using thread pool
+Upcoming set Marvel Super Heroes (MSH) dated in the future. All `upcoming` cards will be added to this set with unknown rarity.
+The card A-Baba Lysaga, Night Witch was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Divide by Zero was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Esika's Chariot was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Faceless Haven was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Fires of Invention was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Goldspan Dragon was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Hullbreaker Horror was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Kumano Faces Kakkazan was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Luminarch Aspirant was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Monster Manual was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-The Meathook Massacre was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Blinding Radiance was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Goblin Bruiser was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Ogre Painbringer was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Titanic Pelagosaur was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Treetop Recluse was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+Upcoming set Marvel Super Heroes (MSH) dated in the future. All `upcoming` cards will be added to this set with unknown rarity.
+Read cards: 789 files in 0 ms (7 parts) using thread pool
+Simulation mode
+An unsupported card was requested: "Catapult Fodder // Catapult Captain" from "VOW". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Revitalizing Repast // Old-Growth Grove" from "MH3". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Catapult Fodder // Catapult Captain" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Revitalizing Repast // Old-Growth Grove" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+Ai(1)-Doran Big Butts vs Ai(2)-Blood Rites vs Ai(3)-Explorers of the Deep vs Ai(4)-Draconic Dissent - one game of Commander
+Overriding AI confirmAction decision for ChangeZoneToAltDestination, defaulting to true.
+Overriding AI confirmAction decision for ChangeZoneToAltDestination, defaulting to true.
+Overriding AI confirmAction decision for ChangeZoneToAltDestination, defaulting to true.
+AI Attack declaration invalid, defaulting to: {Mist Dancer (418)=Ai(4)-Draconic Dissent, Mist Dancer (419)=Ai(1)-Doran Big Butts}
+AI Attack declaration invalid, defaulting to: {Merfolk Mistbinder (288)=Ai(1)-Doran Big Butts}
+Overriding AI confirmAction decision for ChangeZoneToAltDestination, defaulting to true.
+Default player choice logic.
+Default player choice logic.
+Mulligan: Ai(4)-Draconic Dissent has kept a hand of 7 cards
+Mulligan: Ai(1)-Doran Big Butts has kept a hand of 7 cards
+Mulligan: Ai(2)-Blood Rites has kept a hand of 7 cards
+Mulligan: Ai(3)-Explorers of the Deep has kept a hand of 7 cards
+Turn: Turn 1 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Land: Ai(4)-Draconic Dissent played Island (326)
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Mana: Island (326) - {T}: Add {U}.
+Add to stack: Ai(4)-Draconic Dissent cast Sol Ring (350)
+Resolve stack: Sol Ring
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 2 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Replacement Effect: As Fortified Village enters, you may reveal a Forest or Plains card from your hand. If you don't, Fortified Village enters tapped.
+Land: Ai(1)-Doran Big Butts played Fortified Village (72)
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 3 (Ai(2)-Blood Rites)
+Phase: Ai(2)-Blood Rites' Untap step
+Phase: Ai(2)-Blood Rites' Upkeep step
+Phase: Ai(2)-Blood Rites' Draw step
+Phase: Ai(2)-Blood Rites' Main phase, precombat
+Replacement Effect: Isolated Chapel enters tapped unless you control a Plains or a Swamp.
+Land: Ai(2)-Blood Rites played Isolated Chapel (127)
+Phase: Ai(2)-Blood Rites' Beginning of Combat Step
+Phase: Ai(2)-Blood Rites' Declare Attackers Step
+Phase: Ai(2)-Blood Rites' Declare Blockers Step
+Phase: Ai(2)-Blood Rites' First Strike Damage Step
+Phase: Ai(2)-Blood Rites' Combat Damage Step
+Phase: Ai(2)-Blood Rites' End of Combat Step
+Phase: Ai(2)-Blood Rites' Main phase, postcombat
+Phase: Ai(2)-Blood Rites' End step
+Phase: Ai(2)-Blood Rites' Cleanup step
+Turn: Turn 4 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Replacement Effect: Hinterland Harbor enters tapped unless you control a Forest or an Island.
+Land: Ai(3)-Explorers of the Deep played Hinterland Harbor (220)
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 5 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Land: Ai(4)-Draconic Dissent played Mountain (370)
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Mana: Island (326) - {T}: Add {U}.
+Add to stack: Ai(4)-Draconic Dissent cast The Akroan War (306)
+Replacement Effect: The Akroan War enters with a lore counter on it.
+Resolve stack: The Akroan War
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 6 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Land: Ai(1)-Doran Big Butts played Swamp (87)
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Mana: Swamp (87) - {T}: Add {B}.
+Add to stack: Ai(1)-Doran Big Butts cast Nyx-Fleece Ram (6)
+Resolve stack: Nyx-Fleece Ram - Creature 0 / 5
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 7 (Ai(2)-Blood Rites)
+Phase: Ai(2)-Blood Rites' Untap step
+Phase: Ai(2)-Blood Rites' Upkeep step
+Phase: Ai(2)-Blood Rites' Draw step
+Phase: Ai(2)-Blood Rites' Main phase, precombat
+Land: Ai(2)-Blood Rites played Swamp (158)
+Phase: Ai(2)-Blood Rites' Beginning of Combat Step
+Phase: Ai(2)-Blood Rites' Declare Attackers Step
+Phase: Ai(2)-Blood Rites' Declare Blockers Step
+Phase: Ai(2)-Blood Rites' First Strike Damage Step
+Phase: Ai(2)-Blood Rites' Combat Damage Step
+Phase: Ai(2)-Blood Rites' End of Combat Step
+Phase: Ai(2)-Blood Rites' Main phase, postcombat
+Mana: Isolated Chapel (127) - {T}: Add {W} or {B}.
+Mana: Swamp (158) - {T}: Add {B}.
+Add to stack: Ai(2)-Blood Rites cast Oathsworn Vampire (193)
+Replacement Effect: Oathsworn Vampire enters tapped.
+Resolve stack: Oathsworn Vampire - Creature 2 / 2
+Phase: Ai(2)-Blood Rites' End step
+Phase: Ai(2)-Blood Rites' Cleanup step
+Turn: Turn 8 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Replacement Effect: Mosswort Bridge enters tapped.
+Land: Ai(3)-Explorers of the Deep played Mosswort Bridge (299)
+Add to stack: Ai(3)-Explorers of the Deep triggered Mosswort Bridge (299)
+Resolve stack: Hideaway 4 (When this permanent enters, look at the top four cards of your library, exile one face down, then put the rest on the bottom of your library.) [Zone Changer: Mosswort Bridge (299)]
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 9 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Add to stack: Ai(4)-Draconic Dissent triggered The Akroan War (306)
+Resolve stack: II — Until your next turn, creatures your opponents control attack each combat if able. [Added once: The Akroan War (306)]
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Island (326) - {T}: Add {U}.
+Add to stack: Ai(4)-Draconic Dissent cast Sprite Dragon (375)
+Resolve stack: Sprite Dragon - Creature 1 / 1
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Combat: Ai(4)-Draconic Dissent assigned Sprite Dragon (375) to attack Ai(3)-Explorers of the Deep.
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Combat: Ai(3)-Explorers of the Deep didn't block Sprite Dragon (375).
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Damage: Sprite Dragon (375) deals 1 combat damage to Ai(3)-Explorers of the Deep.
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Replacement Effect: Myriad Landscape enters tapped.
+Land: Ai(4)-Draconic Dissent played Myriad Landscape (386)
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 10 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Land: Ai(1)-Doran Big Butts played Reliquary Tower (68)
+Mana: Swamp (87) - {T}: Add {B}.
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Mana: Reliquary Tower (68) - {T}: Add {C}.
+Add to stack: Ai(1)-Doran Big Butts cast Anguished Unmaking (28) targeting [The Akroan War (306)]
+Resolve stack: Anguished Unmaking (28) - Exile The Akroan War (306). Ai(1)-Doran Big Butts loses 3 life.
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Combat: Ai(1)-Doran Big Butts assigned Nyx-Fleece Ram (6) to attack Ai(2)-Blood Rites.
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Combat: Ai(2)-Blood Rites didn't block Nyx-Fleece Ram (6).
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 11 (Ai(2)-Blood Rites)
+Phase: Ai(2)-Blood Rites' Untap step
+Phase: Ai(2)-Blood Rites' Upkeep step
+Phase: Ai(2)-Blood Rites' Draw step
+Phase: Ai(2)-Blood Rites' Main phase, precombat
+Land: Ai(2)-Blood Rites played Plains (121)
+Mana: Swamp (158) - {T}: Add {B}.
+Mana: Isolated Chapel (127) - {T}: Add {W} or {B}.
+Mana: Plains (121) - {T}: Add {W}.
+Add to stack: Ai(2)-Blood Rites cast Clavileño, First of the Blessed (199)
+Resolve stack: Clavileño, First of the Blessed - Creature 2 / 2
+Phase: Ai(2)-Blood Rites' Beginning of Combat Step
+Phase: Ai(2)-Blood Rites' Declare Attackers Step
+Combat: Ai(2)-Blood Rites assigned Oathsworn Vampire (193) to attack Ai(1)-Doran Big Butts.
+Add to stack: Ai(2)-Blood Rites triggered Clavileño, First of the Blessed (199) targeting [Oathsworn Vampire (193)]
+Resolve stack: Whenever you attack, target attacking Vampire that isn't a Demon becomes a Demon in addition to its other types. It gains "When this creature dies, draw a card and create a tapped 4/3 white and black Vampire Demon creature token with flying." (Targeting: [[Oathsworn Vampire (193)]]) [Number Attackers: [Oathsworn Vampire (193)]]
+Phase: Ai(2)-Blood Rites' Declare Blockers Step
+Combat: Ai(1)-Doran Big Butts didn't block Oathsworn Vampire (193).
+Phase: Ai(2)-Blood Rites' First Strike Damage Step
+Phase: Ai(2)-Blood Rites' Combat Damage Step
+Damage: Oathsworn Vampire (193) deals 2 combat damage to Ai(1)-Doran Big Butts.
+Phase: Ai(2)-Blood Rites' End of Combat Step
+Phase: Ai(2)-Blood Rites' Main phase, postcombat
+Phase: Ai(2)-Blood Rites' End step
+Phase: Ai(2)-Blood Rites' Cleanup step
+Turn: Turn 12 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Land: Ai(3)-Explorers of the Deep played Island (268)
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Mana: Island (268) - {T}: Add {U}.
+Mana: Mosswort Bridge (299) - {T}: Add {G}.
+Add to stack: Ai(3)-Explorers of the Deep cast Sage of Fables (295)
+Resolve stack: Sage of Fables - Creature 2 / 2
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 13 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Add to stack: Ai(4)-Draconic Dissent activated Myriad Landscape (386)
+Resolve stack: Myriad Landscape (386) - Ai(4)-Draconic Dissent searches their library for  up to two basic land cards, puts them onto the battlefield tapped, then shuffles.
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Combat: Ai(4)-Draconic Dissent assigned Sprite Dragon (375) to attack Ai(1)-Doran Big Butts.
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Combat: Ai(1)-Doran Big Butts didn't block Sprite Dragon (375).
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Damage: Sprite Dragon (375) deals 1 combat damage to Ai(1)-Doran Big Butts.
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Land: Ai(4)-Draconic Dissent played Island (330)
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 14 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Land: Ai(1)-Doran Big Butts played Plains (12)
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Mana: Reliquary Tower (68) - {T}: Add {C}.
+Mana: Swamp (87) - {T}: Add {B}.
+Mana: Plains (12) - {T}: Add {W}.
+Add to stack: Ai(1)-Doran Big Butts cast Gorm the Great (31)
+Resolve stack: Gorm the Great - Creature 2 / 7
+Add to stack: Ai(1)-Doran Big Butts triggered Gorm the Great (31) targeting [Ai(1)-Doran Big Butts]
+Resolve stack: Partner with Virtus the Veiled (When this creature enters, target player may put Virtus the Veiled into their hand from their library, then shuffle.) (Targeting: [[Ai(1)-Doran Big Butts]]) [Zone Changer: Gorm the Great (31)]
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 15 (Ai(2)-Blood Rites)
+Phase: Ai(2)-Blood Rites' Untap step
+Phase: Ai(2)-Blood Rites' Upkeep step
+Phase: Ai(2)-Blood Rites' Draw step
+Phase: Ai(2)-Blood Rites' Main phase, precombat
+Mana: Swamp (158) - {T}: Add {B}.
+Mana: Isolated Chapel (127) - {T}: Add {W} or {B}.
+Mana: Plains (121) - {T}: Add {W}.
+Add to stack: Ai(2)-Blood Rites cast Yahenni, Undying Partisan (140)
+Resolve stack: Yahenni, Undying Partisan - Creature 2 / 2
+Phase: Ai(2)-Blood Rites' Beginning of Combat Step
+Phase: Ai(2)-Blood Rites' Declare Attackers Step
+Combat: Ai(2)-Blood Rites assigned Oathsworn Vampire (193), Clavileño, First of the Blessed (199) and Yahenni, Undying Partisan (140) to attack Ai(4)-Draconic Dissent.
+Add to stack: Ai(2)-Blood Rites triggered Clavileño, First of the Blessed (199) targeting [Clavileño, First of the Blessed (199)]
+Resolve stack: Whenever you attack, target attacking Vampire that isn't a Demon becomes a Demon in addition to its other types. It gains "When this creature dies, draw a card and create a tapped 4/3 white and black Vampire Demon creature token with flying." (Targeting: [[Clavileño, First of the Blessed (199)]]) [Number Attackers: [Oathsworn Vampire (193), Clavileño, First of the Blessed (199), Yahenni, Undying Partisan (140)]]
+Phase: Ai(2)-Blood Rites' Declare Blockers Step
+Combat: Ai(4)-Draconic Dissent didn't block Oathsworn Vampire (193).
+Ai(4)-Draconic Dissent didn't block Clavileño, First of the Blessed (199).
+Ai(4)-Draconic Dissent didn't block Yahenni, Undying Partisan (140).
+Phase: Ai(2)-Blood Rites' First Strike Damage Step
+Phase: Ai(2)-Blood Rites' Combat Damage Step
+Damage: Oathsworn Vampire (193) deals 2 combat damage to Ai(4)-Draconic Dissent.
+Damage: Clavileño, First of the Blessed (199) deals 2 combat damage to Ai(4)-Draconic Dissent.
+Damage: Yahenni, Undying Partisan (140) deals 2 combat damage to Ai(4)-Draconic Dissent.
+Phase: Ai(2)-Blood Rites' End of Combat Step
+Phase: Ai(2)-Blood Rites' Main phase, postcombat
+Phase: Ai(2)-Blood Rites' End step
+Phase: Ai(2)-Blood Rites' Cleanup step
+Turn: Turn 16 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Replacement Effect: As Secluded Courtyard enters, choose a creature type.
+Land: Ai(3)-Explorers of the Deep played Secluded Courtyard (274)
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Combat: Ai(3)-Explorers of the Deep assigned Sage of Fables (295) to attack Ai(2)-Blood Rites.
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Combat: Ai(2)-Blood Rites didn't block Sage of Fables (295).
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Damage: Sage of Fables (295) deals 2 combat damage to Ai(2)-Blood Rites.
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Mana: Island (268) - {T}: Add {U}.
+Mana: Mosswort Bridge (299) - {T}: Add {G}.
+Mana: Secluded Courtyard (274) - {T}: Add {C}.
+Add to stack: Ai(3)-Explorers of the Deep cast Hakbal of the Surging Soul (300)
+Resolve stack: Hakbal of the Surging Soul - Creature 3 / 3
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 17 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Land: Ai(4)-Draconic Dissent played Terrain Generator (352)
+Mana: Island (326) - {T}: Add {U}.
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Mana: Terrain Generator (352) - {T}: Add {C}.
+Add to stack: Ai(4)-Draconic Dissent cast Firkraag, Cunning Instigator (401)
+Resolve stack: Firkraag, Cunning Instigator - Creature 3 / 3
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Combat: Ai(4)-Draconic Dissent assigned Firkraag, Cunning Instigator (401) and Sprite Dragon (375) to attack Ai(2)-Blood Rites.
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401) targeting [Yahenni, Undying Partisan (140)]
+Resolve stack: Whenever one or more Dragons you control attack an opponent, goad target creature that player controls. (Targeting: [[Yahenni, Undying Partisan (140)]]) [Number Attackers: [Firkraag, Cunning Instigator (401), Sprite Dragon (375)]]
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Combat: Ai(2)-Blood Rites didn't block Firkraag, Cunning Instigator (401).
+Ai(2)-Blood Rites didn't block Sprite Dragon (375).
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Damage: Firkraag, Cunning Instigator (401) deals 3 combat damage to Ai(2)-Blood Rites.
+Damage: Sprite Dragon (375) deals 1 combat damage to Ai(2)-Blood Rites.
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 18 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Land: Ai(1)-Doran Big Butts played Forest (41)
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Mana: Swamp (87) - {T}: Add {B}.
+Mana: Reliquary Tower (68) - {T}: Add {C}.
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Mana: Forest (41) - {T}: Add {G}.
+Add to stack: Ai(1)-Doran Big Butts cast Tree of Perdition (95)
+Resolve stack: Tree of Perdition - Creature 0 / 13
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 19 (Ai(2)-Blood Rites)
+Phase: Ai(2)-Blood Rites' Untap step
+Phase: Ai(2)-Blood Rites' Upkeep step
+Phase: Ai(2)-Blood Rites' Draw step
+Phase: Ai(2)-Blood Rites' Main phase, precombat
+Replacement Effect: As Shineshadow Snarl enters, you may reveal a Plains or Swamp card from your hand. If you don't, Shineshadow Snarl enters tapped.
+Land: Ai(2)-Blood Rites played Shineshadow Snarl (183)
+Phase: Ai(2)-Blood Rites' Beginning of Combat Step
+Phase: Ai(2)-Blood Rites' Declare Attackers Step
+Combat: Ai(2)-Blood Rites assigned Yahenni, Undying Partisan (140) to attack Ai(1)-Doran Big Butts.
+Add to stack: Ai(2)-Blood Rites triggered Clavileño, First of the Blessed (199) targeting [Yahenni, Undying Partisan (140)]
+Resolve stack: Whenever you attack, target attacking Vampire that isn't a Demon becomes a Demon in addition to its other types. It gains "When this creature dies, draw a card and create a tapped 4/3 white and black Vampire Demon creature token with flying." (Targeting: [[Yahenni, Undying Partisan (140)]]) [Number Attackers: [Yahenni, Undying Partisan (140)]]
+Phase: Ai(2)-Blood Rites' Declare Blockers Step
+Combat: Ai(1)-Doran Big Butts assigned Gorm the Great (31) to block Yahenni, Undying Partisan (140).
+Add to stack: Ai(2)-Blood Rites activated Yahenni, Undying Partisan (140)
+Add to stack: Ai(2)-Blood Rites triggered Oathsworn Vampire (193)
+Resolve stack: When this creature dies, draw a card and create a tapped 4/3 white and black Vampire Demon creature token with flying. [Zone Changer: Oathsworn Vampire (193)]
+Resolve stack: Yahenni, Undying Partisan (140) - Yahenni, Undying Partisan (140) gains indestructible until end of turn.
+Phase: Ai(2)-Blood Rites' First Strike Damage Step
+Phase: Ai(2)-Blood Rites' Combat Damage Step
+Damage: Yahenni, Undying Partisan (140) deals 2 damage to Gorm the Great (31).
+Damage: Gorm the Great (31) deals 2 damage to Yahenni, Undying Partisan (140).
+Phase: Ai(2)-Blood Rites' End of Combat Step
+Phase: Ai(2)-Blood Rites' Main phase, postcombat
+Mana: Swamp (158) - {T}: Add {B}.
+Mana: Isolated Chapel (127) - {T}: Add {W} or {B}.
+Add to stack: Ai(2)-Blood Rites cast Mind Stone (107)
+Resolve stack: Mind Stone
+Phase: Ai(2)-Blood Rites' End step
+Phase: Ai(2)-Blood Rites' Cleanup step
+Turn: Turn 20 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Land: Ai(3)-Explorers of the Deep played Forest (287)
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Resolve stack: At the beginning of combat on your turn, each Merfolk creature you control explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on the exploring creature, then put the card back or put it into your graveyard.) [Phase: Ai(3)-Explorers of the Deep]
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Combat: Ai(3)-Explorers of the Deep assigned Hakbal of the Surging Soul (300) and Sage of Fables (295) to attack Ai(4)-Draconic Dissent.
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Resolve stack: Whenever Hakbal of the Surging Soul attacks, you may put a land card from your hand onto the battlefield. If you don't, draw a card. [Attacker: Hakbal of the Surging Soul (300)]
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Combat: Ai(4)-Draconic Dissent didn't block Sage of Fables (295).
+Ai(4)-Draconic Dissent didn't block Hakbal of the Surging Soul (300).
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Damage: Hakbal of the Surging Soul (300) deals 4 combat damage to Ai(4)-Draconic Dissent.
+Damage: Sage of Fables (295) deals 3 combat damage to Ai(4)-Draconic Dissent.
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Mana: Island (268) - {T}: Add {U}.
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Mana: Forest (287) - {T}: Add {G}.
+Mana: Mosswort Bridge (299) - {T}: Add {G}.
+Mana: Forest (283) - {T}: Add {G}.
+Add to stack: Ai(3)-Explorers of the Deep cast Mist Dancer (217)
+Replacement Effect: Each other Wizard creature you control enters with an additional +1/+1 counter on it.
+Resolve stack: Mist Dancer - Creature 3 / 3
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 21 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Add to stack: Ai(4)-Draconic Dissent activated Terrain Generator (352)
+Resolve stack: Terrain Generator (352) - Ai(4)-Draconic Dissent puts a Land.Basic+YouCtrl card from their hand onto the battlefield tapped.
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Land: Ai(4)-Draconic Dissent played Island (323)
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Mountain (369) - {T}: Add {R}.
+Mana: Island (326) - {T}: Add {U}.
+Mana: Island (330) - {T}: Add {U}.
+Mana: Island (323) - {T}: Add {U}.
+Mana: Mountain (366) - {T}: Add {R}.
+Add to stack: Ai(4)-Draconic Dissent cast Warmonger Hellkite (337)
+Resolve stack: Warmonger Hellkite - Creature 5 / 5
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 22 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Land: Ai(1)-Doran Big Butts played Plains (16)
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Combat: Ai(1)-Doran Big Butts assigned Gorm the Great (31) and Nyx-Fleece Ram (6) to attack Ai(4)-Draconic Dissent.
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Combat: Ai(4)-Draconic Dissent didn't block Nyx-Fleece Ram (6).
+Ai(4)-Draconic Dissent assigned Firkraag, Cunning Instigator (401) and Warmonger Hellkite (337) to block Gorm the Great (31).
+Add to stack: Ai(1)-Doran Big Butts activated Tree of Perdition (95) targeting [Ai(2)-Blood Rites]
+Resolve stack: Tree of Perdition (95) - Exchange Ai(2)-Blood Rites's life total with Tree of Perdition's toughness.
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Damage: Gorm the Great (31) deals 2 damage to Warmonger Hellkite (337).
+Damage: Firkraag, Cunning Instigator (401) deals 3 damage to Gorm the Great (31).
+Damage: Warmonger Hellkite (337) deals 5 damage to Gorm the Great (31).
+Add to stack: Ai(2)-Blood Rites triggered Yahenni, Undying Partisan (140)
+Resolve stack: Whenever a creature an opponent controls dies, put a +1/+1 counter on Yahenni, Undying Partisan. [Zone Changer: Gorm the Great (31)]
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Mana: Plains (12) - {T}: Add {W}.
+Mana: Reliquary Tower (68) - {T}: Add {C}.
+Mana: Swamp (87) - {T}: Add {B}.
+Add to stack: Ai(1)-Doran Big Butts cast Moonlit Lamenter (82)
+Replacement Effect: Moonlit Lamenter enters with a -1/-1 counter on it.
+Resolve stack: Moonlit Lamenter - Creature 2 / 5
+Mana: Forest (41) - {T}: Add {G}.
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Mana: Plains (16) - {T}: Add {W}.
+Add to stack: Ai(1)-Doran Big Butts cast Abzan Beastmaster (56)
+Resolve stack: Abzan Beastmaster - Creature 2 / 1
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 23 (Ai(2)-Blood Rites)
+Phase: Ai(2)-Blood Rites' Untap step
+Phase: Ai(2)-Blood Rites' Upkeep step
+Phase: Ai(2)-Blood Rites' Draw step
+Phase: Ai(2)-Blood Rites' Main phase, precombat
+Land: Ai(2)-Blood Rites played Plains (126)
+Phase: Ai(2)-Blood Rites' Beginning of Combat Step
+Phase: Ai(2)-Blood Rites' Declare Attackers Step
+Combat: Ai(2)-Blood Rites assigned Vampire Demon Token (406), Yahenni, Undying Partisan (140) and Clavileño, First of the Blessed (199) to attack Ai(4)-Draconic Dissent.
+Phase: Ai(2)-Blood Rites' Declare Blockers Step
+Combat: Ai(4)-Draconic Dissent assigned Warmonger Hellkite (337) to block Vampire Demon Token (406).
+Ai(4)-Draconic Dissent assigned Firkraag, Cunning Instigator (401) to block Clavileño, First of the Blessed (199).
+Ai(4)-Draconic Dissent didn't block Yahenni, Undying Partisan (140).
+Phase: Ai(2)-Blood Rites' First Strike Damage Step
+Phase: Ai(2)-Blood Rites' Combat Damage Step
+Damage: Vampire Demon Token (406) deals 4 damage to Warmonger Hellkite (337).
+Damage: Yahenni, Undying Partisan (140) deals 3 combat damage to Ai(4)-Draconic Dissent.
+Damage: Clavileño, First of the Blessed (199) deals 2 damage to Firkraag, Cunning Instigator (401).
+Damage: Warmonger Hellkite (337) deals 5 damage to Vampire Demon Token (406).
+Damage: Firkraag, Cunning Instigator (401) deals 3 damage to Clavileño, First of the Blessed (199).
+Add to stack: Ai(2)-Blood Rites triggered Clavileño, First of the Blessed (199)
+Resolve stack: When this creature dies, draw a card and create a tapped 4/3 white and black Vampire Demon creature token with flying. [Zone Changer: Clavileño, First of the Blessed (199)]
+Phase: Ai(2)-Blood Rites' End of Combat Step
+Phase: Ai(2)-Blood Rites' Main phase, postcombat
+Mana: Swamp (158) - {T}: Add {B}.
+Mana: Isolated Chapel (127) - {T}: Add {W} or {B}.
+Mana: Plains (121) - {T}: Add {W}.
+Mana: Mind Stone (107) - {T}: Add {C}.
+Mana: Plains (126) - {T}: Add {W}.
+Mana: Shineshadow Snarl (183) - {T}: Add {W} or {B}.
+Add to stack: Ai(2)-Blood Rites cast Crossway Troublemakers (104)
+Resolve stack: Crossway Troublemakers - Creature 5 / 5
+Phase: Ai(2)-Blood Rites' End step
+Phase: Ai(2)-Blood Rites' Cleanup step
+Turn: Turn 24 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Mana: Forest (287) - {T}: Add {G}.
+Add to stack: Ai(3)-Explorers of the Deep activated Mosswort Bridge (299)
+Add to stack: Ai(3)-Explorers of the Deep cast Reflections of Littjara (238)
+Resolve stack: Mosswort Bridge (299) - Ai(3)-Explorers of the Deep may play Reflections of Littjara (238) without paying its mana cost.
+Replacement Effect: As Reflections of Littjara enters, choose a creature type.
+Resolve stack: Reflections of Littjara
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Land: Ai(3)-Explorers of the Deep played Island (262)
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Resolve stack: At the beginning of combat on your turn, each Merfolk creature you control explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on the exploring creature, then put the card back or put it into your graveyard.) [Phase: Ai(3)-Explorers of the Deep]
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Combat: Ai(3)-Explorers of the Deep assigned Hakbal of the Surging Soul (300), Sage of Fables (295) and Mist Dancer (217) to attack Ai(2)-Blood Rites.
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Resolve stack: Whenever Hakbal of the Surging Soul attacks, you may put a land card from your hand onto the battlefield. If you don't, draw a card. [Attacker: Hakbal of the Surging Soul (300)]
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Combat: Ai(2)-Blood Rites didn't block Sage of Fables (295).
+Ai(2)-Blood Rites didn't block Mist Dancer (217).
+Ai(2)-Blood Rites didn't block Hakbal of the Surging Soul (300).
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Damage: Hakbal of the Surging Soul (300) deals 6 combat damage to Ai(2)-Blood Rites.
+Damage: Sage of Fables (295) deals 5 combat damage to Ai(2)-Blood Rites.
+Damage: Mist Dancer (217) deals 5 combat damage to Ai(2)-Blood Rites.
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401)
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401)
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401)
+Resolve stack: Whenever a creature deals combat damage to one of your opponents, if that creature had to attack this combat, you put a +1/+1 counter on Firkraag, Cunning Instigator and you draw a card. [Damage Source: Mist Dancer (217), Damaged: Ai(2)-Blood Rites, Amount: 5]
+Resolve stack: Whenever a creature deals combat damage to one of your opponents, if that creature had to attack this combat, you put a +1/+1 counter on Firkraag, Cunning Instigator and you draw a card. [Damage Source: Sage of Fables (295), Damaged: Ai(2)-Blood Rites, Amount: 5]
+Resolve stack: Whenever a creature deals combat damage to one of your opponents, if that creature had to attack this combat, you put a +1/+1 counter on Firkraag, Cunning Instigator and you draw a card. [Damage Source: Hakbal of the Surging Soul (300), Damaged: Ai(2)-Blood Rites, Amount: 6]
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Mana: Forest (283) - {T}: Add {G}.
+Mana: Island (268) - {T}: Add {U}.
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Add to stack: Ai(3)-Explorers of the Deep cast Branching Evolution (212)
+Resolve stack: Branching Evolution
+Mana: Secluded Courtyard (274) - {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature or creature card of the chosen type.
+Mana: Island (262) - {T}: Add {U}.
+Add to stack: Ai(3)-Explorers of the Deep cast Merfolk Mistbinder (288)
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Merfolk Mistbinder (288), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Merfolk Mistbinder - Creature 2 / 2]
+Add to stack: Ai(3)-Explorers of the Deep cast Merfolk Mistbinder (409)
+Resolve stack: Merfolk Mistbinder - Creature 2 / 2
+Resolve stack: Merfolk Mistbinder - Creature 2 / 2
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 25 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Land: Ai(4)-Draconic Dissent played Kher Keep (354)
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Combat: Ai(4)-Draconic Dissent assigned Firkraag, Cunning Instigator (401), Warmonger Hellkite (337) and Sprite Dragon (375) to attack Ai(3)-Explorers of the Deep.
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401) targeting [Hakbal of the Surging Soul (300)]
+Resolve stack: Whenever one or more Dragons you control attack an opponent, goad target creature that player controls. (Targeting: [[Hakbal of the Surging Soul (300)]]) [Number Attackers: [Firkraag, Cunning Instigator (401), Warmonger Hellkite (337), Sprite Dragon (375)]]
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Combat: Ai(3)-Explorers of the Deep didn't block Firkraag, Cunning Instigator (401).
+Ai(3)-Explorers of the Deep didn't block Warmonger Hellkite (337).
+Ai(3)-Explorers of the Deep assigned Merfolk Mistbinder (409) to block Sprite Dragon (375).
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Damage: Firkraag, Cunning Instigator (401) deals 6 combat damage to Ai(3)-Explorers of the Deep.
+Damage: Warmonger Hellkite (337) deals 5 combat damage to Ai(3)-Explorers of the Deep.
+Damage: Sprite Dragon (375) deals 1 damage to Merfolk Mistbinder (409).
+Damage: Merfolk Mistbinder (409) deals 4 damage to Sprite Dragon (375).
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401)
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401)
+Resolve stack: Whenever a creature deals combat damage to one of your opponents, if that creature had to attack this combat, you put a +1/+1 counter on Firkraag, Cunning Instigator and you draw a card. [Damage Source: Warmonger Hellkite (337), Damaged: Ai(3)-Explorers of the Deep, Amount: 5]
+Resolve stack: Whenever a creature deals combat damage to one of your opponents, if that creature had to attack this combat, you put a +1/+1 counter on Firkraag, Cunning Instigator and you draw a card. [Damage Source: Firkraag, Cunning Instigator (401), Damaged: Ai(3)-Explorers of the Deep, Amount: 6]
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Mountain (369) - {T}: Add {R}.
+Mana: Mountain (366) - {T}: Add {R}.
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Mana: Island (326) - {T}: Add {U}.
+Mana: Terrain Generator (352) - {T}: Add {C}.
+Add to stack: Ai(4)-Draconic Dissent cast Drakuseth, Maw of Flames (317)
+Resolve stack: Drakuseth, Maw of Flames - Creature 7 / 7
+Mana: Island (330) - {T}: Add {U}.
+Mana: Island (322) - {T}: Add {U}.
+Mana: Kher Keep (354) - {T}: Add {C}.
+Mana: Island (323) - {T}: Add {U}.
+Add to stack: Ai(4)-Draconic Dissent cast Dissipation Field (395)
+Resolve stack: Dissipation Field
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 26 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Add to stack: Ai(1)-Doran Big Butts triggered Abzan Beastmaster (56)
+Resolve stack: At the beginning of your upkeep, draw a card if you control the creature with the greatest toughness or tied for the greatest toughness. [Phase: Ai(1)-Doran Big Butts]
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Replacement Effect: Isolated Chapel enters tapped unless you control a Plains or a Swamp.
+Land: Ai(1)-Doran Big Butts played Isolated Chapel (62)
+Mana: Plains (12) - {T}: Add {W}.
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Mana: Reliquary Tower (68) - {T}: Add {C}.
+Mana: Swamp (87) - {T}: Add {B}.
+Mana: Forest (41) - {T}: Add {G}.
+Add to stack: Ai(1)-Doran Big Butts cast Expel the Interlopers (3)
+Resolve stack: Expel the Interlopers (3) - Ai(1)-Doran Big Butts chooses a number. Destroy all creatures with power greater than or equal to the chosen number.
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Mana: Plains (16) - {T}: Add {W}.
+Mana: Isolated Chapel (62) - {T}: Add {W} or {B}.
+Add to stack: Ai(1)-Doran Big Butts activated Moonlit Lamenter (82)
+Resolve stack: Moonlit Lamenter (82) - Ai(1)-Doran Big Butts draws a card.
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 27 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Mana: Island (268) - {T}: Add {U}.
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Mana: Forest (287) - {T}: Add {G}.
+Mana: Mosswort Bridge (299) - {T}: Add {G}.
+Mana: Island (262) - {T}: Add {U}.
+Mana: Island (257) - {T}: Add {U}.
+Mana: Forest (283) - {T}: Add {G}.
+Add to stack: Ai(3)-Explorers of the Deep activated Mist Dancer (217)
+Resolve stack: Mist Dancer (217) - Ai(3)-Explorers of the Deep creates a token that's a copy of Mist Dancer (217). Sacrifice it at the beginning of the next end step. 
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Combat: Ai(3)-Explorers of the Deep assigned Mist Dancer (418) to attack Ai(4)-Draconic Dissent.
+Ai(3)-Explorers of the Deep assigned Mist Dancer (419) to attack Ai(1)-Doran Big Butts.
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Combat: Ai(4)-Draconic Dissent didn't block Mist Dancer (418).
+Combat: Ai(1)-Doran Big Butts didn't block Mist Dancer (419).
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Damage: Mist Dancer (419) deals 6 combat damage to Ai(1)-Doran Big Butts.
+Damage: Mist Dancer (418) deals 6 combat damage to Ai(4)-Draconic Dissent.
+Add to stack: Ai(4)-Draconic Dissent triggered Dissipation Field (395)
+Resolve stack: Whenever a permanent deals damage to you, return it to its owner's hand. [Damage Source: Mist Dancer (418), Damaged: Ai(4)-Draconic Dissent, Amount: 6]
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Mana: Secluded Courtyard (274) - {T}: Add {C}.
+Add to stack: Ai(3)-Explorers of the Deep cast Sol Ring (224)
+Resolve stack: Sol Ring
+Phase: Ai(3)-Explorers of the Deep's End step
+Add to stack: Ai(3)-Explorers of the Deep triggered Mist Dancer (217)
+Resolve stack: Sacrifice Mist Dancer (418) and Mist Dancer (419) at the beginning of the next end step. ([Mist Dancer (418), Mist Dancer (419)]) [Phase: Ai(3)-Explorers of the Deep]
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 28 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Island (326) - {T}: Add {U}.
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Mana: Mountain (369) - {T}: Add {R}.
+Mana: Mountain (366) - {T}: Add {R}.
+Mana: Terrain Generator (352) - {T}: Add {C}.
+Add to stack: Ai(4)-Draconic Dissent cast Firkraag, Cunning Instigator (401)
+Resolve stack: Firkraag, Cunning Instigator - Creature 3 / 3
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Combat: Ai(4)-Draconic Dissent assigned Firkraag, Cunning Instigator (401) to attack Ai(3)-Explorers of the Deep.
+Add to stack: Ai(4)-Draconic Dissent triggered Firkraag, Cunning Instigator (401) targeting [Merfolk Mistbinder (288)]
+Resolve stack: Whenever one or more Dragons you control attack an opponent, goad target creature that player controls. (Targeting: [[Merfolk Mistbinder (288)]]) [Number Attackers: [Firkraag, Cunning Instigator (401)]]
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Combat: Ai(3)-Explorers of the Deep didn't block Firkraag, Cunning Instigator (401).
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Damage: Firkraag, Cunning Instigator (401) deals 3 combat damage to Ai(3)-Explorers of the Deep.
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Mana: Island (330) - {T}: Add {U}.
+Mana: Kher Keep (354) - {T}: Add {C}.
+Mana: Island (322) - {T}: Add {U}.
+Mana: Island (323) - {T}: Add {U}.
+Add to stack: Ai(4)-Draconic Dissent cast Hedron Archive (399)
+Resolve stack: Hedron Archive
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 29 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Add to stack: Ai(1)-Doran Big Butts triggered Abzan Beastmaster (56)
+Resolve stack: At the beginning of your upkeep, draw a card if you control the creature with the greatest toughness or tied for the greatest toughness. [Phase: Ai(1)-Doran Big Butts]
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Replacement Effect: Razorverge Thicket enters tapped unless you control two or fewer other lands.
+Land: Ai(1)-Doran Big Butts played Razorverge Thicket (93)
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Mana: Swamp (87) - {T}: Add {B}.
+Mana: Forest (41) - {T}: Add {G}.
+Mana: Plains (12) - {T}: Add {W}.
+Mana: Reliquary Tower (68) - {T}: Add {C}.
+Add to stack: Ai(1)-Doran Big Butts cast Doran, Besieged by Time (98)
+Resolve stack: Doran, Besieged by Time - Creature 0 / 5
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 30 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Mana: Forest (287) - {T}: Add {G}.
+Mana: Island (268) - {T}: Add {U}.
+Mana: Sol Ring (224) - {T}: Add {C}{C}.
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Mana: Mosswort Bridge (299) - {T}: Add {G}.
+Add to stack: Ai(3)-Explorers of the Deep cast Hakbal of the Surging Soul (300)
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Hakbal of the Surging Soul (300), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Hakbal of the Surging Soul - Creature 3 / 3]
+Add to stack: Ai(3)-Explorers of the Deep cast Hakbal of the Surging Soul (430)
+Resolve stack: Hakbal of the Surging Soul - Creature 3 / 3
+Resolve stack: Hakbal of the Surging Soul - Creature 3 / 3
+Mana: Forest (283) - {T}: Add {G}.
+Mana: Island (262) - {T}: Add {U}.
+Mana: Island (257) - {T}: Add {U}.
+Add to stack: Ai(3)-Explorers of the Deep cast Realmwalker (289)
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Realmwalker (289), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Realmwalker - Creature 2 / 3]
+Add to stack: Ai(3)-Explorers of the Deep cast Realmwalker (431)
+Replacement Effect: As Realmwalker enters, choose a creature type.
+Resolve stack: Realmwalker - Creature 2 / 3
+Replacement Effect: As Realmwalker enters, choose a creature type.
+Resolve stack: Realmwalker - Creature 2 / 3
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: At the beginning of combat on your turn, each Merfolk creature you control explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on the exploring creature, then put the card back or put it into your graveyard.) [Phase: Ai(3)-Explorers of the Deep]
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Combat: Ai(3)-Explorers of the Deep assigned Merfolk Mistbinder (288) to attack Ai(1)-Doran Big Butts.
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Combat: Ai(1)-Doran Big Butts assigned Tree of Perdition (95) to block Merfolk Mistbinder (288).
+Add to stack: Ai(1)-Doran Big Butts triggered Doran, Besieged by Time (98)
+Resolve stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Blocker: Tree of Perdition (95)]
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Damage: Merfolk Mistbinder (288) deals 5 damage to Tree of Perdition (95).
+Damage: Tree of Perdition (95) deals 34 damage to Merfolk Mistbinder (288).
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 31 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Mountain (369) - {T}: Add {R}.
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Mana: Mountain (366) - {T}: Add {R}.
+Mana: Island (326) - {T}: Add {U}.
+Mana: Terrain Generator (352) - {T}: Add {C}.
+Add to stack: Ai(4)-Draconic Dissent cast Thunder Dragon (383)
+Resolve stack: Thunder Dragon - Creature 5 / 5
+Add to stack: Ai(4)-Draconic Dissent triggered Thunder Dragon (383)
+Damage: Thunder Dragon (383) deals 3 damage to Nyx-Fleece Ram (6).
+Damage: Thunder Dragon (383) deals 3 damage to Tree of Perdition (95).
+Damage: Thunder Dragon (383) deals 3 damage to Moonlit Lamenter (82).
+Damage: Thunder Dragon (383) deals 3 damage to Abzan Beastmaster (56).
+Damage: Thunder Dragon (383) deals 3 damage to Doran, Besieged by Time (98).
+Damage: Thunder Dragon (383) deals 3 damage to Merfolk Mistbinder (409).
+Damage: Thunder Dragon (383) deals 3 damage to Hakbal of the Surging Soul (300).
+Damage: Thunder Dragon (383) deals 3 damage to Realmwalker (431).
+Damage: Thunder Dragon (383) deals 3 damage to Realmwalker (289).
+Resolve stack: When Thunder Dragon enters, it deals 3 damage to each creature without flying. [Zone Changer: Thunder Dragon (383)]
+Mana: Island (330) - {T}: Add {U}.
+Mana: Kher Keep (354) - {T}: Add {C}.
+Mana: Island (322) - {T}: Add {U}.
+Add to stack: Ai(4)-Draconic Dissent cast Dragon's Hoard (312)
+Resolve stack: Dragon's Hoard
+Mana: Island (323) - {T}: Add {U}.
+Mana: Hedron Archive (399) - {T}: Add {C}{C}.
+Add to stack: Ai(4)-Draconic Dissent cast Artificer Class (356)
+Resolve stack: Artificer Class
+Mana: Dragon's Hoard (312) - {T}: Add one mana of any color.
+Add to stack: Ai(4)-Draconic Dissent activated Artificer Class (356)
+Resolve stack: Artificer Class (356) - Level 2
+Add to stack: Ai(4)-Draconic Dissent triggered Artificer Class (356)
+Resolve stack: When this Class becomes level 2, reveal cards from the top of your library until you reveal an artifact card. Put that card into your hand and the rest on the bottom of your library in a random order. [Class Level: 2]
+Phase: Ai(4)-Draconic Dissent's End step
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 32 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Land: Ai(1)-Doran Big Butts played Swamp (86)
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Mana: Plains (12) - {T}: Add {W}.
+Mana: Plains (16) - {T}: Add {W}.
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Add to stack: Ai(1)-Doran Big Butts cast Reaping Willow (67)
+Replacement Effect: Reaping Willow enters with two -1/-1 counters on it.
+Resolve stack: Reaping Willow - Creature 3 / 6
+Mana: Swamp (87) - {T}: Add {B}.
+Mana: Reliquary Tower (68) - {T}: Add {C}.
+Add to stack: Ai(1)-Doran Big Butts activated Reaping Willow (67) targeting [Abzan Beastmaster (56)]
+Resolve stack: Reaping Willow (67) - Return Abzan Beastmaster (56) from the graveyard to the battlefield.
+Phase: Ai(1)-Doran Big Butts' End step
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 33 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Mana: Forest (287) - {T}: Add {G}.
+Mana: Sol Ring (224) - {T}: Add {C}{C}.
+Mana: Island (268) - {T}: Add {U}.
+Add to stack: Ai(3)-Explorers of the Deep cast Deeproot Historian (229)
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Deeproot Historian (229), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Deeproot Historian - Creature 3 / 3]
+Add to stack: Ai(3)-Explorers of the Deep cast Deeproot Historian (438)
+Resolve stack: Deeproot Historian - Creature 3 / 3
+Resolve stack: Deeproot Historian - Creature 3 / 3
+Mana: Forest (283) - {T}: Add {G}.
+Mana: Island (262) - {T}: Add {U}.
+Add to stack: Ai(3)-Explorers of the Deep cast Nicanzil, Current Conductor (278)
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Nicanzil, Current Conductor (278), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Nicanzil, Current Conductor - Creature 2 / 3 by Realmwalker (289)]
+Add to stack: Ai(3)-Explorers of the Deep cast Nicanzil, Current Conductor (439)
+Resolve stack: Nicanzil, Current Conductor - Creature 2 / 3
+Resolve stack: Nicanzil, Current Conductor - Creature 2 / 3
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: At the beginning of combat on your turn, each Merfolk creature you control explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on the exploring creature, then put the card back or put it into your graveyard.) [Phase: Ai(3)-Explorers of the Deep]
+Add to stack: Ai(3)-Explorers of the Deep triggered Nicanzil, Current Conductor (278)
+Add to stack: Ai(3)-Explorers of the Deep triggered Nicanzil, Current Conductor (278)
+Add to stack: Ai(3)-Explorers of the Deep triggered Nicanzil, Current Conductor (278)
+Add to stack: Ai(3)-Explorers of the Deep triggered Nicanzil, Current Conductor (278)
+Add to stack: Ai(3)-Explorers of the Deep triggered Nicanzil, Current Conductor (278)
+Add to stack: Ai(3)-Explorers of the Deep triggered Nicanzil, Current Conductor (278)
+Add to stack: Ai(3)-Explorers of the Deep triggered Nicanzil, Current Conductor (278)
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Whenever a creature you control explores a nonland card, put a +1/+1 counter on Nicanzil, Current Conductor. [Explorer: Nicanzil, Current Conductor (278), Explored: Curse of the Swine (297)]
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Whenever a creature you control explores a nonland card, put a +1/+1 counter on Nicanzil, Current Conductor. [Explorer: Deeproot Historian (229), Explored: Curse of the Swine (297)]
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Whenever a creature you control explores a nonland card, put a +1/+1 counter on Nicanzil, Current Conductor. [Explorer: Deeproot Historian (438), Explored: Curse of the Swine (297)]
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Whenever a creature you control explores a nonland card, put a +1/+1 counter on Nicanzil, Current Conductor. [Explorer: Realmwalker (289), Explored: Curse of the Swine (297)]
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Whenever a creature you control explores a nonland card, put a +1/+1 counter on Nicanzil, Current Conductor. [Explorer: Realmwalker (431), Explored: Curse of the Swine (297)]
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Whenever a creature you control explores a nonland card, put a +1/+1 counter on Nicanzil, Current Conductor. [Explorer: Hakbal of the Surging Soul (300), Explored: Curse of the Swine (297)]
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Whenever a creature you control explores a nonland card, put a +1/+1 counter on Nicanzil, Current Conductor. [Explorer: Merfolk Mistbinder (409), Explored: Curse of the Swine (297)]
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Combat: Ai(3)-Explorers of the Deep assigned Hakbal of the Surging Soul (300), Realmwalker (431), Realmwalker (289) and Merfolk Mistbinder (409) to attack Ai(4)-Draconic Dissent.
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Resolve stack: Whenever Hakbal of the Surging Soul attacks, you may put a land card from your hand onto the battlefield. If you don't, draw a card. [Attacker: Hakbal of the Surging Soul (300)]
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Combat: Ai(4)-Draconic Dissent didn't block Realmwalker (289).
+Ai(4)-Draconic Dissent didn't block Merfolk Mistbinder (409).
+Ai(4)-Draconic Dissent assigned Firkraag, Cunning Instigator (401) to block Hakbal of the Surging Soul (300).
+Ai(4)-Draconic Dissent assigned Thunder Dragon (383) to block Realmwalker (431).
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Damage: Hakbal of the Surging Soul (300) deals 8 damage to Firkraag, Cunning Instigator (401).
+Damage: Realmwalker (431) deals 7 damage to Thunder Dragon (383).
+Damage: Realmwalker (289) deals 7 combat damage to Ai(4)-Draconic Dissent.
+Damage: Merfolk Mistbinder (409) deals 6 combat damage to Ai(4)-Draconic Dissent.
+Damage: Firkraag, Cunning Instigator (401) deals 3 damage to Hakbal of the Surging Soul (300).
+Damage: Thunder Dragon (383) deals 5 damage to Realmwalker (431).
+Add to stack: Ai(4)-Draconic Dissent triggered Dissipation Field (395)
+Add to stack: Ai(4)-Draconic Dissent triggered Dissipation Field (395)
+Resolve stack: Whenever a permanent deals damage to you, return it to its owner's hand. [Damage Source: Merfolk Mistbinder (409), Damaged: Ai(4)-Draconic Dissent, Amount: 6]
+Resolve stack: Whenever a permanent deals damage to you, return it to its owner's hand. [Damage Source: Realmwalker (289), Damaged: Ai(4)-Draconic Dissent, Amount: 7]
+Phase: Ai(3)-Explorers of the Deep's End of Combat Step
+Phase: Ai(3)-Explorers of the Deep's Main phase, postcombat
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Mana: Island (257) - {T}: Add {U}.
+Mana: Mosswort Bridge (299) - {T}: Add {G}.
+Add to stack: Ai(3)-Explorers of the Deep cast Realmwalker (289)
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Realmwalker (289), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Realmwalker - Creature 2 / 3]
+Add to stack: Ai(3)-Explorers of the Deep cast Realmwalker (440)
+Replacement Effect: As Realmwalker enters, choose a creature type.
+Resolve stack: Realmwalker - Creature 2 / 3
+Replacement Effect: As Realmwalker enters, choose a creature type.
+Resolve stack: Realmwalker - Creature 2 / 3
+Phase: Ai(3)-Explorers of the Deep's End step
+Phase: Ai(3)-Explorers of the Deep's Cleanup step
+Turn: Turn 34 (Ai(4)-Draconic Dissent)
+Phase: Ai(4)-Draconic Dissent's Untap step
+Phase: Ai(4)-Draconic Dissent's Upkeep step
+Phase: Ai(4)-Draconic Dissent's Draw step
+Phase: Ai(4)-Draconic Dissent's Main phase, precombat
+Mana: Island (326) - {T}: Add {U}.
+Mana: Sol Ring (350) - {T}: Add {C}{C}.
+Mana: Mountain (370) - {T}: Add {R}.
+Mana: Mountain (369) - {T}: Add {R}.
+Mana: Mountain (366) - {T}: Add {R}.
+Add to stack: Ai(4)-Draconic Dissent activated Artificer Class (356)
+Resolve stack: Artificer Class (356) - Level 3
+Phase: Ai(4)-Draconic Dissent's Beginning of Combat Step
+Phase: Ai(4)-Draconic Dissent's Declare Attackers Step
+Phase: Ai(4)-Draconic Dissent's Declare Blockers Step
+Phase: Ai(4)-Draconic Dissent's First Strike Damage Step
+Phase: Ai(4)-Draconic Dissent's Combat Damage Step
+Phase: Ai(4)-Draconic Dissent's End of Combat Step
+Phase: Ai(4)-Draconic Dissent's Main phase, postcombat
+Mana: Island (330) - {T}: Add {U}.
+Mana: Terrain Generator (352) - {T}: Add {C}.
+Mana: Kher Keep (354) - {T}: Add {C}.
+Mana: Island (322) - {T}: Add {U}.
+Mana: Hedron Archive (399) - {T}: Add {C}{C}.
+Add to stack: Ai(4)-Draconic Dissent cast Keiga, the Tide Star (318)
+Resolve stack: Keiga, the Tide Star - Creature 5 / 5
+Add to stack: Ai(4)-Draconic Dissent triggered Dragon's Hoard (312)
+Resolve stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Keiga, the Tide Star (318)]
+Add to stack: Ai(4)-Draconic Dissent activated Dragon's Hoard (312)
+Resolve stack: Dragon's Hoard (312) - Ai(4)-Draconic Dissent draws a card.
+Land: Ai(4)-Draconic Dissent played Island (329)
+Phase: Ai(4)-Draconic Dissent's End step
+Add to stack: Ai(4)-Draconic Dissent triggered Artificer Class (356) targeting [Hedron Archive (399)]
+Resolve stack: At the beginning of your end step, create a token that's a copy of target artifact you control. (Targeting: [[Hedron Archive (399)]]) [Phase: Ai(4)-Draconic Dissent]
+Phase: Ai(4)-Draconic Dissent's Cleanup step
+Turn: Turn 35 (Ai(1)-Doran Big Butts)
+Phase: Ai(1)-Doran Big Butts' Untap step
+Phase: Ai(1)-Doran Big Butts' Upkeep step
+Add to stack: Ai(1)-Doran Big Butts triggered Nyx-Fleece Ram (6)
+Add to stack: Ai(1)-Doran Big Butts triggered Abzan Beastmaster (56)
+Resolve stack: At the beginning of your upkeep, draw a card if you control the creature with the greatest toughness or tied for the greatest toughness. [Phase: Ai(1)-Doran Big Butts]
+Resolve stack: At the beginning of your upkeep, you gain 1 life. [Phase: Ai(1)-Doran Big Butts]
+Mana: Plains (12) - {T}: Add {W}.
+Add to stack: Ai(1)-Doran Big Butts cast Swords to Plowshares (70) targeting [Nicanzil, Current Conductor (278)]
+Resolve stack: Swords to Plowshares (70) - Exile Nicanzil, Current Conductor (278). Ai(3)-Explorers of the Deep gains life equal to its power.
+Phase: Ai(1)-Doran Big Butts' Draw step
+Phase: Ai(1)-Doran Big Butts' Main phase, precombat
+Phase: Ai(1)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(1)-Doran Big Butts' Declare Attackers Step
+Combat: Ai(1)-Doran Big Butts assigned Doran, Besieged by Time (98), Reaping Willow (67), Moonlit Lamenter (82), Abzan Beastmaster (56) and Nyx-Fleece Ram (6) to attack Ai(4)-Draconic Dissent.
+Add to stack: Ai(1)-Doran Big Butts triggered Doran, Besieged by Time (98)
+Add to stack: Ai(1)-Doran Big Butts triggered Doran, Besieged by Time (98)
+Add to stack: Ai(1)-Doran Big Butts triggered Doran, Besieged by Time (98)
+Add to stack: Ai(1)-Doran Big Butts triggered Doran, Besieged by Time (98)
+Add to stack: Ai(1)-Doran Big Butts triggered Doran, Besieged by Time (98)
+Mana: Island (323) - {T}: Add {U}.
+Mana: Hedron Archive (448) - {T}: Add {C}{C}.
+Mana: Island (329) - {T}: Add {U}.
+Add to stack: Ai(4)-Draconic Dissent cast Mocking Doppelganger (348)
+Replacement Effect: You may have Tree of Perdition enter as a copy of a creature an opponent controls, except it has "Other creatures with the same name as this creature are goaded."
+Resolve stack: Mocking Doppelganger - Creature 0 / 0
+Resolve stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Attacker: Nyx-Fleece Ram (6)]
+Resolve stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Attacker: Abzan Beastmaster (56)]
+Resolve stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Attacker: Moonlit Lamenter (82)]
+Resolve stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Attacker: Reaping Willow (67)]
+Resolve stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Attacker: Doran, Besieged by Time (98)]
+Phase: Ai(1)-Doran Big Butts' Declare Blockers Step
+Combat: Ai(4)-Draconic Dissent assigned Keiga, the Tide Star (318) to block Doran, Besieged by Time (98).
+Ai(4)-Draconic Dissent didn't block Moonlit Lamenter (82).
+Ai(4)-Draconic Dissent assigned Tree of Perdition (348) to block Reaping Willow (67).
+Ai(4)-Draconic Dissent didn't block Nyx-Fleece Ram (6).
+Ai(4)-Draconic Dissent didn't block Abzan Beastmaster (56).
+Add to stack: Ai(1)-Doran Big Butts activated Tree of Perdition (95) targeting [Ai(3)-Explorers of the Deep]
+Resolve stack: Tree of Perdition (95) - Exchange Ai(3)-Explorers of the Deep's life total with Tree of Perdition's toughness.
+Phase: Ai(1)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(1)-Doran Big Butts' Combat Damage Step
+Damage: Doran, Besieged by Time (98) deals 5 damage to Keiga, the Tide Star (318).
+Damage: Reaping Willow (67) deals 6 damage to Tree of Perdition (348).
+Damage: Moonlit Lamenter (82) deals 5 combat damage to Ai(4)-Draconic Dissent.
+Damage: Abzan Beastmaster (56) deals 3 combat damage to Ai(4)-Draconic Dissent.
+Damage: Nyx-Fleece Ram (6) deals 5 combat damage to Ai(4)-Draconic Dissent.
+Damage: Keiga, the Tide Star (318) deals 5 damage to Doran, Besieged by Time (98).
+Phase: Ai(1)-Doran Big Butts' End of Combat Step
+Phase: Ai(1)-Doran Big Butts' Main phase, postcombat
+Replacement Effect: Radiant Grove enters tapped.
+Land: Ai(1)-Doran Big Butts played Radiant Grove (91)
+Mana: Forest (41) - {T}: Add {G}.
+Mana: Fortified Village (72) - {T}: Add {G} or {W}.
+Add to stack: Ai(1)-Doran Big Butts cast Gluntch, the Bestower (83)
+Resolve stack: Gluntch, the Bestower - Creature 0 / 5
+Phase: Ai(1)-Doran Big Butts' End step
+Add to stack: Ai(1)-Doran Big Butts triggered Gluntch, the Bestower (83)
+Resolve stack: At the beginning of your end step, choose a player. They put two +1/+1 counters on a creature they control. Choose a second player to draw a card. Then choose a third player to create two Treasure tokens. [Phase: Ai(1)-Doran Big Butts]
+Phase: Ai(1)-Doran Big Butts' Cleanup step
+Turn: Turn 36 (Ai(3)-Explorers of the Deep)
+Phase: Ai(3)-Explorers of the Deep's Untap step
+Phase: Ai(3)-Explorers of the Deep's Upkeep step
+Phase: Ai(3)-Explorers of the Deep's Draw step
+Phase: Ai(3)-Explorers of the Deep's Main phase, precombat
+Mana: Island (268) - {T}: Add {U}.
+Mana: Sol Ring (224) - {T}: Add {C}{C}.
+Add to stack: Ai(3)-Explorers of the Deep cast Merrow Reejerey (211)
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Merrow Reejerey (211), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Merrow Reejerey - Creature 2 / 2]
+Add to stack: Ai(3)-Explorers of the Deep cast Merrow Reejerey (449)
+Resolve stack: Merrow Reejerey - Creature 2 / 2
+Resolve stack: Merrow Reejerey - Creature 2 / 2
+Mana: Island (262) - {T}: Add {U}.
+Mana: Forest (287) - {T}: Add {G}.
+Mana: Hinterland Harbor (220) - {T}: Add {G} or {U}.
+Discard: Ai(3)-Explorers of the Deep discards Forest (282).
+Add to stack: Ai(3)-Explorers of the Deep cast Sage of Fables (295)
+Add to stack: Ai(3)-Explorers of the Deep triggered Merrow Reejerey (211) targeting [Gluntch, the Bestower (83)]
+Add to stack: Ai(3)-Explorers of the Deep triggered Reflections of Littjara (238)
+Add to stack: Ai(3)-Explorers of the Deep triggered Merrow Reejerey (449) targeting [Gluntch, the Bestower (83)]
+Resolve stack: Whenever you cast a Merfolk spell, you may tap or untap target permanent. (Targeting: [[Gluntch, the Bestower (83)]]) [Card: Sage of Fables (295), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Sage of Fables - Creature 2 / 2]
+Resolve stack: Whenever you cast a spell of the chosen type, copy that spell. (A copy of a permanent spell becomes a token.) [Card: Sage of Fables (295), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Sage of Fables - Creature 2 / 2]
+Add to stack: Ai(3)-Explorers of the Deep cast Sage of Fables (450)
+Resolve stack: Sage of Fables - Creature 2 / 2
+Resolve stack: Whenever you cast a Merfolk spell, you may tap or untap target permanent. (Targeting: [[Gluntch, the Bestower (83)]]) [Card: Sage of Fables (295), Activator: Ai(3)-Explorers of the Deep, SpellAbility: Sage of Fables - Creature 2 / 2]
+Replacement Effect: Each other Wizard creature you control enters with an additional +1/+1 counter on it.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: Sage of Fables - Creature 2 / 2
+Phase: Ai(3)-Explorers of the Deep's Beginning of Combat Step
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Replacement Effect: If one or more +1/+1 counters would be put a creature you control, twice that many +1/+1 counters are put on that creature instead.
+Resolve stack: At the beginning of combat on your turn, each Merfolk creature you control explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on the exploring creature, then put the card back or put it into your graveyard.) [Phase: Ai(3)-Explorers of the Deep]
+Phase: Ai(3)-Explorers of the Deep's Declare Attackers Step
+Combat: Ai(3)-Explorers of the Deep assigned Hakbal of the Surging Soul (300), Realmwalker (431), Deeproot Historian (438), Deeproot Historian (229), Realmwalker (440) and Realmwalker (289) to attack Ai(1)-Doran Big Butts.
+Add to stack: Ai(3)-Explorers of the Deep triggered Hakbal of the Surging Soul (300)
+Resolve stack: Whenever Hakbal of the Surging Soul attacks, you may put a land card from your hand onto the battlefield. If you don't, draw a card. [Attacker: Hakbal of the Surging Soul (300)]
+Phase: Ai(3)-Explorers of the Deep's Declare Blockers Step
+Combat: Ai(1)-Doran Big Butts didn't block Realmwalker (289).
+Ai(1)-Doran Big Butts didn't block Deeproot Historian (229).
+Ai(1)-Doran Big Butts didn't block Deeproot Historian (438).
+Ai(1)-Doran Big Butts didn't block Realmwalker (440).
+Ai(1)-Doran Big Butts didn't block Hakbal of the Surging Soul (300).
+Ai(1)-Doran Big Butts didn't block Realmwalker (431).
+Phase: Ai(3)-Explorers of the Deep's First Strike Damage Step
+Phase: Ai(3)-Explorers of the Deep's Combat Damage Step
+Damage: Hakbal of the Surging Soul (300) deals 11 combat damage to Ai(1)-Doran Big Butts.
+Damage: Realmwalker (431) deals 10 combat damage to Ai(1)-Doran Big Butts.
+Damage: Deeproot Historian (438) deals 9 combat damage to Ai(1)-Doran Big Butts.
+Damage: Deeproot Historian (229) deals 9 combat damage to Ai(1)-Doran Big Butts.
+Damage: Realmwalker (440) deals 6 combat damage to Ai(1)-Doran Big Butts.
+Damage: Realmwalker (289) deals 6 combat damage to Ai(1)-Doran Big Butts.
+Game outcome: Turn 18
+Game outcome: Ai(1)-Doran Big Butts has lost because life total reached 0
+Game outcome: Ai(2)-Blood Rites has lost because life total reached 0
+Game outcome: Ai(3)-Explorers of the Deep has won because all opponents have lost
+Game outcome: Ai(4)-Draconic Dissent has lost because life total reached 0
+Match result: Ai(1)-Doran Big Butts: 0 Ai(2)-Blood Rites: 0 Ai(3)-Explorers of the Deep: 1 Ai(4)-Draconic Dissent: 0 
+
+Game Result: Game 1 ended in 31501 ms. Ai(3)-Explorers of the Deep has won!
+
+

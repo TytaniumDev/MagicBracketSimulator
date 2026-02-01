@@ -68,6 +68,8 @@ ls -la logs/
 
 **Note (Windows / Git Bash):** Git Bash (MSYS) converts Unix-style paths and can append `;C` to volume paths, creating empty folders `decks;C` and `logs;C` instead of mounting `./decks` and `./logs`. Use `run_docker.sh` (sets `MSYS_NO_PATHCONV=1`) or the path-safe form `"/$(pwd)/decks"` above. Alternatively use PowerShell or WSL.
 
+**Note (WSL / Linux):** The container runs as user `forge`. If the host `./logs` (and `./decks`) directory is not writable by others, the container may fail with "Permission denied" when writing game logs. Fix: `chmod 777 ./logs` (and `chmod 777 ./decks` if needed) before running.
+
 ## Precon Source & Manifest
 
 Precons live in `precons/` as `.dck` files. Add or replace decks as needed.
@@ -98,6 +100,14 @@ python scripts/generate_manifest.py
 ```
 
 (Run from `forge-simulation-engine/` or repo root.) Optionally edit `precons/manifest.json` to add `set`, `primaryCommander`, `colors`, `powerLevel`, etc. for display and Orchestrator.
+
+## Double-faced and MDFC cards in .dck
+
+- **Name format:** Use the standard **front and back** name with a space, two slashes, and a space: `Front // Back`.
+  - Examples: `Dusk // Dawn`, `Catapult Fodder // Catapult Captain`, `Revitalizing Repast // Old-Growth Grove`.
+- **Optional disambiguation:** If Forge reports "An unsupported card was requested", add the **set code and collector number** after a pipe: `CardName // OtherName|SET|collector_number`.
+  - Example: `Catapult Fodder // Catapult Captain|VOW|99`, `Dusk // Dawn|CLB|1`, `Commit // Memory|NCC|1`.
+- Forge looks up cards by name (and optionally by set). If a set is not in Forge’s card database yet (e.g. very new sets), that card will remain unsupported until Forge adds the set.
 
 ## CLI Reference
 

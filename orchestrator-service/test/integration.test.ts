@@ -66,7 +66,7 @@ async function runTests() {
     
     assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.error.includes('deckUrl or deckText'), 'Expected deck required error');
+    assert(data.error.includes('deckUrl') || data.error.includes('deckText') || data.error.includes('deckId'), 'Expected deck required error');
   });
 
   // Test: POST /api/jobs - invalid URL
@@ -94,13 +94,31 @@ async function runTests() {
       body: JSON.stringify({
         deckText: '[Commander]\n1 Test Commander\n[Main]\n99 Mountain',
         opponentMode: 'random',
-        simulations: 100,
+        simulations: 201,
       }),
     });
     
     assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.error.includes('between 1 and 10'), 'Expected simulations range error');
+    assert(data.error.includes('between 1 and 100'), 'Expected simulations range error');
+  });
+
+  // Test: POST /api/jobs - parallelism out of range
+  await test('POST /api/jobs rejects invalid parallelism', async () => {
+    const response = await fetch(`${BASE_URL}/api/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deckText: '[Commander]\n1 Test Commander\n[Main]\n99 Mountain',
+        opponentMode: 'random',
+        simulations: 5,
+        parallelism: 10,
+      }),
+    });
+    
+    assert(response.status === 400, `Expected 400, got ${response.status}`);
+    const data = await response.json();
+    assert(data.error.includes('between 1 and 8'), 'Expected parallelism range error');
   });
 
   // Test: POST /api/jobs - specific mode needs 3 opponents
@@ -137,6 +155,7 @@ async function runTests() {
         deckText,
         opponentMode: 'random',
         simulations: 1,
+        parallelism: 1,
       }),
     });
     
@@ -145,6 +164,7 @@ async function runTests() {
     assert(data.id, 'Expected job id');
     assert(data.status === 'QUEUED', 'Expected QUEUED status');
     assert(data.opponents.length === 3, 'Expected 3 opponents');
+    assert(data.parallelism === 1, 'Expected parallelism 1');
     
     // Test: GET /api/jobs/[id]
     const getResponse = await fetch(`${BASE_URL}/api/jobs/${data.id}`);
@@ -157,6 +177,16 @@ async function runTests() {
   // Test: GET /api/jobs/[id] - not found
   await test('GET /api/jobs/[id] returns 404 for unknown job', async () => {
     const response = await fetch(`${BASE_URL}/api/jobs/nonexistent-id`);
+    assert(response.status === 404, `Expected 404, got ${response.status}`);
+  });
+
+  // Test: POST /api/jobs/[id]/analyze - not found
+  await test('POST /api/jobs/[id]/analyze returns 404 for unknown job', async () => {
+    const response = await fetch(`${BASE_URL}/api/jobs/nonexistent-id/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
     assert(response.status === 404, `Expected 404, got ${response.status}`);
   });
 

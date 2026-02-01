@@ -13,6 +13,9 @@ interface Row {
   result_json: string | null;
   error_message: string | null;
   idempotency_key?: string | null;
+  skip_analysis?: number | null;
+  parallelism?: number | null;
+  games_completed?: number | null;
 }
 
 function rowToJob(row: Row): Job {
@@ -26,6 +29,8 @@ function rowToJob(row: Row): Job {
     createdAt: new Date(row.created_at),
     ...(row.result_json && { resultJson: JSON.parse(row.result_json) as AnalysisResult }),
     ...(row.error_message && { errorMessage: row.error_message }),
+    ...(row.parallelism != null && { parallelism: row.parallelism }),
+    ...(row.games_completed != null && { gamesCompleted: row.games_completed }),
   };
 }
 
@@ -42,7 +47,8 @@ export function createJob(
   deckDck: string,
   opponents: string[],
   simulations: number,
-  idempotencyKey?: string
+  idempotencyKey?: string,
+  parallelism?: number
 ): Job {
   if (idempotencyKey) {
     const existing = getJobByIdempotencyKey(idempotencyKey);
@@ -52,8 +58,8 @@ export function createJob(
   const createdAt = new Date().toISOString();
   const db = getDb();
   db.prepare(
-    `INSERT INTO jobs (id, deck_name, deck_dck, status, simulations, opponents, created_at, idempotency_key)
-     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?)`
+    `INSERT INTO jobs (id, deck_name, deck_dck, status, simulations, opponents, created_at, idempotency_key, parallelism)
+     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?, ?)`
   ).run(
     id,
     deckName,
@@ -61,7 +67,8 @@ export function createJob(
     simulations,
     JSON.stringify(opponents),
     createdAt,
-    idempotencyKey ?? null
+    idempotencyKey ?? null,
+    parallelism ?? null
   );
   return rowToJob({
     id,
@@ -74,6 +81,7 @@ export function createJob(
     result_json: null,
     error_message: null,
     idempotency_key: idempotencyKey ?? null,
+    parallelism: parallelism ?? null,
   });
 }
 
@@ -89,12 +97,43 @@ export function updateJobStatus(id: string, status: JobStatus): boolean {
   return result.changes > 0;
 }
 
+export function updateJobProgress(id: string, gamesCompleted: number): boolean {
+  const db = getDb();
+  const result = db.prepare('UPDATE jobs SET games_completed = ? WHERE id = ?').run(gamesCompleted, id);
+  return result.changes > 0;
+}
+
 export function setJobResult(id: string, result: AnalysisResult): boolean {
   const db = getDb();
   const resultJson = JSON.stringify(result);
   const result_ = db
     .prepare('UPDATE jobs SET status = ?, result_json = ? WHERE id = ?')
     .run('COMPLETED', resultJson, id);
+  return result_.changes > 0;
+}
+
+/**
+ * Marks a job as COMPLETED without setting result_json.
+ * Used when simulations finish but analysis is deferred to user action.
+ */
+export function setJobCompleted(id: string): boolean {
+  const db = getDb();
+  const result = db
+    .prepare('UPDATE jobs SET status = ? WHERE id = ?')
+    .run('COMPLETED', id);
+  return result.changes > 0;
+}
+
+/**
+ * Updates result_json for an already COMPLETED job.
+ * Used for on-demand analysis after simulations are done.
+ */
+export function updateJobResult(id: string, result: AnalysisResult): boolean {
+  const db = getDb();
+  const resultJson = JSON.stringify(result);
+  const result_ = db
+    .prepare('UPDATE jobs SET result_json = ? WHERE id = ?')
+    .run(resultJson, id);
   return result_.changes > 0;
 }
 

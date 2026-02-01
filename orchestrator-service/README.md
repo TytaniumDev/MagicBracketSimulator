@@ -60,8 +60,9 @@ npm start
 ## Architecture
 
 - **Next.js 15+ App Router** - API routes only; the web UI lives in the repo root `frontend/` package and calls these APIs over HTTP.
-- **In-Memory Job Store** - Simple Map-based storage (jobs lost on restart)
-- **Integrated Worker** - Polls for jobs, spawns Docker containers, calls Analysis Service
+- **SQLite Job Store** - Persistent storage in `data/jobs.db` (jobs survive restarts)
+- **Integrated Worker** - Polls for jobs, spawns Docker containers, sends logs to Log Analyzer
+- **On-Demand Analysis** - AI analysis (Gemini) is triggered by user action via `/api/jobs/[id]/analyze`, not automatically after simulations
 - **CORS** - API allows requests from `http://localhost:5173` (frontend dev server).
 
 ## API Routes
@@ -71,6 +72,10 @@ npm start
 | `/api/precons` | GET | List available preconstructed decks |
 | `/api/jobs` | POST | Create a new simulation job |
 | `/api/jobs/[id]` | GET | Get job status and results |
+| `/api/jobs/[id]/analyze` | POST | Trigger on-demand AI analysis (Gemini) |
+| `/api/decks` | GET | List saved decks |
+| `/api/decks` | POST | Save a deck from URL or text |
+| `/api/decks/[id]` | DELETE | Delete a saved deck |
 
 ### Create Job Request
 
@@ -147,8 +152,29 @@ npm run dev
 
 4. Start the frontend (from repo root: `npm run frontend`) and open the UI at http://localhost:5173
 
+## Recomputing logs for a job
+
+If a job was run before the batched-games fix (e.g. 4 parallel runs × 3 games stored as 4 games instead of 12), you can force recomputation from the raw log files on disk:
+
+1. **Raw logs must still exist** in `orchestrator-service/jobs/<jobId>/logs/` (the worker does not delete them by default).
+2. **Log Analyzer must be running** (e.g. `http://localhost:3001`).
+3. From the `orchestrator-service` directory:
+
+```bash
+npm run recompute-logs -- <jobId>
+```
+
+Example:
+
+```bash
+npm run recompute-logs -- c998d985-66d3-4048-9d97-80e6911123e4
+```
+
+This re-reads all game log files (including batched `job_<id>_runN_game_M.txt`), re-posts them to the Log Analyzer, and updates the job’s `games_completed` count. Refresh the job page to see the corrected game count and life totals.
+
+If the raw logs were deleted, re-run the simulation (create a new job with the same deck and opponents) to get correct results.
+
 ## Limitations
 
-- **In-Memory Storage**: Jobs are lost when the server restarts
 - **Single Worker**: Only one job processes at a time
 - **Local Only**: Designed for local development/testing

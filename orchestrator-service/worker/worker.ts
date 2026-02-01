@@ -4,16 +4,25 @@ import * as path from 'path';
 import {
   getNextQueuedJob,
   updateJobStatus,
-  setJobResult,
+  updateJobProgress,
+  setJobCompleted,
   setJobFailed,
 } from '../lib/job-store';
 import { withRetry } from '../lib/retry';
-import { AnalysisResult } from '../lib/types';
+import { countGameLogFiles, readGameLogs } from '../lib/game-logs';
 
 const POLL_INTERVAL_MS = 3000; // 3 seconds
 const FORGE_ENGINE_PATH = process.env.FORGE_ENGINE_PATH || '../forge-simulation-engine';
-const ANALYSIS_SERVICE_URL = process.env.ANALYSIS_SERVICE_URL || 'http://localhost:8000';
+const LOG_ANALYZER_URL = process.env.LOG_ANALYZER_URL || 'http://localhost:3001';
+const DEFAULT_PARALLELISM = 4;
 const JOBS_DIR = path.resolve(__dirname, '..', 'jobs');
+
+function splitSimulations(total: number, parallelism: number): number[] {
+  const runs = Math.min(parallelism, total);
+  const base = Math.floor(total / runs);
+  const remainder = total % runs;
+  return Array.from({ length: runs }, (_, i) => base + (i < remainder ? 1 : 0));
+}
 
 // Ensure jobs directory exists
 if (!fs.existsSync(JOBS_DIR)) {
@@ -23,9 +32,12 @@ if (!fs.existsSync(JOBS_DIR)) {
 async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
   if (!job) return;
 
+  const parallelism = job.parallelism ?? (Number(process.env.FORGE_PARALLELISM) || DEFAULT_PARALLELISM);
+  const runConfigs = splitSimulations(job.simulations, parallelism);
+
   console.log(`[Worker] Processing job ${job.id}: ${job.deckName}`);
   console.log(`[Worker] Opponents: ${job.opponents.join(', ')}`);
-  console.log(`[Worker] Simulations: ${job.simulations}`);
+  console.log(`[Worker] Simulations: ${job.simulations}, parallel runs: ${runConfigs.length} (${runConfigs.join(', ')})`);
 
   // Update status to RUNNING
   updateJobStatus(job.id, 'RUNNING');
@@ -35,33 +47,62 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
   const decksDir = path.join(jobDir, 'decks');
   const logsDir = path.join(jobDir, 'logs');
 
+  // Progress tracking interval
+  let progressInterval: ReturnType<typeof setInterval> | null = null;
+
   try {
-    // Create directories
+    // Create directories (make writable by Docker container's forge user on Linux/WSL)
     fs.mkdirSync(decksDir, { recursive: true });
     fs.mkdirSync(logsDir, { recursive: true });
+    try {
+      fs.chmodSync(decksDir, 0o777);
+      fs.chmodSync(logsDir, 0o777);
+    } catch {
+      // Ignore chmod errors (e.g. Windows)
+    }
 
     // Write deck file
     const deckFilename = 'deck.dck';
     fs.writeFileSync(path.join(decksDir, deckFilename), job.deckDck);
 
-    // Run Docker with retry (non-zero exit or no logs)
-    console.log(`[Worker] Spawning Docker container...`);
+    // Initialize progress to 0
+    updateJobProgress(job.id, 0);
+
+    // Start progress tracking interval (every 5 seconds)
+    progressInterval = setInterval(() => {
+      const count = countGameLogFiles(logsDir, job.id);
+      updateJobProgress(job.id, count);
+    }, 5000);
+
+    // Run Docker containers in parallel (with retry on failure)
+    console.log(`[Worker] Spawning ${runConfigs.length} Docker container(s)...`);
     const gameLogs = await withRetry(
       async () => {
-        const exitCode = await runForgeDocker(
-          job.id,
-          deckFilename,
-          job.opponents,
-          job.simulations,
-          decksDir,
-          logsDir
+        const exitCodes = await Promise.all(
+          runConfigs.map((games, runIndex) =>
+            runForgeDocker(
+              job.id,
+              deckFilename,
+              job.opponents,
+              games,
+              runConfigs.length > 1 ? runIndex : undefined,
+              decksDir,
+              logsDir
+            )
+          )
         );
-        if (exitCode !== 0) {
-          throw new Error(`Forge simulation failed with exit code ${exitCode}`);
+
+        const failed = exitCodes.findIndex((c) => c !== 0);
+        if (failed >= 0) {
+          throw new Error(`Forge run ${failed} failed with exit code ${exitCodes[failed]}`);
         }
+
         const logs = readGameLogs(logsDir, job.id);
         if (logs.length === 0) {
           throw new Error('No game logs produced by simulation');
+        }
+        if (logs.length < job.simulations) {
+          console.warn(`[Worker] Expected ${job.simulations} game logs, got ${logs.length}`);
         }
         return logs;
       },
@@ -69,26 +110,43 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
       'Forge exit or no game logs'
     );
 
+    // Clear progress interval now that simulations are done
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+
+    // Update final progress count
+    updateJobProgress(job.id, gameLogs.length);
+
     console.log(`[Worker] Found ${gameLogs.length} game logs`);
 
-    // Update status to ANALYZING
-    updateJobStatus(job.id, 'ANALYZING');
-
-    // Call Analysis Service with retry (network / 5xx only; no retry on 4xx)
-    console.log(`[Worker] Calling Analysis Service...`);
-    const analysisResult = await withRetry(
-      () => callAnalysisService(job.deckName, job.opponents, gameLogs),
+    // -------------------------------------------------------------------------
+    // POST logs to Log Analyzer for storage and later retrieval
+    // -------------------------------------------------------------------------
+    console.log(`[Worker] Sending logs to Log Analyzer...`);
+    await withRetry(
+      async () => {
+        const response = await fetch(`${LOG_ANALYZER_URL}/jobs/${job.id}/logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gameLogs,
+            deckNames: [job.deckName, ...job.opponents],
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Log Analyzer ingest error: ${response.status}`);
+        }
+      },
       {},
-      'Analysis Service error',
-      (err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        return !/Analysis Service error: 4\d\d/.test(msg);
-      }
+      'Log Analyzer ingest'
     );
+    console.log(`[Worker] Logs sent to Log Analyzer`);
 
-    // Save result
-    setJobResult(job.id, analysisResult);
-    console.log(`[Worker] Job ${job.id} completed. Bracket: ${analysisResult.bracket}`);
+    // Mark job as completed (analysis is now on-demand via frontend)
+    setJobCompleted(job.id);
+    console.log(`[Worker] Job ${job.id} completed. Simulations done, analysis available on-demand.`);
 
     // Cleanup (optional - keep for debugging)
     // fs.rmSync(jobDir, { recursive: true, force: true });
@@ -97,6 +155,11 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Worker] Job ${job.id} failed:`, message);
     setJobFailed(job.id, message);
+  } finally {
+    // Ensure progress interval is cleared even on error
+    if (progressInterval) {
+      clearInterval(progressInterval);
+    }
   }
 }
 
@@ -105,6 +168,7 @@ async function runForgeDocker(
   deckFilename: string,
   opponents: string[],
   simulations: number,
+  runIndex: number | undefined,
   decksDir: string,
   logsDir: string
 ): Promise<number> {
@@ -112,22 +176,32 @@ async function runForgeDocker(
     // Determine if running on Windows with Git Bash
     const isWindows = process.platform === 'win32';
     const env = { ...process.env };
-    
+
     if (isWindows) {
       // Prevent MSYS path conversion issues
       env.MSYS_NO_PATHCONV = '1';
     }
 
+    const runId = runIndex != null ? `job_${jobId}_run${runIndex}` : `job_${jobId}`;
+
     const dockerArgs = [
       'run',
       '--rm',
-      '-v', `${decksDir}:/app/decks`,
-      '-v', `${logsDir}:/app/logs`,
+      '-v',
+      `${decksDir}:/app/decks`,
+      '-v',
+      `${logsDir}:/app/logs`,
       'forge-sim',
-      '--user-deck', deckFilename,
-      '--opponents', opponents[0], opponents[1], opponents[2],
-      '--simulations', simulations.toString(),
-      '--id', `job_${jobId}`,
+      '--user-deck',
+      deckFilename,
+      '--opponents',
+      opponents[0],
+      opponents[1],
+      opponents[2],
+      '--simulations',
+      simulations.toString(),
+      '--id',
+      runId,
     ];
 
     console.log(`[Worker] Docker command: docker ${dockerArgs.join(' ')}`);
@@ -163,66 +237,10 @@ async function runForgeDocker(
   });
 }
 
-function readGameLogs(logsDir: string, jobId: string): string[] {
-  const logs: string[] = [];
-  
-  try {
-    const files = fs.readdirSync(logsDir);
-    const logFiles = files
-      .filter(f => f.startsWith(`job_${jobId}_game_`) && f.endsWith('.txt'))
-      .sort();
-
-    for (const file of logFiles) {
-      const content = fs.readFileSync(path.join(logsDir, file), 'utf-8');
-      if (content.trim()) {
-        logs.push(content);
-      }
-    }
-  } catch (error) {
-    console.error(`[Worker] Error reading logs:`, error);
-  }
-
-  return logs;
-}
-
-async function callAnalysisService(
-  heroDeckName: string,
-  opponents: string[],
-  gameLogs: string[]
-): Promise<AnalysisResult> {
-  const url = `${ANALYSIS_SERVICE_URL}/analyze`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      hero_deck_name: heroDeckName,
-      opponent_decks: opponents,
-      game_logs: gameLogs,
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Analysis Service error: ${response.status} ${text}`);
-  }
-
-  const result = await response.json();
-
-  return {
-    bracket: result.bracket,
-    confidence: result.confidence,
-    reasoning: result.reasoning,
-    weaknesses: result.weaknesses,
-  };
-}
-
 async function runWorkerLoop() {
   console.log('[Worker] Starting worker loop...');
   console.log(`[Worker] FORGE_ENGINE_PATH: ${FORGE_ENGINE_PATH}`);
-  console.log(`[Worker] ANALYSIS_SERVICE_URL: ${ANALYSIS_SERVICE_URL}`);
+  console.log(`[Worker] LOG_ANALYZER_URL: ${LOG_ANALYZER_URL}`);
   console.log(`[Worker] JOBS_DIR: ${JOBS_DIR}`);
 
   while (true) {

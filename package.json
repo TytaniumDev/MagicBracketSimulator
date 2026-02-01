@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "analysis": "cd analysis-service && uv run uvicorn main:app --reload",
-    "orchestrator": "cd orchestrator-service && npm run dev",
-    "frontend": "cd frontend && npm run dev",
-    "worker": "cd orchestrator-service && npm run worker",
-    "dev": "concurrently -n analysis,orchestrator,frontend,worker -c blue,green,yellow,magenta \"npm run analysis\" \"npm run orchestrator\" \"npm run frontend\" \"npm run worker\""
+    "install:all": "node -e \"var p=require('path'),c=require('child_process');var r=process.env.INIT_CWD||process.cwd();var s=c.spawnSync(process.execPath,[p.join(r,'scripts','run-install.js')],{stdio:'inherit'});process.exit(s.status!==null?s.status:1)\"",
+    "analysis": "node scripts/run-analysis.js",
+    "orchestrator": "npm run dev --prefix orchestrator-service",
+    "frontend": "npm run dev --prefix frontend",
+    "worker": "npm run worker --prefix orchestrator-service",
+    "log-analyzer": "npm run dev --prefix forge-log-analyzer",
+    "dev": "node -e \"var p=require('path'),c=require('child_process');var r=process.env.INIT_CWD||process.cwd();var s=c.spawnSync(process.execPath,[p.join(r,'scripts','run-dev.js')],{stdio:'inherit'});process.exit(s.status!==null?s.status:1)\"",
+    "dev:inner": "node ./node_modules/concurrently/dist/bin/concurrently.js -n analysis,log-analyzer,orchestrator,frontend,worker -c blue,cyan,green,yellow,magenta \"npm run analysis\" \"npm run log-analyzer\" \"npm run orchestrator\" \"npm run frontend\" \"npm run worker\""
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

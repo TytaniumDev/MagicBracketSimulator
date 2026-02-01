@@ -6,21 +6,53 @@ An attempt to better figure out commander brackets through simulation.
 
 - **frontend/** – The **web UI** (Vite + React). This is the only user-facing app; run it for the simulator interface at http://localhost:5173.
 - **orchestrator-service/** – API and worker: deck ingestion, job store, simulation orchestration. Serves APIs consumed by the frontend.
-- **analysis-service/** – Python service that analyzes simulation logs.
+- **forge-log-analyzer/** – TypeScript service that parses, condenses, and structures Forge game logs. Provides raw/condensed/structured log endpoints and forwards condensed logs to the Analysis Service.
+- **analysis-service/** – Python service that uses Gemini AI to analyze condensed game logs and assign a power bracket (1-5).
 - **forge-simulation-engine/** – Docker-based Forge simulation runner.
+
+## Architecture
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│   Frontend  │────▶│   Orchestrator  │────▶│  Forge (Docker)  │
+│  (React)    │     │  (API + Worker) │     │   Simulation     │
+└─────────────┘     └────────┬────────┘     └──────────────────┘
+       │                     │                        │
+       │                     │ raw logs               │
+       │                     ▼                        │
+       │            ┌─────────────────┐               │
+       └───────────▶│  Log Analyzer   │◀──────────────┘
+     raw/condensed  │ (condense, store)│
+     /structured    └────────┬────────┘
+                             │ condensed
+                             ▼
+                    ┌─────────────────┐
+                    │ Analysis Service│
+                    │  (Gemini AI)    │
+                    └─────────────────┘
+```
 
 ## Running the full app
 
 **Prerequisites:** Node.js 18+, Python 3.11+ with [uv](https://github.com/astral-sh/uv), Docker (with `forge-sim` image built). See [orchestrator-service/README.md](orchestrator-service/README.md) and [analysis-service/README.md](analysis-service/README.md) for setup (`.env` files, `GEMINI_API_KEY`, etc.).
 
+**Opening the project from Windows (e.g. Cursor with a `\\wsl.localhost\...` path):** `npm run dev` will re-run inside WSL. You need Node and npm installed **inside WSL** (not only on Windows). In a WSL terminal run: `sudo apt update && sudo apt install -y nodejs npm`. For the analysis service you also need [uv](https://github.com/astral-sh/uv) in WSL: `curl -LsSf https://astral.sh/uv/install.sh | sh` (then restart the terminal or `source ~/.bashrc`).
+
 ### One command (from repo root)
 
 ```bash
-npm install
+npm run install:all
 npm run dev
 ```
 
-Starts the Analysis Service (port 8000), Orchestrator API (port 3000), and **Frontend** (port 5173) in one terminal. Open **http://localhost:5173** in your browser for the web UI.
+Installs root, orchestrator-service, forge-log-analyzer, and frontend dependencies, then starts:
+- **Analysis Service** (port 8000)
+- **Log Analyzer** (port 3001)
+- **Orchestrator API** (port 3000)
+- **Frontend** (port 5173)
+- **Worker** (processes simulation jobs)
+
+Open **http://localhost:5173** in your browser for the web UI. (If you only ran `npm install` at the root before, run `npm run install:all` once so the subprojects get their dependencies.)
 
 ### Windows: double-click launcher
 

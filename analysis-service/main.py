@@ -1,8 +1,12 @@
 """
-Bracket Analysis Service API: POST /analyze condenses Forge logs and uses Gemini to judge bracket (1-5).
+Bracket Analysis Service API: POST /analyze uses Gemini to judge bracket (1-5).
+
+The service now expects pre-condensed logs from the Log Analyzer service.
+For backward compatibility, it also supports raw game_logs (will condense them).
 """
 import os
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -17,14 +21,23 @@ from log_parser import condense
 
 app = FastAPI(
     title="Bracket Analysis Service",
-    description="Condenses Forge game logs and uses Gemini to judge deck power bracket (1-5).",
+    description="Uses Gemini to judge deck power bracket (1-5) from condensed game logs.",
 )
 
 
 class AnalyzeRequest(BaseModel):
     hero_deck_name: str = Field(..., description="Name of the deck being judged")
     opponent_decks: list[str] = Field(..., description="Names of opponent decks (context)")
-    game_logs: list[str] = Field(..., description="Raw log string per game")
+    # Primary: Accept pre-condensed logs from the Log Analyzer
+    condensed_logs: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Pre-condensed game logs (from Log Analyzer). Preferred input."
+    )
+    # Backward compatibility: Accept raw logs and condense them here
+    game_logs: list[str] | None = Field(
+        default=None,
+        description="Raw log strings (deprecated - use condensed_logs instead)"
+    )
 
 
 class AnalyzeResponse(BaseModel):
@@ -37,15 +50,30 @@ class AnalyzeResponse(BaseModel):
 @app.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     """
-    Condense each game log, then call the Judge (Gemini) to assign bracket with reasoning.
+    Call the Judge (Gemini) to assign bracket with reasoning.
+    
+    Accepts either:
+    - condensed_logs: Pre-condensed logs from the Log Analyzer (preferred)
+    - game_logs: Raw logs that will be condensed here (backward compatibility)
     """
-    try:
-        condensed = [condense(log) for log in request.game_logs]
-    except Exception as e:
+    # Determine which input to use
+    if request.condensed_logs is not None:
+        # Use pre-condensed logs directly (new flow via Log Analyzer)
+        condensed = request.condensed_logs
+    elif request.game_logs is not None:
+        # Backward compatibility: condense raw logs here
+        try:
+            condensed = [condense(log) for log in request.game_logs]
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail="Log condensation failed. Please check game_logs format.",
+            ) from e
+    else:
         raise HTTPException(
-            status_code=503,
-            detail="Log condensation failed. Please check game_logs format.",
-        ) from e
+            status_code=400,
+            detail="Either condensed_logs or game_logs must be provided.",
+        )
 
     try:
         result = judge_analyze(
