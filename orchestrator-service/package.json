@@ -1,0 +1,33 @@
+{
+  "name": "orchestrator-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "worker": "tsx worker/worker.ts",
+    "test:integration": "tsx test/integration.test.ts"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "better-sqlite3": "^11.6.0",
+    "autoprefixer": "^10.4.21",
+    "next": "^15.3.3",
+    "postcss": "^8.5.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.8",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.15.29",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

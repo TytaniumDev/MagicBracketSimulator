@@ -1,0 +1,237 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-02-01",
+  "precons": [
+    {
+      "id": "ahoy-mateys",
+      "name": "Ahoy Mateys",
+      "filename": "Ahoy Mateys.dck",
+      "primaryCommander": "Admiral Brass, Unsinkable|LCC|1"
+    },
+    {
+      "id": "blame-game",
+      "name": "Blame Game",
+      "filename": "Blame Game.dck",
+      "primaryCommander": "Nelly Borca, Impulsive Accuser|MKC|1"
+    },
+    {
+      "id": "blood-rites",
+      "name": "Blood Rites",
+      "filename": "Blood Rites.dck",
+      "primaryCommander": "Clavile\u00f1o, First of the Blessed|LCC|1"
+    },
+    {
+      "id": "corrupting-influence",
+      "name": "Corrupting Influence",
+      "filename": "Corrupting Influence.dck",
+      "primaryCommander": "Ixhel, Scion of Atraxa"
+    },
+    {
+      "id": "deadly-disguise",
+      "name": "Deadly Disguise",
+      "filename": "Deadly Disguise.dck",
+      "primaryCommander": "Kaust, Eyes of the Glade|MKC|1"
+    },
+    {
+      "id": "deep-clue-sea",
+      "name": "Deep Clue Sea",
+      "filename": "Deep Clue Sea.dck",
+      "primaryCommander": "Morska, Undersea Sleuth|MKC|1"
+    },
+    {
+      "id": "desert-bloom",
+      "name": "Desert Bloom",
+      "filename": "Desert Bloom.dck",
+      "primaryCommander": "Yuma, Proud Protector|OTC|1"
+    },
+    {
+      "id": "draconic-dissent",
+      "name": "Draconic Dissent",
+      "filename": "Draconic Dissent.dck",
+      "primaryCommander": "Firkraag, Cunning Instigator"
+    },
+    {
+      "id": "eldrazi-unbound",
+      "name": "Eldrazi Unbound",
+      "filename": "Eldrazi Unbound.dck",
+      "primaryCommander": "Zhulodok, Void Gorger|CMM|1"
+    },
+    {
+      "id": "elven-council",
+      "name": "Elven Council",
+      "filename": "Elven Council.dck",
+      "primaryCommander": "Galadriel, Elven-Queen|LTC|1"
+    },
+    {
+      "id": "enduring-enchantments",
+      "name": "Enduring Enchantments",
+      "filename": "Enduring Enchantments.dck",
+      "primaryCommander": "Anikthea, Hand of Erebos|CMM|1"
+    },
+    {
+      "id": "exit-from-exile",
+      "name": "Exit from Exile",
+      "filename": "Exit from Exile.dck",
+      "primaryCommander": "Faldorn, Dread Wolf Herald"
+    },
+    {
+      "id": "explorers-of-the-deep",
+      "name": "Explorers of the Deep",
+      "filename": "Explorers of the Deep.dck",
+      "primaryCommander": "Hakbal of the Surging Soul|LCC|1"
+    },
+    {
+      "id": "fae-dominion",
+      "name": "Fae Dominion",
+      "filename": "Fae Dominion.dck",
+      "primaryCommander": "Tegwyll, Duke of Splendor|WOC|1"
+    },
+    {
+      "id": "food-and-fellowship",
+      "name": "Food and Fellowship",
+      "filename": "Food and Fellowship.dck",
+      "primaryCommander": "Frodo, Adventurous Hobbit|LTC|1"
+    },
+    {
+      "id": "grand-larceny",
+      "name": "Grand Larceny",
+      "filename": "Grand Larceny.dck",
+      "primaryCommander": "Gonti, Canny Acquisitor|OTC|1"
+    },
+    {
+      "id": "hail-caesar",
+      "name": "Hail, Caesar",
+      "filename": "Hail, Caesar.dck",
+      "primaryCommander": "Aradesh, the Founder|PIP|1"
+    },
+    {
+      "id": "lorehold-legacies",
+      "name": "Lorehold Legacies",
+      "filename": "Lorehold Legacies.dck",
+      "set": "Strixhaven Commander",
+      "setCode": "STX",
+      "year": 2021,
+      "primaryCommander": "Osgir, the Reconstructor",
+      "colors": [
+        "R",
+        "W"
+      ],
+      "archetype": "artifacts",
+      "powerLevel": 6
+    },
+    {
+      "id": "mind-flayarrrs",
+      "name": "Mind Flayarrrs",
+      "filename": "Mind Flayarrrs.dck",
+      "primaryCommander": "Captain N'ghathrod"
+    },
+    {
+      "id": "most-wanted",
+      "name": "Most Wanted",
+      "filename": "Most Wanted.dck",
+      "primaryCommander": "Olivia, Opulent Outlaw|OTC|1"
+    },
+    {
+      "id": "mutant-menace",
+      "name": "Mutant Menace",
+      "filename": "Mutant Menace.dck",
+      "primaryCommander": "The Wise Mothman|PIP|1"
+    },
+    {
+      "id": "party-time",
+      "name": "Party Time",
+      "filename": "Party Time.dck",
+      "primaryCommander": "Nalia de'Arnise"
+    },
+    {
+      "id": "planeswalker-party",
+      "name": "Planeswalker Party",
+      "filename": "Planeswalker Party.dck",
+      "primaryCommander": "Commodore Guff|CMM|1"
+    },
+    {
+      "id": "prismari-performance",
+      "name": "Prismari Performance",
+      "filename": "Prismari Performance.dck",
+      "primaryCommander": "Zaffai, Thunder Conductor"
+    },
+    {
+      "id": "quantum-quandrix",
+      "name": "Quantum Quandrix",
+      "filename": "Quantum Quandrix.dck",
+      "primaryCommander": "Adrix and Nev, Twincasters"
+    },
+    {
+      "id": "quick-draw",
+      "name": "Quick Draw",
+      "filename": "Quick Draw.dck",
+      "primaryCommander": "Stella Lee, Wild Card|OTC|1"
+    },
+    {
+      "id": "rebellion-rising",
+      "name": "Rebellion Rising",
+      "filename": "Rebellion Rising.dck",
+      "primaryCommander": "Neyali, Suns' Vanguard"
+    },
+    {
+      "id": "revenant-recon",
+      "name": "Revenant Recon",
+      "filename": "Revenant Recon.dck",
+      "primaryCommander": "Mirko, Obsessive Theorist|MKC|1"
+    },
+    {
+      "id": "riders-of-rohan",
+      "name": "Riders of Rohan",
+      "filename": "Riders of Rohan.dck",
+      "primaryCommander": "\u00c9owyn, Shieldmaiden|LTC|1"
+    },
+    {
+      "id": "science",
+      "name": "Science!",
+      "filename": "Science!.dck",
+      "primaryCommander": "Dr. Madison Li|PIP|1"
+    },
+    {
+      "id": "scrappy-survivors",
+      "name": "Scrappy Survivors",
+      "filename": "Scrappy Survivors.dck",
+      "primaryCommander": "Codsworth, Handy Helper|PIP|1"
+    },
+    {
+      "id": "silverquill-statement",
+      "name": "Silverquill Statement",
+      "filename": "Silverquill Statement.dck",
+      "primaryCommander": "Breena, the Demagogue"
+    },
+    {
+      "id": "sliver-swarm",
+      "name": "Sliver Swarm",
+      "filename": "Sliver Swarm.dck",
+      "primaryCommander": "Sliver Gravemother|CMM|1"
+    },
+    {
+      "id": "the-hosts-of-mordor",
+      "name": "The Hosts of Mordor",
+      "filename": "The Hosts of Mordor.dck",
+      "primaryCommander": "Sauron, Lord of the Rings|LTC|1"
+    },
+    {
+      "id": "veloci-ramp-tor",
+      "name": "Veloci-RAMP-Tor",
+      "filename": "Veloci-RAMP-Tor.dck",
+      "primaryCommander": "Pantlaza, Sun-Favored|LCC|1"
+    },
+    {
+      "id": "virtue-and-valor",
+      "name": "Virtue and Valor",
+      "filename": "Virtue and Valor.dck",
+      "primaryCommander": "Ellivere of the Wild Court|WOC|1"
+    },
+    {
+      "id": "witherbloom-witchcraft",
+      "name": "Witherbloom Witchcraft",
+      "filename": "Witherbloom Witchcraft.dck",
+      "primaryCommander": "Willowdusk, Essence Seer"
+    }
+  ]
+}

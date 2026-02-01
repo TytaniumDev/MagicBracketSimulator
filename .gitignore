@@ -1,0 +1,51 @@
+# Plan artifacts - do not commit
+agent-plans/
+
+# Environment
+.env
+**/.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+*.egg-info/
+.eggs/
+
+# Job store (SQLite DB - shared across processes)
+orchestrator-service/data/
+
+# Forge simulation (generated logs)
+forge-simulation-engine/logs/
+
+# Forge installer (too large for GitHub; Dockerfile downloads at build time)
+forge-simulation-engine/forge-installer*.jar
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE (optional – remove if you commit shared settings)
+.vscode/
+.idea/

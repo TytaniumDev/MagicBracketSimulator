@@ -1,0 +1,15 @@
+{
+  "name": "magic-bracket-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "analysis": "cd analysis-service && uv run uvicorn main:app --reload",
+    "orchestrator": "cd orchestrator-service && npm run dev",
+    "frontend": "cd frontend && npm run dev",
+    "worker": "cd orchestrator-service && npm run worker",
+    "dev": "concurrently -n analysis,orchestrator,frontend,worker -c blue,green,yellow,magenta \"npm run analysis\" \"npm run orchestrator\" \"npm run frontend\" \"npm run worker\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
