@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends jq \
     && cd /app/res/precons \
     && if [ -f manifest.json ]; then \
         set -e; \
-        jq -r '.precons[].filename' manifest.json 2>/dev/null > /tmp/decklist; \
+        jq -r '.precons[].filename' manifest.json > /tmp/decklist || { echo "ERROR: manifest.json is invalid or unparseable"; exit 1; }; \
         while IFS= read -r deck; do \
             [ -f "$deck" ] || { echo "Missing precon: $deck"; exit 1; }; \
         done < /tmp/decklist; \
