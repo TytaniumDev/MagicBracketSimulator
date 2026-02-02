@@ -126,12 +126,22 @@ function splitSimulations(total: number, parallelism: number): number[] {
 function runDocker(args: string[]): Promise<{ exitCode: number; duration: number }> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    console.log(`Running: docker ${args.join(' ')}`);
+    // Determine command and args based on platform
+    let command = 'docker';
+    let commandArgs = args;
+
+    // On macOS, use caffeinate to prevent sleep during execution
+    if (process.platform === 'darwin') {
+      command = 'caffeinate';
+      commandArgs = ['-i', 'docker', ...args];
+    }
+
+    console.log(`Running: ${command} ${commandArgs.join(' ')}`);
 
     // Handle Windows/WSL path issues
     const env = { ...process.env, MSYS_NO_PATHCONV: '1' };
 
-    const proc: ChildProcess = spawn('docker', args, {
+    const proc: ChildProcess = spawn(command, commandArgs, {
       stdio: 'inherit',
       env,
     });

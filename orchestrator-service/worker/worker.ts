@@ -215,9 +215,19 @@ async function runForgeDocker(
       runId,
     ];
 
-    console.log(`[Worker] Docker command: docker ${dockerArgs.join(' ')}`);
+    // Determine command and args based on platform
+    let command = 'docker';
+    let commandArgs = dockerArgs;
 
-    const dockerProcess = spawn('docker', dockerArgs, {
+    // On macOS, use caffeinate to prevent sleep during execution
+    if (process.platform === 'darwin') {
+      command = 'caffeinate';
+      commandArgs = ['-i', 'docker', ...dockerArgs];
+    }
+
+    console.log(`[Worker] Docker command: ${command} ${commandArgs.join(' ')}`);
+
+    const dockerProcess = spawn(command, commandArgs, {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -258,7 +268,7 @@ async function runWorkerLoop() {
   while (true) {
     try {
       const job = getNextQueuedJob();
-      
+
       if (job) {
         await processJob(job);
       } else {

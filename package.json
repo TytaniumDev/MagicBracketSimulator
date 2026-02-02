@@ -10,7 +10,8 @@
     "worker": "npm run worker --prefix orchestrator-service",
     "log-analyzer": "npm run dev --prefix forge-log-analyzer",
     "dev": "node -e \"var p=require('path'),c=require('child_process');var r=process.env.INIT_CWD||process.cwd();var s=c.spawnSync(process.execPath,[p.join(r,'scripts','run-dev.js')],{stdio:'inherit'});process.exit(s.status!==null?s.status:1)\"",
-    "dev:inner": "node ./node_modules/concurrently/dist/bin/concurrently.js -n analysis,log-analyzer,orchestrator,frontend,worker -c blue,cyan,green,yellow,magenta \"npm run analysis\" \"npm run log-analyzer\" \"npm run orchestrator\" \"npm run frontend\" \"npm run worker\""
+    "dev:inner": "node ./node_modules/concurrently/dist/bin/concurrently.js -n analysis,log-analyzer,orchestrator,frontend,worker -c blue,cyan,green,yellow,magenta \"npm run analysis\" \"npm run log-analyzer\" \"npm run orchestrator\" \"npm run frontend\" \"npm run worker\"",
+    "dev:keep-awake": "caffeinate -i npm run dev"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
