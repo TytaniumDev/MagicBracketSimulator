@@ -1,5 +1,7 @@
 # Forge Log Analyzer
 
+> **Status: Legacy** - This service is used only in LOCAL mode. In GCP mode, this functionality is handled by **misc-runner** (Go container) which condenses logs and uploads directly to Cloud Storage.
+
 A dedicated service for parsing, condensing, and structuring Forge game logs.
 
 ## Purpose

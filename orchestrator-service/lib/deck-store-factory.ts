@@ -13,6 +13,15 @@ import * as firestoreDecks from './firestore-decks';
 const USE_FIRESTORE =
   typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
+// Log mode detection at startup
+console.log(`[Deck Store] Running in ${USE_FIRESTORE ? 'GCP' : 'LOCAL'} mode`);
+if (USE_FIRESTORE) {
+  console.log(`[Deck Store] Project: ${process.env.GOOGLE_CLOUD_PROJECT}`);
+  console.log(`[Deck Store] Using: Firestore`);
+} else {
+  console.log(`[Deck Store] Using: Filesystem (precons + saved-decks)`);
+}
+
 export interface DeckListItem {
   id: string;
   name: string;

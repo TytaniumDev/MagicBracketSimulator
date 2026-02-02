@@ -1,5 +1,7 @@
 # Bracket Analysis Service
 
+> **Status: Legacy** - This service is used only in LOCAL mode. In GCP mode, AI analysis is handled directly by **orchestrator-service** using the Gemini API.
+
 The **Judge** service: takes raw Forge simulation output, condenses it, and uses Gemini to determine the Power Level Bracket (1–5) of a deck with explainable reasoning (why a deck is in a given bracket and what weaknesses it has).
 
 See [PRD.md](PRD.md) for full specifications.

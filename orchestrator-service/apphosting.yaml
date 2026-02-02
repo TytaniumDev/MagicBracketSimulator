@@ -1,0 +1,25 @@
+# Firebase App Hosting configuration
+runConfig:
+  minInstances: 0
+  maxInstances: 1
+  memory: 512MiB
+  cpu: 1
+  concurrency: 80
+
+env:
+  - variable: GOOGLE_CLOUD_PROJECT
+    value: magic-bracket-simulator
+  - variable: GCS_BUCKET
+    value: magic-bracket-simulator-artifacts
+  - variable: PUBSUB_TOPIC
+    value: job-created
+  - variable: NODE_ENV
+    value: production
+
+secretEnv:
+  - variable: GEMINI_API_KEY
+    secret: gemini-api-key
+    version: latest
+  - variable: WORKER_SECRET
+    secret: worker-secret
+    version: latest

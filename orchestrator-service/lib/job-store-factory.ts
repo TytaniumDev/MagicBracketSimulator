@@ -8,6 +8,15 @@ import * as firestoreStore from './firestore-job-store';
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
+// Log mode detection at startup
+console.log(`[Job Store] Running in ${USE_FIRESTORE ? 'GCP' : 'LOCAL'} mode`);
+if (USE_FIRESTORE) {
+  console.log(`[Job Store] Project: ${process.env.GOOGLE_CLOUD_PROJECT}`);
+  console.log(`[Job Store] Using: Firestore + Cloud Storage + Pub/Sub`);
+} else {
+  console.log(`[Job Store] Using: SQLite + local filesystem`);
+}
+
 export function isGcpMode(): boolean {
   return USE_FIRESTORE;
 }

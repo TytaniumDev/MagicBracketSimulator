@@ -3,7 +3,7 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { listAllDecks, createDeck } from '@/lib/deck-store-factory';
 import { parseCommanderFromContent } from '@/lib/saved-decks';
 import { getColorIdentity } from '@/lib/scryfall';
-import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
+import { fetchDeckAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
 
 /**
  * GET /api/decks - List all decks (precons + every user's submissions)
@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/decks - Create a deck from URL or text
- * Body: { deckUrl?: string, deckText?: string }
+ * POST /api/decks - Create a deck from URL
+ * Body: { deckUrl: string }
  */
 export async function POST(request: NextRequest) {
   let user;
@@ -41,49 +41,27 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { deckUrl, deckText } = body;
+    const { deckUrl } = body;
 
-    if (!deckUrl && !deckText) {
+    const url = typeof deckUrl === 'string' ? deckUrl.trim() : '';
+    if (!url) {
       return NextResponse.json(
-        { error: 'Either deckUrl or deckText is required' },
-        { status: 400 }
-      );
-    }
-    if (deckUrl && deckText) {
-      return NextResponse.json(
-        { error: 'Provide either deckUrl or deckText, not both' },
+        { error: 'deckUrl is required' },
         { status: 400 }
       );
     }
 
-    let name: string;
-    let dck: string;
-    let link: string | null = null;
-
-    if (deckUrl) {
-      const url = typeof deckUrl === 'string' ? deckUrl.trim() : '';
-      if (!isMoxfieldUrl(url) && !isArchidektUrl(url) && !isManaboxUrl(url)) {
-        return NextResponse.json(
-          { error: 'Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.' },
-          { status: 400 }
-        );
-      }
-      const result = await fetchDeckAsDck(url);
-      name = result.name;
-      dck = result.dck;
-      link = url;
-    } else {
-      const text = typeof deckText === 'string' ? deckText.trim() : '';
-      if (!text) {
-        return NextResponse.json(
-          { error: 'deckText is required when not using deckUrl' },
-          { status: 400 }
-        );
-      }
-      const result = parseTextAsDck(text);
-      name = result.name;
-      dck = result.dck;
+    if (!isMoxfieldUrl(url) && !isArchidektUrl(url) && !isManaboxUrl(url)) {
+      return NextResponse.json(
+        { error: 'Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.' },
+        { status: 400 }
+      );
     }
+
+    const result = await fetchDeckAsDck(url);
+    const name = result.name;
+    const dck = result.dck;
+    const link = url;
 
     const commander = parseCommanderFromContent(dck);
     let colorIdentity: string[] | undefined;

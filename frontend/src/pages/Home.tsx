@@ -50,9 +50,7 @@ export default function Home() {
   const { user } = useAuth();
   
   // Add deck state
-  const [addDeckMode, setAddDeckMode] = useState<'url' | 'text'>('url');
   const [deckUrl, setDeckUrl] = useState('');
-  const [deckText, setDeckText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -171,19 +169,12 @@ export default function Home() {
     setIsSaving(true);
 
     try {
-      const body: Record<string, string> = {};
-      if (addDeckMode === 'url') {
-        if (!deckUrl.trim()) throw new Error('Please enter a deck URL');
-        body.deckUrl = deckUrl.trim();
-      } else {
-        if (!deckText.trim()) throw new Error('Please enter a deck list');
-        body.deckText = deckText.trim();
-      }
+      if (!deckUrl.trim()) throw new Error('Please enter a deck URL');
 
       const response = await fetchWithAuth(`${apiBase}/api/decks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ deckUrl: deckUrl.trim() }),
       });
 
       const data = await response.json();
@@ -194,8 +185,7 @@ export default function Home() {
 
       setSaveMessage(`Deck saved: "${data.name}"`);
       await fetchDecks();
-      if (addDeckMode === 'url') setDeckUrl('');
-      else setDeckText('');
+      setDeckUrl('');
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save deck');
     } finally {
@@ -311,79 +301,30 @@ export default function Home() {
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Add a Deck</h2>
         <p className="text-sm text-gray-400 mb-4">
-          Import a deck from Moxfield, Archidekt, or ManaBox or paste a deck list to add it to your saved decks.
+          Import a deck from Moxfield, Archidekt, or ManaBox to add it to your saved decks.
         </p>
 
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={deckUrl}
+            onChange={(e) => setDeckUrl(e.target.value)}
+            placeholder="https://moxfield.com/decks/... or https://manabox.app/decks/..."
+            className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
           <button
             type="button"
-            onClick={() => setAddDeckMode('url')}
-            className={`px-4 py-2 rounded-md text-sm ${
-              addDeckMode === 'url'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            onClick={handleSaveDeck}
+            disabled={isSaving || !deckUrl.trim()}
+            className={`px-4 py-2 rounded-md ${
+              isSaving || !deckUrl.trim()
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-green-600 text-white hover:bg-green-700'
             }`}
           >
-            URL
-          </button>
-          <button
-            type="button"
-            onClick={() => setAddDeckMode('text')}
-            className={`px-4 py-2 rounded-md text-sm ${
-              addDeckMode === 'text'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Deck List
+            {isSaving ? 'Adding...' : 'Add Deck'}
           </button>
         </div>
-
-        {addDeckMode === 'url' ? (
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={deckUrl}
-              onChange={(e) => setDeckUrl(e.target.value)}
-              placeholder="https://moxfield.com/decks/... or https://manabox.app/decks/..."
-              className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="button"
-              onClick={handleSaveDeck}
-              disabled={isSaving || !deckUrl.trim()}
-              className={`px-4 py-2 rounded-md ${
-                isSaving || !deckUrl.trim()
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-            >
-              {isSaving ? 'Adding...' : 'Add Deck'}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <textarea
-              value={deckText}
-              onChange={(e) => setDeckText(e.target.value)}
-              placeholder={`[Commander]\n1 Ashling the Pilgrim\n\n[Main]\n1 Sol Ring\n99 Mountain`}
-              rows={6}
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-            />
-            <button
-              type="button"
-              onClick={handleSaveDeck}
-              disabled={isSaving || !deckText.trim()}
-              className={`px-4 py-2 rounded-md ${
-                isSaving || !deckText.trim()
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-            >
-              {isSaving ? 'Adding...' : 'Add Deck'}
-            </button>
-          </div>
-        )}
 
         {saveMessage && (
           <div className="mt-3 bg-green-900/50 border border-green-500 text-green-200 px-4 py-2 rounded-md text-sm">
