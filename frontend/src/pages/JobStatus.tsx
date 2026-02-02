@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getApiBase, getLogAnalyzerBase } from '../api';
+import { getApiBase, getLogAnalyzerBase, fetchWithAuth } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
@@ -141,7 +141,7 @@ export default function JobStatusPage() {
     if (!id) return;
     const controller = new AbortController();
     const fetchJob = () => {
-      fetch(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
+      fetchWithAuth(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) throw new Error('Job not found');
@@ -177,7 +177,7 @@ export default function JobStatusPage() {
     if (structuredGames !== null) return; // Already fetched
     
     setStructuredError(null);
-    fetch(`${logAnalyzerBase}/jobs/${id}/logs/structured`)
+    fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/structured`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) return { games: [], deckNames: [] };
@@ -203,7 +203,7 @@ export default function JobStatusPage() {
     const list = Array.from(names);
     if (list.length === 0) return;
     const params = new URLSearchParams({ names: list.join(',') });
-    fetch(`${apiBase}/api/deck-color-identity?${params}`)
+    fetchWithAuth(`${apiBase}/api/deck-color-identity?${params}`)
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
       .catch(() => {});
@@ -216,7 +216,7 @@ export default function JobStatusPage() {
     if (analyzePayload !== null) return; // Already fetched
     
     setAnalyzePayloadError(null);
-    fetch(`${logAnalyzerBase}/jobs/${id}/logs/analyze-payload`)
+    fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/analyze-payload`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) return null;
@@ -237,7 +237,7 @@ export default function JobStatusPage() {
     if (!id || !showPayload || !analyzePayload) return;
     setPromptPreviewError(null);
     setPromptPreview(null);
-    fetch(`${logAnalyzerBase}/jobs/${id}/logs/analyze-prompt-preview`)
+    fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/analyze-prompt-preview`)
       .then(async (res) => {
         if (!res.ok) {
           const text = await res.text();
@@ -265,7 +265,7 @@ export default function JobStatusPage() {
     // Fetch raw logs
     if (rawLogs === null) {
       setRawLogsError(null);
-      fetch(`${logAnalyzerBase}/jobs/${id}/logs/raw`)
+      fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/raw`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { gameLogs: [] };
@@ -280,7 +280,7 @@ export default function JobStatusPage() {
     // Fetch condensed logs
     if (condensedLogs === null) {
       setCondensedError(null);
-      fetch(`${logAnalyzerBase}/jobs/${id}/logs/condensed`)
+      fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/condensed`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { condensed: [] };
@@ -383,7 +383,7 @@ export default function JobStatusPage() {
     setAnalyzeError(null);
     
     try {
-      const response = await fetch(`${apiBase}/api/jobs/${id}/analyze`, {
+      const response = await fetchWithAuth(`${apiBase}/api/jobs/${id}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),

@@ -7,6 +7,14 @@ agent-plans/
 .env.local
 .env.*.local
 
+# GCP credentials and secrets - NEVER commit these
+*-key.json
+*-credentials.json
+firebase-admin-key.json
+magic-bracket-worker-key.json
+*.pem
+service-account*.json
+
 # Node
 node_modules/
 .next/
@@ -32,8 +40,15 @@ venv/
 # Job store (SQLite DB - shared across processes)
 orchestrator-service/data/
 
+# Local worker jobs directory
+local-worker/jobs/
+orchestrator-service/jobs/
+
 # Forge simulation (generated logs)
 forge-simulation-engine/logs/
+
+# Go build artifacts
+misc-runner/misc-runner
 
 # Forge installer (too large for GitHub; Dockerfile downloads at build time)
 forge-simulation-engine/forge-installer*.jar

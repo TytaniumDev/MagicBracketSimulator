@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
-import { deleteSavedDeck } from '@/lib/saved-decks';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { deleteDeck } from '@/lib/deck-store-factory';
 import { removeColorIdentity } from '@/lib/deck-metadata';
 
 interface RouteParams {
@@ -7,12 +8,19 @@ interface RouteParams {
 }
 
 /**
- * DELETE /api/decks/[id] - Delete a saved deck by filename
+ * DELETE /api/decks/[id] - Delete a deck (only owner can delete)
  */
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  let user;
+  try {
+    user = await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const { id } = await params;
-    
+
     if (!id) {
       return NextResponse.json(
         { error: 'Deck ID is required' },
@@ -20,8 +28,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       );
     }
 
-    // The id is the filename (e.g., "doran-big-butts.dck")
-    const deleted = deleteSavedDeck(id);
+    const deleted = await deleteDeck(id, user.uid);
 
     if (deleted) {
       removeColorIdentity(id);
@@ -29,7 +36,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     if (!deleted) {
       return NextResponse.json(
-        { error: 'Deck not found' },
+        { error: 'Deck not found or you do not have permission to delete it' },
         { status: 404 }
       );
     }
@@ -38,15 +45,11 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   } catch (error) {
     console.error('Failed to delete deck:', error);
     const message = error instanceof Error ? error.message : 'Failed to delete deck';
-    
-    // If it's an invalid filename error, return 400
-    if (message === 'Invalid deck filename') {
-      return NextResponse.json(
-        { error: message },
-        { status: 400 }
-      );
+
+    if (message.includes('Only the deck owner')) {
+      return NextResponse.json({ error: message }, { status: 403 });
     }
-    
+
     return NextResponse.json(
       { error: message },
       { status: 500 }

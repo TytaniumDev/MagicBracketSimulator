@@ -1,0 +1,10 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "apphosting": {
+    "source": "./orchestrator-service",
+    "apphosting.yaml": "./orchestrator-service/apphosting.yaml"
+  }
+}

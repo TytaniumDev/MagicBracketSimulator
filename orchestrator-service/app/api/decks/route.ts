@@ -1,89 +1,87 @@
-import { NextResponse } from 'next/server';
-import { listSavedDecks, saveDeck, parseCommanderFromContent } from '@/lib/saved-decks';
-import { getColorIdentityByKey, setColorIdentity } from '@/lib/deck-metadata';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { listAllDecks, createDeck } from '@/lib/deck-store-factory';
+import { parseCommanderFromContent } from '@/lib/saved-decks';
 import { getColorIdentity } from '@/lib/scryfall';
-import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
+import { fetchDeckAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
 
 /**
- * GET /api/decks - List all saved decks
+ * GET /api/decks - List all decks (precons + every user's submissions)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const decks = listSavedDecks();
-    const decksWithColor = decks.map((deck) => {
-      const colorIdentity = getColorIdentityByKey(deck.filename);
-      return { ...deck, colorIdentity };
-    });
-    return NextResponse.json({ decks: decksWithColor });
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
+  try {
+    const decks = await listAllDecks();
+    return NextResponse.json({ decks });
   } catch (error) {
-    console.error('Failed to list saved decks:', error);
+    console.error('Failed to list decks:', error);
     return NextResponse.json(
-      { error: 'Failed to list saved decks' },
+      { error: 'Failed to list decks' },
       { status: 500 }
     );
   }
 }
 
 /**
- * POST /api/decks - Save a deck from URL or text
- * Body: { deckUrl?: string, deckText?: string }
+ * POST /api/decks - Create a deck from URL
+ * Body: { deckUrl: string }
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  let user;
+  try {
+    user = await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json();
-    const { deckUrl, deckText } = body;
+    const { deckUrl } = body;
 
-    // Validate: exactly one of deckUrl or deckText required
-    if (!deckUrl && !deckText) {
+    const url = typeof deckUrl === 'string' ? deckUrl.trim() : '';
+    if (!url) {
       return NextResponse.json(
-        { error: 'Either deckUrl or deckText is required' },
-        { status: 400 }
-      );
-    }
-    if (deckUrl && deckText) {
-      return NextResponse.json(
-        { error: 'Provide either deckUrl or deckText, not both' },
+        { error: 'deckUrl is required' },
         { status: 400 }
       );
     }
 
-    let name: string;
-    let dck: string;
-
-    if (deckUrl) {
-      // Validate URL format
-      if (!isMoxfieldUrl(deckUrl) && !isArchidektUrl(deckUrl) && !isManaboxUrl(deckUrl)) {
-        return NextResponse.json(
-          { error: 'Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.' },
-          { status: 400 }
-        );
-      }
-
-      // Fetch deck from URL
-      const result = await fetchDeckAsDck(deckUrl);
-      name = result.name;
-      dck = result.dck;
-    } else {
-      // Parse deck from text
-      const result = parseTextAsDck(deckText);
-      name = result.name;
-      dck = result.dck;
+    if (!isMoxfieldUrl(url) && !isArchidektUrl(url) && !isManaboxUrl(url)) {
+      return NextResponse.json(
+        { error: 'Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.' },
+        { status: 400 }
+      );
     }
 
-    // Save the deck
-    const savedDeck = saveDeck(name, dck);
+    const result = await fetchDeckAsDck(url);
+    const name = result.name;
+    const dck = result.dck;
+    const link = url;
 
-    // Resolve and store commander color identity
     const commander = parseCommanderFromContent(dck);
     let colorIdentity: string[] | undefined;
     if (commander) {
       colorIdentity = await getColorIdentity(commander);
-      if (colorIdentity.length > 0) {
-        setColorIdentity(savedDeck.filename, colorIdentity);
-      }
     }
 
-    return NextResponse.json({ ...savedDeck, colorIdentity }, { status: 201 });
+    const savedDeck = await createDeck({
+      name,
+      dck,
+      link,
+      ownerId: user.uid,
+      ownerEmail: user.email,
+      colorIdentity,
+    });
+
+    return NextResponse.json(
+      { ...savedDeck, colorIdentity },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Failed to save deck:', error);
     const message = error instanceof Error ? error.message : 'Failed to save deck';

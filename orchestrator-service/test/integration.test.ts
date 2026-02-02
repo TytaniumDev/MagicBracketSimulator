@@ -130,13 +130,13 @@ async function runTests() {
       body: JSON.stringify({
         deckIds: preconIds,
         simulations: 5,
-        parallelism: 10,
+        parallelism: 20,
       }),
     });
     
     assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.error.includes('between 1 and 8'), 'Expected parallelism range error');
+    assert(data.error.includes('between 1 and 16'), 'Expected parallelism range error');
   });
 
   // Test: POST /api/jobs - create job with 4 precons
@@ -218,30 +218,18 @@ async function runTests() {
     assert(data.name === 'Temur Roar Upgraded', `Expected deck name, got ${data.name}`);
   });
 
-  // Test: POST /api/decks - save a deck from text
-  await test('POST /api/decks saves deck from text', async () => {
-    const deckText = `[metadata]
-Name=Test Deck
-
-[Commander]
-1 Ashling the Pilgrim
-
-[Main]
-1 Sol Ring
-98 Mountain`;
-
+  // Test: POST /api/decks - deckText is not accepted (URL only)
+  await test('POST /api/decks rejects deck text', async () => {
     const response = await fetch(`${BASE_URL}/api/decks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        deckText,
+        deckText: '[Commander]\n1 Ashling\n\n[Main]\n99 Mountain',
       }),
     });
-    
-    assert(response.status === 201, `Expected 201, got ${response.status}`);
+    assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.id, 'Expected deck id (filename)');
-    assert(data.name === 'Test Deck', 'Expected deck name from metadata');
+    assert(data.error?.includes('deckUrl') || data.error?.toLowerCase().includes('url'), 'Expected error about deckUrl');
   });
 
   // Test: GET /api/decks - list saved decks

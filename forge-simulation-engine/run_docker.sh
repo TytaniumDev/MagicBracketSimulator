@@ -9,8 +9,17 @@ if [[ -n "${MSYSTEM:-}" ]] || [[ "${OSTYPE:-}" =~ ^msys ]]; then
 fi
 
 IMAGE="${FORGE_SIM_IMAGE:-forge-sim}"
-exec docker run --rm \
+
+# Build the docker command arguments
+CMD=(docker run --rm \
   -v "$(pwd)/decks:/app/decks" \
   -v "$(pwd)/logs:/app/logs" \
   "$IMAGE" \
-  "$@"
+  "$@")
+
+# On macOS, use caffeinate to prevent sleep during execution
+if [[ "${OSTYPE:-}" == "darwin"* ]]; then
+  exec caffeinate -i "${CMD[@]}"
+else
+  exec "${CMD[@]}"
+fi

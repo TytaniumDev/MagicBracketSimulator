@@ -48,7 +48,7 @@ export interface CreateJobRequest {
 export const SIMULATIONS_MIN = 1;
 export const SIMULATIONS_MAX = 100;
 export const PARALLELISM_MIN = 1;
-export const PARALLELISM_MAX = 8;
+export const PARALLELISM_MAX = 16;
 
 export interface Precon {
   id: string;

@@ -4,8 +4,7 @@ The API and worker for the Magic Bracket Simulator. Handles deck ingestion from 
 
 ## Features
 
-- Import decks from Moxfield, Archidekt, or ManaBox URLs
-- Paste deck lists directly
+- Import decks from Moxfield, Archidekt, or ManaBox URLs only
 - Select random or specific precon opponents
 - Real-time job status tracking
 - Display power bracket analysis results
@@ -92,17 +91,6 @@ npm start
 {
   "deckUrl": "https://moxfield.com/decks/abc123",
   "opponentMode": "random",
-  "simulations": 5
-}
-```
-
-Or with deck text:
-
-```json
-{
-  "deckText": "[Commander]\n1 Ashling the Pilgrim\n\n[Main]\n1 Sol Ring\n99 Mountain",
-  "opponentMode": "specific",
-  "opponentIds": ["lorehold-legacies", "elven-council", "prismari-performance"],
   "simulations": 5
 }
 ```
