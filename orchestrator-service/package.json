@@ -15,9 +15,14 @@
     "backfill-color-identity": "tsx scripts/backfill-deck-color-identity.ts"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^8.2.0",
+    "@google-cloud/pubsub": "^5.2.2",
+    "@google-cloud/storage": "^7.18.0",
+    "@google/generative-ai": "^0.24.1",
     "@tailwindcss/postcss": "^4.1.18",
-    "better-sqlite3": "^11.6.0",
     "autoprefixer": "^10.4.21",
+    "better-sqlite3": "^11.6.0",
+    "firebase-admin": "^13.6.0",
     "next": "15.5.7",
     "postcss": "^8.5.3",
     "react": "^19.1.0",

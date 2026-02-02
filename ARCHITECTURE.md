@@ -4,6 +4,102 @@ This document describes the system architecture, with emphasis on the Docker-bas
 
 ---
 
+## Deployment Modes
+
+The system supports two deployment modes:
+
+1. **Local Development** - All services run locally (original architecture)
+2. **GCP Cloud Deployment** - Cloud Run API with local Docker workers
+
+---
+
+## GCP Cloud Architecture (Recommended for Production)
+
+```mermaid
+flowchart TB
+    subgraph gcp [GCP Cloud - Free Tier]
+        CloudRun[Cloud Run<br/>Next.js App]
+        Firestore[(Firestore)]
+        GCS[(Cloud Storage)]
+        PubSub[Pub/Sub]
+        FirebaseAuth[Firebase Auth]
+        CloudRun --> Firestore
+        CloudRun --> GCS
+        CloudRun --> PubSub
+        FirebaseAuth --> CloudRun
+    end
+
+    subgraph local [Local Machine]
+        Worker[Local Worker<br/>Pub/Sub Pull]
+        ForgeSim[forge-sim container]
+        MiscRunner[misc-runner container<br/>Go]
+        Worker --> ForgeSim
+        Worker --> MiscRunner
+    end
+
+    User --> CloudRun
+    PubSub -.-> Worker
+    MiscRunner --> GCS
+    MiscRunner --> CloudRun
+```
+
+### GCP Components
+
+| Component | Service | Purpose |
+|-----------|---------|---------|
+| **API + Frontend** | Cloud Run | Single Next.js app serving API routes and optional frontend |
+| **Job Metadata** | Firestore | Job state, deck references, results |
+| **Artifacts** | Cloud Storage | Raw logs, condensed logs, analysis payloads |
+| **Job Queue** | Pub/Sub | Triggers local workers when jobs are created |
+| **Authentication** | Firebase Auth | Google sign-in with email allowlist |
+| **Secrets** | Secret Manager | Gemini API key and other secrets |
+
+### Local Components (GCP Mode)
+
+| Component | Directory | Purpose |
+|-----------|-----------|---------|
+| **Local Worker** | `local-worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
+| **Forge Sim** | `forge-simulation-engine/` | Runs MTG simulations (unchanged) |
+| **Misc Runner** | `misc-runner/` | Go container: condenses logs, uploads to GCS |
+
+### GCP Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CloudRun as Cloud Run
+    participant Firestore
+    participant PubSub
+    participant LocalWorker as Local Worker
+    participant ForgeSim as forge-sim
+    participant MiscRunner as misc-runner
+    participant GCS
+
+    User->>CloudRun: POST /api/jobs (create job)
+    CloudRun->>Firestore: Store job (QUEUED)
+    CloudRun->>PubSub: Publish job-created message
+    CloudRun-->>User: 201 Created
+
+    PubSub->>LocalWorker: Pull message
+    LocalWorker->>CloudRun: GET job details
+    LocalWorker->>ForgeSim: Run simulations
+    ForgeSim-->>LocalWorker: Game logs
+
+    LocalWorker->>MiscRunner: Condense logs
+    MiscRunner->>GCS: Upload artifacts
+    MiscRunner->>CloudRun: PATCH job COMPLETED
+
+    User->>CloudRun: POST /api/jobs/:id/analyze
+    CloudRun->>GCS: Get analyze payload
+    CloudRun->>CloudRun: Call Gemini API
+    CloudRun->>Firestore: Store results
+    CloudRun-->>User: Analysis results
+```
+
+---
+
+## Local Development Architecture (Original)
+
 ## High-Level Architecture
 
 ```mermaid
@@ -166,7 +262,7 @@ flowchart TB
     subgraph source["Where N comes from"]
         Default["Default 4"]
         Env["FORGE_PARALLELISM env"]
-        JobParam["Per-job parallelism 1-8"]
+        JobParam["Per-job parallelism 1-16"]
         JobParam --> C
         Env --> Default
         Default --> C
@@ -179,31 +275,33 @@ flowchart TB
 |--------|-------------|
 | **Default** | `DEFAULT_PARALLELISM = 4` in `orchestrator-service/worker/worker.ts` |
 | **Environment** | `FORGE_PARALLELISM` overrides the default if set |
-| **Per job** | Request body when creating the job can send `parallelism` (frontend does this); validated to 1–8 |
+| **Per job** | Request body when creating the job can send `parallelism` (frontend does this); validated to 1–16 |
 
-Effective parallelism for a job: `job.parallelism ?? FORGE_PARALLELISM ?? 4`, clamped by the 1–8 API validation.
+Effective parallelism for a job: `job.parallelism ?? FORGE_PARALLELISM ?? 4`, clamped by the 1–16 API validation.
 
 ### Explicit Limits
 
 | Limit | Value | Location |
 |-------|--------|----------|
-| **Per-job parallelism** | 1–8 | `PARALLELISM_MIN` / `PARALLELISM_MAX` in `orchestrator-service/lib/types.ts` |
-| **Max concurrent Docker containers** | Same as current job’s parallelism | 1–8 |
+| **Per-job parallelism** | 1–16 | `PARALLELISM_MIN` / `PARALLELISM_MAX` in `orchestrator-service/lib/types.ts` |
+| **Max concurrent Docker containers** | Same as current job’s parallelism | 1–16 |
 | **Concurrent jobs** | 1 | Worker loop processes a single job at a time |
 
-There is **no** explicit global “max concurrent containers across all jobs” — effectively it’s “one job at a time, up to 8 containers for that job.” The next job starts only after the current one finishes. Beyond that, the real ceiling is host CPU/memory and Docker daemon limits.
+There is **no** explicit global “max concurrent containers across all jobs” — effectively it’s “one job at a time, up to 16 containers for that job.” The next job starts only after the current one finishes. Beyond that, the real ceiling is host CPU/memory and Docker daemon limits.
 
 ---
 
 ## Repo Layout (reference)
 
-| Directory | Purpose |
-|-----------|---------|
-| **frontend/** | Web UI (Vite + React). Only user-facing app. |
-| **orchestrator-service/** | API and worker: deck ingestion, job store, simulation orchestration. |
-| **forge-log-analyzer/** | Parses, condenses, and structures Forge game logs; forwards to Analysis Service. |
-| **analysis-service/** | Python + Gemini: analyzes condensed logs and assigns power bracket (1–5). |
-| **forge-simulation-engine/** | Docker-based Forge simulation runner (image + `run_sim.sh`). |
+| Directory | Purpose | Mode |
+|-----------|---------|------|
+| **frontend/** | Web UI (Vite + React) with Firebase Auth | Both |
+| **orchestrator-service/** | Next.js API: decks, precons, jobs, Gemini analysis | Both |
+| **local-worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
+| **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
+| **forge-simulation-engine/** | Docker-based Forge simulation runner | Both |
+| **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
+| **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route | Local only |
 
 ---
 

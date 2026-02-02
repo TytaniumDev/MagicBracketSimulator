@@ -1,0 +1,41 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build output (we rebuild in Docker)
+.next
+out
+dist
+
+# Development files
+*.md
+!rubric.md
+.env*
+!.env.example
+
+# Test files
+test
+tests
+*.test.ts
+*.spec.ts
+jest.config.*
+vitest.config.*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Local data
+data
+jobs
+.cache
+
+# Docker
+Dockerfile
+docker-compose*

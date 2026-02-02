@@ -130,13 +130,13 @@ async function runTests() {
       body: JSON.stringify({
         deckIds: preconIds,
         simulations: 5,
-        parallelism: 10,
+        parallelism: 20,
       }),
     });
     
     assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.error.includes('between 1 and 8'), 'Expected parallelism range error');
+    assert(data.error.includes('between 1 and 16'), 'Expected parallelism range error');
   });
 
   // Test: POST /api/jobs - create job with 4 precons
