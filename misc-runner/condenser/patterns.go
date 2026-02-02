@@ -85,8 +85,8 @@ var (
 	// CMC extraction
 	ExtractCMC = regexp.MustCompile(`(?i)\((?:CMC\s*)?(\d+)\)`)
 	
-	// Winner extraction
-	ExtractWinner = regexp.MustCompile(`(?i)(.+?)\s+(?:wins\s+the\s+game|has\s+won!?)(?:\s|$|!|\.)`)
+	// Winner extraction pattern (note: use ExtractWinnerRegex in condenser.go for function use)
+	ExtractWinnerPattern = regexp.MustCompile(`(?i)(.+?)\s+(?:wins\s+the\s+game|has\s+won!?)(?:\s|$|!|\.)`)
 	
 	// Game result line for splitting concatenated games
 	GameResultPattern = regexp.MustCompile(`(?i)^Game Result: Game (\d+) ended`)

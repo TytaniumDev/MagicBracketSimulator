@@ -4,7 +4,7 @@
 The **Orchestrator Service** is the user-facing "brain" of the application. It handles deck ingestion from external sites (Moxfield/Archidekt/ManaBox), manages the queue of simulation jobs, and displays the final results.
 
 ## 2. Goals
--   **Easy Onboarding**: Users should only need a URL or a deck list text to start.
+-   **Easy Onboarding**: Users need a deck URL (Moxfield, Archidekt, or ManaBox) to add decks.
 -   **Async Processing**: UI should not hang while 5-10 minute simulations run.
 -   **Scalability**: Manage multiple simulation requests without crashing the single Forge instance (Queue system).
 
@@ -19,7 +19,7 @@ The **Orchestrator Service** is the user-facing "brain" of the application. It h
 
 #### A. Frontend UI
 -   **Input Form**:
-    -   `Deck URL` (validated for moxfield.com / archidekt.com / manabox.app) OR `Deck Text`.
+    -   `Deck URL` (validated for moxfield.com / archidekt.com / manabox.app only).
     -   `Opponent Selector`: Dropdown of "Random Precons" or "Specific Precons" (served from a static list).
     -   `Simulations`: Slider (1-10).
 -   **Status Dashboard**:

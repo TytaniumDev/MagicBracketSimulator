@@ -29,7 +29,8 @@ func main() {
 	apiURL := os.Getenv("API_URL")
 	logsDir := os.Getenv("LOGS_DIR")
 	gcsBucket := os.Getenv("GCS_BUCKET")
-	authToken := os.Getenv("AUTH_TOKEN") // Optional
+	authToken := os.Getenv("AUTH_TOKEN")       // Optional
+	workerSecret := os.Getenv("WORKER_SECRET") // Optional - for X-Worker-Secret header
 
 	// Validate required env vars
 	if jobID == "" {
@@ -51,7 +52,7 @@ func main() {
 	// Initialize API client (optional - for status updates)
 	var apiClient *api.Client
 	if apiURL != "" {
-		apiClient = api.NewClient(apiURL, authToken)
+		apiClient = api.NewClient(apiURL, authToken, workerSecret)
 	}
 
 	// Initialize GCS client

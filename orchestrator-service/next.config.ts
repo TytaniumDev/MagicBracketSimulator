@@ -14,8 +14,11 @@ const allowedOrigins = [
 const nextConfig: NextConfig = {
   // Required for Cloud Run deployment - produces standalone build
   output: "standalone",
-  
+
   outputFileTracingRoot: path.join(__dirname),
+
+  serverExternalPackages: ["forge-log-analyzer"],
+
   
   // instrumentation.ts is automatically detected in Next.js 15+
   async headers() {

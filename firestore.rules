@@ -1,0 +1,34 @@
+rules_version='2'
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper: true if the authenticated user is in the allowed-users list.
+    function isAllowedUser() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/allowedUsers/$(request.auth.uid));
+    }
+
+    // Allowlist: each doc id is a Firebase Auth UID. Users can only read their
+    // own doc (so the app can check "am I allowed?"). Add/remove allowed users
+    // via Firebase Console or Admin SDK only.
+    match /allowedUsers/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Unified decks collection: precons + user decks
+    // All allowed users can read all decks (precons + everyone's submissions)
+    // Only deck owner can delete; precons (ownerId == null) cannot be deleted by any user
+    match /decks/{deckId} {
+      allow read: if isAllowedUser();
+      allow create: if isAllowedUser() && request.resource.data.ownerId == request.auth.uid;
+      allow delete: if isAllowedUser() && resource.data.ownerId == request.auth.uid;
+      allow update: if false;
+    }
+
+    // All other data: only allowed users can read/write.
+    match /{document=**} {
+      allow read, write: if isAllowedUser();
+    }
+  }
+}

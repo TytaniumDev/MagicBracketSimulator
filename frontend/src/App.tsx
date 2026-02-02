@@ -5,7 +5,7 @@ import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, isAllowed, loading } = useAuth();
 
   if (loading) {
     return (
@@ -21,6 +21,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         <h2 className="text-2xl font-bold text-gray-300">Sign in to continue</h2>
         <p className="text-gray-400 text-center max-w-md">
           You need to sign in with your Google account to use Magic Bracket Simulator.
+        </p>
+        <LoginButton />
+      </div>
+    );
+  }
+
+  if (isAllowed === false) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
+        <h2 className="text-2xl font-bold text-amber-200">Access denied</h2>
+        <p className="text-gray-400 text-center max-w-md">
+          Your account is not authorized to use this app. If you believe this is an error, contact the administrator.
         </p>
         <LoginButton />
       </div>

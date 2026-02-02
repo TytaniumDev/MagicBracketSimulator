@@ -1,28 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getApiBase } from '../api';
+import { getApiBase, fetchWithAuth } from '../api';
+import { useAuth } from '../contexts/AuthContext';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
 
-interface Precon {
-  id: string;
-  name: string;
-  primaryCommander: string;
-  colorIdentity?: string[];
-}
-
-interface SavedDeck {
+interface Deck {
   id: string;
   name: string;
   filename: string;
   colorIdentity?: string[];
+  isPrecon: boolean;
+  link?: string | null;
+  ownerId: string | null;
+  ownerEmail?: string | null;
 }
 
-// Combined deck type for the unified list
 interface DeckOption {
   id: string;
   name: string;
   type: 'saved' | 'precon';
+  deck: Deck;
 }
 
 type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
@@ -49,6 +47,7 @@ function formatDurationMs(ms: number): string {
 
 export default function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   // Add deck state
   const [addDeckMode, setAddDeckMode] = useState<'url' | 'text'>('url');
@@ -66,9 +65,8 @@ export default function Home() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
   
-  // Data state
-  const [precons, setPrecons] = useState<Precon[]>([]);
-  const [savedDecks, setSavedDecks] = useState<SavedDeck[]>([]);
+  // Data state - unified deck list
+  const [decks, setDecks] = useState<Deck[]>([]);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Past runs state
@@ -80,39 +78,36 @@ export default function Home() {
 
   const apiBase = getApiBase();
 
+  const precons = decks.filter((d) => d.isPrecon);
+  const communityDecks = decks.filter((d) => !d.isPrecon);
+
   // Build combined deck options
-  const deckOptions: DeckOption[] = [
-    ...savedDecks.map((d) => ({ id: d.id, name: d.name, type: 'saved' as const })),
-    ...precons.map((p) => ({ id: p.id, name: p.name, type: 'precon' as const })),
-  ];
+  const deckOptions: DeckOption[] = decks.map((d) => ({
+    id: d.id,
+    name: d.name,
+    type: d.isPrecon ? ('precon' as const) : ('saved' as const),
+    deck: d,
+  }));
 
-  // Fetch precons on load
-  useEffect(() => {
-    fetch(`${apiBase}/api/precons`)
-      .then((res) => res.json())
-      .then((data) => setPrecons(data.precons || []))
-      .catch((err) => console.error('Failed to load precons:', err));
-  }, [apiBase]);
-
-  // Fetch saved decks
-  const fetchSavedDecks = useCallback(async () => {
+  // Fetch all decks (unified API)
+  const fetchDecks = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBase}/api/decks`);
+      const res = await fetchWithAuth(`${apiBase}/api/decks`);
       const data = await res.json();
-      setSavedDecks(data.decks || []);
+      setDecks(data.decks || []);
     } catch (err) {
-      console.error('Failed to load saved decks:', err);
+      console.error('Failed to load decks:', err);
     }
   }, [apiBase]);
 
   useEffect(() => {
-    fetchSavedDecks();
-  }, [fetchSavedDecks]);
+    fetchDecks();
+  }, [fetchDecks]);
 
   // Fetch past runs and poll when jobs are in progress
   const fetchPastRuns = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBase}/api/jobs`);
+      const res = await fetchWithAuth(`${apiBase}/api/jobs`);
       if (!res.ok) {
         throw new Error('Failed to fetch past runs');
       }
@@ -177,20 +172,15 @@ export default function Home() {
 
     try {
       const body: Record<string, string> = {};
-
       if (addDeckMode === 'url') {
-        if (!deckUrl.trim()) {
-          throw new Error('Please enter a deck URL');
-        }
+        if (!deckUrl.trim()) throw new Error('Please enter a deck URL');
         body.deckUrl = deckUrl.trim();
       } else {
-        if (!deckText.trim()) {
-          throw new Error('Please enter a deck list');
-        }
+        if (!deckText.trim()) throw new Error('Please enter a deck list');
         body.deckText = deckText.trim();
       }
 
-      const response = await fetch(`${apiBase}/api/decks`, {
+      const response = await fetchWithAuth(`${apiBase}/api/decks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -203,14 +193,9 @@ export default function Home() {
       }
 
       setSaveMessage(`Deck saved: "${data.name}"`);
-      await fetchSavedDecks();
-      
-      // Clear the input after saving
-      if (addDeckMode === 'url') {
-        setDeckUrl('');
-      } else {
-        setDeckText('');
-      }
+      await fetchDecks();
+      if (addDeckMode === 'url') setDeckUrl('');
+      else setDeckText('');
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save deck');
     } finally {
@@ -218,7 +203,7 @@ export default function Home() {
     }
   };
 
-  const handleDeleteDeck = async (deck: SavedDeck) => {
+  const handleDeleteDeck = async (deck: Deck) => {
     if (!confirm(`Delete "${deck.name}"?`)) {
       return;
     }
@@ -226,7 +211,7 @@ export default function Home() {
     setIsDeleting(deck.id);
 
     try {
-      const response = await fetch(`${apiBase}/api/decks/${encodeURIComponent(deck.filename)}`, {
+      const response = await fetchWithAuth(`${apiBase}/api/decks/${encodeURIComponent(deck.id)}`, {
         method: 'DELETE',
       });
 
@@ -240,7 +225,7 @@ export default function Home() {
         setSelectedDeckIds((prev) => prev.filter((id) => id !== deck.id));
       }
 
-      await fetchSavedDecks();
+      await fetchDecks();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to delete deck');
     } finally {
@@ -269,7 +254,7 @@ export default function Home() {
         idempotencyKey: key,
       };
 
-      const response = await fetch(`${apiBase}/api/jobs`, {
+      const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -298,7 +283,7 @@ export default function Home() {
     }
     setDeletingJobId(jobId);
     try {
-      const response = await fetch(`${apiBase}/api/jobs/${encodeURIComponent(jobId)}`, {
+      const response = await fetchWithAuth(`${apiBase}/api/jobs/${encodeURIComponent(jobId)}`, {
         method: 'DELETE',
       });
       if (!response.ok && response.status !== 204) {
@@ -328,7 +313,7 @@ export default function Home() {
         <p className="text-sm text-gray-400 mb-4">
           Import a deck from Moxfield, Archidekt, or ManaBox or paste a deck list to add it to your saved decks.
         </p>
-        
+
         <div className="flex gap-2 mb-4">
           <button
             type="button"
@@ -437,14 +422,14 @@ export default function Home() {
           </div>
           
           <div className="max-h-80 overflow-y-auto bg-gray-700 rounded-md p-3">
-            {/* Saved Decks Group */}
-            {savedDecks.length > 0 && (
+            {/* Community Decks Group */}
+            {communityDecks.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-                  Your Decks
+                  Community Decks
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {savedDecks.map((deck) => (
+                  {communityDecks.map((deck) => (
                     <div
                       key={deck.id}
                       className={`flex items-center justify-between p-2 rounded cursor-pointer ${
@@ -454,51 +439,75 @@ export default function Home() {
                       }`}
                       onClick={() => handleDeckToggle(deck.id)}
                     >
-                      <span className="text-sm flex-1 min-w-0 flex items-center">
-                        <span className="truncate">{deck.name}</span>
-                        <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteDeck(deck);
-                        }}
-                        disabled={isDeleting === deck.id}
-                        className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                          isDeleting === deck.id
-                            ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                            : 'bg-red-600/50 text-red-200 hover:bg-red-600'
-                        }`}
-                      >
-                        {isDeleting === deck.id ? '...' : 'X'}
-                      </button>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm flex items-center">
+                          <span className="truncate">{deck.name}</span>
+                          <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
+                        </span>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          {deck.ownerEmail ?? 'unknown'}
+                          {deck.link && (
+                            <>
+                              {' · '}
+                              <a
+                                href={deck.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-blue-400 hover:underline"
+                              >
+                                View source
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {deck.ownerId === user?.uid && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDeck(deck);
+                          }}
+                          disabled={isDeleting === deck.id}
+                          className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                            isDeleting === deck.id
+                              ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                              : 'bg-red-600/50 text-red-200 hover:bg-red-600'
+                          }`}
+                        >
+                          {isDeleting === deck.id ? '...' : 'X'}
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Precons Group */}
+            {/* Preconstructed Decks Group */}
             <div>
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
                 Preconstructed Decks
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {precons.map((precon) => (
+                {precons.map((deck) => (
                   <div
-                    key={precon.id}
+                    key={deck.id}
                     className={`flex items-center p-2 rounded cursor-pointer ${
-                      selectedDeckIds.includes(precon.id)
+                      selectedDeckIds.includes(deck.id)
                         ? 'bg-blue-600/30 border border-blue-500'
                         : 'bg-gray-600 hover:bg-gray-500'
                     }`}
-                    onClick={() => handleDeckToggle(precon.id)}
+                    onClick={() => handleDeckToggle(deck.id)}
                   >
-                    <span className="text-sm min-w-0 flex items-center">
-                      <span className="truncate">{precon.name}</span>
-                      <ColorIdentity colorIdentity={precon.colorIdentity} className="ml-1.5" />
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm flex items-center">
+                        <span className="truncate">{deck.name}</span>
+                        <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
+                      </span>
+                      <div className="text-xs text-gray-400 mt-0.5">precon</div>
+                    </div>
                   </div>
                 ))}
               </div>

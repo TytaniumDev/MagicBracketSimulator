@@ -6,10 +6,15 @@ import {
   onAuthStateChanged,
   getIdToken,
 } from 'firebase/auth';
-import { auth, googleProvider } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db, googleProvider } from '../firebase';
+
+const ALLOWED_USERS_COLLECTION = 'allowedUsers';
 
 interface AuthContextType {
   user: User | null;
+  /** True only when user is signed in AND listed in Firestore allowedUsers. */
+  isAllowed: boolean | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -32,12 +37,27 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
+  const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (!firebaseUser) {
+        setIsAllowed(null);
+        setLoading(false);
+        return;
+      }
+      try {
+        const allowedRef = doc(db, ALLOWED_USERS_COLLECTION, firebaseUser.uid);
+        const snap = await getDoc(allowedRef);
+        setIsAllowed(snap.exists());
+      } catch (err) {
+        console.error('Error checking allowlist:', err);
+        setIsAllowed(false);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return () => unsubscribe();
@@ -73,6 +93,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value: AuthContextType = {
     user,
+    isAllowed,
     loading,
     signInWithGoogle,
     signOut,

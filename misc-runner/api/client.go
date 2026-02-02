@@ -13,19 +13,21 @@ import (
 
 // Client wraps HTTP client for API calls
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	authToken  string
+	baseURL      string
+	httpClient   *http.Client
+	authToken    string
+	workerSecret string
 }
 
 // NewClient creates a new API client
-func NewClient(baseURL string, authToken string) *Client {
+func NewClient(baseURL string, authToken string, workerSecret string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		authToken: authToken,
+		authToken:    authToken,
+		workerSecret: workerSecret,
 	}
 }
 
@@ -40,6 +42,9 @@ func (c *Client) GetJob(jobID string) (*types.JobData, error) {
 
 	if c.authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+	if c.workerSecret != "" {
+		req.Header.Set("X-Worker-Secret", c.workerSecret)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -85,6 +90,9 @@ func (c *Client) PatchJobStatus(jobID string, status string, errorMessage string
 	if c.authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.authToken)
 	}
+	if c.workerSecret != "" {
+		req.Header.Set("X-Worker-Secret", c.workerSecret)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -123,6 +131,9 @@ func (c *Client) PatchJobCompleted(jobID string, durationsMs []int64) error {
 
 	if c.authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+	if c.workerSecret != "" {
+		req.Header.Set("X-Worker-Secret", c.workerSecret)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -164,6 +175,9 @@ func (c *Client) PatchJobProgress(jobID string, gamesCompleted int) error {
 
 	if c.authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+	if c.workerSecret != "" {
+		req.Header.Set("X-Worker-Secret", c.workerSecret)
 	}
 	req.Header.Set("Content-Type", "application/json")
 

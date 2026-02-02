@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 /**
  * Local Worker: Pulls jobs from Pub/Sub and orchestrates Docker containers
  * 
@@ -23,6 +25,7 @@ const JOBS_DIR = process.env.JOBS_DIR || './jobs';
 const FORGE_SIM_IMAGE = process.env.FORGE_SIM_IMAGE || 'forge-sim:latest';
 const MISC_RUNNER_IMAGE = process.env.MISC_RUNNER_IMAGE || 'misc-runner:latest';
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const SA_KEY_PATH = process.env.GOOGLE_APPLICATION_CREDENTIALS || '';
 
 // Types
@@ -60,6 +63,9 @@ async function fetchJob(jobId: string): Promise<JobData | null> {
   if (AUTH_TOKEN) {
     headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   }
+  if (WORKER_SECRET) {
+    headers['X-Worker-Secret'] = WORKER_SECRET;
+  }
 
   try {
     const response = await fetch(url, { headers });
@@ -84,6 +90,9 @@ async function patchJobStatus(jobId: string, status: string, errorMessage?: stri
   };
   if (AUTH_TOKEN) {
     headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  }
+  if (WORKER_SECRET) {
+    headers['X-Worker-Secret'] = WORKER_SECRET;
   }
 
   const body: Record<string, unknown> = { status };
@@ -204,6 +213,9 @@ async function runMiscRunner(jobId: string, jobDir: string): Promise<{ exitCode:
 
   if (AUTH_TOKEN) {
     args.push('-e', `AUTH_TOKEN=${AUTH_TOKEN}`);
+  }
+  if (WORKER_SECRET) {
+    args.push('-e', `WORKER_SECRET=${WORKER_SECRET}`);
   }
 
   args.push(MISC_RUNNER_IMAGE);
