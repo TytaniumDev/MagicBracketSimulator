@@ -16,6 +16,9 @@ build/
 .env.test.local
 .env.production.local
 
+# Cache (Scryfall + deck metadata)
+.cache/
+
 # Jobs directory (temp files)
 jobs/
 

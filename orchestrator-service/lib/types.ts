@@ -1,32 +1,45 @@
 export type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
 
-export interface AnalysisResult {
+/**
+ * Single deck's bracket result from AI analysis.
+ */
+export interface DeckBracketResult {
+  deck_name: string;
   bracket: number;
   confidence: string;
   reasoning: string;
   weaknesses?: string;
 }
 
+/**
+ * Analysis results for all 4 decks.
+ */
+export interface AnalysisResult {
+  results: DeckBracketResult[];
+}
+
+export interface DeckSlot {
+  name: string;
+  dck: string;
+}
+
 export interface Job {
   id: string;
-  deckName: string;
-  deckDck: string;
+  decks: DeckSlot[]; // Always length 4
   status: JobStatus;
   resultJson?: AnalysisResult;
   simulations: number;
   parallelism?: number;
-  opponents: string[];
   createdAt: Date;
   errorMessage?: string;
   gamesCompleted?: number;
+  startedAt?: Date;
+  completedAt?: Date;
+  dockerRunDurationsMs?: number[];
 }
 
 export interface CreateJobRequest {
-  deckUrl?: string;
-  deckText?: string;
-  deckId?: string; // Saved deck filename (e.g., "doran-big-butts.dck")
-  opponentMode: 'random' | 'specific';
-  opponentIds?: string[];
+  deckIds: string[]; // Length 4: each is a precon id or saved deck filename
   simulations: number;
   parallelism?: number;
   idempotencyKey?: string;

@@ -1,5 +1,6 @@
 import { isMoxfieldUrl, fetchDeckFromMoxfieldUrl } from './moxfield';
 import { isArchidektUrl, fetchDeckFromArchidektUrl } from './archidekt';
+import { isManaboxUrl, fetchDeckFromManaboxUrl } from './manabox';
 import { ParsedDeck, toDck } from './to-dck';
 import { parseTextDeckWithAutoName } from './text-parser';
 
@@ -7,6 +8,7 @@ export type { ParsedDeck, DeckCard } from './to-dck';
 export { toDck } from './to-dck';
 export { isMoxfieldUrl, fetchDeckFromMoxfieldUrl } from './moxfield';
 export { isArchidektUrl, fetchDeckFromArchidektUrl } from './archidekt';
+export { isManaboxUrl, fetchDeckFromManaboxUrl } from './manabox';
 export { parseTextDeck, parseTextDeckWithAutoName, extractDeckName } from './text-parser';
 
 /**
@@ -21,7 +23,11 @@ export async function fetchDeckFromUrl(url: string): Promise<ParsedDeck> {
     return fetchDeckFromArchidektUrl(url);
   }
 
-  throw new Error(`Unsupported deck URL. Please use Moxfield or Archidekt URLs.`);
+  if (isManaboxUrl(url)) {
+    return fetchDeckFromManaboxUrl(url);
+  }
+
+  throw new Error(`Unsupported deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.`);
 }
 
 /**

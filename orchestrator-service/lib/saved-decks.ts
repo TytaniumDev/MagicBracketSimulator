@@ -13,6 +13,35 @@ function getDecksDir(): string {
 }
 
 /**
+ * Parse commander card name from .dck file content.
+ * Looks for [Commander] section and first card line (e.g. "1 Card Name|SET|1" or "1 Card Name").
+ * Returns the card name (part before first |) or undefined if no Commander section.
+ */
+export function parseCommanderFromContent(content: string): string | undefined {
+  const lines = content.split(/\r?\n/);
+  let inCommander = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.toLowerCase() === '[commander]') {
+      inCommander = true;
+      continue;
+    }
+    if (inCommander && trimmed) {
+      if (trimmed.startsWith('[')) {
+        break;
+      }
+      const match = trimmed.match(/^\d+\s*(?:x\s*)?(.+)$/);
+      if (match) {
+        const rest = match[1].trim();
+        const pipeIndex = rest.indexOf('|');
+        return pipeIndex >= 0 ? rest.substring(0, pipeIndex).trim() : rest;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Parse deck name from .dck file content.
  * Looks for Name=... in the [metadata] section.
  */

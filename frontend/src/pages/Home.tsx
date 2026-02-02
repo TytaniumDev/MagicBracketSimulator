@@ -1,58 +1,90 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { getApiBase } from '../api';
+import { ColorIdentity } from '../components/ColorIdentity';
+import { SliderWithInput } from '../components/SliderWithInput';
 
 interface Precon {
   id: string;
   name: string;
   primaryCommander: string;
+  colorIdentity?: string[];
 }
 
 interface SavedDeck {
   id: string;
   name: string;
   filename: string;
+  colorIdentity?: string[];
+}
+
+// Combined deck type for the unified list
+interface DeckOption {
+  id: string;
+  name: string;
+  type: 'saved' | 'precon';
 }
 
 type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
 
 interface JobSummary {
   id: string;
-  deckName: string;
+  name: string;
+  deckNames: string[];
   status: JobStatus;
   simulations: number;
   gamesCompleted: number;
   createdAt: string;
-  opponents: string[];
   hasResult: boolean;
+  durationMs?: number | null;
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = ((ms % 60_000) / 1000).toFixed(1);
+  return `${minutes}m ${seconds}s`;
 }
 
 export default function Home() {
   const navigate = useNavigate();
+  
+  // Add deck state
+  const [addDeckMode, setAddDeckMode] = useState<'url' | 'text'>('url');
   const [deckUrl, setDeckUrl] = useState('');
   const [deckText, setDeckText] = useState('');
-  const [inputMode, setInputMode] = useState<'url' | 'text' | 'saved'>('url');
-  const [opponentMode, setOpponentMode] = useState<'random' | 'specific'>('random');
-  const [selectedOpponents, setSelectedOpponents] = useState<string[]>([]);
-  const [simulations, setSimulations] = useState(5);
-  const [parallelism, setParallelism] = useState(4);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  
+  // Deck selection state
+  const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
+  const [simulations, setSimulations] = useState(100);
+  const [parallelism, setParallelism] = useState(10);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+  
+  // Data state
   const [precons, setPrecons] = useState<Precon[]>([]);
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>([]);
-  const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   // Past runs state
   const [pastRuns, setPastRuns] = useState<JobSummary[]>([]);
   const [pastRunsLoading, setPastRunsLoading] = useState(true);
   const [pastRunsError, setPastRunsError] = useState<string | null>(null);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const apiBase = getApiBase();
+
+  // Build combined deck options
+  const deckOptions: DeckOption[] = [
+    ...savedDecks.map((d) => ({ id: d.id, name: d.name, type: 'saved' as const })),
+    ...precons.map((p) => ({ id: p.id, name: p.name, type: 'precon' as const })),
+  ];
 
   // Fetch precons on load
   useEffect(() => {
@@ -125,12 +157,13 @@ export default function Home() {
     };
   }, [fetchPastRuns]);
 
-  const handleOpponentToggle = (id: string) => {
-    setSelectedOpponents((prev) => {
+  const handleDeckToggle = (id: string) => {
+    setSelectedDeckIds((prev) => {
       if (prev.includes(id)) {
         return prev.filter((x) => x !== id);
       }
-      if (prev.length >= 3) {
+      if (prev.length >= 4) {
+        // Replace oldest selection
         return [...prev.slice(1), id];
       }
       return [...prev, id];
@@ -138,25 +171,23 @@ export default function Home() {
   };
 
   const handleSaveDeck = async () => {
-    setError(null);
+    setSaveError(null);
     setSaveMessage(null);
     setIsSaving(true);
 
     try {
       const body: Record<string, string> = {};
 
-      if (inputMode === 'url') {
+      if (addDeckMode === 'url') {
         if (!deckUrl.trim()) {
           throw new Error('Please enter a deck URL');
         }
         body.deckUrl = deckUrl.trim();
-      } else if (inputMode === 'text') {
+      } else {
         if (!deckText.trim()) {
           throw new Error('Please enter a deck list');
         }
         body.deckText = deckText.trim();
-      } else {
-        throw new Error('Cannot save from saved deck mode');
       }
 
       const response = await fetch(`${apiBase}/api/decks`, {
@@ -171,17 +202,17 @@ export default function Home() {
         throw new Error(data.error || 'Failed to save deck');
       }
 
-      setSaveMessage(`Deck saved as "${data.name}"`);
+      setSaveMessage(`Deck saved: "${data.name}"`);
       await fetchSavedDecks();
       
       // Clear the input after saving
-      if (inputMode === 'url') {
+      if (addDeckMode === 'url') {
         setDeckUrl('');
       } else {
         setDeckText('');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save deck');
+      setSaveError(err instanceof Error ? err.message : 'Failed to save deck');
     } finally {
       setIsSaving(false);
     }
@@ -193,7 +224,6 @@ export default function Home() {
     }
 
     setIsDeleting(deck.id);
-    setError(null);
 
     try {
       const response = await fetch(`${apiBase}/api/decks/${encodeURIComponent(deck.filename)}`, {
@@ -205,14 +235,14 @@ export default function Home() {
         throw new Error(data.error || 'Failed to delete deck');
       }
 
-      // Clear selection if we deleted the selected deck
-      if (selectedDeckId === deck.id) {
-        setSelectedDeckId(null);
+      // Clear selection if we deleted a selected deck
+      if (selectedDeckIds.includes(deck.id)) {
+        setSelectedDeckIds((prev) => prev.filter((id) => id !== deck.id));
       }
 
       await fetchSavedDecks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete deck');
+      setSaveError(err instanceof Error ? err.message : 'Failed to delete deck');
     } finally {
       setIsDeleting(null);
     }
@@ -220,43 +250,24 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSaveMessage(null);
+    setSubmitError(null);
+    
+    if (selectedDeckIds.length !== 4) {
+      setSubmitError('Please select exactly 4 decks');
+      return;
+    }
+
     const key = idempotencyKey ?? crypto.randomUUID();
     if (!idempotencyKey) setIdempotencyKey(key);
     setIsSubmitting(true);
 
     try {
-      const body: Record<string, unknown> = {
-        opponentMode,
+      const body = {
+        deckIds: selectedDeckIds,
         simulations,
         parallelism,
         idempotencyKey: key,
       };
-
-      if (inputMode === 'url') {
-        if (!deckUrl.trim()) {
-          throw new Error('Please enter a deck URL');
-        }
-        body.deckUrl = deckUrl.trim();
-      } else if (inputMode === 'text') {
-        if (!deckText.trim()) {
-          throw new Error('Please enter a deck list');
-        }
-        body.deckText = deckText.trim();
-      } else if (inputMode === 'saved') {
-        if (!selectedDeckId) {
-          throw new Error('Please select a saved deck');
-        }
-        body.deckId = selectedDeckId;
-      }
-
-      if (opponentMode === 'specific') {
-        if (selectedOpponents.length !== 3) {
-          throw new Error('Please select exactly 3 opponents');
-        }
-        body.opponentIds = selectedOpponents;
-      }
 
       const response = await fetch(`${apiBase}/api/jobs`, {
         method: 'POST',
@@ -272,297 +283,269 @@ export default function Home() {
 
       navigate(`/jobs/${data.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setSubmitError(err instanceof Error ? err.message : 'An error occurred');
       setIdempotencyKey(null);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleDeleteJob = async (e: React.MouseEvent, jobId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Delete this run? This cannot be undone.')) {
+      return;
+    }
+    setDeletingJobId(jobId);
+    try {
+      const response = await fetch(`${apiBase}/api/jobs/${encodeURIComponent(jobId)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok && response.status !== 204) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete run');
+      }
+      await fetchPastRuns();
+    } catch (err) {
+      setPastRunsError(err instanceof Error ? err.message : 'Failed to delete run');
+    } finally {
+      setDeletingJobId(null);
+    }
+  };
+
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="text-4xl font-bold text-center mb-4">
         Magic Bracket Simulator
       </h1>
       <p className="text-gray-400 text-center mb-8">
-        Submit your Commander deck to analyze its power bracket by simulating
-        games against preconstructed decks.
+        Simulate Commander games between any 4 decks to analyze performance.
       </p>
 
-      <form
-        onSubmit={handleSubmit}
-        className="bg-gray-800 rounded-lg p-6 space-y-6"
-      >
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Deck Input Method
-          </label>
-          <div className="flex gap-4 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setInputMode('url')}
-              className={`px-4 py-2 rounded-md ${
-                inputMode === 'url'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Deck URL
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputMode('text')}
-              className={`px-4 py-2 rounded-md ${
-                inputMode === 'text'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Deck List
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputMode('saved')}
-              className={`px-4 py-2 rounded-md ${
-                inputMode === 'saved'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Saved Deck
-            </button>
-          </div>
+      {/* Add Deck Section */}
+      <div className="bg-gray-800 rounded-lg p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Add a Deck</h2>
+        <p className="text-sm text-gray-400 mb-4">
+          Import a deck from Moxfield, Archidekt, or ManaBox or paste a deck list to add it to your saved decks.
+        </p>
+        
+        <div className="flex gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setAddDeckMode('url')}
+            className={`px-4 py-2 rounded-md text-sm ${
+              addDeckMode === 'url'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            URL
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddDeckMode('text')}
+            className={`px-4 py-2 rounded-md text-sm ${
+              addDeckMode === 'text'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Deck List
+          </button>
         </div>
 
-        {inputMode === 'url' && (
-          <div>
-            <label
-              htmlFor="deckUrl"
-              className="block text-sm font-medium text-gray-300 mb-2"
-            >
-              Moxfield or Archidekt URL
-            </label>
+        {addDeckMode === 'url' ? (
+          <div className="flex gap-2">
             <input
-              id="deckUrl"
               type="url"
               value={deckUrl}
               onChange={(e) => setDeckUrl(e.target.value)}
-              placeholder="https://moxfield.com/decks/..."
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://moxfield.com/decks/... or https://manabox.app/decks/..."
+              className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               type="button"
               onClick={handleSaveDeck}
               disabled={isSaving || !deckUrl.trim()}
-              className={`mt-2 px-4 py-2 rounded-md text-sm ${
+              className={`px-4 py-2 rounded-md ${
                 isSaving || !deckUrl.trim()
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
             >
-              {isSaving ? 'Saving...' : 'Save Deck for Later'}
+              {isSaving ? 'Adding...' : 'Add Deck'}
             </button>
           </div>
-        )}
-
-        {inputMode === 'text' && (
-          <div>
-            <label
-              htmlFor="deckText"
-              className="block text-sm font-medium text-gray-300 mb-2"
-            >
-              Deck List
-            </label>
+        ) : (
+          <div className="space-y-2">
             <textarea
-              id="deckText"
               value={deckText}
               onChange={(e) => setDeckText(e.target.value)}
               placeholder={`[Commander]\n1 Ashling the Pilgrim\n\n[Main]\n1 Sol Ring\n99 Mountain`}
-              rows={10}
+              rows={6}
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
             />
             <button
               type="button"
               onClick={handleSaveDeck}
               disabled={isSaving || !deckText.trim()}
-              className={`mt-2 px-4 py-2 rounded-md text-sm ${
+              className={`px-4 py-2 rounded-md ${
                 isSaving || !deckText.trim()
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
             >
-              {isSaving ? 'Saving...' : 'Save Deck for Later'}
+              {isSaving ? 'Adding...' : 'Add Deck'}
             </button>
           </div>
         )}
 
-        {inputMode === 'saved' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Select a Saved Deck
+        {saveMessage && (
+          <div className="mt-3 bg-green-900/50 border border-green-500 text-green-200 px-4 py-2 rounded-md text-sm">
+            {saveMessage}
+          </div>
+        )}
+        {saveError && (
+          <div className="mt-3 bg-red-900/50 border border-red-500 text-red-200 px-4 py-2 rounded-md text-sm">
+            {saveError}
+          </div>
+        )}
+      </div>
+
+      {/* Run Simulation Section */}
+      <form onSubmit={handleSubmit} className="bg-gray-800 rounded-lg p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Run Simulation</h2>
+        <p className="text-sm text-gray-400 mb-4">
+          Select exactly 4 decks to battle against each other.
+        </p>
+
+        {/* Deck Selection */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-gray-300">
+              Pick 4 Decks ({selectedDeckIds.length}/4)
             </label>
-            {savedDecks.length === 0 ? (
-              <div className="bg-gray-700 rounded-md p-4 text-gray-400 text-sm">
-                No saved decks. Use the URL or Deck List tab and click "Save Deck for Later" to add one.
+            {selectedDeckIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedDeckIds([])}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+          
+          <div className="max-h-80 overflow-y-auto bg-gray-700 rounded-md p-3">
+            {/* Saved Decks Group */}
+            {savedDecks.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
+                  Your Decks
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {savedDecks.map((deck) => (
+                    <div
+                      key={deck.id}
+                      className={`flex items-center justify-between p-2 rounded cursor-pointer ${
+                        selectedDeckIds.includes(deck.id)
+                          ? 'bg-blue-600/30 border border-blue-500'
+                          : 'bg-gray-600 hover:bg-gray-500'
+                      }`}
+                      onClick={() => handleDeckToggle(deck.id)}
+                    >
+                      <span className="text-sm flex-1 min-w-0 flex items-center">
+                        <span className="truncate">{deck.name}</span>
+                        <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDeck(deck);
+                        }}
+                        disabled={isDeleting === deck.id}
+                        className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                          isDeleting === deck.id
+                            ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                            : 'bg-red-600/50 text-red-200 hover:bg-red-600'
+                        }`}
+                      >
+                        {isDeleting === deck.id ? '...' : 'X'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ) : (
-              <div className="max-h-64 overflow-y-auto bg-gray-700 rounded-md p-3 space-y-2">
-                {savedDecks.map((deck) => (
+            )}
+
+            {/* Precons Group */}
+            <div>
+              <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
+                Preconstructed Decks
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {precons.map((precon) => (
                   <div
-                    key={deck.id}
-                    className={`flex items-center justify-between p-2 rounded cursor-pointer ${
-                      selectedDeckId === deck.id
+                    key={precon.id}
+                    className={`flex items-center p-2 rounded cursor-pointer ${
+                      selectedDeckIds.includes(precon.id)
                         ? 'bg-blue-600/30 border border-blue-500'
                         : 'bg-gray-600 hover:bg-gray-500'
                     }`}
-                    onClick={() => setSelectedDeckId(deck.id)}
+                    onClick={() => handleDeckToggle(precon.id)}
                   >
-                    <span className="text-sm flex-1">{deck.name}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteDeck(deck);
-                      }}
-                      disabled={isDeleting === deck.id}
-                      className={`ml-2 px-2 py-1 rounded text-xs ${
-                        isDeleting === deck.id
-                          ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                          : 'bg-red-600 text-white hover:bg-red-700'
-                      }`}
-                    >
-                      {isDeleting === deck.id ? '...' : 'Delete'}
-                    </button>
+                    <span className="text-sm min-w-0 flex items-center">
+                      <span className="truncate">{precon.name}</span>
+                      <ColorIdentity colorIdentity={precon.colorIdentity} className="ml-1.5" />
+                    </span>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Opponents
-          </label>
-          <div className="flex gap-4 mb-4">
-            <button
-              type="button"
-              onClick={() => setOpponentMode('random')}
-              className={`px-4 py-2 rounded-md ${
-                opponentMode === 'random'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Random Precons
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpponentMode('specific')}
-              className={`px-4 py-2 rounded-md ${
-                opponentMode === 'specific'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Select Precons
-            </button>
+            </div>
           </div>
 
-          {opponentMode === 'specific' && (
-            <div className="max-h-64 overflow-y-auto bg-gray-700 rounded-md p-3">
-              <p className="text-sm text-gray-400 mb-2">
-                Select exactly 3 precons ({selectedOpponents.length}/3 selected)
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {precons.map((precon) => (
-                  <label
-                    key={precon.id}
-                    className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                      selectedOpponents.includes(precon.id)
-                        ? 'bg-blue-600/30 border border-blue-500'
-                        : 'bg-gray-600 hover:bg-gray-500'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedOpponents.includes(precon.id)}
-                      onChange={() => handleOpponentToggle(precon.id)}
-                      className="sr-only"
-                    />
-                    <span className="text-sm">{precon.name}</span>
-                  </label>
-                ))}
-              </div>
+          {/* Selected decks summary */}
+          {selectedDeckIds.length > 0 && (
+            <div className="mt-3 text-sm text-gray-300">
+              <span className="font-medium">Selected: </span>
+              {selectedDeckIds.map((id) => {
+                const deck = deckOptions.find((d) => d.id === id);
+                return deck?.name ?? id;
+              }).join(' vs ')}
             </div>
           )}
         </div>
 
-        <div>
-          <label
-            htmlFor="simulations"
-            className="block text-sm font-medium text-gray-300 mb-2"
-          >
-            Number of Simulations: {simulations}
-          </label>
-          <input
-            id="simulations"
-            type="range"
-            min="1"
-            max="100"
-            value={simulations}
-            onChange={(e) => setSimulations(parseInt(e.target.value))}
-            className="w-full accent-blue-500"
-          />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>1</span>
-            <span>25</span>
-            <span>50</span>
-            <span>75</span>
-            <span>100</span>
-          </div>
-        </div>
+        <SliderWithInput
+          label="Number of Simulations"
+          value={simulations}
+          onChange={setSimulations}
+          min={1}
+          max={100}
+          className="mb-4"
+        />
 
-        <div>
-          <label
-            htmlFor="parallelism"
-            className="block text-sm font-medium text-gray-300 mb-2"
-          >
-            Parallel Docker Runs: {parallelism}
-          </label>
-          <input
-            id="parallelism"
-            type="range"
-            min="1"
-            max="8"
-            value={parallelism}
-            onChange={(e) => setParallelism(parseInt(e.target.value))}
-            className="w-full accent-blue-500"
-          />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>1</span>
-            <span>4</span>
-            <span>8</span>
-          </div>
-        </div>
+        <SliderWithInput
+          label="Parallel Docker Runs"
+          value={parallelism}
+          onChange={setParallelism}
+          min={1}
+          max={16}
+          className="mb-6"
+        />
 
-        {saveMessage && (
-          <div className="bg-green-900/50 border border-green-500 text-green-200 px-4 py-3 rounded-md">
-            {saveMessage}
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
-            {error}
+        {submitError && (
+          <div className="mb-4 bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
+            {submitError}
           </div>
         )}
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || selectedDeckIds.length !== 4}
           className={`w-full py-3 rounded-md font-semibold ${
-            isSubmitting
+            isSubmitting || selectedDeckIds.length !== 4
               ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
@@ -572,7 +555,7 @@ export default function Home() {
       </form>
 
       {/* Past Runs Section */}
-      <div className="mt-8">
+      <div className="mb-8">
         <h2 className="text-2xl font-bold mb-4">Past Runs</h2>
         
         {pastRunsLoading && (
@@ -589,39 +572,49 @@ export default function Home() {
 
         {!pastRunsLoading && !pastRunsError && pastRuns.length === 0 && (
           <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
-            No past runs yet. Submit a deck above to start your first simulation.
+            No past runs yet. Select 4 decks above to start your first simulation.
           </div>
         )}
 
         {!pastRunsLoading && !pastRunsError && pastRuns.length > 0 && (
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {pastRuns.map((run) => (
-              <Link
+              <div
                 key={run.id}
-                to={`/jobs/${run.id}`}
-                className="block bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition-colors border border-gray-700 hover:border-gray-600"
+                className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors flex items-start gap-3"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-white truncate">
-                        {run.deckName}
-                      </h3>
-                      <StatusBadge status={run.status} />
+                <Link
+                  to={`/jobs/${run.id}`}
+                  className="flex-1 min-w-0 block"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-white truncate">
+                          {run.name}
+                        </h3>
+                        <StatusBadge status={run.status} />
+                      </div>
+                      <p className="text-sm text-gray-400 truncate">
+                        {run.deckNames.join(', ')}
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-400 truncate">
-                      vs {run.opponents.join(', ')}
-                    </p>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-medium text-gray-300">
+                        {run.status === 'COMPLETED'
+                          ? `${run.simulations} / ${run.simulations} games`
+                          : `${run.gamesCompleted ?? 0} / ${run.simulations} games`}
+                      </div>
+                      {run.durationMs != null && run.durationMs >= 0 && (
+                        <div className="text-xs text-gray-400">
+                          Run time: {formatDurationMs(run.durationMs)}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500">
+                        {formatDate(run.createdAt)}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-sm font-medium text-gray-300">
-                      {run.gamesCompleted} / {run.simulations} games
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {formatDate(run.createdAt)}
-                    </div>
-                  </div>
-                </div>
                 {(run.status === 'RUNNING' || run.status === 'ANALYZING') && (
                   <div className="mt-2">
                     <div
@@ -640,7 +633,25 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-              </Link>
+                </Link>
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteJob(e, run.id)}
+                  disabled={deletingJobId === run.id}
+                  title="Delete run"
+                  className={`flex-shrink-0 p-2 rounded text-gray-400 hover:text-red-200 hover:bg-red-900/30 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 ${
+                    deletingJobId === run.id ? 'cursor-not-allowed' : ''
+                  }`}
+                >
+                  {deletingJobId === run.id ? (
+                    <span className="text-xs">…</span>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             ))}
           </div>
         )}

@@ -1,6 +1,6 @@
 # Forge Simulation Engine
 
-Headless, Dockerized MTG simulation service using [Card-Forge](https://github.com/Card-Forge/forge) in CLI sim mode. Runs Commander games (1 user deck vs 3 opponents) and outputs detailed game logs for the [Analysis Service](../analysis-service/PRD.md).
+Headless, Dockerized MTG simulation service using [Card-Forge](https://github.com/Card-Forge/forge) in CLI sim mode. Runs Commander games with 4 decks and outputs detailed game logs for the [Analysis Service](../analysis-service/PRD.md).
 
 ## Forge Version
 
@@ -24,40 +24,26 @@ docker build -t forge-sim .
 
 ### Run (Orchestrator-style)
 
-**Recommended (Git Bash on Windows):** Use the wrapper script so volume paths are not mangled (avoids empty `decks;C` and `logs;C` folders):
+The orchestrator provides all 4 deck files in `/app/decks`. Use the `--decks` flag with 4 filenames:
 
 ```bash
 # Create local dirs for mounts
 mkdir -p ./decks ./logs
 
-# Copy a user deck into decks/
-cp test/decks/minimal.dck ./decks/
+# Copy 4 decks into decks/
+cp deck_0.dck deck_1.dck deck_2.dck deck_3.dck ./decks/
 
-# Run simulation (use run_docker.sh on Git Bash / Windows)
-chmod +x run_docker.sh
-./run_docker.sh \
-  --user-deck minimal.dck \
-  --opponents "Lorehold Legacies" "Elven Council" "Prismari Performance" \
-  --simulations 2 \
-  --id job_test1
-```
-
-**Or run Docker directly** (on Linux/macOS, or Git Bash with path-safe form):
-
-```bash
-mkdir -p ./decks ./logs
-cp test/decks/minimal.dck ./decks/
-
-# Path-safe form: leading slash prevents Git Bash from appending ";C" to volume paths
+# Run simulation
 docker run --rm \
-  -v "/$(pwd)/decks:/app/decks" \
-  -v "/$(pwd)/logs:/app/logs" \
+  -v "$(pwd)/decks:/app/decks" \
+  -v "$(pwd)/logs:/app/logs" \
   forge-sim \
-  --user-deck minimal.dck \
-  --opponents "Lorehold Legacies" "Elven Council" "Prismari Performance" \
+  --decks deck_0.dck deck_1.dck deck_2.dck deck_3.dck \
   --simulations 2 \
   --id job_test1
 ```
+
+**Note (Git Bash on Windows):** Use `run_docker.sh` or path-safe form `"/$(pwd)/decks"` to prevent Git Bash from mangling volume paths.
 
 ### Verify
 
@@ -113,8 +99,7 @@ python scripts/generate_manifest.py
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--user-deck` | Yes | Filename in `/app/decks` (e.g. `my_deck.dck`) |
-| `--opponents` | Yes | Three precon names (e.g. `"Lorehold Legacies" "Elven Council" "Prismari Performance"`) |
+| `--decks` | Yes | Four deck filenames in `/app/decks` (e.g. `deck_0.dck deck_1.dck deck_2.dck deck_3.dck`) |
 | `--id` | Yes | Job ID for logs: `{id}_game_{n}.txt` |
 | `--simulations` | No | Number of games (default: 5) |
 
@@ -127,8 +112,7 @@ python scripts/generate_manifest.py
      -v decks_vol:/app/decks \
      -v logs_vol:/app/logs \
      forge-sim \
-     --user-deck <filename> \
-     --opponents <name1> <name2> <name3> \
+     --decks deck_0.dck deck_1.dck deck_2.dck deck_3.dck \
      --simulations 5 \
      --id <job_id>
    ```
@@ -139,10 +123,9 @@ python scripts/generate_manifest.py
 | Path | Purpose |
 |------|---------|
 | `/app/forge.sh` | Forge launcher (extracted from release tar) |
-| `/app/res/precons/` | Baked-in precon `.dck` files |
-| `/app/decks/` | Volume: user deck(s) from Orchestrator |
+| `/app/res/precons/` | Baked-in precon `.dck` files (for reference; orchestrator copies needed decks to /app/decks) |
+| `/app/decks/` | Volume: 4 deck files from Orchestrator |
 | `/app/logs/` | Volume: output `{job_id}_game_{n}.txt` |
-| `/app/run/decks/` | Ephemeral merged dir (user + 3 precons) |
 
 ## Log Format
 

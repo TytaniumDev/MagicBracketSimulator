@@ -47,7 +47,8 @@ async function main() {
     process.exit(1);
   }
 
-  const deckNames = [job.deckName, ...job.opponents];
+  const deckNames = job.decks.map((d) => d.name);
+  const deckLists = job.decks.map((d) => d.dck);
 
   // Invalidate cached condensed/structured so recomputation uses latest parsing logic
   const invalidateRes = await fetch(`${LOG_ANALYZER_URL}/jobs/${jobId}/cache`, {
@@ -64,7 +65,7 @@ async function main() {
   const response = await fetch(`${LOG_ANALYZER_URL}/jobs/${jobId}/logs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ gameLogs, deckNames }),
+    body: JSON.stringify({ gameLogs, deckNames, deckLists }),
   });
 
   if (!response.ok) {

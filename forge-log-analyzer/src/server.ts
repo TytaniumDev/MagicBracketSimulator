@@ -30,6 +30,7 @@ import {
   invalidateCache,
   getAnalyzePayload,
 } from './store.js';
+import { buildPromptPreview } from './prompt-preview.js';
 import type {
   IngestLogsRequest,
   RawLogsResponse,
@@ -96,8 +97,8 @@ app.post('/jobs/:jobId/logs', (req: Request, res: Response) => {
   }
 
   try {
-    storeJobLogs(jobId, body.gameLogs, body.deckNames);
-    console.log(`[Ingest] Stored ${body.gameLogs.length} logs for job ${jobId}`);
+    storeJobLogs(jobId, body.gameLogs, body.deckNames, body.deckLists);
+    console.log(`[Ingest] Stored ${body.gameLogs.length} logs for job ${jobId} (deckLists: ${body.deckLists ? 'yes' : 'no'})`);
     res.status(201).json({
       message: 'Logs ingested successfully',
       jobId,
@@ -197,6 +198,44 @@ app.get('/jobs/:jobId/logs/analyze-payload', (req: Request, res: Response) => {
 });
 
 // -----------------------------------------------------------------------------
+// GET /jobs/:jobId/logs/analyze-prompt-preview - Get exact prompts sent to Gemini
+// -----------------------------------------------------------------------------
+
+app.get('/jobs/:jobId/logs/analyze-prompt-preview', async (req: Request, res: Response) => {
+  const { jobId } = req.params;
+
+  const payload = getAnalyzePayload(jobId);
+  if (payload === null) {
+    res.status(404).json({ error: 'Analyze payload not found for this job' });
+    return;
+  }
+
+  // Try Analysis Service first (authoritative prompt when running)
+  try {
+    const previewResponse = await fetch(`${ANALYSIS_SERVICE_URL}/analyze/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (previewResponse.ok) {
+      const preview = (await previewResponse.json()) as { system_prompt: string; user_prompt: string };
+      return res.json(preview);
+    }
+    // Non-ok (e.g. 500): fall through to local build
+  } catch (error) {
+    // ECONNREFUSED, network error, etc. — build prompt locally so UI still shows preview
+    const cause = error instanceof Error ? error.cause ?? error : error;
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    console.warn(`[Preview] Analysis Service unreachable (${msg}); using local prompt build for job ${jobId}`);
+  }
+
+  // Fallback: build prompt locally (same format as Analysis Service)
+  const preview = buildPromptPreview(payload as Parameters<typeof buildPromptPreview>[0]);
+  res.json(preview);
+});
+
+// -----------------------------------------------------------------------------
 // POST /jobs/:jobId/analyze - Forward pre-computed payload to Analysis Service
 // -----------------------------------------------------------------------------
 
@@ -234,7 +273,13 @@ app.post('/jobs/:jobId/analyze', async (req: Request, res: Response) => {
     }
 
     const result = (await analysisResponse.json()) as AnalyzeResponse;
-    console.log(`[Analyze] Job ${jobId} result: Bracket ${result.bracket}`);
+    // Log summary of results (new format has results array)
+    if (result.results && Array.isArray(result.results)) {
+      const summary = result.results.map(r => `${r.deck_name}: B${r.bracket}`).join(', ');
+      console.log(`[Analyze] Job ${jobId} results: ${summary}`);
+    } else {
+      console.log(`[Analyze] Job ${jobId} result received`);
+    }
     res.json(result);
   } catch (error) {
     console.error(`[Analyze] Error for job ${jobId}:`, error);
@@ -295,8 +340,9 @@ app.listen(PORT, () => {
   console.log(`  GET  /jobs/:jobId/logs/raw           - Get raw logs`);
   console.log(`  GET  /jobs/:jobId/logs/condensed     - Get condensed logs`);
   console.log(`  GET  /jobs/:jobId/logs/structured    - Get structured logs`);
-  console.log(`  GET  /jobs/:jobId/logs/analyze-payload - Get pre-computed payload`);
-  console.log(`  POST /jobs/:jobId/analyze            - Run analysis`);
+  console.log(`  GET  /jobs/:jobId/logs/analyze-payload        - Get pre-computed payload`);
+  console.log(`  GET  /jobs/:jobId/logs/analyze-prompt-preview - Get exact prompts sent to Gemini`);
+  console.log(`  POST /jobs/:jobId/analyze                    - Run analysis`);
   console.log(`  GET  /health                         - Health check`);
   console.log('');
 });

@@ -1,10 +1,10 @@
 # Orchestrator Service
 
-The API and worker for the Magic Bracket Simulator. Handles deck ingestion from Moxfield/Archidekt, manages simulation jobs, and serves the APIs consumed by the frontend. **The web UI lives in the repo root `frontend/` package**, not here.
+The API and worker for the Magic Bracket Simulator. Handles deck ingestion from Moxfield/Archidekt/ManaBox, manages simulation jobs, and serves the APIs consumed by the frontend. **The web UI lives in the repo root `frontend/` package**, not here.
 
 ## Features
 
-- Import decks from Moxfield or Archidekt URLs
+- Import decks from Moxfield, Archidekt, or ManaBox URLs
 - Paste deck lists directly
 - Select random or specific precon opponents
 - Real-time job status tracking
@@ -31,11 +31,18 @@ ANALYSIS_SERVICE_URL="http://localhost:8000"
 FORGE_ENGINE_PATH="../forge-simulation-engine"
 ```
 
-3. Ensure the Forge Docker image is built:
+3. Ensure the Forge Docker image is built (required for the worker):
 
 ```bash
 cd ../forge-simulation-engine
 docker build -t forge-sim .
+```
+
+**If the worker fails with** `Unknown option --decks` **or** `Usage: ... --user-deck ... --opponents ...`**:** the container is running an old entrypoint script. Rebuild the image from the current repo so it uses the `--decks` CLI:
+
+```bash
+cd ../forge-simulation-engine
+docker build -t forge-sim --no-cache .
 ```
 
 ## Running
@@ -70,8 +77,10 @@ npm start
 | Route | Method | Description |
 |-------|--------|-------------|
 | `/api/precons` | GET | List available preconstructed decks |
+| `/api/jobs` | GET | List all jobs (past runs) |
 | `/api/jobs` | POST | Create a new simulation job |
 | `/api/jobs/[id]` | GET | Get job status and results |
+| `/api/jobs/[id]` | DELETE | Delete a job (and its artifact directory) |
 | `/api/jobs/[id]/analyze` | POST | Trigger on-demand AI analysis (Gemini) |
 | `/api/decks` | GET | List saved decks |
 | `/api/decks` | POST | Save a deck from URL or text |

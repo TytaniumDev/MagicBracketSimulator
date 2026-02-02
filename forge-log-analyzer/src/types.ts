@@ -174,8 +174,10 @@ export interface StructuredGame {
 export interface IngestLogsRequest {
   /** Array of raw game log strings (one per game) */
   gameLogs: string[];
-  /** Optional: deck names for labeling (hero + 3 opponents) */
+  /** Optional: deck names for labeling (all 4 decks) */
   deckNames?: string[];
+  /** Optional: deck lists (.dck content) for all 4 decks, same order as deckNames */
+  deckLists?: string[];
 }
 
 /**
@@ -205,19 +207,21 @@ export interface StructuredLogsResponse {
 }
 
 /**
- * Request body for analyze endpoint.
+ * Request body for analyze endpoint (deprecated - now uses pre-computed payload).
  */
 export interface AnalyzeRequest {
-  /** Name of the deck being judged */
-  heroDeckName: string;
-  /** Names of opponent decks (for context) */
-  opponentDecks: string[];
+  /** Name of the deck being judged (legacy) */
+  heroDeckName?: string;
+  /** Names of opponent decks (legacy) */
+  opponentDecks?: string[];
 }
 
 /**
- * Response from analyze endpoint (mirrors Analysis Service response).
+ * Single deck's bracket result from AI analysis.
  */
-export interface AnalyzeResponse {
+export interface DeckBracketResult {
+  /** Name of the deck */
+  deck_name: string;
   /** Power bracket 1-5 */
   bracket: number;
   /** Confidence level: High, Medium, or Low */
@@ -225,21 +229,53 @@ export interface AnalyzeResponse {
   /** Explanation of why this bracket was assigned */
   reasoning: string;
   /** Identified weaknesses of the deck */
-  weaknesses: string;
+  weaknesses?: string;
+}
+
+/**
+ * Response from analyze endpoint - bracket results for all 4 decks.
+ */
+export interface AnalyzeResponse {
+  /** Bracket results for each deck (length 4) */
+  results: DeckBracketResult[];
+}
+
+/**
+ * Per-deck game outcome statistics.
+ */
+export interface DeckOutcome {
+  /** Number of games this deck won */
+  wins: number;
+  /** Turn numbers when this deck won */
+  winning_turns: number[];
+  /** Turn numbers when this deck lost (game ended but deck didn't win) */
+  turns_lost_on: number[];
+}
+
+/**
+ * Deck info for the analysis payload.
+ */
+export interface DeckInfo {
+  /** Deck name */
+  name: string;
+  /** Deck list content (.dck format) */
+  decklist?: string;
 }
 
 /**
  * Pre-computed payload for the Analysis Service (Gemini).
  * This is stored in meta.json and sent exactly as-is to the Analysis Service.
  * Uses snake_case to match Python conventions.
+ * 
+ * New slim format: all 4 decks treated equally with decklists and outcomes.
  */
 export interface AnalyzePayload {
-  /** Name of the deck being judged */
-  hero_deck_name: string;
-  /** Names of opponent decks (for context) */
-  opponent_decks: string[];
-  /** Condensed logs in Analysis Service format (snake_case) */
-  condensed_logs: object[];
+  /** All 4 decks with their names and decklists */
+  decks: DeckInfo[];
+  /** Total number of games played */
+  total_games: number;
+  /** Per-deck outcome statistics */
+  outcomes: Record<string, DeckOutcome>;
 }
 
 // -----------------------------------------------------------------------------
@@ -252,8 +288,10 @@ export interface AnalyzePayload {
 export interface StoredJobLogs {
   /** Raw game logs */
   gameLogs: string[];
-  /** Deck names (hero + opponents) */
+  /** Deck names (all 4 decks) */
   deckNames?: string[];
+  /** Deck lists (.dck content) for all 4 decks */
+  deckLists?: string[];
   /** When the logs were ingested */
   ingestedAt: string;
   /** Pre-computed condensed logs (computed on first access or ingest) */

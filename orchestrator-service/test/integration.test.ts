@@ -41,6 +41,9 @@ async function runTests() {
   console.log('Running integration tests...\n');
   console.log(`Base URL: ${BASE_URL}\n`);
 
+  // Fetch precons for use in tests
+  let preconIds: string[] = [];
+  
   // Test: GET /api/precons
   await test('GET /api/precons returns precon list', async () => {
     const response = await fetch(`${BASE_URL}/api/precons`);
@@ -48,42 +51,59 @@ async function runTests() {
     
     const data = await response.json();
     assert(Array.isArray(data.precons), 'Expected precons array');
-    assert(data.precons.length > 0, 'Expected at least one precon');
+    assert(data.precons.length >= 4, 'Expected at least 4 precons for testing');
     assert(data.precons[0].id, 'Expected precon to have id');
     assert(data.precons[0].name, 'Expected precon to have name');
+    
+    // Store first 4 precon IDs for later tests
+    preconIds = data.precons.slice(0, 4).map((p: { id: string }) => p.id);
   });
 
-  // Test: POST /api/jobs - missing deck
-  await test('POST /api/jobs rejects missing deck', async () => {
+  // Test: POST /api/jobs - missing deckIds
+  await test('POST /api/jobs rejects missing deckIds', async () => {
     const response = await fetch(`${BASE_URL}/api/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        opponentMode: 'random',
         simulations: 5,
       }),
     });
     
     assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.error.includes('deckUrl') || data.error.includes('deckText') || data.error.includes('deckId'), 'Expected deck required error');
+    assert(data.error.includes('deckIds'), 'Expected deckIds required error');
   });
 
-  // Test: POST /api/jobs - invalid URL
-  await test('POST /api/jobs rejects invalid URL', async () => {
+  // Test: POST /api/jobs - wrong number of deckIds
+  await test('POST /api/jobs rejects wrong number of deckIds', async () => {
     const response = await fetch(`${BASE_URL}/api/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        deckUrl: 'https://example.com/deck',
-        opponentMode: 'random',
+        deckIds: preconIds.slice(0, 2), // Only 2
         simulations: 5,
       }),
     });
     
     assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.error.includes('Invalid deck URL'), 'Expected invalid URL error');
+    assert(data.error.toLowerCase().includes('exactly 4'), 'Expected exactly 4 deckIds error');
+  });
+
+  // Test: POST /api/jobs - invalid deck ID
+  await test('POST /api/jobs rejects invalid deck ID', async () => {
+    const response = await fetch(`${BASE_URL}/api/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deckIds: ['invalid-id-1', 'invalid-id-2', 'invalid-id-3', 'invalid-id-4'],
+        simulations: 5,
+      }),
+    });
+    
+    assert(response.status === 400, `Expected 400, got ${response.status}`);
+    const data = await response.json();
+    assert(data.error.includes('Invalid deck ID'), 'Expected invalid deck ID error');
   });
 
   // Test: POST /api/jobs - simulations out of range
@@ -92,8 +112,7 @@ async function runTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        deckText: '[Commander]\n1 Test Commander\n[Main]\n99 Mountain',
-        opponentMode: 'random',
+        deckIds: preconIds,
         simulations: 201,
       }),
     });
@@ -109,8 +128,7 @@ async function runTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        deckText: '[Commander]\n1 Test Commander\n[Main]\n99 Mountain',
-        opponentMode: 'random',
+        deckIds: preconIds,
         simulations: 5,
         parallelism: 10,
       }),
@@ -121,39 +139,13 @@ async function runTests() {
     assert(data.error.includes('between 1 and 8'), 'Expected parallelism range error');
   });
 
-  // Test: POST /api/jobs - specific mode needs 3 opponents
-  await test('POST /api/jobs specific mode requires 3 opponents', async () => {
+  // Test: POST /api/jobs - create job with 4 precons
+  await test('POST /api/jobs creates job with 4 precon deck IDs', async () => {
     const response = await fetch(`${BASE_URL}/api/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        deckText: '[Commander]\n1 Test Commander\n[Main]\n99 Mountain',
-        opponentMode: 'specific',
-        opponentIds: ['lorehold-legacies'], // Only 1
-        simulations: 5,
-      }),
-    });
-    
-    assert(response.status === 400, `Expected 400, got ${response.status}`);
-    const data = await response.json();
-    assert(data.error.includes('exactly 3'), 'Expected 3 opponents error');
-  });
-
-  // Test: POST /api/jobs - create job with text deck (random opponents)
-  await test('POST /api/jobs creates job with text deck', async () => {
-    const deckText = `[Commander]
-1 Ashling the Pilgrim
-
-[Main]
-1 Sol Ring
-98 Mountain`;
-
-    const response = await fetch(`${BASE_URL}/api/jobs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        deckText,
-        opponentMode: 'random',
+        deckIds: preconIds,
         simulations: 1,
         parallelism: 1,
       }),
@@ -163,31 +155,106 @@ async function runTests() {
     const data = await response.json();
     assert(data.id, 'Expected job id');
     assert(data.status === 'QUEUED', 'Expected QUEUED status');
-    assert(data.opponents.length === 3, 'Expected 3 opponents');
+    assert(data.name, 'Expected name (simulations - datetime)');
+    assert(Array.isArray(data.deckNames) && data.deckNames.length === 4, 'Expected 4 deckNames');
     assert(data.parallelism === 1, 'Expected parallelism 1');
+  });
+
+  // Test: GET /api/jobs - list jobs
+  let createdJobId: string | null = null;
+  await test('GET /api/jobs returns job list', async () => {
+    const response = await fetch(`${BASE_URL}/api/jobs`);
+    assert(response.ok, `Expected 200, got ${response.status}`);
     
-    // Test: GET /api/jobs/[id]
-    const getResponse = await fetch(`${BASE_URL}/api/jobs/${data.id}`);
-    assert(getResponse.ok, `Expected 200, got ${getResponse.status}`);
-    const jobData = await getResponse.json();
-    assert(jobData.id === data.id, 'Expected same job id');
-    assert(jobData.deckName === 'Imported Deck', 'Expected default deck name');
+    const data = await response.json();
+    assert(Array.isArray(data.jobs), 'Expected jobs array');
+    assert(data.jobs.length > 0, 'Expected at least one job from previous test');
+    
+    const job = data.jobs[0];
+    assert(job.id, 'Expected job id');
+    assert(job.name, 'Expected name');
+    assert(Array.isArray(job.deckNames) && job.deckNames.length === 4, 'Expected 4 deckNames');
+    assert(job.status, 'Expected status');
+    createdJobId = job.id;
   });
 
-  // Test: GET /api/jobs/[id] - not found
-  await test('GET /api/jobs/[id] returns 404 for unknown job', async () => {
-    const response = await fetch(`${BASE_URL}/api/jobs/nonexistent-id`);
-    assert(response.status === 404, `Expected 404, got ${response.status}`);
+  // Test: DELETE /api/jobs/[id] - delete a job
+  await test('DELETE /api/jobs/[id] deletes job and returns 204', async () => {
+    if (!createdJobId) throw new Error('No job id from previous test');
+    const response = await fetch(`${BASE_URL}/api/jobs/${encodeURIComponent(createdJobId)}`, {
+      method: 'DELETE',
+    });
+    assert(response.status === 204, `Expected 204, got ${response.status}`);
+    const getResponse = await fetch(`${BASE_URL}/api/jobs/${encodeURIComponent(createdJobId)}`);
+    assert(getResponse.status === 404, 'Expected job to be gone (404)');
   });
 
-  // Test: POST /api/jobs/[id]/analyze - not found
-  await test('POST /api/jobs/[id]/analyze returns 404 for unknown job', async () => {
-    const response = await fetch(`${BASE_URL}/api/jobs/nonexistent-id/analyze`, {
+  // Test: POST /api/decks - reject invalid deck URL
+  await test('POST /api/decks rejects invalid deck URL', async () => {
+    const response = await fetch(`${BASE_URL}/api/decks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        deckUrl: 'https://example.com/not-a-deck',
+      }),
     });
-    assert(response.status === 404, `Expected 404, got ${response.status}`);
+    assert(response.status === 400, `Expected 400, got ${response.status}`);
+    const data = await response.json();
+    assert(data.error?.includes('ManaBox') || data.error?.includes('Moxfield'), 'Expected supported URLs in error');
+  });
+
+  // Test: POST /api/decks - save a deck from ManaBox URL (requires network)
+  await test('POST /api/decks saves deck from ManaBox URL', async () => {
+    const response = await fetch(`${BASE_URL}/api/decks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deckUrl: 'https://manabox.app/decks/iB_rScEtT_6hnOlPUUQ-vA',
+      }),
+    });
+    assert(response.status === 201, `Expected 201, got ${response.status}`);
+    const data = await response.json();
+    assert(data.id, 'Expected deck id');
+    assert(data.name === 'Temur Roar Upgraded', `Expected deck name, got ${data.name}`);
+  });
+
+  // Test: POST /api/decks - save a deck from text
+  await test('POST /api/decks saves deck from text', async () => {
+    const deckText = `[metadata]
+Name=Test Deck
+
+[Commander]
+1 Ashling the Pilgrim
+
+[Main]
+1 Sol Ring
+98 Mountain`;
+
+    const response = await fetch(`${BASE_URL}/api/decks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deckText,
+      }),
+    });
+    
+    assert(response.status === 201, `Expected 201, got ${response.status}`);
+    const data = await response.json();
+    assert(data.id, 'Expected deck id (filename)');
+    assert(data.name === 'Test Deck', 'Expected deck name from metadata');
+  });
+
+  // Test: GET /api/decks - list saved decks
+  await test('GET /api/decks returns saved deck list', async () => {
+    const response = await fetch(`${BASE_URL}/api/decks`);
+    assert(response.ok, `Expected 200, got ${response.status}`);
+    
+    const data = await response.json();
+    assert(Array.isArray(data.decks), 'Expected decks array');
+    // Should have at least the test deck we just created
+    assert(data.decks.length > 0, 'Expected at least one saved deck');
+    assert(data.decks[0].id, 'Expected deck id');
+    assert(data.decks[0].name, 'Expected deck name');
   });
 
   // Summary

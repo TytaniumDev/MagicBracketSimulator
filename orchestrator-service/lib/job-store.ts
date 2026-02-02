@@ -1,36 +1,38 @@
 import { getDb } from './db';
-import { Job, JobStatus, AnalysisResult } from './types';
+import { Job, JobStatus, AnalysisResult, DeckSlot } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Row {
   id: string;
-  deck_name: string;
-  deck_dck: string;
+  decks_json: string;
   status: string;
   simulations: number;
-  opponents: string;
   created_at: string;
   result_json: string | null;
   error_message: string | null;
   idempotency_key?: string | null;
-  skip_analysis?: number | null;
   parallelism?: number | null;
   games_completed?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  docker_run_durations_ms?: string | null;
 }
 
 function rowToJob(row: Row): Job {
+  const decks = JSON.parse(row.decks_json) as DeckSlot[];
   return {
     id: row.id,
-    deckName: row.deck_name,
-    deckDck: row.deck_dck,
+    decks,
     status: row.status as JobStatus,
     simulations: row.simulations,
-    opponents: JSON.parse(row.opponents) as string[],
     createdAt: new Date(row.created_at),
     ...(row.result_json && { resultJson: JSON.parse(row.result_json) as AnalysisResult }),
     ...(row.error_message && { errorMessage: row.error_message }),
     ...(row.parallelism != null && { parallelism: row.parallelism }),
     ...(row.games_completed != null && { gamesCompleted: row.games_completed }),
+    ...(row.started_at && { startedAt: new Date(row.started_at) }),
+    ...(row.completed_at && { completedAt: new Date(row.completed_at) }),
+    ...(row.docker_run_durations_ms != null && row.docker_run_durations_ms !== '' && { dockerRunDurationsMs: JSON.parse(row.docker_run_durations_ms) as number[] }),
   };
 }
 
@@ -43,9 +45,7 @@ export function getJobByIdempotencyKey(key: string): Job | undefined {
 }
 
 export function createJob(
-  deckName: string,
-  deckDck: string,
-  opponents: string[],
+  decks: DeckSlot[],
   simulations: number,
   idempotencyKey?: string,
   parallelism?: number
@@ -57,32 +57,26 @@ export function createJob(
   const id = uuidv4();
   const createdAt = new Date().toISOString();
   const db = getDb();
+
   db.prepare(
-    `INSERT INTO jobs (id, deck_name, deck_dck, status, simulations, opponents, created_at, idempotency_key, parallelism)
-     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?, ?)`
+    `INSERT INTO jobs (id, decks_json, status, simulations, created_at, idempotency_key, parallelism)
+     VALUES (?, ?, 'QUEUED', ?, ?, ?, ?)`
   ).run(
     id,
-    deckName,
-    deckDck,
+    JSON.stringify(decks),
     simulations,
-    JSON.stringify(opponents),
     createdAt,
     idempotencyKey ?? null,
     parallelism ?? null
   );
-  return rowToJob({
+  return {
     id,
-    deck_name: deckName,
-    deck_dck: deckDck,
+    decks,
     status: 'QUEUED',
     simulations,
-    opponents: JSON.stringify(opponents),
-    created_at: createdAt,
-    result_json: null,
-    error_message: null,
-    idempotency_key: idempotencyKey ?? null,
-    parallelism: parallelism ?? null,
-  });
+    createdAt: new Date(createdAt),
+    ...(parallelism != null && { parallelism }),
+  };
 }
 
 export function getJob(id: string): Job | undefined {
@@ -94,6 +88,13 @@ export function getJob(id: string): Job | undefined {
 export function updateJobStatus(id: string, status: JobStatus): boolean {
   const db = getDb();
   const result = db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run(status, id);
+  return result.changes > 0;
+}
+
+export function setJobStartedAt(id: string): boolean {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const result = db.prepare('UPDATE jobs SET started_at = ? WHERE id = ?').run(now, id);
   return result.changes > 0;
 }
 
@@ -112,15 +113,22 @@ export function setJobResult(id: string, result: AnalysisResult): boolean {
   return result_.changes > 0;
 }
 
+export interface SetJobCompletedOptions {
+  completedAt?: Date;
+  dockerRunDurationsMs?: number[];
+}
+
 /**
  * Marks a job as COMPLETED without setting result_json.
  * Used when simulations finish but analysis is deferred to user action.
  */
-export function setJobCompleted(id: string): boolean {
+export function setJobCompleted(id: string, options?: SetJobCompletedOptions): boolean {
   const db = getDb();
+  const completedAt = options?.completedAt ?? new Date();
+  const dockerRunDurationsJson = options?.dockerRunDurationsMs != null ? JSON.stringify(options.dockerRunDurationsMs) : null;
   const result = db
-    .prepare('UPDATE jobs SET status = ? WHERE id = ?')
-    .run('COMPLETED', id);
+    .prepare('UPDATE jobs SET status = ?, completed_at = ?, docker_run_durations_ms = ? WHERE id = ?')
+    .run('COMPLETED', completedAt.toISOString(), dockerRunDurationsJson, id);
   return result.changes > 0;
 }
 
@@ -137,11 +145,27 @@ export function updateJobResult(id: string, result: AnalysisResult): boolean {
   return result_.changes > 0;
 }
 
-export function setJobFailed(id: string, errorMessage: string): boolean {
+export interface SetJobFailedOptions {
+  completedAt?: Date;
+  dockerRunDurationsMs?: number[];
+}
+
+export function setJobFailed(id: string, errorMessage: string, options?: SetJobFailedOptions): boolean {
   const db = getDb();
+  const completedAt = options?.completedAt ?? new Date();
+  const dockerRunDurationsJson = options?.dockerRunDurationsMs != null ? JSON.stringify(options.dockerRunDurationsMs) : null;
   const result = db
-    .prepare('UPDATE jobs SET status = ?, error_message = ? WHERE id = ?')
-    .run('FAILED', errorMessage, id);
+    .prepare('UPDATE jobs SET status = ?, error_message = ?, completed_at = ?, docker_run_durations_ms = ? WHERE id = ?')
+    .run('FAILED', errorMessage, completedAt.toISOString(), dockerRunDurationsJson, id);
+  return result.changes > 0;
+}
+
+/**
+ * Deletes a job by id. Returns true if a row was deleted.
+ */
+export function deleteJob(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
   return result.changes > 0;
 }
 

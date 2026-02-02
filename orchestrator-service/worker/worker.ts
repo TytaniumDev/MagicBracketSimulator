@@ -5,6 +5,7 @@ import {
   getNextQueuedJob,
   updateJobStatus,
   updateJobProgress,
+  setJobStartedAt,
   setJobCompleted,
   setJobFailed,
 } from '../lib/job-store';
@@ -35,12 +36,13 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
   const parallelism = job.parallelism ?? (Number(process.env.FORGE_PARALLELISM) || DEFAULT_PARALLELISM);
   const runConfigs = splitSimulations(job.simulations, parallelism);
 
-  console.log(`[Worker] Processing job ${job.id}: ${job.deckName}`);
-  console.log(`[Worker] Opponents: ${job.opponents.join(', ')}`);
+  const deckNames = job.decks.map((d) => d.name);
+  console.log(`[Worker] Processing job ${job.id}: ${deckNames.join(' vs ')}`);
   console.log(`[Worker] Simulations: ${job.simulations}, parallel runs: ${runConfigs.length} (${runConfigs.join(', ')})`);
 
-  // Update status to RUNNING
+  // Update status to RUNNING and record start time
   updateJobStatus(job.id, 'RUNNING');
+  setJobStartedAt(job.id);
 
   // Create job directory structure
   const jobDir = path.join(JOBS_DIR, job.id);
@@ -49,6 +51,7 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
 
   // Progress tracking interval
   let progressInterval: ReturnType<typeof setInterval> | null = null;
+  let dockerRunDurationsMs: number[] = [];
 
   try {
     // Create directories (make writable by Docker container's forge user on Linux/WSL)
@@ -61,9 +64,13 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
       // Ignore chmod errors (e.g. Windows)
     }
 
-    // Write deck file
-    const deckFilename = 'deck.dck';
-    fs.writeFileSync(path.join(decksDir, deckFilename), job.deckDck);
+    // Write all 4 deck files
+    const deckFilenames: string[] = [];
+    for (let i = 0; i < job.decks.length; i++) {
+      const filename = `deck_${i}.dck`;
+      fs.writeFileSync(path.join(decksDir, filename), job.decks[i].dck);
+      deckFilenames.push(filename);
+    }
 
     // Initialize progress to 0
     updateJobProgress(job.id, 0);
@@ -78,12 +85,11 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
     console.log(`[Worker] Spawning ${runConfigs.length} Docker container(s)...`);
     const gameLogs = await withRetry(
       async () => {
-        const exitCodes = await Promise.all(
+        const results = await Promise.all(
           runConfigs.map((games, runIndex) =>
             runForgeDocker(
               job.id,
-              deckFilename,
-              job.opponents,
+              deckFilenames,
               games,
               runConfigs.length > 1 ? runIndex : undefined,
               decksDir,
@@ -92,9 +98,10 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
           )
         );
 
-        const failed = exitCodes.findIndex((c) => c !== 0);
+        dockerRunDurationsMs = results.map((r) => r.durationMs);
+        const failed = results.findIndex((r) => r.exitCode !== 0);
         if (failed >= 0) {
-          throw new Error(`Forge run ${failed} failed with exit code ${exitCodes[failed]}`);
+          throw new Error(`Forge run ${failed} failed with exit code ${results[failed].exitCode}`);
         }
 
         const logs = readGameLogs(logsDir, job.id);
@@ -110,14 +117,16 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
       'Forge exit or no game logs'
     );
 
-    // Clear progress interval now that simulations are done
+    // Clear progress interval first so no tick can overwrite the final count
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
     }
 
-    // Update final progress count
-    updateJobProgress(job.id, gameLogs.length);
+    // Set final progress to the intended total (job.simulations). Using gameLogs.length
+    // can undercount when multiple parallel runs write to the same dir and the host
+    // sees only one file per run (e.g. 8 or 4) due to FS sync timing.
+    updateJobProgress(job.id, job.simulations);
 
     console.log(`[Worker] Found ${gameLogs.length} game logs`);
 
@@ -125,6 +134,8 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
     // POST logs to Log Analyzer for storage and later retrieval
     // -------------------------------------------------------------------------
     console.log(`[Worker] Sending logs to Log Analyzer...`);
+    // Include all 4 deck lists for AI analysis
+    const deckLists = job.decks.map((d) => d.dck);
     await withRetry(
       async () => {
         const response = await fetch(`${LOG_ANALYZER_URL}/jobs/${job.id}/logs`, {
@@ -132,7 +143,8 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             gameLogs,
-            deckNames: [job.deckName, ...job.opponents],
+            deckNames,
+            deckLists,
           }),
         });
         if (!response.ok) {
@@ -142,10 +154,10 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
       {},
       'Log Analyzer ingest'
     );
-    console.log(`[Worker] Logs sent to Log Analyzer`);
+    console.log(`[Worker] Logs sent to Log Analyzer (with deck lists)`);
 
     // Mark job as completed (analysis is now on-demand via frontend)
-    setJobCompleted(job.id);
+    setJobCompleted(job.id, { completedAt: new Date(), dockerRunDurationsMs });
     console.log(`[Worker] Job ${job.id} completed. Simulations done, analysis available on-demand.`);
 
     // Cleanup (optional - keep for debugging)
@@ -154,7 +166,7 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Worker] Job ${job.id} failed:`, message);
-    setJobFailed(job.id, message);
+    setJobFailed(job.id, message, { completedAt: new Date(), dockerRunDurationsMs });
   } finally {
     // Ensure progress interval is cleared even on error
     if (progressInterval) {
@@ -165,14 +177,14 @@ async function processJob(job: ReturnType<typeof getNextQueuedJob>) {
 
 async function runForgeDocker(
   jobId: string,
-  deckFilename: string,
-  opponents: string[],
+  deckFilenames: string[],
   simulations: number,
   runIndex: number | undefined,
   decksDir: string,
   logsDir: string
-): Promise<number> {
+): Promise<{ exitCode: number; durationMs: number }> {
   return new Promise((resolve, reject) => {
+    const startMs = Date.now();
     // Determine if running on Windows with Git Bash
     const isWindows = process.platform === 'win32';
     const env = { ...process.env };
@@ -192,12 +204,11 @@ async function runForgeDocker(
       '-v',
       `${logsDir}:/app/logs`,
       'forge-sim',
-      '--user-deck',
-      deckFilename,
-      '--opponents',
-      opponents[0],
-      opponents[1],
-      opponents[2],
+      '--decks',
+      deckFilenames[0],
+      deckFilenames[1],
+      deckFilenames[2],
+      deckFilenames[3],
       '--simulations',
       simulations.toString(),
       '--id',
@@ -223,11 +234,12 @@ async function runForgeDocker(
     });
 
     dockerProcess.on('close', (code) => {
+      const durationMs = Date.now() - startMs;
       if (code !== 0) {
         console.error(`[Worker] Docker stderr:`, stderr || '(empty)');
         console.log(`[Worker] Docker stdout:`, stdout || '(empty)');
       }
-      resolve(code ?? 1);
+      resolve({ exitCode: code ?? 1, durationMs });
     });
 
     dockerProcess.on('error', (error) => {

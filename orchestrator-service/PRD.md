@@ -1,7 +1,7 @@
 # Product Requirement Document: Orchestrator Service
 
 ## 1. Overview
-The **Orchestrator Service** is the user-facing "brain" of the application. It handles deck ingestion from external sites (Moxfield/Archidekt), manages the queue of simulation jobs, and displays the final results.
+The **Orchestrator Service** is the user-facing "brain" of the application. It handles deck ingestion from external sites (Moxfield/Archidekt/ManaBox), manages the queue of simulation jobs, and displays the final results.
 
 ## 2. Goals
 -   **Easy Onboarding**: Users should only need a URL or a deck list text to start.
@@ -19,7 +19,7 @@ The **Orchestrator Service** is the user-facing "brain" of the application. It h
 
 #### A. Frontend UI
 -   **Input Form**:
-    -   `Deck URL` (validated for moxfield.com / archidekt.com) OR `Deck Text`.
+    -   `Deck URL` (validated for moxfield.com / archidekt.com / manabox.app) OR `Deck Text`.
     -   `Opponent Selector`: Dropdown of "Random Precons" or "Specific Precons" (served from a static list).
     -   `Simulations`: Slider (1-10).
 -   **Status Dashboard**:
@@ -29,7 +29,7 @@ The **Orchestrator Service** is the user-facing "brain" of the application. It h
 
 #### B. Backend Services (Next.js API Routes / Server Actions)
 -   **Deck Ingestion**:
-    -   Service to fetch metadata from Moxfield/Archidekt APIs.
+    -   Service to fetch metadata from Moxfield/Archidekt APIs and ManaBox deck pages.
     -   `Converter`: Logic to transform imports into `.dck` format.
 -   **Job Lifecycle & Data Model**:
     -   **Job Table**:
@@ -66,6 +66,6 @@ The **Orchestrator Service** is the user-facing "brain" of the application. It h
 
 ## 5. Work Plan
 1.  **Scaffold**: Create Next.js App with matching DB schema.
-2.  **Ingestion**: Implement Moxfield/Archidekt scrapers.
+2.  **Ingestion**: Implement Moxfield/Archidekt/ManaBox scrapers.
 3.  **Worker**: Build the `worker.js` process to handle Docker spawning.
 4.  **Integration**: connect Worker -> Forge (Docker) -> Analysis (API).

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { deleteSavedDeck } from '@/lib/saved-decks';
+import { removeColorIdentity } from '@/lib/deck-metadata';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -21,6 +22,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     // The id is the filename (e.g., "doran-big-butts.dck")
     const deleted = deleteSavedDeck(id);
+
+    if (deleted) {
+      removeColorIdentity(id);
+    }
 
     if (!deleted) {
       return NextResponse.json(

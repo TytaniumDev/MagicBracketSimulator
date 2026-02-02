@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { listSavedDecks, saveDeck } from '@/lib/saved-decks';
-import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl } from '@/lib/ingestion';
+import { listSavedDecks, saveDeck, parseCommanderFromContent } from '@/lib/saved-decks';
+import { getColorIdentityByKey, setColorIdentity } from '@/lib/deck-metadata';
+import { getColorIdentity } from '@/lib/scryfall';
+import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
 
 /**
  * GET /api/decks - List all saved decks
@@ -8,7 +10,11 @@ import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl } from '@
 export async function GET() {
   try {
     const decks = listSavedDecks();
-    return NextResponse.json({ decks });
+    const decksWithColor = decks.map((deck) => {
+      const colorIdentity = getColorIdentityByKey(deck.filename);
+      return { ...deck, colorIdentity };
+    });
+    return NextResponse.json({ decks: decksWithColor });
   } catch (error) {
     console.error('Failed to list saved decks:', error);
     return NextResponse.json(
@@ -46,9 +52,9 @@ export async function POST(request: Request) {
 
     if (deckUrl) {
       // Validate URL format
-      if (!isMoxfieldUrl(deckUrl) && !isArchidektUrl(deckUrl)) {
+      if (!isMoxfieldUrl(deckUrl) && !isArchidektUrl(deckUrl) && !isManaboxUrl(deckUrl)) {
         return NextResponse.json(
-          { error: 'Invalid deck URL. Please use Moxfield or Archidekt URLs.' },
+          { error: 'Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.' },
           { status: 400 }
         );
       }
@@ -67,7 +73,17 @@ export async function POST(request: Request) {
     // Save the deck
     const savedDeck = saveDeck(name, dck);
 
-    return NextResponse.json(savedDeck, { status: 201 });
+    // Resolve and store commander color identity
+    const commander = parseCommanderFromContent(dck);
+    let colorIdentity: string[] | undefined;
+    if (commander) {
+      colorIdentity = await getColorIdentity(commander);
+      if (colorIdentity.length > 0) {
+        setColorIdentity(savedDeck.filename, colorIdentity);
+      }
+    }
+
+    return NextResponse.json({ ...savedDeck, colorIdentity }, { status: 201 });
   } catch (error) {
     console.error('Failed to save deck:', error);
     const message = error instanceof Error ? error.message : 'Failed to save deck';

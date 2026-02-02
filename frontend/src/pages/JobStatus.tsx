@@ -1,27 +1,37 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getApiBase, getLogAnalyzerBase } from '../api';
+import { ColorIdentity } from '../components/ColorIdentity';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
 
-interface AnalysisResult {
+interface DeckBracketResult {
+  deck_name: string;
   bracket: number;
   confidence: string;
   reasoning: string;
   weaknesses?: string;
 }
 
+interface AnalysisResult {
+  results: DeckBracketResult[];
+}
+
 interface Job {
   id: string;
-  deckName: string;
+  name: string;
+  deckNames: string[];
   status: JobStatusValue;
   simulations: number;
   parallelism?: number;
-  opponents: string[];
   createdAt: string;
   errorMessage?: string;
   resultJson?: AnalysisResult;
   gamesCompleted?: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  durationMs?: number | null;
+  dockerRunDurationsMs?: number[] | null;
 }
 
 // Types for Log Analyzer responses
@@ -80,6 +90,14 @@ const EVENT_FILTER_OPTIONS = [
   { value: 'draw_extra', label: 'Draw' },
 ] as const;
 
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = ((ms % 60_000) / 1000).toFixed(1);
+  return `${minutes}m ${seconds}s`;
+}
+
 export default function JobStatusPage() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<Job | null>(null);
@@ -96,6 +114,7 @@ export default function JobStatusPage() {
   const [structuredGames, setStructuredGames] = useState<StructuredGame[] | null>(null);
   const [structuredError, setStructuredError] = useState<string | null>(null);
   const [deckNames, setDeckNames] = useState<string[] | null>(null);
+  const [colorIdentityByDeckName, setColorIdentityByDeckName] = useState<Record<string, string[]>>({});
   
   // Turn viewer state
   const [selectedGame, setSelectedGame] = useState(0);
@@ -108,6 +127,8 @@ export default function JobStatusPage() {
   const [analyzePayload, setAnalyzePayload] = useState<object | null>(null);
   const [analyzePayloadError, setAnalyzePayloadError] = useState<string | null>(null);
   const [showPayload, setShowPayload] = useState(false);
+  const [promptPreview, setPromptPreview] = useState<{ system_prompt: string; user_prompt: string } | null>(null);
+  const [promptPreviewError, setPromptPreviewError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   
@@ -171,6 +192,23 @@ export default function JobStatusPage() {
       .catch((err) => setStructuredError(err instanceof Error ? err.message : 'Unknown error'));
   }, [id, logAnalyzerBase, job, structuredGames]);
 
+  // Fetch color identity for deck names (job.deckNames, deckNames from logs, result.results)
+  useEffect(() => {
+    if (!job) return;
+    const names = new Set<string>();
+    job.deckNames?.forEach((n) => names.add(n));
+    deckNames?.forEach((n) => names.add(n));
+    const result = job.resultJson;
+    result?.results?.forEach((r) => r.deck_name && names.add(r.deck_name));
+    const list = Array.from(names);
+    if (list.length === 0) return;
+    const params = new URLSearchParams({ names: list.join(',') });
+    fetch(`${apiBase}/api/deck-color-identity?${params}`)
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
+      .catch(() => {});
+  }, [apiBase, job?.id, job?.deckNames, deckNames, job?.resultJson?.results]);
+
   // Fetch analyze payload when job is completed (for on-demand analysis)
   useEffect(() => {
     if (!id || !job) return;
@@ -193,6 +231,32 @@ export default function JobStatusPage() {
       })
       .catch((err) => setAnalyzePayloadError(err instanceof Error ? err.message : 'Unknown error'));
   }, [id, logAnalyzerBase, job, analyzePayload]);
+
+  // Fetch exact prompt preview when user expands "data sent to Gemini"
+  useEffect(() => {
+    if (!id || !showPayload || !analyzePayload) return;
+    setPromptPreviewError(null);
+    setPromptPreview(null);
+    fetch(`${logAnalyzerBase}/jobs/${id}/logs/analyze-prompt-preview`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          let msg: string;
+          try {
+            const d = JSON.parse(text) as { error?: string; details?: string };
+            msg = d.details || d.error || text || `Preview failed: ${res.status}`;
+          } catch {
+            msg = text || `Preview failed: ${res.status}`;
+          }
+          throw new Error(msg);
+        }
+        return res.json() as Promise<{ system_prompt: string; user_prompt: string }>;
+      })
+      .then((data) => {
+        setPromptPreview(data);
+      })
+      .catch((err) => setPromptPreviewError(err instanceof Error ? err.message : 'Unknown error'));
+  }, [id, logAnalyzerBase, showPayload, analyzePayload]);
 
   // Fetch raw and condensed logs when log panel is opened
   useEffect(() => {
@@ -356,8 +420,13 @@ export default function JobStatusPage() {
           Back to home
         </Link>
       </div>
-      <h1 className="text-3xl font-bold mb-2">Job: {job.deckName || job.id}</h1>
-      <p className="text-gray-400 text-sm mb-6">ID: {job.id}</p>
+      <h1 className="text-3xl font-bold mb-2">
+        {job.name || `${job.simulations} games - ${job.id.slice(0, 8)}`}
+      </h1>
+      <p className="text-gray-400 text-sm mb-2">
+        {job.deckNames?.join(', ')}
+      </p>
+      <p className="text-gray-500 text-xs mb-6">ID: {job.id}</p>
 
       <div className="bg-gray-800 rounded-lg p-6 space-y-4">
         <div>
@@ -384,6 +453,24 @@ export default function JobStatusPage() {
             <span>{job.parallelism}</span>
           </div>
         )}
+        {(job.status === 'COMPLETED' || job.status === 'FAILED') && job.durationMs != null && job.durationMs >= 0 && (
+          <div>
+            <span className="text-gray-400">Total run time: </span>
+            <span>{formatDurationMs(job.durationMs)}</span>
+          </div>
+        )}
+        {job.dockerRunDurationsMs != null && job.dockerRunDurationsMs.length > 0 && (
+          <div>
+            <span className="text-gray-400">Docker runs: </span>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-300">
+              {job.dockerRunDurationsMs.map((ms, i) => (
+                <span key={i}>
+                  Run {i + 1}: {formatDurationMs(ms)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {(job.status === 'RUNNING' || job.status === 'ANALYZING') && job.gamesCompleted != null && (
           <div className="space-y-2">
             <div>
@@ -408,10 +495,15 @@ export default function JobStatusPage() {
             </div>
           </div>
         )}
-        {job.opponents?.length > 0 && (
-          <div>
-            <span className="text-gray-400">Opponents: </span>
-            <span>{job.opponents.join(', ')}</span>
+        {job.deckNames?.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-gray-400">Decks: </span>
+            {job.deckNames.map((name) => (
+              <span key={name} className="inline-flex items-center gap-1">
+                {name}
+                <ColorIdentity colorIdentity={colorIdentityByDeckName[name]} />
+              </span>
+            ))}
           </div>
         )}
         {job.status === 'FAILED' && job.errorMessage && (
@@ -436,8 +528,9 @@ export default function JobStatusPage() {
                       className="bg-gray-800/50 rounded p-3 text-center"
                     >
                       <div className="text-lg font-bold text-blue-400">{wins}</div>
-                      <div className="text-xs text-gray-400 truncate" title={deck}>
-                        {deck}
+                      <div className="flex items-center justify-center gap-1 text-xs text-gray-400 truncate" title={deck}>
+                        <span className="truncate">{deck}</span>
+                        <ColorIdentity colorIdentity={colorIdentityByDeckName[deck]} />
                       </div>
                       {deckWinTurns.length > 0 && (
                         <div className="text-xs text-gray-500 mt-1">
@@ -464,41 +557,12 @@ export default function JobStatusPage() {
                 <p className="text-sm text-gray-400">
                   Simulations complete. Review the data below and click to analyze with Gemini.
                 </p>
-                
-                {/* Analyze Payload Viewer */}
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPayload((v) => !v)}
-                    className="text-sm text-blue-400 hover:text-blue-300 mb-2"
-                  >
-                    {showPayload ? 'Hide' : 'Show'} data sent to Gemini
-                  </button>
-                  
-                  {showPayload && (
-                    <div className="mt-2">
-                      {analyzePayloadError && (
-                        <p className="text-sm text-red-400 mb-2">{analyzePayloadError}</p>
-                      )}
-                      {analyzePayload === null && !analyzePayloadError && (
-                        <p className="text-sm text-gray-500">Loading payload...</p>
-                      )}
-                      {analyzePayload && (
-                        <pre className="text-xs overflow-auto max-h-96 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-400 font-mono">
-                          {JSON.stringify(analyzePayload, null, 2)}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-                </div>
-                
                 {/* Analyze Error */}
                 {analyzeError && (
                   <div className="bg-red-900/30 border border-red-600 rounded p-3 text-red-200 text-sm">
                     {analyzeError}
                   </div>
                 )}
-                
                 {/* Analyze Button */}
                 <button
                   type="button"
@@ -515,36 +579,119 @@ export default function JobStatusPage() {
               </div>
             )}
             
-            {/* Analysis result exists - show it */}
-            {result && (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-2xl font-bold text-green-400 mb-1">
-                    Bracket {result.bracket}
-                  </div>
-                  {result.confidence && (
-                    <p className="text-sm text-gray-300 mb-2">
-                      <span className="text-gray-400">Confidence: </span>
-                      {result.confidence}
-                    </p>
+            {/* Exact data and prompt sent to Gemini - always visible for completed jobs */}
+            <div className={result ? 'mt-4 pt-4 border-t border-gray-600' : ''}>
+              <button
+                type="button"
+                onClick={() => setShowPayload((v) => !v)}
+                className="text-sm text-blue-400 hover:text-blue-300 mb-2"
+              >
+                {showPayload ? 'Hide' : 'Show'} exact data and prompt sent to Gemini
+              </button>
+              {showPayload && (
+                <div className="mt-2 space-y-4">
+                  {analyzePayloadError && (
+                    <p className="text-sm text-red-400">{analyzePayloadError}</p>
+                  )}
+                  {analyzePayload === null && !analyzePayloadError && (
+                    <p className="text-sm text-gray-500">Loading...</p>
+                  )}
+                  {analyzePayload && (
+                    <>
+                      {Array.isArray((analyzePayload as { decks?: { decklist?: string }[] }).decks) &&
+                        (analyzePayload as { decks: { decklist?: string }[] }).decks.some(
+                          (d) => !d.decklist || d.decklist.trim() === ''
+                        ) && (
+                        <p className="text-xs text-amber-400/90">
+                          This job was run before decklists were stored. Decklists below may be missing. Re-run the simulation to include full decklists in the payload.
+                        </p>
+                      )}
+                      <div>
+                        <h4 className="text-xs font-semibold text-gray-400 mb-1">
+                          1. Request body sent to Analysis Service (then used to build the prompt)
+                        </h4>
+                        <pre className="text-xs overflow-auto max-h-80 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-400 font-mono border border-gray-700">
+                          {JSON.stringify(analyzePayload, null, 2)}
+                        </pre>
+                      </div>
+                      {promptPreviewError && (
+                        <div className="text-sm text-red-400 space-y-1">
+                          <p>{promptPreviewError}</p>
+                          <p className="text-xs text-gray-400">
+                            If the prompt preview fails, ensure the Analysis Service is running (default port 8000).
+                          </p>
+                        </div>
+                      )}
+                      {promptPreview === null && !promptPreviewError && (
+                        <p className="text-sm text-gray-500">Loading prompt preview...</p>
+                      )}
+                      {promptPreview && (
+                        <>
+                          <div>
+                            <h4 className="text-xs font-semibold text-gray-400 mb-1">
+                              2. System instruction (sent to Gemini)
+                            </h4>
+                            <pre className="text-xs overflow-auto max-h-80 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-300 font-mono border border-gray-700">
+                              {promptPreview.system_prompt}
+                            </pre>
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-semibold text-gray-400 mb-1">
+                              3. User message (sent to Gemini — includes rubric, decklists, outcomes)
+                            </h4>
+                            <pre className="text-xs overflow-auto max-h-96 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-300 font-mono border border-gray-700">
+                              {promptPreview.user_prompt}
+                            </pre>
+                          </div>
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
-                {result.reasoning && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-400 mb-2">Reasoning</h4>
-                    <p className="text-gray-300 text-sm whitespace-pre-wrap">
-                      {result.reasoning}
-                    </p>
-                  </div>
-                )}
-                {result.weaknesses && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-400 mb-2">Weaknesses</h4>
-                    <p className="text-gray-300 text-sm whitespace-pre-wrap">
-                      {result.weaknesses}
-                    </p>
-                  </div>
-                )}
+              )}
+            </div>
+            
+            {/* Analysis result exists - show bracket for each deck */}
+            {result && result.results && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {result.results.map((deckResult, idx) => (
+                    <div
+                      key={deckResult.deck_name || idx}
+                      className="bg-gray-800/50 rounded-lg p-4 border border-gray-600"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-gray-200 truncate flex items-center gap-1" title={deckResult.deck_name}>
+                          {deckResult.deck_name}
+                          <ColorIdentity colorIdentity={colorIdentityByDeckName[deckResult.deck_name]} />
+                        </h4>
+                        <span className="text-xl font-bold text-green-400 shrink-0">
+                          B{deckResult.bracket}
+                        </span>
+                      </div>
+                      {deckResult.confidence && (
+                        <p className="text-xs text-gray-400 mb-2">
+                          Confidence: {deckResult.confidence}
+                        </p>
+                      )}
+                      {deckResult.reasoning && (
+                        <div className="mb-2">
+                          <p className="text-xs text-gray-300 line-clamp-3">
+                            {deckResult.reasoning}
+                          </p>
+                        </div>
+                      )}
+                      {deckResult.weaknesses && (
+                        <div>
+                          <p className="text-xs text-gray-500">
+                            <span className="text-gray-400">Weaknesses: </span>
+                            {deckResult.weaknesses}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 <div>
                   <button
                     type="button"
@@ -722,10 +869,11 @@ export default function JobStatusPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className={`text-sm font-semibold truncate ${
+                          <h4 className={`text-sm font-semibold truncate flex items-center gap-1 ${
                             isHero ? 'text-blue-300' : 'text-gray-300'
                           }`}>
                             {isHero ? '(Hero) ' : ''}{label}
+                            <ColorIdentity colorIdentity={colorIdentityByDeckName[label]} />
                           </h4>
                           {lifeTotal !== undefined && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded ${

@@ -1,19 +1,17 @@
 #!/bin/bash
 # Forge Simulation Engine - Entrypoint Script
-# Parses CLI args, merges decks, invokes Forge sim, captures logs to /app/logs/{job_id}_game_{n}.txt
+# Parses CLI args, copies decks, invokes Forge sim, captures logs to /app/logs/{job_id}_game_{n}.txt
 set -euo pipefail
 
 cd /app
 
 # Defaults
 SIMULATIONS=5
-USER_DECK=""
-OPPONENTS=()
+DECKS=()
 JOB_ID=""
 
 # Paths
 DECKS_DIR="/app/decks"
-PRECONS_DIR="/app/res/precons"
 # Forge looks for Commander decks in ~/.forge/decks/commander/ when -f Commander is set
 # The -D flag should override this, but in practice it doesn't for format-specific modes
 # So we copy decks to Forge's default Commander deck path
@@ -23,30 +21,25 @@ FORGE_LAUNCHER="/app/forge.sh"
 
 usage() {
     cat <<EOF >&2
-Usage: $0 --user-deck <filename> --opponents <name1> <name2> <name3> [--simulations <n>] --id <job_id>
-  --user-deck   Filename of user's deck in ${DECKS_DIR} (e.g. my_deck.dck)
-  --opponents   Three opponent deck names from precons (e.g. "Lorehold Legacies" "Elven Council" "Prismari Performance")
+Usage: $0 --decks <d1> <d2> <d3> <d4> [--simulations <n>] --id <job_id>
+  --decks       Four deck filenames in ${DECKS_DIR} (e.g. deck_0.dck deck_1.dck deck_2.dck deck_3.dck)
   --simulations Number of games (default: 5)
   --id          Job ID for output logs: {job_id}_game_{n}.txt
 EOF
     exit 1
 }
 
-# Parse arguments (simple loop - handles --opponents with 3 following args)
+# Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --user-deck)
-            USER_DECK="${2:?Missing value for --user-deck}"
-            shift 2
-            ;;
-        --opponents)
+        --decks)
             shift
-            if [[ $# -lt 3 ]]; then
-                echo "Error: --opponents requires exactly 3 deck names" >&2
+            if [[ $# -lt 4 ]]; then
+                echo "Error: --decks requires exactly 4 deck filenames" >&2
                 exit 1
             fi
-            OPPONENTS=("$1" "$2" "$3")
-            shift 3
+            DECKS=("$1" "$2" "$3" "$4")
+            shift 4
             ;;
         --simulations)
             SIMULATIONS="${2:?Missing value for --simulations}"
@@ -67,70 +60,41 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required args
-if [[ -z "$USER_DECK" ]] || [[ ${#OPPONENTS[@]} -ne 3 ]] || [[ -z "$JOB_ID" ]]; then
-    echo "Error: Missing required arguments (--user-deck, --opponents x3, --id)" >&2
+if [[ ${#DECKS[@]} -ne 4 ]] || [[ -z "$JOB_ID" ]]; then
+    echo "Error: Missing required arguments (--decks x4, --id)" >&2
     usage
 fi
 
-# Resolve opponent filename (try exact, then with .dck)
-resolve_opponent() {
-    local name="$1"
-    if [[ -f "${PRECONS_DIR}/${name}" ]]; then
-        echo "${name}"
-        return
+# Validate all decks exist and have [Main] section
+for deck in "${DECKS[@]}"; do
+    deck_path="${DECKS_DIR}/${deck}"
+    if [[ ! -f "$deck_path" ]]; then
+        echo "Error: Deck not found: ${deck_path}" >&2
+        exit 1
     fi
-    if [[ -f "${PRECONS_DIR}/${name}.dck" ]]; then
-        echo "${name}.dck"
-        return
+    if ! grep -qi '\[main\]' "$deck_path"; then
+        echo "Error: Deck missing [Main] section: ${deck}" >&2
+        exit 1
     fi
-    echo "Error: Opponent deck not found: ${name} (checked ${PRECONS_DIR}/)" >&2
-    exit 1
-}
+done
 
-# Validate user deck exists
-USER_DECK_PATH="${DECKS_DIR}/${USER_DECK}"
-if [[ ! -f "$USER_DECK_PATH" ]]; then
-    echo "Error: User deck not found: ${USER_DECK_PATH}" >&2
-    exit 1
-fi
-
-# Ensure [Main] in deck for basic validation (case-insensitive: [Main], [main], etc.)
-if ! grep -qi '\[main\]' "$USER_DECK_PATH"; then
-    echo "Error: User deck missing [Main] section: ${USER_DECK}" >&2
-    exit 1
-fi
-
-# Create ephemeral merged deck directory
+# Create ephemeral deck directory for Forge
 rm -rf "${RUN_DECKS_DIR}"
 mkdir -p "${RUN_DECKS_DIR}"
 
-# Copy user deck (preserve filename as-is for -d)
-cp "$USER_DECK_PATH" "${RUN_DECKS_DIR}/"
-
-# Resolve and copy opponent decks
-DECK_LIST=("$USER_DECK")
-for opp in "${OPPONENTS[@]}"; do
-    opp_file=$(resolve_opponent "$opp")
-    cp "${PRECONS_DIR}/${opp_file}" "${RUN_DECKS_DIR}/"
-    # Use the actual filename in /app/run/decks (might be "Buckle Up.dck" etc)
-    DECK_LIST+=("$opp_file")
-done
-
-# Build -d argument list (quote names with spaces for shell)
-# We pass deck filenames as they appear in RUN_DECKS_DIR
-deck_args=()
-for d in "${DECK_LIST[@]}"; do
-    deck_args+=("$d")
+# Copy all 4 decks to Forge's deck directory
+for deck in "${DECKS[@]}"; do
+    cp "${DECKS_DIR}/${deck}" "${RUN_DECKS_DIR}/"
 done
 
 # Ensure logs directory exists
 mkdir -p "$LOGS_DIR"
 
-echo "Forge Simulation Engine: starting ${SIMULATIONS} game(s) with ${USER_DECK} vs ${OPPONENTS[*]}" >&2
+echo "Forge Simulation Engine: starting ${SIMULATIONS} game(s) with decks: ${DECKS[*]}" >&2
 
 # Run Forge sim - capture stdout/stderr for log processing
 # Do NOT use -q; we need full logs for Analysis Service
-# -D overrides deck path; -f Commander; -n number of games
+# -f Commander; -n number of games
 # -c 300 = 5 min timeout per game (optional, helps avoid infinite games)
 FORGE_OUTPUT=$(mktemp)
 trap "rm -f ${FORGE_OUTPUT}" EXIT
@@ -140,7 +104,7 @@ trap "rm -f ${FORGE_OUTPUT}" EXIT
 set +e
 xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
     "$FORGE_LAUNCHER" sim \
-    -d "${deck_args[0]}" "${deck_args[1]}" "${deck_args[2]}" "${deck_args[3]}" \
+    -d "${DECKS[0]}" "${DECKS[1]}" "${DECKS[2]}" "${DECKS[3]}" \
     -f Commander \
     -n "$SIMULATIONS" \
     -c 300 \

@@ -1,7 +1,7 @@
 # Product Requirement Document: Forge Simulation Engine
 
 ## 1. Overview
-The **Forge Simulation Engine** is a headless, dockerized service responsible for simulating games of Magic: The Gathering. It uses the "Forge" rules engine in CLI mode (`sim`) to play a user's deck against 3 opponent decks and output detailed game logs.
+The **Forge Simulation Engine** is a headless, dockerized service responsible for simulating games of Magic: The Gathering. It uses the "Forge" rules engine in CLI mode (`sim`) to play 4 decks against each other and output detailed game logs.
 
 ## 2. Goals
 -   **Reliable Headless Execution**: Must run in a Linux Docker container without a GUI (X11).
@@ -24,14 +24,13 @@ The **Forge Simulation Engine** is a headless, dockerized service responsible fo
 The container entrypoint script must accept standard flags to orchestrate the simulation.
 **Script**: `run_sim.sh` (Entrypoint)
 **Arguments**:
--   `--user-deck <filename>`: The filename of the user's deck in `/app/decks`.
--   `--opponents <name1> <name2> <name3>`: Names of the opponent decks (either in `/app/decks` or `/app/res/precons`).
+-   `--decks <d1> <d2> <d3> <d4>`: Four deck filenames in `/app/decks`.
 -   `--simulations <n>`: Number of games to run (default: 5).
 -   `--id <job_id>`: a unique ID to prefix output logs (e.g. `job_123_game_1.log`).
 
 **Example Usage**:
 ```bash
-./run_sim.sh --user-deck my_deck.dck --opponents "Buckle Up" "Elven Empire" "Lorehold Legacies" --simulations 5 --id job_abc
+./run_sim.sh --decks deck_0.dck deck_1.dck deck_2.dck deck_3.dck --simulations 5 --id job_abc
 ```
 
 ### 3.3 Data Contracts

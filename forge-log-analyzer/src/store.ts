@@ -14,8 +14,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { StoredJobLogs, CondensedGame, StructuredGame, AnalyzePayload } from './types.js';
-import { condenseGames, structureGames, toAnalysisServiceFormatBatch } from './condenser/index.js';
+import type { StoredJobLogs, CondensedGame, StructuredGame, AnalyzePayload, DeckOutcome, DeckInfo } from './types.js';
+import { condenseGames, structureGames } from './condenser/index.js';
 
 // -----------------------------------------------------------------------------
 // Configuration
@@ -111,6 +111,81 @@ function readGameLogFiles(jobDir: string): string[] {
 // -----------------------------------------------------------------------------
 
 /**
+ * Builds the slim analyze payload from condensed games and deck info.
+ * 
+ * This aggregates game outcomes (wins, winning turns, turns lost on) for each deck
+ * instead of sending full condensed logs to Gemini.
+ */
+function buildAnalyzePayload(
+  condensed: CondensedGame[],
+  deckNames?: string[],
+  deckLists?: string[]
+): AnalyzePayload {
+  // Build deck info array
+  const decks: DeckInfo[] = (deckNames ?? []).map((name, i) => ({
+    name,
+    decklist: deckLists?.[i],
+  }));
+
+  // Initialize outcomes for all known decks
+  const outcomes: Record<string, DeckOutcome> = {};
+  for (const name of deckNames ?? []) {
+    outcomes[name] = { wins: 0, winning_turns: [], turns_lost_on: [] };
+  }
+
+  // Aggregate outcomes from each game
+  for (const game of condensed) {
+    if (!game.winner) continue;
+
+    // Match winner to deck name (winner might be "Ai(N)-DeckName" format)
+    let matchedWinner = game.winner;
+    if (deckNames) {
+      const found = deckNames.find(
+        (name) => game.winner === name || game.winner?.endsWith(`-${name}`)
+      );
+      if (found) {
+        matchedWinner = found;
+      }
+    }
+
+    // Ensure winner has an entry
+    if (!outcomes[matchedWinner]) {
+      outcomes[matchedWinner] = { wins: 0, winning_turns: [], turns_lost_on: [] };
+    }
+
+    // Record the win
+    outcomes[matchedWinner].wins += 1;
+    if (game.winningTurn !== undefined) {
+      outcomes[matchedWinner].winning_turns.push(game.winningTurn);
+    }
+
+    // For all other decks, this is a loss - record the turn they lost on
+    if (game.winningTurn !== undefined) {
+      for (const name of deckNames ?? []) {
+        if (name !== matchedWinner) {
+          if (!outcomes[name]) {
+            outcomes[name] = { wins: 0, winning_turns: [], turns_lost_on: [] };
+          }
+          outcomes[name].turns_lost_on.push(game.winningTurn);
+        }
+      }
+    }
+  }
+
+  // Sort turn arrays for consistent output
+  for (const outcome of Object.values(outcomes)) {
+    outcome.winning_turns.sort((a, b) => a - b);
+    outcome.turns_lost_on.sort((a, b) => a - b);
+  }
+
+  return {
+    decks,
+    total_games: condensed.length,
+    outcomes,
+  };
+}
+
+/**
  * Stores raw game logs for a job.
  *
  * Writes each game as a plain-text file (game_001.txt, game_002.txt, ...)
@@ -118,12 +193,14 @@ function readGameLogFiles(jobDir: string): string[] {
  *
  * @param jobId - The unique job identifier
  * @param gameLogs - Array of raw game log strings
- * @param deckNames - Optional deck names [hero, opp1, opp2, opp3]
+ * @param deckNames - Optional deck names (all 4 decks)
+ * @param deckLists - Optional deck lists (.dck content) for all 4 decks
  */
 export function storeJobLogs(
   jobId: string,
   gameLogs: string[],
-  deckNames?: string[]
+  deckNames?: string[],
+  deckLists?: string[]
 ): void {
   const jobDir = getJobDir(jobId);
 
@@ -142,31 +219,28 @@ export function storeJobLogs(
     }
   }
 
-  // Write each game as raw text
-  gameLogs.forEach((log, i) => {
+  // Expand concatenated games: each incoming item may contain multiple games (e.g. one file per run with many games)
+  const expandedLogs = gameLogs.flatMap(splitConcatenatedGames);
+
+  // Write each game as raw text (one file per actual game)
+  expandedLogs.forEach((log, i) => {
     const filename = `game_${String(i + 1).padStart(3, '0')}.txt`;
     fs.writeFileSync(path.join(jobDir, filename), log, 'utf-8');
   });
 
-  // Pre-compute condensed logs immediately
-  const condensed = condenseGames(gameLogs);
+  // Pre-compute condensed logs from expanded games
+  const condensed = condenseGames(expandedLogs);
   
-  // Pre-compute structured logs immediately
-  const structured = structureGames(gameLogs, deckNames);
+  // Pre-compute structured logs from expanded games
+  const structured = structureGames(expandedLogs, deckNames);
   
-  // Pre-compute the analyze payload (snake_case format for Analysis Service)
-  const condensedForPython = toAnalysisServiceFormatBatch(condensed);
-  const heroDeckName = deckNames?.[0] ?? 'Unknown Deck';
-  const opponentDecks = deckNames?.slice(1) ?? [];
-  const analyzePayload: AnalyzePayload = {
-    hero_deck_name: heroDeckName,
-    opponent_decks: opponentDecks,
-    condensed_logs: condensedForPython,
-  };
+  // Pre-compute the slim analyze payload (decks + outcomes; total_games = expanded count)
+  const analyzePayload = buildAnalyzePayload(condensed, deckNames, deckLists);
 
   // Write metadata with all pre-computed data
   const meta = {
     deckNames,
+    deckLists,
     ingestedAt: new Date().toISOString(),
     condensed,
     structured,
@@ -192,6 +266,7 @@ export function getJobLogs(jobId: string): StoredJobLogs | null {
     const metaContent = fs.readFileSync(metaPath, 'utf-8');
     const meta = JSON.parse(metaContent) as {
       deckNames?: string[];
+      deckLists?: string[];
       ingestedAt: string;
       condensed?: CondensedGame[];
       structured?: StructuredGame[];
@@ -204,6 +279,7 @@ export function getJobLogs(jobId: string): StoredJobLogs | null {
     return {
       gameLogs,
       deckNames: meta.deckNames,
+      deckLists: meta.deckLists,
       ingestedAt: meta.ingestedAt,
       condensed: meta.condensed,
       structured: meta.structured,
@@ -222,6 +298,7 @@ function writeMeta(
   jobId: string,
   meta: {
     deckNames?: string[];
+    deckLists?: string[];
     ingestedAt: string;
     condensed?: CondensedGame[];
     structured?: StructuredGame[];
@@ -337,7 +414,7 @@ export function getDeckNames(jobId: string): string[] | undefined {
  * Gets the pre-computed analyze payload for a job.
  *
  * This returns the exact payload that will be sent to the Analysis Service (Gemini).
- * It reads only from cache - no computation is performed.
+ * If the payload is in the old format or missing, it rebuilds it using the new slim format.
  *
  * @param jobId - The unique job identifier
  * @returns The analyze payload, or null if job not found or payload not pre-computed
@@ -348,21 +425,15 @@ export function getAnalyzePayload(jobId: string): AnalyzePayload | null {
     return null;
   }
 
-  // Return pre-computed payload if available
-  if (data.analyzePayload) {
-    return data.analyzePayload;
+  // Check if we have a valid new-format payload (has 'decks' and 'outcomes')
+  const payload = data.analyzePayload;
+  if (payload && 'decks' in payload && 'outcomes' in payload) {
+    return payload;
   }
 
-  // For backward compatibility: compute payload for jobs that were ingested before this feature
+  // Rebuild payload using new slim format from condensed data
   if (data.condensed && data.deckNames) {
-    const condensedForPython = toAnalysisServiceFormatBatch(data.condensed);
-    const heroDeckName = data.deckNames[0] ?? 'Unknown Deck';
-    const opponentDecks = data.deckNames.slice(1);
-    const analyzePayload: AnalyzePayload = {
-      hero_deck_name: heroDeckName,
-      opponent_decks: opponentDecks,
-      condensed_logs: condensedForPython,
-    };
+    const analyzePayload = buildAnalyzePayload(data.condensed, data.deckNames, data.deckLists);
 
     // Cache the payload
     const meta = JSON.parse(fs.readFileSync(getMetaFilePath(jobId), 'utf-8'));

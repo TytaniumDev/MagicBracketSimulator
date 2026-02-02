@@ -50,3 +50,57 @@ export function validatePreconIds(ids: string[]): { valid: boolean; invalid: str
   const invalid = ids.filter(id => !preconIds.has(id));
   return { valid: invalid.length === 0, invalid };
 }
+
+/**
+ * Read the .dck content for a precon by its ID.
+ * Returns { name, dck } or undefined if not found.
+ */
+export function readPreconContent(id: string): { name: string; dck: string } | undefined {
+  const precon = getPreconById(id);
+  if (!precon) {
+    return undefined;
+  }
+
+  return readPreconFile(precon);
+}
+
+/**
+ * Read the .dck content for a precon by its name.
+ * Returns { name, dck } or undefined if not found.
+ */
+export function readPreconContentByName(name: string): { name: string; dck: string } | undefined {
+  const precon = getPreconByName(name);
+  if (!precon) {
+    return undefined;
+  }
+
+  return readPreconFile(precon);
+}
+
+/**
+ * Read the .dck content for a precon by either ID or name (tries ID first).
+ * Returns { name, dck } or undefined if not found.
+ */
+export function readPreconContentByIdOrName(idOrName: string): { name: string; dck: string } | undefined {
+  // Try by ID first
+  const byId = readPreconContent(idOrName);
+  if (byId) {
+    return byId;
+  }
+
+  // Try by name
+  return readPreconContentByName(idOrName);
+}
+
+function readPreconFile(precon: Precon): { name: string; dck: string } | undefined {
+  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../forge-simulation-engine';
+  const preconPath = path.resolve(forgeEnginePath, 'precons', precon.filename);
+
+  try {
+    const dck = fs.readFileSync(preconPath, 'utf-8');
+    return { name: precon.name, dck };
+  } catch (error) {
+    console.error(`Failed to read precon file ${precon.filename}:`, error);
+    return undefined;
+  }
+}

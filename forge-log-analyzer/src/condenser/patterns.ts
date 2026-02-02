@@ -216,8 +216,10 @@ export const KEEP_COMMANDER_CAST = /casts?\s+(their\s+)?commander|from\s+command
  *   - "Player A attacks with 3 creatures."
  *   - "declares attackers"
  *   - "combat damage"
+ *   - "Combat: Ai(3)-Marchesa assigned Warren Soultrader (258) and Skyclave Shadowcat (264) to attack Ai(4)-Explorers of the Deep."
+ *   - "Damage: Warren Soultrader (258) deals 3 combat damage to Ai(4)-Explorers of the Deep."
  */
-export const KEEP_COMBAT = /attacks?\s+with|declares?\s+attack|combat\s+damage/i;
+export const KEEP_COMBAT = /attacks?\s+with|declares?\s+attack|combat\s+damage|assigned\s+.*\s+to\s+attack/i;
 
 /**
  * Pattern: Land played
