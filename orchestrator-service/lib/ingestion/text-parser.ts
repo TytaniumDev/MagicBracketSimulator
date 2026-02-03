@@ -16,26 +16,31 @@ import { ParsedDeck, DeckCard } from './to-dck';
  * - Lines starting with "Commander:" or "1x Commander:"
  *
  * Moxfield MTGO format special handling:
- * - Commander appears after SIDEBOARD section, separated by blank line
- * - Format: mainboard, SIDEBOARD:, sideboard cards, blank line, commander(s)
+ * - Commander appears at the end, separated by blank line
+ * - With sideboard: mainboard, SIDEBOARD:, sideboard cards, blank line, commander(s)
+ * - Without sideboard: mainboard, blank line, commander(s)
  */
 export function parseTextDeck(text: string, deckName: string = 'Imported Deck'): ParsedDeck {
   const lines = text.split(/\r?\n/);
   const commanders: DeckCard[] = [];
   const mainboard: DeckCard[] = [];
   const sideboard: DeckCard[] = [];
-  const postSideboard: DeckCard[] = []; // Cards after sideboard section (Moxfield commander location)
+  // Track cards after the last blank line (potential Moxfield commander location)
+  let cardsAfterLastBlank: DeckCard[] = [];
 
-  let currentSection: 'commander' | 'main' | 'sideboard' | 'post-sideboard' = 'main';
-  let sawBlankAfterSideboard = false;
+  let currentSection: 'commander' | 'main' | 'sideboard' = 'main';
+  let sawBlankInCurrentSection = false;
+  let hasSideboard = false;
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
 
-    // Track blank lines after sideboard to detect Moxfield commander format
+    // Track blank lines to detect Moxfield commander format
     if (!line) {
-      if (currentSection === 'sideboard') {
-        sawBlankAfterSideboard = true;
+      if (currentSection !== 'commander') {
+        sawBlankInCurrentSection = true;
+        // Reset cards after blank - we only care about the LAST group after a blank
+        cardsAfterLastBlank = [];
       }
       continue;
     }
@@ -53,15 +58,13 @@ export function parseTextDeck(text: string, deckName: string = 'Imported Deck'):
         currentSection = 'commander';
       } else if (section === 'sideboard') {
         currentSection = 'sideboard';
+        hasSideboard = true;
+        sawBlankInCurrentSection = false;
+        cardsAfterLastBlank = [];
       } else {
         currentSection = 'main';
       }
       continue;
-    }
-
-    // If we saw a blank line after sideboard, switch to post-sideboard section
-    if (sawBlankAfterSideboard && currentSection === 'sideboard') {
-      currentSection = 'post-sideboard';
     }
 
     // Check for inline commander indicator: "1x CardName *CMDR*" or "Commander: CardName"
@@ -98,27 +101,34 @@ export function parseTextDeck(text: string, deckName: string = 'Imported Deck'):
           commanders.push(card);
           break;
         case 'sideboard':
-          sideboard.push(card);
-          break;
-        case 'post-sideboard':
-          postSideboard.push(card);
+          if (sawBlankInCurrentSection) {
+            // Cards after blank in sideboard section - potential commander
+            cardsAfterLastBlank.push(card);
+          } else {
+            sideboard.push(card);
+          }
           break;
         default:
-          mainboard.push(card);
+          if (sawBlankInCurrentSection && !hasSideboard) {
+            // Cards after blank in main section (no sideboard) - potential commander
+            cardsAfterLastBlank.push(card);
+          } else {
+            mainboard.push(card);
+          }
       }
     }
   }
 
-  // Moxfield MTGO format: if we have 1-2 cards in post-sideboard section and no explicit commanders,
+  // Moxfield MTGO format: if we have 1-2 cards after the last blank line and no explicit commanders,
   // treat those as commanders (this is where Moxfield puts the commander)
-  if (commanders.length === 0 && postSideboard.length > 0 && postSideboard.length <= 2) {
-    for (const card of postSideboard) {
+  if (commanders.length === 0 && cardsAfterLastBlank.length > 0 && cardsAfterLastBlank.length <= 2) {
+    for (const card of cardsAfterLastBlank) {
       card.isCommander = true;
       commanders.push(card);
     }
   } else {
-    // Otherwise add post-sideboard to mainboard (shouldn't happen normally)
-    mainboard.push(...postSideboard);
+    // Otherwise add them to mainboard (they weren't commanders)
+    mainboard.push(...cardsAfterLastBlank);
   }
 
   // Sideboard cards are ignored for Commander format (they're companion/sideboard slots)
