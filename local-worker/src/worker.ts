@@ -261,10 +261,10 @@ async function processJob(jobId: string): Promise<void> {
   }
 
   // Write deck files
-  for (let i = 0; i < job.decks.length; i++) {
+  await Promise.all(job.decks.map((deck, i) => {
     const deckPath = path.join(decksDir, `deck_${i}.dck`);
-    await fs.writeFile(deckPath, job.decks[i].dck, 'utf-8');
-  }
+    return fs.writeFile(deckPath, deck.dck, 'utf-8');
+  }));
 
   // Write deck names for misc-runner
   const deckNamesPath = path.join(logsDir, 'deck_names.txt');
