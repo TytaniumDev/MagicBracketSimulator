@@ -1,0 +1,42 @@
+# Node modules in all directories
+**/node_modules/
+
+# Build outputs
+**/.next/
+**/dist/
+**/build/
+
+# Git
+.git/
+.gitignore
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+**/.cache/
+
+# Local development files
+**/data/
+**/jobs/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# Other services (not needed for orchestrator deployment)
+analysis-service/
+frontend/
+local-worker/
+misc-runner/
+scripts/
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+agent-plans/

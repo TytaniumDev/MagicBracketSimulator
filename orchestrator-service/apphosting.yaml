@@ -1,4 +1,7 @@
 # Firebase App Hosting configuration
+buildConfig:
+  rootDirectory: orchestrator-service
+
 runConfig:
   minInstances: 0
   maxInstances: 1
