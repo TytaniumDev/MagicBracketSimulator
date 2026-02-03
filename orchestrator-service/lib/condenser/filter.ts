@@ -31,7 +31,7 @@ import {
   IGNORE_PATTERNS,
   IGNORE_DRAW_STEP,
   KEEP_EXTRA_DRAW,
-} from './patterns.js';
+} from './patterns';
 
 /**
  * Determines if a log line should be filtered out (ignored).

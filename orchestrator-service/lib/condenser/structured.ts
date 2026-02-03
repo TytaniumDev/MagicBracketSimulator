@@ -29,10 +29,10 @@
  * =============================================================================
  */
 
-import type { StructuredGame, DeckHistory, DeckTurnActions, DeckAction, EventType } from '../types.js';
-import { extractTurnRanges, sliceByTurn, getMaxRound, getNumPlayers, segmentToRound, calculateLifePerTurn, extractWinner, type TurnRange } from './turns.js';
-import { classifyLine } from './classify.js';
-import { shouldIgnoreLine } from './filter.js';
+import type { StructuredGame, DeckHistory, DeckTurnActions, DeckAction, EventType } from '../types';
+import { extractTurnRanges, sliceByTurn, getMaxRound, getNumPlayers, segmentToRound, calculateLifePerTurn, extractWinner, type TurnRange } from './turns';
+import { classifyLine } from './classify';
+import { shouldIgnoreLine } from './filter';
 
 // -----------------------------------------------------------------------------
 // Player Attribution

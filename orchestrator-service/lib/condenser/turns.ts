@@ -27,7 +27,7 @@
  * =============================================================================
  */
 
-import type { TurnManaInfo } from '../types.js';
+import type { TurnManaInfo } from '../types';
 import {
   EXTRACT_TURN_NUMBER,
   EXTRACT_MANA_PRODUCED,
@@ -36,7 +36,7 @@ import {
   EXTRACT_DRAW_SINGLE,
   EXTRACT_WINNER,
   EXTRACT_ACTIVE_PLAYER,
-} from './patterns.js';
+} from './patterns';
 
 // -----------------------------------------------------------------------------
 // Turn Boundary Types

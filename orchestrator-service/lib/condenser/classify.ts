@@ -35,7 +35,7 @@
  * =============================================================================
  */
 
-import type { EventType, GameEvent } from '../types.js';
+import type { EventType, GameEvent } from '../types';
 import {
   KEEP_WIN_CONDITION,
   KEEP_LIFE_CHANGE,
@@ -47,7 +47,7 @@ import {
   KEEP_COMBAT,
   KEEP_LAND_PLAYED,
   EXTRACT_CMC,
-} from './patterns.js';
+} from './patterns';
 
 /**
  * Classifies a single log line into an event type.

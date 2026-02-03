@@ -64,9 +64,9 @@
  * =============================================================================
  */
 
-import type { CondensedGame, StructuredGame } from '../types.js';
-import { splitAndFilter } from './filter.js';
-import { classifyLines } from './classify.js';
+import type { CondensedGame, StructuredGame } from '../types';
+import { splitAndFilter } from './filter';
+import { classifyLines } from './classify';
 import {
   extractTurnRanges,
   getNumPlayers,
@@ -75,15 +75,15 @@ import {
   calculateCardsDrawnPerTurn,
   extractWinner,
   extractWinningTurn,
-} from './turns.js';
-import { buildStructuredGame } from './structured.js';
+} from './turns';
+import { buildStructuredGame } from './structured';
 
 // Re-export sub-modules for direct access if needed
-export { shouldIgnoreLine, filterLines, splitAndFilter } from './filter.js';
-export { classifyLine, createEvent, classifyLines } from './classify.js';
-export * from './turns.js';
-export * from './structured.js';
-export * from './patterns.js';
+export { shouldIgnoreLine, filterLines, splitAndFilter } from './filter';
+export { classifyLine, createEvent, classifyLines } from './classify';
+export * from './turns';
+export * from './structured';
+export * from './patterns';
 
 // -----------------------------------------------------------------------------
 // Main Condensing Functions
