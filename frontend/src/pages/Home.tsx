@@ -51,9 +51,14 @@ export default function Home() {
   
   // Add deck state
   const [deckUrl, setDeckUrl] = useState('');
+  const [deckText, setDeckText] = useState('');
+  const [deckName, setDeckName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Detect if URL is from Moxfield (which requires manual paste due to Cloudflare)
+  const isMoxfieldUrl = /^https?:\/\/(?:www\.)?moxfield\.com\/decks\//i.test(deckUrl.trim());
   
   // Deck selection state
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
@@ -169,12 +174,25 @@ export default function Home() {
     setIsSaving(true);
 
     try {
-      if (!deckUrl.trim()) throw new Error('Please enter a deck URL');
+      let body: Record<string, string>;
+
+      if (isMoxfieldUrl) {
+        // Moxfield requires manual paste due to Cloudflare blocking
+        if (!deckText.trim()) throw new Error('Please paste your deck list from Moxfield');
+        body = { deckText: deckText.trim() };
+        if (deckName.trim()) {
+          body.deckName = deckName.trim();
+        }
+      } else {
+        // Other URLs can be fetched directly
+        if (!deckUrl.trim()) throw new Error('Please enter a deck URL');
+        body = { deckUrl: deckUrl.trim() };
+      }
 
       const response = await fetchWithAuth(`${apiBase}/api/decks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deckUrl: deckUrl.trim() }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -186,6 +204,8 @@ export default function Home() {
       setSaveMessage(`Deck saved: "${data.name}"`);
       await fetchDecks();
       setDeckUrl('');
+      setDeckText('');
+      setDeckName('');
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save deck');
     } finally {
@@ -301,30 +321,80 @@ export default function Home() {
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Add a Deck</h2>
         <p className="text-sm text-gray-400 mb-4">
-          Import a deck from Moxfield, Archidekt, or ManaBox to add it to your saved decks.
+          Import a deck from Moxfield, Archidekt, or ManaBox.
         </p>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-3">
           <input
             type="url"
             value={deckUrl}
             onChange={(e) => setDeckUrl(e.target.value)}
-            placeholder="https://moxfield.com/decks/... or https://manabox.app/decks/..."
+            placeholder="https://moxfield.com/decks/... or https://archidekt.com/decks/..."
             className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button
-            type="button"
-            onClick={handleSaveDeck}
-            disabled={isSaving || !deckUrl.trim()}
-            className={`px-4 py-2 rounded-md ${
-              isSaving || !deckUrl.trim()
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-green-600 text-white hover:bg-green-700'
-            }`}
-          >
-            {isSaving ? 'Adding...' : 'Add Deck'}
-          </button>
+          {!isMoxfieldUrl && (
+            <button
+              type="button"
+              onClick={handleSaveDeck}
+              disabled={isSaving || !deckUrl.trim()}
+              className={`px-4 py-2 rounded-md ${
+                isSaving || !deckUrl.trim()
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
+            >
+              {isSaving ? 'Adding...' : 'Add Deck'}
+            </button>
+          )}
         </div>
+
+        {isMoxfieldUrl && (
+          <>
+            <div className="bg-amber-900/30 border border-amber-600 rounded-md p-3 mb-4">
+              <p className="text-sm text-amber-200 mb-2">
+                <strong>Moxfield requires manual export.</strong> Follow these steps:
+              </p>
+              <ol className="text-sm text-amber-100/80 list-decimal list-inside space-y-1">
+                <li>Open your deck on Moxfield (link above)</li>
+                <li>Click the <span className="text-amber-100 font-medium">Export</span> button (top right)</li>
+                <li>Select <span className="text-amber-100 font-medium">MTGO</span> format</li>
+                <li>Click <span className="text-amber-100 font-medium">Copy to Clipboard</span></li>
+                <li>Paste below</li>
+              </ol>
+            </div>
+
+            <div className="mb-3">
+              <input
+                type="text"
+                value={deckName}
+                onChange={(e) => setDeckName(e.target.value)}
+                placeholder="Deck name (optional)"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <textarea
+              value={deckText}
+              onChange={(e) => setDeckText(e.target.value)}
+              placeholder={`Paste your deck list here...\n\nExample:\n1 Sol Ring\n1 Command Tower\n1 Arcane Signet`}
+              rows={8}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-y"
+            />
+
+            <button
+              type="button"
+              onClick={handleSaveDeck}
+              disabled={isSaving || !deckText.trim()}
+              className={`mt-3 w-full py-2 rounded-md font-medium ${
+                isSaving || !deckText.trim()
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
+            >
+              {isSaving ? 'Adding...' : 'Add Deck'}
+            </button>
+          </>
+        )}
 
         {saveMessage && (
           <div className="mt-3 bg-green-900/50 border border-green-500 text-green-200 px-4 py-2 rounded-md text-sm">
