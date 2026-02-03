@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { deckUrl, deckText, deckName } = body;
+    const { deckUrl, deckText, deckName, deckLink } = body;
 
     let name: string;
     let dck: string;
@@ -69,6 +69,10 @@ export async function POST(request: NextRequest) {
       const result = parseTextAsDck(text);
       name = customName || result.name;
       dck = result.dck;
+      // Use provided link (e.g., Moxfield URL for manual paste flow)
+      if (typeof deckLink === 'string' && deckLink.trim()) {
+        link = deckLink.trim();
+      }
     } else {
       return NextResponse.json(
         { error: 'Either deckUrl or deckText is required' },

@@ -179,7 +179,7 @@ export default function Home() {
       if (isMoxfieldUrl) {
         // Moxfield requires manual paste due to Cloudflare blocking
         if (!deckText.trim()) throw new Error('Please paste your deck list from Moxfield');
-        body = { deckText: deckText.trim() };
+        body = { deckText: deckText.trim(), deckLink: deckUrl.trim() };
         if (deckName.trim()) {
           body.deckName = deckName.trim();
         }
