@@ -17,9 +17,6 @@ const nextConfig: NextConfig = {
 
   outputFileTracingRoot: path.join(__dirname),
 
-  serverExternalPackages: ["forge-log-analyzer"],
-
-  
   // instrumentation.ts is automatically detected in Next.js 15+
   async headers() {
     return [

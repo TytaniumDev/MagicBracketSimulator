@@ -23,7 +23,6 @@
     "autoprefixer": "^10.4.21",
     "better-sqlite3": "^11.6.0",
     "firebase-admin": "^13.6.0",
-    "forge-log-analyzer": "file:../forge-log-analyzer",
     "next": "15.5.7",
     "postcss": "^8.5.3",
     "react": "^19.1.0",
