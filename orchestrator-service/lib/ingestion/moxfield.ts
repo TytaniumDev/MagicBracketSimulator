@@ -1,6 +1,5 @@
 import { ParsedDeck, DeckCard } from './to-dck';
-
-const MOXFIELD_API_BASE = 'https://api2.moxfield.com/v3';
+import { MoxfieldApi } from '../moxfield-api';
 
 // Moxfield URL patterns:
 // https://moxfield.com/decks/ABC123
@@ -16,61 +15,30 @@ export function extractMoxfieldDeckId(url: string): string | null {
   return match ? match[1] : null;
 }
 
-interface MoxfieldCard {
-  quantity: number;
-  card: {
-    name: string;
-  };
-}
-
-interface MoxfieldDeckResponse {
-  name: string;
-  mainboard: Record<string, MoxfieldCard>;
-  commanders: Record<string, MoxfieldCard>;
-}
-
-export async function fetchMoxfieldDeck(deckId: string): Promise<ParsedDeck> {
-  const url = `${MOXFIELD_API_BASE}/decks/${deckId}`;
-
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      // Moxfield may require a user-agent
-      'User-Agent': 'MagicBracketSimulator/1.0',
-    },
-  });
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Deck not found: ${deckId}`);
-    }
-    throw new Error(`Failed to fetch Moxfield deck: ${response.status} ${response.statusText}`);
-  }
-
-  const data: MoxfieldDeckResponse = await response.json();
-
-  const commanders: DeckCard[] = Object.values(data.commanders || {}).map(entry => ({
-    name: entry.card.name,
-    quantity: entry.quantity,
-    isCommander: true,
-  }));
-
-  const mainboard: DeckCard[] = Object.values(data.mainboard || {}).map(entry => ({
-    name: entry.card.name,
-    quantity: entry.quantity,
-  }));
-
-  return {
-    name: data.name,
-    commanders,
-    mainboard,
-  };
-}
-
 export async function fetchDeckFromMoxfieldUrl(url: string): Promise<ParsedDeck> {
   const deckId = extractMoxfieldDeckId(url);
   if (!deckId) {
     throw new Error(`Invalid Moxfield URL: ${url}`);
   }
-  return fetchMoxfieldDeck(deckId);
+
+  // This will throw if MOXFIELD_USER_AGENT is not configured,
+  // effectively disabling URL ingestion for Moxfield in that case.
+  const moxfieldDeck = await MoxfieldApi.fetchDeck(deckId);
+
+  const commanders: DeckCard[] = moxfieldDeck.commanders.map(c => ({
+    name: c.name,
+    quantity: c.quantity,
+    isCommander: true,
+  }));
+
+  const mainboard: DeckCard[] = moxfieldDeck.mainboard.map(c => ({
+    name: c.name,
+    quantity: c.quantity,
+  }));
+
+  return {
+    name: moxfieldDeck.name,
+    commanders,
+    mainboard,
+  };
 }

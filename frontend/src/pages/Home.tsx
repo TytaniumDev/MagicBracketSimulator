@@ -57,8 +57,13 @@ export default function Home() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Detect if URL is from Moxfield (which requires manual paste due to Cloudflare)
+  // Capabilities state
+  const [capabilities, setCapabilities] = useState<{ moxfieldIngestionEnabled: boolean }>({ moxfieldIngestionEnabled: false });
+
+  // Detect if URL is from Moxfield
   const isMoxfieldUrl = /^https?:\/\/(?:www\.)?moxfield\.com\/decks\//i.test(deckUrl.trim());
+  // Only require manual paste if ingestion is NOT enabled
+  const showMoxfieldManualPaste = isMoxfieldUrl && !capabilities.moxfieldIngestionEnabled;
   
   // Deck selection state
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
@@ -101,6 +106,14 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to load decks:', err);
     }
+  }, [apiBase]);
+
+  // Fetch capabilities
+  useEffect(() => {
+    fetchWithAuth(`${apiBase}/api/capabilities`)
+      .then((res) => res.json())
+      .then((data) => setCapabilities(data))
+      .catch((err) => console.error('Failed to fetch capabilities:', err));
   }, [apiBase]);
 
   useEffect(() => {
@@ -176,7 +189,7 @@ export default function Home() {
     try {
       let body: Record<string, string>;
 
-      if (isMoxfieldUrl) {
+      if (showMoxfieldManualPaste) {
         // Moxfield requires manual paste due to Cloudflare blocking
         if (!deckText.trim()) throw new Error('Please paste your deck list from Moxfield');
         body = { deckText: deckText.trim(), deckLink: deckUrl.trim() };
@@ -332,7 +345,7 @@ export default function Home() {
             placeholder="https://moxfield.com/decks/... or https://archidekt.com/decks/..."
             className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {!isMoxfieldUrl && (
+          {!showMoxfieldManualPaste && (
             <button
               type="button"
               onClick={handleSaveDeck}
@@ -348,7 +361,7 @@ export default function Home() {
           )}
         </div>
 
-        {isMoxfieldUrl && (
+        {showMoxfieldManualPaste && (
           <>
             <div className="bg-amber-900/30 border border-amber-600 rounded-md p-3 mb-4">
               <p className="text-sm text-amber-200 mb-2">
