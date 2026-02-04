@@ -1,4 +1,5 @@
 import { ParsedDeck, DeckCard } from './to-dck';
+import { moxfieldFetch } from '../moxfield-service';
 
 const MOXFIELD_API_BASE = 'https://api2.moxfield.com/v3';
 
@@ -32,19 +33,18 @@ interface MoxfieldDeckResponse {
 export async function fetchMoxfieldDeck(deckId: string): Promise<ParsedDeck> {
   const url = `${MOXFIELD_API_BASE}/decks/${deckId}`;
 
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      // Moxfield may require a user-agent
-      'User-Agent': 'MagicBracketSimulator/1.0',
-    },
-  });
+  const response = await moxfieldFetch(url);
 
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error(`Deck not found: ${deckId}`);
     }
-    throw new Error(`Failed to fetch Moxfield deck: ${response.status} ${response.statusText}`);
+    if (response.status === 429) {
+      throw new Error('Moxfield rate limit exceeded. Please try again later.');
+    }
+    throw new Error(
+      `Failed to fetch Moxfield deck: ${response.status} ${response.statusText}`
+    );
   }
 
   const data: MoxfieldDeckResponse = await response.json();

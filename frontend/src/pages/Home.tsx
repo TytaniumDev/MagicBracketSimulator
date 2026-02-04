@@ -57,8 +57,13 @@ export default function Home() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Detect if URL is from Moxfield (which requires manual paste due to Cloudflare)
+  // Moxfield API availability (null = loading, true = direct fetch works, false = manual paste required)
+  const [moxfieldEnabled, setMoxfieldEnabled] = useState<boolean | null>(null);
+
+  // Detect if URL is from Moxfield
   const isMoxfieldUrl = /^https?:\/\/(?:www\.)?moxfield\.com\/decks\//i.test(deckUrl.trim());
+  // Only show manual paste UI if Moxfield API is NOT enabled
+  const showManualPaste = isMoxfieldUrl && moxfieldEnabled === false;
   
   // Deck selection state
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
@@ -106,6 +111,14 @@ export default function Home() {
   useEffect(() => {
     fetchDecks();
   }, [fetchDecks]);
+
+  // Check if Moxfield direct import is available
+  useEffect(() => {
+    fetch(`${apiBase}/api/moxfield-status`)
+      .then((res) => res.json())
+      .then((data) => setMoxfieldEnabled(data.enabled))
+      .catch(() => setMoxfieldEnabled(false));
+  }, [apiBase]);
 
   // Fetch past runs and poll when jobs are in progress
   const fetchPastRuns = useCallback(async () => {
@@ -176,15 +189,15 @@ export default function Home() {
     try {
       let body: Record<string, string>;
 
-      if (isMoxfieldUrl) {
-        // Moxfield requires manual paste due to Cloudflare blocking
+      if (showManualPaste) {
+        // Moxfield API not available - use manual paste
         if (!deckText.trim()) throw new Error('Please paste your deck list from Moxfield');
         body = { deckText: deckText.trim(), deckLink: deckUrl.trim() };
         if (deckName.trim()) {
           body.deckName = deckName.trim();
         }
       } else {
-        // Other URLs can be fetched directly
+        // URL can be fetched directly (including Moxfield when API is enabled)
         if (!deckUrl.trim()) throw new Error('Please enter a deck URL');
         body = { deckUrl: deckUrl.trim() };
       }
@@ -332,7 +345,7 @@ export default function Home() {
             placeholder="https://moxfield.com/decks/... or https://archidekt.com/decks/..."
             className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {!isMoxfieldUrl && (
+          {!showManualPaste && (
             <button
               type="button"
               onClick={handleSaveDeck}
@@ -348,7 +361,7 @@ export default function Home() {
           )}
         </div>
 
-        {isMoxfieldUrl && (
+        {showManualPaste && (
           <>
             <div className="bg-amber-900/30 border border-amber-600 rounded-md p-3 mb-4">
               <p className="text-sm text-amber-200 mb-2">
