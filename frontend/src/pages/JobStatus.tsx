@@ -207,6 +207,7 @@ export default function JobStatusPage() {
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
       .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using specific job properties to avoid refetching on status updates
   }, [apiBase, job?.id, job?.deckNames, deckNames, job?.resultJson?.results]);
 
   // Fetch analyze payload when job is completed (for on-demand analysis)

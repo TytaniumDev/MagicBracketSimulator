@@ -153,6 +153,27 @@ export function getDb(): Database.Database {
 
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency_key ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL`);
 
+  // Workers and current refresh round (for frontend-triggered worker visibility)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workers (
+      worker_id TEXT PRIMARY KEY,
+      hostname TEXT,
+      subscription TEXT,
+      refresh_id TEXT
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS worker_refresh (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      refresh_id TEXT
+    )
+  `);
+  try {
+    db.exec(`INSERT OR IGNORE INTO worker_refresh (id, refresh_id) VALUES (1, '')`);
+  } catch {
+    // Already exists
+  }
+
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);
 

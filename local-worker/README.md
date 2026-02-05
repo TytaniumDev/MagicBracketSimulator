@@ -54,13 +54,37 @@ Edit `.env` with all values (see `.env.example`). The worker uses these when Sec
 
 See [docs/SECRETS_SETUP.md](../docs/SECRETS_SETUP.md) for details and IAM (Secret Manager Secret Accessor).
 
+**Worker ID and report-in (optional):** The worker uses a stable ID across restarts (stored in `./worker-id` or overridden by `WORKER_ID` in env or Secret Manager). For frontend-triggered worker visibility, the worker also subscribes to a report-in topic; set `PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION` (e.g. `worker-report-in-worker`) in Secret Manager or .env if you use a custom subscription name. In GCP, create the topic `worker-report-in` and subscription `worker-report-in-worker` (and grant workers' identity permission to subscribe) so the frontend "Simulation Workers" refresh works.
+
 ### 3. Install and run the worker
+
+**Option A: Run manually (for testing)**
 
 ```bash
 cd local-worker
 npm install
-npm run dev
+npm run build  # Build TypeScript
+npm run dev    # Run in development mode
 ```
+
+**Option B: Run as a Docker service (recommended for production)**
+
+For hands-off operation that auto-starts when Docker starts and auto-restarts on crashes:
+
+```bash
+cd local-worker
+npm install
+npm run build  # Build TypeScript
+docker build -t magicbracket-worker:latest .
+docker-compose up -d
+```
+
+The Docker container will:
+- Start automatically when Docker starts
+- Restart automatically if it crashes
+- Work on any OS (macOS, Linux, Windows)
+
+See [README-SERVICE.md](./README-SERVICE.md) for detailed management commands and alternative options.
 
 The worker will:
 - Connect to Pub/Sub and wait for messages

@@ -118,6 +118,13 @@ You need:
     'job-created-worker'
   );
 
+  const PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = await prompt(
+    rl,
+    'PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION – Subscription for frontend-triggered worker status (e.g. worker-report-in-worker)',
+    pubsubUrl,
+    'worker-report-in-worker'
+  );
+
   console.log(`
   WORKER_SECRET – Shared secret between worker and orchestrator API.
   If you don't have one: generate with: openssl rand -hex 32
@@ -157,6 +164,7 @@ You need:
     API_URL,
     GCS_BUCKET,
     PUBSUB_SUBSCRIPTION,
+    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION,
     WORKER_SECRET,
     FORGE_SIM_IMAGE,
     MISC_RUNNER_IMAGE,

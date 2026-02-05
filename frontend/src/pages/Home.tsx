@@ -37,6 +37,25 @@ interface JobSummary {
   durationMs?: number | null;
 }
 
+// NOTE: This interface must match orchestrator-service/lib/worker-store.ts
+// Consider extracting to shared types package if more duplication occurs
+interface WorkerRecord {
+  workerId: string;
+  hostname?: string;
+  subscription?: string;
+  refreshId?: string;
+}
+
+// Time to wait for workers to receive Pub/Sub message and send heartbeat.
+// Pub/Sub typically delivers within 100-500ms, but we allow extra time for:
+// - Network latency variations
+// - Worker processing time
+// - Firestore/SQLite write latency
+const WORKER_REPORT_IN_WAIT_MS = 2500;
+
+// Cooldown between refresh requests to prevent race conditions with stale refreshIds
+const REFRESH_COOLDOWN_MS = 5000;
+
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
@@ -83,6 +102,13 @@ export default function Home() {
   const [pastRunsError, setPastRunsError] = useState<string | null>(null);
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Simulation workers state (frontend-triggered report-in)
+  const [workers, setWorkers] = useState<WorkerRecord[]>([]);
+  const [workersRefreshing, setWorkersRefreshing] = useState(false);
+  const [workersError, setWorkersError] = useState<string | null>(null);
+  const [workersFetchedOnce, setWorkersFetchedOnce] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
 
   const apiBase = getApiBase();
 
@@ -167,6 +193,39 @@ export default function Home() {
       }
     };
   }, [fetchPastRuns]);
+
+  const handleRefreshWorkers = useCallback(async () => {
+    // Debounce: prevent rapid successive refreshes which can cause race conditions
+    const now = Date.now();
+    if (now - lastRefreshTime < REFRESH_COOLDOWN_MS) {
+      return;
+    }
+    setLastRefreshTime(now);
+    setWorkersRefreshing(true);
+    setWorkersError(null);
+    try {
+      const postRes = await fetchWithAuth(`${apiBase}/api/workers/request-report-in`, {
+        method: 'POST',
+      });
+      if (!postRes.ok) {
+        const err = await postRes.json().catch(() => ({}));
+        throw new Error(err.error || `Request failed: ${postRes.status}`);
+      }
+      await new Promise((r) => setTimeout(r, WORKER_REPORT_IN_WAIT_MS));
+      const getRes = await fetchWithAuth(`${apiBase}/api/workers`);
+      if (!getRes.ok) {
+        throw new Error('Failed to fetch workers');
+      }
+      const data = await getRes.json();
+      setWorkers(data.workers || []);
+      setWorkersFetchedOnce(true);
+    } catch (err) {
+      setWorkersError(err instanceof Error ? err.message : 'Failed to refresh workers');
+      setWorkers([]);
+    } finally {
+      setWorkersRefreshing(false);
+    }
+  }, [apiBase, lastRefreshTime]);
 
   const handleDeckToggle = (id: string) => {
     setSelectedDeckIds((prev) => {
@@ -684,6 +743,57 @@ export default function Home() {
                     </svg>
                   )}
                 </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Simulation workers section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-4">Simulation Workers</h2>
+        <p className="text-sm text-gray-400 mb-3">
+          Workers subscribed to Pub/Sub that can run simulations. Click Refresh to request a one-time status update.
+        </p>
+        <button
+          type="button"
+          onClick={handleRefreshWorkers}
+          disabled={workersRefreshing || (Date.now() - lastRefreshTime < REFRESH_COOLDOWN_MS && lastRefreshTime > 0)}
+          className={`mb-4 px-4 py-2 rounded-md font-medium ${
+            workersRefreshing || (Date.now() - lastRefreshTime < REFRESH_COOLDOWN_MS && lastRefreshTime > 0)
+              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-purple-600 text-white hover:bg-purple-700'
+          }`}
+        >
+          {workersRefreshing ? 'Requesting status...' : 'Refresh'}
+        </button>
+        {workersError && (
+          <div className="mb-4 bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md text-sm">
+            {workersError}
+          </div>
+        )}
+        {!workersRefreshing && workersFetchedOnce && workers.length === 0 && (
+          <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
+            No workers responded. Make sure workers are running and subscribed to the report-in topic.
+          </div>
+        )}
+        {!workersRefreshing && workers.length > 0 && (
+          <div className="space-y-2">
+            {workers.map((w) => (
+              <div
+                key={w.workerId}
+                className="bg-gray-800 rounded-lg p-4 border border-gray-700 flex items-center gap-4 flex-wrap"
+              >
+                <code className="text-sm text-purple-300 font-mono" title={w.workerId}>
+                  {w.workerId.slice(0, 8)}…
+                </code>
+                {w.hostname && (
+                  <span className="text-sm text-gray-300">{w.hostname}</span>
+                )}
+                {w.subscription && (
+                  <span className="text-xs text-gray-400">Subscription: {w.subscription}</span>
+                )}
+                <span className="text-xs text-green-400">Responded to last check</span>
               </div>
             ))}
           </div>

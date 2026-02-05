@@ -32,8 +32,34 @@ import { PubSub, Message } from '@google-cloud/pubsub';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 
 const SECRET_NAME = 'local-worker-config';
+
+const WORKER_ID_FILE = 'worker-id';
+
+/**
+ * Get or create a stable worker ID (survives restarts).
+ * Priority: (1) WORKER_ID env, (2) persisted file, (3) generate UUID and persist.
+ */
+async function getOrCreateWorkerId(jobsDir: string): Promise<string> {
+  const fromEnv = process.env.WORKER_ID?.trim();
+  if (fromEnv && fromEnv.length > 0) {
+    return fromEnv;
+  }
+  const workerIdPath = path.resolve(jobsDir, '..', WORKER_ID_FILE);
+  try {
+    const existing = await fs.readFile(workerIdPath, 'utf-8');
+    const id = existing.trim();
+    if (id.length > 0) return id;
+  } catch {
+    // File missing or unreadable
+  }
+  const newId = crypto.randomUUID();
+  await fs.mkdir(path.dirname(workerIdPath), { recursive: true }).catch(() => {});
+  await fs.writeFile(workerIdPath, newId, 'utf-8');
+  return newId;
+}
 
 /**
  * Load config from Google Secret Manager (if available) and merge into process.env.
@@ -86,8 +112,13 @@ interface JobCreatedMessage {
   createdAt: string;
 }
 
-// Subscription is set in main() after config load; used by shutdown handler
+interface WorkerReportInMessage {
+  refreshId: string;
+}
+
+// Subscriptions are set in main(); used by shutdown handler
 let subscription: ReturnType<PubSub['subscription']> | null = null;
+let subscriptionReportIn: ReturnType<PubSub['subscription']> | null = null;
 
 /**
  * Fetch job details from API
@@ -382,6 +413,61 @@ async function handleMessage(message: Message): Promise<void> {
 }
 
 /**
+ * Send heartbeat to orchestrator (called when worker receives worker-report-in message)
+ */
+async function sendHeartbeat(
+  workerId: string,
+  refreshId: string,
+  subscriptionName: string
+): Promise<void> {
+  const API_URL = process.env.API_URL || 'http://localhost:3000';
+  const WORKER_SECRET = process.env.WORKER_SECRET || '';
+  const url = `${API_URL}/api/workers/heartbeat`;
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    'X-Worker-Secret': WORKER_SECRET,
+  };
+  const body = JSON.stringify({
+    workerId,
+    hostname: os.hostname(),
+    subscription: subscriptionName,
+    refreshId,
+  });
+  const response = await fetch(url, { method: 'POST', headers, body });
+  if (!response.ok) {
+    throw new Error(`Heartbeat failed: ${response.status}`);
+  }
+}
+
+/**
+ * Handle a worker-report-in Pub/Sub message (frontend requested status)
+ */
+async function handleReportInMessage(message: Message, workerId: string, subscriptionName: string): Promise<void> {
+  let data: WorkerReportInMessage;
+  try {
+    data = JSON.parse(message.data.toString());
+  } catch (error) {
+    console.error('Failed to parse report-in message:', error);
+    message.ack();
+    return;
+  }
+  const { refreshId } = data;
+  if (!refreshId) {
+    console.error('Report-in message missing refreshId');
+    message.ack();
+    return;
+  }
+  try {
+    await sendHeartbeat(workerId, refreshId, subscriptionName);
+    message.ack();
+    console.log(`Reported in for refresh ${refreshId.slice(0, 8)}...`);
+  } catch (error) {
+    console.error('Failed to send heartbeat:', error);
+    message.nack();
+  }
+}
+
+/**
  * Graceful shutdown handler
  */
 let isShuttingDown = false;
@@ -392,14 +478,17 @@ function handleShutdown(signal: string): void {
 
   console.log(`Received ${signal}, shutting down gracefully...`);
 
-  // Close the subscription
-  (subscription ? subscription.close() : Promise.resolve()).then(() => {
-    console.log('Subscription closed');
-    process.exit(0);
-  }).catch((error) => {
-    console.error('Error closing subscription:', error);
-    process.exit(1);
-  });
+  const closeJobSub = subscription ? subscription.close() : Promise.resolve();
+  const closeReportInSub = subscriptionReportIn ? subscriptionReportIn.close() : Promise.resolve();
+  Promise.all([closeJobSub, closeReportInSub])
+    .then(() => {
+      console.log('Subscriptions closed');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('Error closing subscriptions:', error);
+      process.exit(1);
+    });
 
   // Force exit after 30 seconds
   setTimeout(() => {
@@ -419,15 +508,22 @@ async function main(): Promise<void> {
 
   const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
   const SUBSCRIPTION_NAME = process.env.PUBSUB_SUBSCRIPTION || 'job-created-worker';
+  const REPORT_IN_SUBSCRIPTION_NAME =
+    process.env.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION || 'worker-report-in-worker';
   const API_URL = process.env.API_URL || 'http://localhost:3000';
   const JOBS_DIR = process.env.JOBS_DIR || './jobs';
 
+  const workerId = await getOrCreateWorkerId(JOBS_DIR);
+  console.log('Worker ID:', workerId.slice(0, 8) + '...');
+
   const pubsub = new PubSub({ projectId: PROJECT_ID });
   subscription = pubsub.subscription(SUBSCRIPTION_NAME);
+  subscriptionReportIn = pubsub.subscription(REPORT_IN_SUBSCRIPTION_NAME);
 
   console.log('Local Worker starting...');
   console.log('Project:', PROJECT_ID);
   console.log('Subscription:', SUBSCRIPTION_NAME);
+  console.log('Report-in subscription:', REPORT_IN_SUBSCRIPTION_NAME);
   console.log('API URL:', API_URL);
   console.log('Jobs directory:', JOBS_DIR);
 
@@ -438,7 +534,14 @@ async function main(): Promise<void> {
 
   subscription.on('message', handleMessage);
   subscription.on('error', (error) => {
-    console.error('Subscription error:', error);
+    console.error('Job subscription error:', error);
+  });
+
+  subscriptionReportIn.on('message', (msg) =>
+    handleReportInMessage(msg, workerId, SUBSCRIPTION_NAME)
+  );
+  subscriptionReportIn.on('error', (error) => {
+    console.error('Report-in subscription error:', error);
   });
 
   console.log('Worker is running. Waiting for messages...');
