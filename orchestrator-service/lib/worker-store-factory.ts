@@ -42,3 +42,11 @@ export async function getCurrentRefreshId(): Promise<string> {
   }
   return sqliteStore.getCurrentRefreshId();
 }
+
+export async function cleanupOldWorkers(): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.cleanupOldWorkers();
+  } else {
+    sqliteStore.cleanupOldWorkers();
+  }
+}

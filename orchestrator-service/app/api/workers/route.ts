@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
-import { listWorkers, getCurrentRefreshId } from '@/lib/worker-store-factory';
+import { listWorkers, getCurrentRefreshId, cleanupOldWorkers } from '@/lib/worker-store-factory';
 
 /**
  * GET /api/workers - List workers that responded to the latest report-in request
@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
   try {
     const workers = await listWorkers();
     const refreshId = await getCurrentRefreshId();
+    // Fire-and-forget cleanup of old worker records to prevent unbounded growth
+    cleanupOldWorkers().catch((err) => console.error('Failed to cleanup old workers:', err));
     return NextResponse.json({ workers, refreshId: refreshId || undefined });
   } catch (error) {
     console.error('Failed to list workers:', error);

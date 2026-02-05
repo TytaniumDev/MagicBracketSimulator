@@ -37,12 +37,24 @@ interface JobSummary {
   durationMs?: number | null;
 }
 
+// NOTE: This interface must match orchestrator-service/lib/worker-store.ts
+// Consider extracting to shared types package if more duplication occurs
 interface WorkerRecord {
   workerId: string;
   hostname?: string;
   subscription?: string;
   refreshId?: string;
 }
+
+// Time to wait for workers to receive Pub/Sub message and send heartbeat.
+// Pub/Sub typically delivers within 100-500ms, but we allow extra time for:
+// - Network latency variations
+// - Worker processing time
+// - Firestore/SQLite write latency
+const WORKER_REPORT_IN_WAIT_MS = 2500;
+
+// Cooldown between refresh requests to prevent race conditions with stale refreshIds
+const REFRESH_COOLDOWN_MS = 5000;
 
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
@@ -96,6 +108,7 @@ export default function Home() {
   const [workersRefreshing, setWorkersRefreshing] = useState(false);
   const [workersError, setWorkersError] = useState<string | null>(null);
   const [workersFetchedOnce, setWorkersFetchedOnce] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
 
   const apiBase = getApiBase();
 
@@ -182,6 +195,12 @@ export default function Home() {
   }, [fetchPastRuns]);
 
   const handleRefreshWorkers = useCallback(async () => {
+    // Debounce: prevent rapid successive refreshes which can cause race conditions
+    const now = Date.now();
+    if (now - lastRefreshTime < REFRESH_COOLDOWN_MS) {
+      return;
+    }
+    setLastRefreshTime(now);
     setWorkersRefreshing(true);
     setWorkersError(null);
     try {
@@ -192,7 +211,7 @@ export default function Home() {
         const err = await postRes.json().catch(() => ({}));
         throw new Error(err.error || `Request failed: ${postRes.status}`);
       }
-      await new Promise((r) => setTimeout(r, 2500));
+      await new Promise((r) => setTimeout(r, WORKER_REPORT_IN_WAIT_MS));
       const getRes = await fetchWithAuth(`${apiBase}/api/workers`);
       if (!getRes.ok) {
         throw new Error('Failed to fetch workers');
@@ -206,7 +225,7 @@ export default function Home() {
     } finally {
       setWorkersRefreshing(false);
     }
-  }, [apiBase]);
+  }, [apiBase, lastRefreshTime]);
 
   const handleDeckToggle = (id: string) => {
     setSelectedDeckIds((prev) => {
@@ -739,9 +758,9 @@ export default function Home() {
         <button
           type="button"
           onClick={handleRefreshWorkers}
-          disabled={workersRefreshing}
+          disabled={workersRefreshing || (Date.now() - lastRefreshTime < REFRESH_COOLDOWN_MS && lastRefreshTime > 0)}
           className={`mb-4 px-4 py-2 rounded-md font-medium ${
-            workersRefreshing
+            workersRefreshing || (Date.now() - lastRefreshTime < REFRESH_COOLDOWN_MS && lastRefreshTime > 0)
               ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-purple-600 text-white hover:bg-purple-700'
           }`}

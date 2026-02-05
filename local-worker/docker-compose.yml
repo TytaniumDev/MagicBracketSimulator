@@ -15,7 +15,7 @@ services:
       - ~/.config/gcloud:/root/.config/gcloud:ro
     environment:
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-magic-bracket-simulator}
-    # Keep container running even if worker exits (for debugging)
-    # Remove this if you want container to exit on worker failure
+    # Keep stdin/tty open for interactive debugging (attach with: docker attach magicbracket-worker)
+    # These can be removed in production if not needed for debugging
     stdin_open: true
     tty: true

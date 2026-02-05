@@ -52,3 +52,14 @@ export function listWorkers(): WorkerRecord[] {
     refreshId: r.refresh_id,
   }));
 }
+
+/**
+ * Clean up old worker records to prevent unbounded table growth.
+ * Deletes workers that don't match the current refreshId.
+ */
+export function cleanupOldWorkers(): void {
+  const db = getDb();
+  const current = getCurrentRefreshId();
+  if (!current) return;
+  db.prepare(`DELETE FROM workers WHERE refresh_id != ?`).run(current);
+}

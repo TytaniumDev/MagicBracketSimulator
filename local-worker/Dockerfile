@@ -1,5 +1,24 @@
 # Dockerfile for local-worker
-# This allows running the worker in a container with restart policies
+# Multi-stage build: compiles TypeScript, then creates lean production image
+
+# =============================================================================
+# Stage 1: Build TypeScript
+# =============================================================================
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Copy package files and install all dependencies (including devDependencies for build)
+COPY package*.json tsconfig.json ./
+RUN npm ci
+
+# Copy source and build
+COPY src/ ./src/
+RUN npm run build
+
+# =============================================================================
+# Stage 2: Production image
+# =============================================================================
 FROM node:20-slim
 
 # Install gcloud CLI (required for Secret Manager access)
@@ -24,18 +43,12 @@ RUN apt-get update && apt-get install -y lsb-release \
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and install production dependencies only
 COPY package*.json ./
-COPY tsconfig.json ./
-
-# Install dependencies
 RUN npm ci --only=production
 
-# Copy built worker
-COPY dist/ ./dist/
-
-# Copy source (for potential debugging)
-COPY src/ ./src/
+# Copy built artifacts from builder stage
+COPY --from=builder /app/dist ./dist
 
 # Create jobs directory
 RUN mkdir -p /app/jobs

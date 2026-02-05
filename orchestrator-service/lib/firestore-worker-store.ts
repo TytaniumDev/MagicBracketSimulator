@@ -53,3 +53,17 @@ export async function listWorkers(): Promise<WorkerRecord[]> {
     };
   });
 }
+
+/**
+ * Clean up old worker records to prevent unbounded collection growth.
+ * Deletes workers that don't match the current refreshId.
+ */
+export async function cleanupOldWorkers(): Promise<void> {
+  const current = await getCurrentRefreshId();
+  if (!current) return;
+  const snapshot = await workersCollection.where('refreshId', '!=', current).get();
+  if (snapshot.empty) return;
+  const batch = firestore.batch();
+  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+}
