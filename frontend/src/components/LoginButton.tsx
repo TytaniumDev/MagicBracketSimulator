@@ -18,7 +18,7 @@ export function LoginButton() {
 
     try {
       await signInWithEmail(email, password);
-    } catch (err) {
+    } catch {
       setError('Invalid email or password');
     } finally {
       setIsSubmitting(false);

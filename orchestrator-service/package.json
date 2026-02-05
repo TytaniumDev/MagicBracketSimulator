@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "tsc --noEmit",
     "worker": "tsx worker/worker.ts",
     "test:integration": "tsx test/integration.test.ts",
     "test:unit": "tsx test/game-logs.test.ts",
