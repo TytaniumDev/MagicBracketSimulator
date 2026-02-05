@@ -69,7 +69,7 @@ npm start
 - **SQLite Job Store** - Persistent storage in `data/jobs.db` (jobs survive restarts)
 - **Integrated Worker** - Polls for jobs, spawns Docker containers, sends logs to Log Analyzer
 - **On-Demand Analysis** - AI analysis (Gemini) is triggered by user action via `/api/jobs/[id]/analyze`, not automatically after simulations
-- **CORS** - API allows requests from `http://localhost:5173` (frontend dev server).
+- **CORS** - API allows origins from `CORS_ALLOWED_ORIGINS` (comma-separated); default `http://localhost:5173`. In production set e.g. `https://magic-bracket-simulator.web.app`.
 
 ## API Routes
 
