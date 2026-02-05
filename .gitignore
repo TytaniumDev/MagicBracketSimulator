@@ -42,8 +42,9 @@ venv/
 # Job store (SQLite DB - shared across processes)
 orchestrator-service/data/
 
-# Local worker jobs directory
+# Local worker jobs directory and stable worker ID file
 local-worker/jobs/
+local-worker/worker-id
 orchestrator-service/jobs/
 
 # Forge simulation (generated logs)
