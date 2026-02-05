@@ -14,6 +14,7 @@
     "dev:local": "node ./node_modules/concurrently/dist/bin/concurrently.js -n analysis,log-analyzer,orchestrator,frontend,worker -c blue,cyan,green,yellow,magenta \"npm run analysis\" \"npm run log-analyzer\" \"npm run orchestrator\" \"npm run frontend\" \"npm run worker\"",
     "dev:gcp": "node ./node_modules/concurrently/dist/bin/concurrently.js -n orchestrator,frontend -c green,yellow \"npm run orchestrator\" \"npm run frontend\"",
     "worker:gcp": "npm run dev --prefix local-worker",
+    "dev:hosted": "node ./node_modules/concurrently/dist/bin/concurrently.js -n frontend,worker -c yellow,magenta \"npm run frontend\" \"npm run worker:gcp\"",
     "add-allowed-user": "node scripts/add-allowed-user.js",
     "dev:keep-awake": "caffeinate -i npm run dev"
   },
