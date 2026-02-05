@@ -1,7 +1,29 @@
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supportsGooglePopup } from '../utils/browserDetection';
 
 export function LoginButton() {
-  const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const { user, loading, signInWithGoogle, signInWithEmail, signOut } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const canUseGoogle = supportsGooglePopup();
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      await signInWithEmail(email, password);
+    } catch (err) {
+      setError('Invalid email or password');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -17,9 +39,9 @@ export function LoginButton() {
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           {user.photoURL && (
-            <img 
-              src={user.photoURL} 
-              alt={user.displayName || 'User'} 
+            <img
+              src={user.photoURL}
+              alt={user.displayName || 'User'}
               className="h-8 w-8 rounded-full"
             />
           )}
@@ -37,6 +59,41 @@ export function LoginButton() {
     );
   }
 
+  // Email/password form for embedded browsers (Cursor, etc.)
+  if (!canUseGoogle) {
+    return (
+      <form onSubmit={handleEmailSignIn} className="flex items-center gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          className="px-3 py-2 text-sm bg-gray-700 text-white rounded-md border border-gray-600 focus:outline-none focus:border-purple-500 w-40"
+          disabled={isSubmitting}
+          required
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          className="px-3 py-2 text-sm bg-gray-700 text-white rounded-md border border-gray-600 focus:outline-none focus:border-purple-500 w-32"
+          disabled={isSubmitting}
+          required
+        />
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 text-white rounded-md transition-colors font-medium"
+        >
+          {isSubmitting ? 'Signing in...' : 'Sign In'}
+        </button>
+        {error && <span className="text-red-400 text-sm">{error}</span>}
+      </form>
+    );
+  }
+
+  // Google sign-in button for regular browsers
   return (
     <button
       onClick={signInWithGoogle}
