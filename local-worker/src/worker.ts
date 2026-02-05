@@ -2,31 +2,60 @@ import 'dotenv/config';
 
 /**
  * Local Worker: Pulls jobs from Pub/Sub and orchestrates Docker containers
- * 
+ *
  * This worker:
- * 1. Pulls job-created messages from Pub/Sub
- * 2. Fetches job details from the API
- * 3. Runs forge-sim container(s) to simulate games
- * 4. Runs misc-runner container to condense logs and upload to GCS
- * 5. Acknowledges the message when complete
+ * 1. Loads config from Google Secret Manager (if GOOGLE_CLOUD_PROJECT set) or env
+ * 2. Pulls job-created messages from Pub/Sub
+ * 3. Fetches job details from the API
+ * 4. Runs forge-sim container(s) to simulate games
+ * 5. Runs misc-runner container to condense logs and upload to GCS
+ * 6. Acknowledges the message when complete
  */
 
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { PubSub, Message } from '@google-cloud/pubsub';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Configuration from environment
-const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
-const SUBSCRIPTION_NAME = process.env.PUBSUB_SUBSCRIPTION || 'job-created-worker';
-const API_URL = process.env.API_URL || 'http://localhost:3000';
-const GCS_BUCKET = process.env.GCS_BUCKET || 'magic-bracket-simulator-artifacts';
-const JOBS_DIR = process.env.JOBS_DIR || './jobs';
-const FORGE_SIM_IMAGE = process.env.FORGE_SIM_IMAGE || 'forge-sim:latest';
-const MISC_RUNNER_IMAGE = process.env.MISC_RUNNER_IMAGE || 'misc-runner:latest';
-const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
-const WORKER_SECRET = process.env.WORKER_SECRET || '';
-const SA_KEY_PATH = process.env.GOOGLE_APPLICATION_CREDENTIALS || '';
+const SECRET_NAME = 'local-worker-config';
+
+/**
+ * Load config from Google Secret Manager (if available) and merge into process.env.
+ * Existing env vars take precedence. If Secret Manager is not configured or fails, we keep env-only.
+ */
+async function loadConfigFromSecretManager(): Promise<void> {
+  const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+  if (!projectId) {
+    return;
+  }
+  try {
+    const client = new SecretManagerServiceClient();
+    const [version] = await client.accessSecretVersion({
+      name: `projects/${projectId}/secrets/${SECRET_NAME}/versions/latest`,
+    });
+    const payload = version.payload?.data;
+    if (!payload) {
+      return;
+    }
+    const data =
+      typeof payload === 'string' ? payload : Buffer.from(payload).toString('utf8');
+    const config = JSON.parse(data) as Record<string, string>;
+    for (const [key, value] of Object.entries(config)) {
+      if (value !== undefined && value !== '' && process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+    }
+    console.log('Loaded config from Secret Manager (local-worker-config)');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('NOT_FOUND') || msg.includes('Permission')) {
+      console.log('Secret Manager not used (secret missing or no access). Using env only.');
+    } else {
+      console.warn('Secret Manager fetch failed:', msg);
+    }
+  }
+}
 
 // Types
 interface JobData {
@@ -42,29 +71,25 @@ interface JobCreatedMessage {
   createdAt: string;
 }
 
-// Initialize Pub/Sub client
-const pubsub = new PubSub({ projectId: PROJECT_ID });
-const subscription = pubsub.subscription(SUBSCRIPTION_NAME);
-
-console.log(`Local Worker starting...`);
-console.log(`Project: ${PROJECT_ID}`);
-console.log(`Subscription: ${SUBSCRIPTION_NAME}`);
-console.log(`API URL: ${API_URL}`);
-console.log(`Jobs directory: ${JOBS_DIR}`);
+// Subscription is set in main() after config load; used by shutdown handler
+let subscription: ReturnType<PubSub['subscription']> | null = null;
 
 /**
  * Fetch job details from API
  */
 async function fetchJob(jobId: string): Promise<JobData | null> {
+  const API_URL = process.env.API_URL || 'http://localhost:3000';
+  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+  const WORKER_SECRET = process.env.WORKER_SECRET || '';
   const url = `${API_URL}/api/jobs/${jobId}`;
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
   if (AUTH_TOKEN) {
-    headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+    (headers as Record<string, string>)['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   }
   if (WORKER_SECRET) {
-    headers['X-Worker-Secret'] = WORKER_SECRET;
+    (headers as Record<string, string>)['X-Worker-Secret'] = WORKER_SECRET;
   }
 
   try {
@@ -84,15 +109,18 @@ async function fetchJob(jobId: string): Promise<JobData | null> {
  * Update job status via API
  */
 async function patchJobStatus(jobId: string, status: string, errorMessage?: string): Promise<void> {
+  const API_URL = process.env.API_URL || 'http://localhost:3000';
+  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+  const WORKER_SECRET = process.env.WORKER_SECRET || '';
   const url = `${API_URL}/api/jobs/${jobId}`;
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
   if (AUTH_TOKEN) {
-    headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+    (headers as Record<string, string>)['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   }
   if (WORKER_SECRET) {
-    headers['X-Worker-Secret'] = WORKER_SECRET;
+    (headers as Record<string, string>)['X-Worker-Secret'] = WORKER_SECRET;
   }
 
   const body: Record<string, unknown> = { status };
@@ -174,6 +202,7 @@ async function runForgeSim(
   simulations: number,
   runId: string
 ): Promise<{ exitCode: number; duration: number }> {
+  const FORGE_SIM_IMAGE = process.env.FORGE_SIM_IMAGE || 'forge-sim:latest';
   const decksDir = path.resolve(jobDir, 'decks');
   const logsDir = path.resolve(jobDir, 'logs');
 
@@ -194,6 +223,12 @@ async function runForgeSim(
  * Run misc-runner container
  */
 async function runMiscRunner(jobId: string, jobDir: string): Promise<{ exitCode: number; duration: number }> {
+  const API_URL = process.env.API_URL || 'http://localhost:3000';
+  const GCS_BUCKET = process.env.GCS_BUCKET || 'magic-bracket-simulator-artifacts';
+  const MISC_RUNNER_IMAGE = process.env.MISC_RUNNER_IMAGE || 'misc-runner:latest';
+  const SA_KEY_PATH = process.env.GOOGLE_APPLICATION_CREDENTIALS || '';
+  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+  const WORKER_SECRET = process.env.WORKER_SECRET || '';
   const logsDir = path.resolve(jobDir, 'logs');
 
   const args = [
@@ -245,6 +280,7 @@ async function processJob(jobId: string): Promise<void> {
   await patchJobStatus(jobId, 'RUNNING');
 
   // Create job directories
+  const JOBS_DIR = process.env.JOBS_DIR || './jobs';
   const jobDir = path.join(JOBS_DIR, jobId);
   const decksDir = path.join(jobDir, 'decks');
   const logsDir = path.join(jobDir, 'logs');
@@ -342,7 +378,7 @@ function handleShutdown(signal: string): void {
   console.log(`Received ${signal}, shutting down gracefully...`);
 
   // Close the subscription
-  subscription.close().then(() => {
+  (subscription ? subscription.close() : Promise.resolve()).then(() => {
     console.log('Subscription closed');
     process.exit(0);
   }).catch((error) => {
@@ -364,14 +400,28 @@ process.on('SIGINT', () => handleShutdown('SIGINT'));
  * Main entry point
  */
 async function main(): Promise<void> {
+  await loadConfigFromSecretManager();
+
+  const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
+  const SUBSCRIPTION_NAME = process.env.PUBSUB_SUBSCRIPTION || 'job-created-worker';
+  const API_URL = process.env.API_URL || 'http://localhost:3000';
+  const JOBS_DIR = process.env.JOBS_DIR || './jobs';
+
+  const pubsub = new PubSub({ projectId: PROJECT_ID });
+  subscription = pubsub.subscription(SUBSCRIPTION_NAME);
+
+  console.log('Local Worker starting...');
+  console.log('Project:', PROJECT_ID);
+  console.log('Subscription:', SUBSCRIPTION_NAME);
+  console.log('API URL:', API_URL);
+  console.log('Jobs directory:', JOBS_DIR);
+
   // Ensure jobs directory exists
   await fs.mkdir(JOBS_DIR, { recursive: true });
 
   console.log('Subscribing to Pub/Sub messages...');
 
-  // Handle incoming messages
   subscription.on('message', handleMessage);
-
   subscription.on('error', (error) => {
     console.error('Subscription error:', error);
   });

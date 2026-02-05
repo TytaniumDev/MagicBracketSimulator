@@ -15,10 +15,18 @@
     "dev:gcp": "node ./node_modules/concurrently/dist/bin/concurrently.js -n orchestrator,frontend -c green,yellow \"npm run orchestrator\" \"npm run frontend\"",
     "worker:gcp": "npm run dev --prefix local-worker",
     "add-allowed-user": "node scripts/add-allowed-user.js",
-    "dev:keep-awake": "caffeinate -i npm run dev"
+    "dev:keep-awake": "caffeinate -i npm run dev",
+    "populate-worker-secret": "node scripts/populate-worker-secret.js",
+    "populate-frontend-secret": "node scripts/populate-frontend-secret.js",
+    "fetch-frontend-config": "node scripts/fetch-frontend-config.js",
+    "get-cloud-run-url": "node scripts/get-cloud-run-url.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
     "firebase-admin": "^13.6.0"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "^5.6.0",
+    "dotenv": "^17.2.3"
   }
 }

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google-cloud/pubsub": "^4.3.0",
+    "@google-cloud/secret-manager": "^5.6.0",
     "dotenv": "^17.2.3"
   },
   "devDependencies": {

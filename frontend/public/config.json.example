@@ -1,0 +1,4 @@
+{
+  "apiUrl": "https://your-orchestrator-xxxxx-uc.a.run.app",
+  "logAnalyzerUrl": "http://localhost:3001"
+}

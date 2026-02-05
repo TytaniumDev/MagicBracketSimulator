@@ -1,27 +1,30 @@
 import { auth } from './firebase';
+import { getRuntimeConfig } from './config';
 
-const orchestratorBase =
-  typeof import.meta.env.VITE_API_URL === 'string' &&
-  import.meta.env.VITE_API_URL.length > 0
-    ? import.meta.env.VITE_API_URL.replace(/\/$/, '')
-    : typeof import.meta.env.VITE_ORCHESTRATOR_URL === 'string' &&
-      import.meta.env.VITE_ORCHESTRATOR_URL.length > 0
-      ? import.meta.env.VITE_ORCHESTRATOR_URL.replace(/\/$/, '')
-      : 'http://localhost:3000';
+function getOrchestratorBase(): string {
+  const runtime = getRuntimeConfig();
+  if (runtime.apiUrl) return runtime.apiUrl;
+  if (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL.length > 0)
+    return (import.meta.env.VITE_API_URL as string).replace(/\/$/, '');
+  if (typeof import.meta.env.VITE_ORCHESTRATOR_URL === 'string' && import.meta.env.VITE_ORCHESTRATOR_URL.length > 0)
+    return (import.meta.env.VITE_ORCHESTRATOR_URL as string).replace(/\/$/, '');
+  return 'http://localhost:3000';
+}
 
-// Legacy: log analyzer base for backwards compatibility during migration
-const logAnalyzerBase =
-  typeof import.meta.env.VITE_LOG_ANALYZER_URL === 'string' &&
-  import.meta.env.VITE_LOG_ANALYZER_URL.length > 0
-    ? import.meta.env.VITE_LOG_ANALYZER_URL.replace(/\/$/, '')
-    : 'http://localhost:3001';
+function getLogAnalyzerBaseUrl(): string {
+  const runtime = getRuntimeConfig();
+  if (runtime.logAnalyzerUrl) return runtime.logAnalyzerUrl;
+  if (typeof import.meta.env.VITE_LOG_ANALYZER_URL === 'string' && import.meta.env.VITE_LOG_ANALYZER_URL.length > 0)
+    return (import.meta.env.VITE_LOG_ANALYZER_URL as string).replace(/\/$/, '');
+  return 'http://localhost:3001';
+}
 
 export function getApiBase(): string {
-  return orchestratorBase;
+  return getOrchestratorBase();
 }
 
 export function getLogAnalyzerBase(): string {
-  return logAnalyzerBase;
+  return getLogAnalyzerBaseUrl();
 }
 
 /**

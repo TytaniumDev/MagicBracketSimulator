@@ -6,5 +6,10 @@
   "apphosting": {
     "source": ".",
     "apphosting.yaml": "./orchestrator-service/apphosting.yaml"
+  },
+  "hosting": {
+    "public": "frontend/dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "predeploy": ["npm run fetch-frontend-config", "npm run build --prefix frontend"]
   }
 }

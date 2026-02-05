@@ -16,7 +16,7 @@ forge-sim Docker  →  misc-runner Docker
 
 1. **Docker** installed and running
 2. **forge-sim** and **misc-runner** images built
-3. **Service account key** with Pub/Sub + GCS + Firestore access
+3. **GCP credentials**: Application Default Credentials (`gcloud auth application-default login`) or a **service account key** with Pub/Sub, GCS, Firestore, and **Secret Manager Secret Accessor**
 
 ## Setup Steps
 
@@ -32,36 +32,26 @@ cd ../misc-runner
 docker build -t misc-runner:latest .
 ```
 
-### 2. Create local-worker .env
+### 2. Configure local-worker (Secret Manager or .env)
+
+**Option A – Secret Manager (recommended; no .env copy on each machine)**
+
+1. **One-time:** From repo root, run the interactive script. It prompts for each value and prints **clickable links** to GCP Console, then stores config in Secret Manager:
+   ```bash
+   GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run populate-worker-secret
+   ```
+2. **On each machine:** Set only `GOOGLE_CLOUD_PROJECT` (env or a minimal `.env`) and use Application Default Credentials (`gcloud auth application-default login`) or a service account key. The worker loads the rest from Secret Manager at startup. No need to copy a full `.env`.
+
+**Option B – .env (legacy)**
 
 ```bash
 cd local-worker
 cp .env.example .env
 ```
 
-Edit `.env` with:
+Edit `.env` with all values (see `.env.example`). The worker uses these when Secret Manager is not configured or not available.
 
-```bash
-# Required: Path to service account key (from Phase 0.6 of the plan)
-GOOGLE_APPLICATION_CREDENTIALS="/home/wsl/magic-bracket-simulator-worker-key.json"
-GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
-
-# Pub/Sub subscription
-PUBSUB_SUBSCRIPTION="job-created-worker"
-
-# GCS bucket
-GCS_BUCKET="magic-bracket-simulator-artifacts"
-
-# Cloud Run API URL (orchestrator)
-API_URL="https://orchestrator-jfmj7qwxca-uc.a.run.app"
-
-# Docker image names (must match your built images)
-FORGE_SIM_IMAGE="forge-sim:latest"
-MISC_RUNNER_IMAGE="misc-runner:latest"
-
-# Local jobs directory (where deck files and logs are written)
-JOBS_DIR="./jobs"
-```
+See [docs/SECRETS_SETUP.md](../docs/SECRETS_SETUP.md) for details and IAM (Secret Manager Secret Accessor).
 
 ### 3. Install and run the worker
 
@@ -86,6 +76,7 @@ If the orchestrator API requires Firebase Auth, the worker needs a token. For de
 
 ## Troubleshooting
 
-- **"No credentials"** – Ensure `GOOGLE_APPLICATION_CREDENTIALS` points to a valid JSON key file
-- **"Permission denied"** – Service account needs `roles/pubsub.subscriber`, `roles/storage.objectAdmin`, `roles/datastore.user`
+- **"No credentials"** – Run `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS` to a valid JSON key file
+- **"Secret Manager not used"** – Normal if the secret doesn’t exist or the identity has no access; worker falls back to env/.env
+- **"Permission denied"** – Service account needs `roles/pubsub.subscriber`, `roles/storage.objectAdmin`, `roles/datastore.user`, and **Secret Manager Secret Accessor** (for Secret Manager config)
 - **Docker volume mount errors** – On WSL/Windows, ensure paths are correct and Docker has access to the jobs directory

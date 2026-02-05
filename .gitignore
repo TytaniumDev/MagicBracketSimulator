@@ -7,6 +7,9 @@ agent-plans/
 .env.local
 .env.*.local
 
+# Frontend runtime config (generated from Secret Manager or CI; do not commit)
+frontend/public/config.json
+
 # GCP credentials and secrets - NEVER commit these
 *-key.json
 *-credentials.json

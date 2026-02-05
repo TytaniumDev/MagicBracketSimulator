@@ -61,3 +61,9 @@ Open **http://localhost:5173** in your browser for the web UI. (If you only ran 
 3. Close the window (or press Ctrl+C) to stop.
 
 (To use the new frontend, run `npm run frontend` from the repo root in a separate terminal and open http://localhost:5173.)
+
+## Deployment and secrets
+
+- **GCP vs local mode:** See [MODE_SETUP.md](MODE_SETUP.md) for LOCAL vs GCP setup and running the local worker.
+- **Secrets and credentials:** See **[docs/SECRETS_SETUP.md](docs/SECRETS_SETUP.md)** for step-by-step instructions. **No secrets on your machine:** use Secret Manager and `gcloud auth application-default login`; see the doc for frontend config (`config.json`) and local-worker config.
+- **Find your Cloud Run URL:** Run `npm run get-cloud-run-url` (requires gcloud), or use [Firebase Console → App Hosting](https://console.firebase.google.com/) or [GCP Console → Cloud Run](https://console.cloud.google.com/run).
