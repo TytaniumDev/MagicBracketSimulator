@@ -34,13 +34,14 @@ docker build -t misc-runner:latest .
 
 ### 2. Configure local-worker (Secret Manager or .env)
 
-**Option A – Secret Manager (recommended; no .env copy on each machine)**
+**Option A – Secret Manager (recommended; no .env on your machine)**
 
-1. **One-time:** From repo root, run the interactive script. It prompts for each value and prints **clickable links** to GCP Console, then stores config in Secret Manager:
+1. **One-time:** From repo root, run the interactive script. It prompts for each value and prints **clickable links** to GCP Console, then stores config in Secret Manager. No .env needed if gcloud default project is set:
    ```bash
-   GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run populate-worker-secret
+   gcloud config set project magic-bracket-simulator
+   npm run populate-worker-secret
    ```
-2. **On each machine:** Set only `GOOGLE_CLOUD_PROJECT` (env or a minimal `.env`) and use Application Default Credentials (`gcloud auth application-default login`) or a service account key. The worker loads the rest from Secret Manager at startup. No need to copy a full `.env`.
+2. **On each machine:** Set only the gcloud default project (`gcloud config set project ...`) and use Application Default Credentials (`gcloud auth application-default login`) or a service account key. The worker loads the rest from Secret Manager at startup. **No .env needed** (worker and scripts also read project from `gcloud config get-value project`).
 
 **Option B – .env (legacy)**
 

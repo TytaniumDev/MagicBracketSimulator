@@ -1,4 +1,19 @@
 import 'dotenv/config';
+import { execSync } from 'child_process';
+
+// Resolve GCP project from gcloud config if not set (no .env needed)
+if (!process.env.GOOGLE_CLOUD_PROJECT) {
+  try {
+    const out = execSync('gcloud config get-value project --format="value(core.project)"', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    const p = (out || '').trim();
+    if (p.length > 0) process.env.GOOGLE_CLOUD_PROJECT = p;
+  } catch {
+    // gcloud not installed or project not set; worker will use env only
+  }
+}
 
 /**
  * Local Worker: Pulls jobs from Pub/Sub and orchestrates Docker containers

@@ -2,7 +2,7 @@ import { ticks } from 'd3-array';
 
 function scaleLabels(min: number, max: number): number[] {
   const t = ticks(min, max, 4);
-  const filtered = t.filter((v) => v >= min && v <= max);
+  const filtered = t.filter((v: number) => v >= min && v <= max);
   const result = [...new Set([min, ...filtered, max])];
   return result.sort((a, b) => a - b);
 }

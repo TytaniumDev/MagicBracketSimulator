@@ -17,16 +17,31 @@ const { execSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', 'local-worker', '.env') });
 
+/** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
+function getProjectFromGcloud() {
+  try {
+    const out = execSync('gcloud config get-value project --format="value(core.project)"', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    const p = (out || '').trim();
+    return p.length > 0 ? p : null;
+  } catch {
+    return null;
+  }
+}
+
 const projectArg = process.argv.find((a) => a.startsWith('--project='));
 const projectId =
-  projectArg?.split('=')[1] || process.env.GOOGLE_CLOUD_PROJECT;
+  projectArg?.split('=')[1] || process.env.GOOGLE_CLOUD_PROJECT || getProjectFromGcloud();
 
 if (!projectId) {
   console.error(`
 Usage: node scripts/get-cloud-run-url.js [--project=PROJECT_ID]
    or: GOOGLE_CLOUD_PROJECT=your-project node scripts/get-cloud-run-url.js
+   or: gcloud config set project YOUR_PROJECT_ID  (then run without .env)
 
-Set GOOGLE_CLOUD_PROJECT or pass --project= to specify the GCP project.
+Set GOOGLE_CLOUD_PROJECT, pass --project=, or set gcloud default project.
 `);
   process.exit(1);
 }

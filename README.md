@@ -65,5 +65,15 @@ Open **http://localhost:5173** in your browser for the web UI. (If you only ran 
 ## Deployment and secrets
 
 - **GCP vs local mode:** See [MODE_SETUP.md](MODE_SETUP.md) for LOCAL vs GCP setup and running the local worker.
-- **Secrets and credentials:** See **[docs/SECRETS_SETUP.md](docs/SECRETS_SETUP.md)** for step-by-step instructions. **No secrets on your machine:** use Secret Manager and `gcloud auth application-default login`; see the doc for frontend config (`config.json`) and local-worker config.
+- **Secrets and credentials:** See **[docs/SECRETS_SETUP.md](docs/SECRETS_SETUP.md)** for step-by-step instructions. The frontend API URL is **committed** in `frontend/public/config.json` (stable App Hosting URL; not a secret). Use Secret Manager for worker config (e.g. `npm run populate-worker-secret`). Frontend always uses the committed `config.json`.
 - **Find your Cloud Run URL:** Run `npm run get-cloud-run-url` (requires gcloud), or use [Firebase Console → App Hosting](https://console.firebase.google.com/) or [GCP Console → Cloud Run](https://console.cloud.google.com/run).
+
+### Firebase Hosting (frontend)
+
+The frontend is deployed to **Firebase Hosting**. From the repo root:
+
+```bash
+firebase deploy --only hosting  # predeploy runs the frontend build; config.json is committed
+```
+
+**CI/CD:** Merges to `main` trigger a GitHub Actions workflow that runs the same tests as CI (frontend + orchestrator lint/build/test); if all pass, it deploys to Firebase Hosting. Configure **FIREBASE_TOKEN** in the repo’s **Settings → Secrets and variables → Actions**; see [docs/SECRETS_SETUP.md](docs/SECRETS_SETUP.md).

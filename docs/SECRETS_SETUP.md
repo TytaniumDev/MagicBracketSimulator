@@ -2,6 +2,13 @@
 
 Step-by-step instructions for where to create and store secrets used by Magic Bracket Simulator: Firebase/GCP, frontend build, and local-worker. **Goal: store no secrets on your local machine** — use Secret Manager and (for CI) GitHub Secrets.
 
+**No .env required:** Scripts and the local-worker resolve the GCP project from `gcloud config get-value project` when `GOOGLE_CLOUD_PROJECT` is not set. So you can use only:
+
+- `gcloud auth application-default login`
+- `gcloud config set project YOUR_PROJECT_ID`
+
+Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the local-worker with **no .env file**.
+
 ---
 
 ## Where secrets live (overview)
@@ -12,24 +19,29 @@ Step-by-step instructions for where to create and store secrets used by Magic Br
 | GCP credentials (ADC or key) | `gcloud auth application-default login` or key file | local-worker, scripts (Secret Manager access) |
 | Worker / API env (e.g. WORKER_SECRET) | Orchestrator env (Cloud Run); local-worker: **Secret Manager** (or .env) | Orchestrator, local-worker |
 | **local-worker config** (API_URL, GCS_BUCKET, etc.) | **Google Secret Manager** (`npm run populate-worker-secret`) or local-worker .env | local-worker |
-| **Frontend API URL** | **Google Secret Manager** (`frontend-config`) or **GitHub Secrets** (CI); frontend reads **runtime** `/config.json` | Frontend (Firebase Hosting) |
+| **Frontend API URL** | **Committed** in `frontend/public/config.json` (stable App Hosting URL). **Not a secret** — visible when the app loads. Always used as-is; no override. | Frontend (Firebase Hosting) |
 
 ---
 
-## 0. Finding your Cloud Run URL
+## 0. Finding your orchestrator URL
 
-You need the orchestrator’s Cloud Run URL for **API_URL** (local-worker) and **apiUrl** (frontend config).
+You need the orchestrator URL for **API_URL** (local-worker). For the frontend, it’s already set in committed `frontend/public/config.json` (stable App Hosting URL: `https://orchestrator--magic-bracket-simulator.us-central1.hosted.app` — not a secret, visible when the app loads).
 
 ### Option A – gcloud (no browser)
 
 From repo root, with [gcloud](https://cloud.google.com/sdk/gcloud) installed and logged in:
 
 ```bash
-GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run get-cloud-run-url
-# or: node scripts/get-cloud-run-url.js --project=magic-bracket-simulator
+# No .env needed if gcloud default project is set:
+gcloud config set project magic-bracket-simulator
+npm run get-cloud-run-url
+
+# Or pass project explicitly:
+npm run get-cloud-run-url -- --project=magic-bracket-simulator
+# or: GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run get-cloud-run-url
 ```
 
-This lists all Cloud Run services and their URLs in the project. Use the orchestrator backend URL (e.g. `https://orchestrator-xxxxx-uc.a.run.app`).
+This lists Cloud Run services and their URLs. For **App Hosting**, use the stable backend URL from Firebase Console (e.g. `https://orchestrator--magic-bracket-simulator.us-central1.hosted.app`).
 
 ### Option B – Firebase Console
 
@@ -43,7 +55,7 @@ This lists all Cloud Run services and their URLs in the project. Use the orchest
 2. Go to **Cloud Run** (or: **Run** in the left menu).
 3. Click your orchestrator service; the **URL** is at the top.
 
-Use this URL when running `npm run populate-worker-secret` or `npm run populate-frontend-secret`.
+Use this URL when running `npm run populate-worker-secret`. The frontend always uses the committed `config.json` (same stable URL).
 
 ---
 
@@ -74,21 +86,23 @@ Use this URL when running `npm run populate-worker-secret` or `npm run populate-
 5. **On your Mac (or host running local-worker):**
    - Save the JSON somewhere safe (e.g. `~/.config/magicbracket/worker-key.json`).
    - Grant the service account **Secret Manager Secret Accessor** (so the worker can read `local-worker-config`). Optionally **Secret Manager Admin** if you will run the populate script with this key.
-   - Set **only** `GOOGLE_CLOUD_PROJECT` and (if not using ADC) `GOOGLE_APPLICATION_CREDENTIALS` in env or a minimal `.env`. The rest of the worker config can come from Secret Manager (see below).
+   - **No .env required:** Use `gcloud config set project YOUR_PROJECT_ID` and (if not using ADC) set `GOOGLE_APPLICATION_CREDENTIALS` in env or a minimal `.env`. The rest of the worker config comes from Secret Manager (see below).
 
 ### 1.3 local-worker config via Secret Manager (no .env copy on each machine)
 
 **One-time setup:** Run the interactive script from the repo root. It prompts for each value and gives **clickable links** to where to get it in GCP Console, then creates/updates the secret `local-worker-config` in Secret Manager.
 
 ```bash
-# From repo root; ensure GOOGLE_CLOUD_PROJECT is set (env or .env)
+# From repo root. No .env needed if gcloud default project is set:
+gcloud config set project magic-bracket-simulator
 npm run populate-worker-secret
 # or: node scripts/populate-worker-secret.js
+# or: GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run populate-worker-secret
 ```
 
 - The script asks for: **API_URL**, **GCS_BUCKET**, **PUBSUB_SUBSCRIPTION**, **WORKER_SECRET**, **FORGE_SIM_IMAGE**, **MISC_RUNNER_IMAGE**, **JOBS_DIR**.
 - For each, it prints a link (e.g. Cloud Run, Storage, Pub/Sub) so you can copy the value from the console.
-- After you fill values, it creates or updates the secret. On any **new machine**, you only need `GOOGLE_CLOUD_PROJECT` and Application Default Credentials (or the service account key with Secret Manager access); no need to copy `.env` or re-enter all values.
+- After you fill values, it creates or updates the secret. On any **new machine**, you only need the gcloud default project (`gcloud config set project ...`) and Application Default Credentials (or the service account key with Secret Manager access); **no .env needed** and no need to copy or re-enter all values.
 
 **IAM:** The identity the worker uses (ADC or service account key) must have **Secret Manager Secret Accessor** on the secret (or project). Same key can have Pub/Sub, GCS, Firestore roles as before.
 
@@ -96,33 +110,20 @@ npm run populate-worker-secret
 
 ## 2. Firebase Hosting and frontend (no secrets on your machine)
 
-The frontend reads **runtime config** from `/config.json` (API URL, optional log analyzer URL). You do **not** need to store `VITE_API_URL` in `.env` on your machine.
+The frontend reads **runtime config** from `/config.json` (API URL, optional log analyzer URL). **The API URL is not a secret** — it’s visible to anyone who loads the app (network requests). We **commit** `frontend/public/config.json` with the stable App Hosting URL (`https://orchestrator--magic-bracket-simulator.us-central1.hosted.app`). Deploy and local dev always use that file; there is no override.
 
-### One-time: store frontend config in Secret Manager
-
-1. **Get your Cloud Run URL** (see [§0. Finding your Cloud Run URL](#0-finding-your-cloud-run-url)).
-2. From repo root:
-   ```bash
-   GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run populate-frontend-secret
-   ```
-   Enter **apiUrl** (your orchestrator Cloud Run URL) and optionally **logAnalyzerUrl**. The script creates/updates the Secret Manager secret `frontend-config`.
-
-### Before each build or deploy
-
-Fetch config from Secret Manager and write `frontend/public/config.json` (not committed):
+### Build and deploy
 
 ```bash
-npm run fetch-frontend-config
 npm run build --prefix frontend
-# or: firebase deploy   (predeploy runs build; run fetch-frontend-config first)
+# or: firebase deploy --only hosting   (predeploy runs the build)
 ```
 
-So on your machine you only need **GOOGLE_CLOUD_PROJECT** and **Application Default Credentials** (`gcloud auth application-default login`); no `frontend/.env` with API URL.
+### CI/CD – Deploy to Firebase Hosting on merge to main
 
-### CI (e.g. GitHub Actions)
+A GitHub Actions workflow (`.github/workflows/deploy.yml`) runs on **push to main** (after a PR is merged). It runs the same tests as CI (frontend lint/build, orchestrator lint/build/test); if all pass, it deploys the frontend to **Firebase Hosting**.
 
-- **Option A:** Run `fetch-frontend-config` in CI using a service account key (or Workload Identity) with Secret Manager access; then build and deploy.
-- **Option B:** Store `VITE_API_URL` (or the whole config JSON) in **GitHub Secrets**; in the workflow, write `frontend/public/config.json` from the secret, then build and deploy. No Secret Manager needed in CI.
+**Required GitHub secret:** **FIREBASE_TOKEN** – Firebase CI token. Locally run `firebase login:ci`, then in the repo **Settings → Secrets and variables → Actions** add a secret named `FIREBASE_TOKEN` with that value.
 
 ### Local dev (no deploy)
 
@@ -151,17 +152,24 @@ Set at least:
 
 ## 4. Checklist summary (no secrets on your machine)
 
+- [ ] **GCP project:** `gcloud config set project YOUR_PROJECT_ID` (or set `GOOGLE_CLOUD_PROJECT` in env). No .env required.
 - [ ] **Cloud Run URL:** Use `npm run get-cloud-run-url` or Firebase/GCP Console (see §0).
 - [ ] **GCP credentials:** Use `gcloud auth application-default login` (or a key) so scripts and local-worker can read Secret Manager. No key file required if using ADC.
-- [ ] **local-worker config:** Run `npm run populate-worker-secret` once; on each machine set only `GOOGLE_CLOUD_PROJECT` and ADC. No full `.env` copy.
-- [ ] **Frontend config:** Run `npm run populate-frontend-secret` once with your Cloud Run URL. Before build/deploy run `npm run fetch-frontend-config`. No `VITE_API_URL` in `.env`.
+- [ ] **local-worker config:** Run `npm run populate-worker-secret` once; on each machine set only gcloud default project and ADC. No .env needed.
+- [ ] **Frontend config:** Committed `config.json` has the stable App Hosting URL (always used as-is).
 - [ ] **Orchestrator (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in local-worker config (in Secret Manager via populate-worker-secret).
+
+---
+
+## 5. GitHub Actions – Firebase Hosting deploy (push to main)
+
+**Required:** In the repo **Settings → Secrets and variables → Actions**, add **FIREBASE_TOKEN**. From your machine run `firebase login:ci`, then paste the token into a new secret named `FIREBASE_TOKEN`. The workflow uses the committed `frontend/public/config.json`; no other secrets are needed for the frontend.
 
 ---
 
 ## Helpful links
 
-- [Finding your Cloud Run URL](#0-finding-your-cloud-run-url) (above)
+- [Finding your orchestrator URL](#0-finding-your-orchestrator-url) (above)
 - [GCP Service account keys](https://cloud.google.com/iam/docs/create-key)
 - [Cloud Run environment variables](https://cloud.google.com/run/docs/configuring/services/environment-variables)
 - [Firebase Hosting](https://firebase.google.com/docs/hosting)

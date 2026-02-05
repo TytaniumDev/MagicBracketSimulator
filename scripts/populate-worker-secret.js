@@ -9,11 +9,26 @@
 
 const path = require('path');
 const readline = require('readline');
+const { execSync } = require('child_process');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', 'local-worker', '.env') });
 
-const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT;
+/** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
+function getProjectFromGcloud() {
+  try {
+    const out = execSync('gcloud config get-value project --format="value(core.project)"', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    const p = (out || '').trim();
+    return p.length > 0 ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || getProjectFromGcloud();
 const SECRET_NAME = 'local-worker-config';
 
 const CONSOLE_BASE = 'https://console.cloud.google.com';
@@ -45,10 +60,12 @@ function prompt(rl, message, helpUrl, defaultValue) {
 async function checkPrereqs() {
   if (!PROJECT_ID) {
     console.error(`
-ERROR: GOOGLE_CLOUD_PROJECT is not set.
+ERROR: GCP project is not set.
 
-Set it in your environment or in a .env file (repo root or local-worker/).
-Example: GOOGLE_CLOUD_PROJECT=magic-bracket-simulator
+Either:
+  • gcloud config set project YOUR_PROJECT_ID   (no .env needed)
+  • GOOGLE_CLOUD_PROJECT=your-project npm run populate-worker-secret
+  • Or set GOOGLE_CLOUD_PROJECT in your environment or .env
 
 For Application Default Credentials (so you don't need a key file on this machine):
   ${link(ADC_DOCS, 'Set up ADC')}
@@ -82,9 +99,9 @@ You need:
 
   const API_URL = await prompt(
     rl,
-    'API_URL – Cloud Run URL of your orchestrator service (e.g. https://orchestrator-xxxxx-uc.a.run.app)',
+    'API_URL – Orchestrator URL (App Hosting: https://orchestrator--magic-bracket-simulator.us-central1.hosted.app)',
     runUrl,
-    'https://orchestrator-jfmj7qwxca-uc.a.run.app'
+    'https://orchestrator--magic-bracket-simulator.us-central1.hosted.app'
   );
 
   const GCS_BUCKET = await prompt(
@@ -183,8 +200,11 @@ On any machine: set GOOGLE_CLOUD_PROJECT and use gcloud auth application-default
   } catch (err) {
     const msg = err.message || String(err);
     console.error('Failed to write secret:', msg);
-    if (msg.includes('Could not load the default credentials') || msg.includes('Permission') || msg.includes('403')) {
-      console.error(`\nRun: gcloud auth application-default login\n  ${ADC_DOCS}`);
+    if (msg.includes('Could not load the default credentials') || msg.includes('Permission') || msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+      console.error('\nIf GOOGLE_APPLICATION_CREDENTIALS is set (e.g. in .env), that service account needs Secret Manager access.');
+      console.error('Either: grant that service account "Secret Manager Admin" in IAM, or run without it:');
+      console.error('  GOOGLE_APPLICATION_CREDENTIALS= npm run populate-worker-secret');
+      console.error(`(Then run: gcloud auth application-default login if needed.\n  ${ADC_DOCS})`);
     }
     process.exit(1);
   }

@@ -16,21 +16,39 @@
 
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', 'frontend', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', 'local-worker', '.env') });
 
-const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT;
+/** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
+function getProjectFromGcloud() {
+  try {
+    const out = execSync('gcloud config get-value project --format="value(core.project)"', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    const p = (out || '').trim();
+    return p.length > 0 ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || getProjectFromGcloud();
 const SECRET_NAME = 'frontend-config';
 const OUT_PATH = path.join(__dirname, '..', 'frontend', 'public', 'config.json');
 
 async function main() {
   if (!PROJECT_ID) {
     console.error(`
-ERROR: GOOGLE_CLOUD_PROJECT is not set.
+ERROR: GCP project is not set.
 
-Set it in your environment or in a .env file (repo root or frontend/).
-Example: GOOGLE_CLOUD_PROJECT=magic-bracket-simulator
+Either:
+  • gcloud config set project YOUR_PROJECT_ID   (no .env needed)
+  • GOOGLE_CLOUD_PROJECT=your-project node scripts/fetch-frontend-config.js
+  • Or set GOOGLE_CLOUD_PROJECT in your environment or .env
 
 Then run: node scripts/fetch-frontend-config.js
 `);

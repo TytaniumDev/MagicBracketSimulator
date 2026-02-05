@@ -7,8 +7,7 @@ agent-plans/
 .env.local
 .env.*.local
 
-# Frontend runtime config (generated from Secret Manager or CI; do not commit)
-frontend/public/config.json
+# Frontend runtime config: config.json is committed with the stable App Hosting URL (not secret — visible when the app loads). Always used as-is.
 
 # GCP credentials and secrets - NEVER commit these
 *-key.json

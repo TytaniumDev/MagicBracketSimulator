@@ -10,6 +10,6 @@
   "hosting": {
     "public": "frontend/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "predeploy": ["npm run fetch-frontend-config", "npm run build --prefix frontend"]
+    "predeploy": ["npm run build --prefix frontend"]
   }
 }
