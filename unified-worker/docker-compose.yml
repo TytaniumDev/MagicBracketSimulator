@@ -1,0 +1,52 @@
+# Unified Worker - Single container deployment
+# Runs Forge simulations + log processing without Docker-in-Docker
+
+services:
+  unified-worker:
+    build:
+      context: ..
+      dockerfile: unified-worker/Dockerfile
+    container_name: unified-worker
+    restart: unless-stopped
+
+    environment:
+      # GCP Configuration
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-magic-bracket-simulator}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json
+
+      # Pub/Sub
+      - PUBSUB_SUBSCRIPTION=${PUBSUB_SUBSCRIPTION:-job-created-worker}
+      - PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION=${PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION:-worker-report-in-worker}
+
+      # API
+      - API_URL=${API_URL:-https://magicbracket.com}
+      - WORKER_SECRET=${WORKER_SECRET}
+
+      # Storage
+      - GCS_BUCKET=${GCS_BUCKET:-magic-bracket-simulator-artifacts}
+
+      # Worker
+      - WORKER_ID=${WORKER_ID:-}
+      - JOBS_DIR=/app/jobs
+      - FORGE_PATH=/app/forge
+
+    volumes:
+      # GCP credentials
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}:/secrets/sa.json:ro
+
+      # Persistent job storage (optional - for debugging)
+      - ./jobs:/app/jobs
+
+    # Resource limits (adjust based on machine)
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

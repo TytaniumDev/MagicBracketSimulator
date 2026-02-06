@@ -3,21 +3,35 @@
 # Parses CLI args, copies decks, invokes Forge sim, captures logs to /app/logs/{job_id}_game_{n}.txt
 set -euo pipefail
 
-cd /app
+# Change to script directory if FORGE_PATH is set, otherwise /app
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${FORGE_PATH:-}" ]]; then
+    cd "$FORGE_PATH"
+else
+    cd /app
+fi
 
 # Defaults
 SIMULATIONS=5
 DECKS=()
 JOB_ID=""
 
-# Paths
-DECKS_DIR="/app/decks"
+# Paths - use env vars if set, otherwise defaults for standalone container
+DECKS_DIR="${DECKS_DIR:-/app/decks}"
 # Forge looks for Commander decks in ~/.forge/decks/commander/ when -f Commander is set
 # The -D flag should override this, but in practice it doesn't for format-specific modes
 # So we copy decks to Forge's default Commander deck path
-RUN_DECKS_DIR="/home/forge/.forge/decks/commander"
-LOGS_DIR="/app/logs"
-FORGE_LAUNCHER="/app/forge.sh"
+RUN_DECKS_DIR="${RUN_DECKS_DIR:-$HOME/.forge/decks/commander}"
+LOGS_DIR="${LOGS_DIR:-/app/logs}"
+
+# Forge launcher - check FORGE_PATH first, then script dir, then /app
+if [[ -n "${FORGE_PATH:-}" ]] && [[ -f "${FORGE_PATH}/forge.sh" ]]; then
+    FORGE_LAUNCHER="${FORGE_PATH}/forge.sh"
+elif [[ -f "${SCRIPT_DIR}/forge.sh" ]]; then
+    FORGE_LAUNCHER="${SCRIPT_DIR}/forge.sh"
+else
+    FORGE_LAUNCHER="/app/forge.sh"
+fi
 
 usage() {
     cat <<EOF >&2

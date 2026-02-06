@@ -1,7 +1,7 @@
 {
   "name": "local-worker",
   "version": "1.0.0",
-  "description": "Local worker that pulls jobs from Pub/Sub and runs forge-sim + misc-runner containers",
+  "description": "Unified worker that pulls jobs from Pub/Sub and runs forge simulations",
   "main": "dist/worker.js",
   "scripts": {
     "build": "tsc",
@@ -13,6 +13,7 @@
   "dependencies": {
     "@google-cloud/pubsub": "^4.3.0",
     "@google-cloud/secret-manager": "^5.6.0",
+    "@google-cloud/storage": "^7.7.0",
     "dotenv": "^17.2.3"
   },
   "devDependencies": {

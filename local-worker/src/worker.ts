@@ -16,14 +16,14 @@ if (!process.env.GOOGLE_CLOUD_PROJECT) {
 }
 
 /**
- * Local Worker: Pulls jobs from Pub/Sub and orchestrates Docker containers
+ * Unified Worker: Pulls jobs from Pub/Sub and runs simulations
  *
  * This worker:
  * 1. Loads config from Google Secret Manager (if GOOGLE_CLOUD_PROJECT set) or env
  * 2. Pulls job-created messages from Pub/Sub
  * 3. Fetches job details from the API
- * 4. Runs forge-sim container(s) to simulate games
- * 5. Runs misc-runner container to condense logs and upload to GCS
+ * 4. Runs forge simulations as child processes (parallel)
+ * 5. Condenses logs and uploads to GCS
  * 6. Acknowledges the message when complete
  */
 
@@ -34,9 +34,37 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
-const SECRET_NAME = 'local-worker-config';
+import {
+  JobData,
+  JobCreatedMessage,
+  WorkerReportInMessage,
+  ProcessResult,
+} from './types.js';
+import {
+  splitConcatenatedGames,
+  condenseGames,
+  buildAnalyzePayload,
+} from './condenser.js';
+import { GCSClient } from './gcs-client.js';
 
+const SECRET_NAME = 'local-worker-config';
 const WORKER_ID_FILE = 'worker-id';
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+// Path to forge installation (set by unified container or local install)
+const FORGE_PATH = process.env.FORGE_PATH || '/app/forge';
+
+// Reserve ~2GB for system + worker overhead
+const SYSTEM_RESERVE_MB = 2048;
+// Each Forge sim needs ~500-600MB RAM
+const RAM_PER_SIM_MB = 600;
+
+// ============================================================================
+// Worker ID Management
+// ============================================================================
 
 /**
  * Get or create a stable worker ID (survives restarts).
@@ -60,6 +88,10 @@ async function getOrCreateWorkerId(jobsDir: string): Promise<string> {
   await fs.writeFile(workerIdPath, newId, 'utf-8');
   return newId;
 }
+
+// ============================================================================
+// Secret Manager Config
+// ============================================================================
 
 /**
  * Load config from Google Secret Manager (if available) and merge into process.env.
@@ -98,27 +130,16 @@ async function loadConfigFromSecretManager(): Promise<void> {
   }
 }
 
-// Types
-interface JobData {
-  id: string;
-  decks: Array<{ name: string; dck: string }>;
-  simulations: number;
-  parallelism: number;
-  status: string;
-}
+// ============================================================================
+// Subscriptions (for shutdown handler)
+// ============================================================================
 
-interface JobCreatedMessage {
-  jobId: string;
-  createdAt: string;
-}
-
-interface WorkerReportInMessage {
-  refreshId: string;
-}
-
-// Subscriptions are set in main(); used by shutdown handler
 let subscription: ReturnType<PubSub['subscription']> | null = null;
 let subscriptionReportIn: ReturnType<PubSub['subscription']> | null = null;
+
+// ============================================================================
+// API Functions
+// ============================================================================
 
 /**
  * Fetch job details from API
@@ -188,6 +209,34 @@ async function patchJobStatus(jobId: string, status: string, errorMessage?: stri
   }
 }
 
+// ============================================================================
+// Dynamic Parallelism
+// ============================================================================
+
+/**
+ * Calculate optimal parallelism based on system resources.
+ * Scales dynamically based on available CPU cores and memory.
+ */
+function calculateDynamicParallelism(requested: number): number {
+  const cpuCount = os.cpus().length;
+  const freeMemMB = os.freemem() / (1024 * 1024);
+
+  const availableMemMB = Math.max(0, freeMemMB - SYSTEM_RESERVE_MB);
+  const memoryLimit = Math.floor(availableMemMB / RAM_PER_SIM_MB);
+
+  // Leave 2 cores for system + worker
+  const cpuLimit = Math.max(1, cpuCount - 2);
+
+  const optimal = Math.min(requested, cpuLimit, memoryLimit);
+
+  console.log(
+    `Dynamic parallelism: cpus=${cpuCount}, freeMem=${Math.round(freeMemMB)}MB, ` +
+      `cpuLimit=${cpuLimit}, memLimit=${memoryLimit}, requested=${requested}, using=${Math.max(1, optimal)}`
+  );
+
+  return Math.max(1, optimal);
+}
+
 /**
  * Split simulations across parallel runs
  */
@@ -200,109 +249,215 @@ function splitSimulations(total: number, parallelism: number): number[] {
     runs.push(base + (i < remainder ? 1 : 0));
   }
 
-  return runs.filter(n => n > 0);
+  return runs.filter((n) => n > 0);
 }
 
+// ============================================================================
+// Process Execution
+// ============================================================================
+
 /**
- * Run a Docker container and wait for it to complete
+ * Run a process and wait for it to complete
  */
-function runDocker(args: string[]): Promise<{ exitCode: number; duration: number }> {
+function runProcess(
+  command: string,
+  args: string[],
+  options: {
+    env?: NodeJS.ProcessEnv;
+    cwd?: string;
+    timeout?: number;
+  } = {}
+): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    // Determine command and args based on platform
-    let command = 'docker';
-    let commandArgs = args;
 
-    // On macOS, use caffeinate to prevent sleep during execution
+    // On macOS, wrap with caffeinate to prevent sleep during execution
+    let finalCommand = command;
+    let finalArgs = args;
     if (process.platform === 'darwin') {
-      command = 'caffeinate';
-      commandArgs = ['-i', 'docker', ...args];
+      finalCommand = 'caffeinate';
+      finalArgs = ['-i', command, ...args];
     }
 
-    console.log(`Running: ${command} ${commandArgs.join(' ')}`);
+    console.log(`Running: ${finalCommand} ${finalArgs.join(' ')}`);
 
-    // Handle Windows/WSL path issues
-    const env = { ...process.env, MSYS_NO_PATHCONV: '1' };
-
-    const proc: ChildProcess = spawn(command, commandArgs, {
+    const proc: ChildProcess = spawn(finalCommand, finalArgs, {
       stdio: 'inherit',
-      env,
+      env: { ...process.env, ...options.env },
+      cwd: options.cwd,
     });
 
+    let timeoutId: NodeJS.Timeout | null = null;
+    if (options.timeout) {
+      timeoutId = setTimeout(() => {
+        console.error(`Process timed out after ${options.timeout}ms, killing...`);
+        proc.kill('SIGTERM');
+        setTimeout(() => proc.kill('SIGKILL'), 5000);
+      }, options.timeout);
+    }
+
     proc.on('error', (error) => {
+      if (timeoutId) clearTimeout(timeoutId);
       reject(error);
     });
 
     proc.on('close', (code) => {
-      const duration = Date.now() - startTime;
-      resolve({ exitCode: code || 0, duration });
+      if (timeoutId) clearTimeout(timeoutId);
+      resolve({ exitCode: code || 0, duration: Date.now() - startTime });
     });
   });
 }
 
 /**
- * Run forge-sim container
+ * Run forge simulation as a child process
  */
 async function runForgeSim(
   jobDir: string,
   simulations: number,
   runId: string
-): Promise<{ exitCode: number; duration: number }> {
-  const FORGE_SIM_IMAGE = process.env.FORGE_SIM_IMAGE || 'forge-sim:latest';
+): Promise<ProcessResult> {
   const decksDir = path.resolve(jobDir, 'decks');
   const logsDir = path.resolve(jobDir, 'logs');
+  const runSimScript = path.join(FORGE_PATH, 'run_sim.sh');
 
   const args = [
-    'run', '--rm',
-    '-v', `${decksDir}:/app/decks`,
-    '-v', `${logsDir}:/app/logs`,
-    FORGE_SIM_IMAGE,
-    '--decks', 'deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck',
-    '--simulations', String(simulations),
-    '--id', runId,
+    '--decks',
+    'deck_0.dck',
+    'deck_1.dck',
+    'deck_2.dck',
+    'deck_3.dck',
+    '--simulations',
+    String(simulations),
+    '--id',
+    runId,
   ];
 
-  return runDocker(args);
+  return runProcess('/bin/bash', [runSimScript, ...args], {
+    env: {
+      DECKS_DIR: decksDir,
+      LOGS_DIR: logsDir,
+    },
+    timeout: 10 * 60 * 1000, // 10 minute timeout
+  });
+}
+
+// ============================================================================
+// Log Processing (replaces misc-runner container)
+// ============================================================================
+
+/**
+ * Read all game logs from the logs directory
+ */
+async function readGameLogs(
+  logsDir: string,
+  jobId: string
+): Promise<{ rawLogs: string[]; deckNames: string[] }> {
+  let files: string[] = [];
+
+  try {
+    // Read all files in logs directory
+    const allFiles = await fs.readdir(logsDir);
+    // Filter for txt files matching job ID (excluding deck_names.txt)
+    files = allFiles
+      .filter((f) => f.includes(jobId) && f.endsWith('.txt') && f !== 'deck_names.txt')
+      .map((f) => path.join(logsDir, f))
+      .sort();
+  } catch {
+    // Directory might not exist
+  }
+
+  // If no files match with job ID, try to find any .txt files (except deck_names.txt)
+  if (files.length === 0) {
+    try {
+      const allFiles = await fs.readdir(logsDir);
+      files = allFiles
+        .filter((f) => f.endsWith('.txt') && f !== 'deck_names.txt')
+        .map((f) => path.join(logsDir, f))
+        .sort();
+    } catch {
+      // Directory might not exist
+    }
+  }
+
+  const rawLogs: string[] = [];
+  for (const file of files) {
+    try {
+      const content = await fs.readFile(file, 'utf-8');
+      // Check if this file contains multiple concatenated games
+      const games = splitConcatenatedGames(content);
+      rawLogs.push(...games);
+    } catch (err) {
+      console.warn(`Warning: Failed to read ${file}:`, err);
+    }
+  }
+
+  // Try to read deck names from metadata file
+  let deckNames = ['Deck 1', 'Deck 2', 'Deck 3', 'Deck 4'];
+  try {
+    const metaPath = path.join(logsDir, 'deck_names.txt');
+    const content = await fs.readFile(metaPath, 'utf-8');
+    const names = content
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l);
+    if (names.length >= 4) {
+      deckNames = names.slice(0, 4);
+    }
+  } catch {
+    // deck_names.txt not found, use defaults
+  }
+
+  return { rawLogs, deckNames };
 }
 
 /**
- * Run misc-runner container
+ * Process logs and upload to GCS (replaces misc-runner container)
  */
-async function runMiscRunner(jobId: string, jobDir: string): Promise<{ exitCode: number; duration: number }> {
-  const API_URL = process.env.API_URL || 'http://localhost:3000';
+async function processAndUploadLogs(
+  jobId: string,
+  logsDir: string,
+  deckLists: string[]
+): Promise<void> {
   const GCS_BUCKET = process.env.GCS_BUCKET || 'magic-bracket-simulator-artifacts';
-  const MISC_RUNNER_IMAGE = process.env.MISC_RUNNER_IMAGE || 'misc-runner:latest';
-  const SA_KEY_PATH = process.env.GOOGLE_APPLICATION_CREDENTIALS || '';
-  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
-  const WORKER_SECRET = process.env.WORKER_SECRET || '';
-  const logsDir = path.resolve(jobDir, 'logs');
 
-  const args = [
-    'run', '--rm',
-    '-v', `${logsDir}:/app/logs:ro`,
-    '-e', `JOB_ID=${jobId}`,
-    '-e', `API_URL=${API_URL}`,
-    '-e', `GCS_BUCKET=${GCS_BUCKET}`,
-    '-e', `LOGS_DIR=/app/logs`,
-  ];
+  console.log('Reading game logs...');
+  const { rawLogs, deckNames } = await readGameLogs(logsDir, jobId);
+  console.log(`Found ${rawLogs.length} game logs`);
 
-  // Add service account credentials if available
-  if (SA_KEY_PATH) {
-    args.push('-e', `GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json`);
-    args.push('-v', `${SA_KEY_PATH}:/secrets/sa.json:ro`);
+  if (rawLogs.length === 0) {
+    throw new Error('No game logs found');
   }
 
-  if (AUTH_TOKEN) {
-    args.push('-e', `AUTH_TOKEN=${AUTH_TOKEN}`);
-  }
-  if (WORKER_SECRET) {
-    args.push('-e', `WORKER_SECRET=${WORKER_SECRET}`);
+  console.log('Condensing game logs...');
+  const condensed = condenseGames(rawLogs);
+  console.log(`Condensed ${condensed.length} games`);
+
+  console.log('Building analyze payload...');
+  const analyzePayload = buildAnalyzePayload(condensed, deckNames, deckLists);
+
+  console.log('Uploading artifacts to GCS...');
+  const gcsClient = new GCSClient(GCS_BUCKET);
+
+  // Upload raw logs (optional - don't fail if this fails)
+  try {
+    await gcsClient.uploadRawLogs(jobId, rawLogs);
+    console.log('Uploaded raw logs');
+  } catch (err) {
+    console.warn('Warning: Failed to upload raw logs:', err);
   }
 
-  args.push(MISC_RUNNER_IMAGE);
+  // Upload condensed logs
+  await gcsClient.uploadJSON(jobId, 'condensed.json', condensed);
+  console.log('Uploaded condensed.json');
 
-  return runDocker(args);
+  // Upload analyze payload
+  await gcsClient.uploadJSON(jobId, 'analyze-payload.json', analyzePayload);
+  console.log('Uploaded analyze-payload.json');
 }
+
+// ============================================================================
+// Job Processing
+// ============================================================================
 
 /**
  * Process a single job
@@ -334,7 +489,7 @@ async function processJob(jobId: string): Promise<void> {
   await fs.mkdir(decksDir, { recursive: true });
   await fs.mkdir(logsDir, { recursive: true });
 
-  // Set permissions for Docker (Linux/WSL)
+  // Set permissions (Linux/WSL)
   try {
     await fs.chmod(decksDir, 0o777);
     await fs.chmod(logsDir, 0o777);
@@ -343,45 +498,51 @@ async function processJob(jobId: string): Promise<void> {
   }
 
   // Write deck files
-  await Promise.all(job.decks.map((deck, i) => {
-    const deckPath = path.join(decksDir, `deck_${i}.dck`);
-    return fs.writeFile(deckPath, deck.dck, 'utf-8');
-  }));
+  await Promise.all(
+    job.decks.map((deck, i) => {
+      const deckPath = path.join(decksDir, `deck_${i}.dck`);
+      return fs.writeFile(deckPath, deck.dck, 'utf-8');
+    })
+  );
 
-  // Write deck names for misc-runner
+  // Write deck names for log processing
   const deckNamesPath = path.join(logsDir, 'deck_names.txt');
-  await fs.writeFile(deckNamesPath, job.decks.map(d => d.name).join('\n'), 'utf-8');
+  await fs.writeFile(deckNamesPath, job.decks.map((d) => d.name).join('\n'), 'utf-8');
 
-  // Run forge-sim container(s) in parallel
-  const parallelism = job.parallelism || 4;
+  // Calculate dynamic parallelism based on system resources
+  const requestedParallelism = job.parallelism || 4;
+  const parallelism = calculateDynamicParallelism(requestedParallelism);
   const runs = splitSimulations(job.simulations, parallelism);
   console.log(`Running ${runs.length} parallel simulations: ${runs.join(', ')}`);
 
+  // Run forge simulations in parallel
   const forgeResults = await Promise.all(
-    runs.map((sims, idx) =>
-      runForgeSim(jobDir, sims, `job_${jobId}_run${idx}`)
-    )
+    runs.map((sims, idx) => runForgeSim(jobDir, sims, `job_${jobId}_run${idx}`))
   );
 
   // Check for failures
-  const failedRuns = forgeResults.filter(r => r.exitCode !== 0);
+  const failedRuns = forgeResults.filter((r) => r.exitCode !== 0);
   if (failedRuns.length > 0) {
-    throw new Error(`${failedRuns.length} forge-sim runs failed`);
+    throw new Error(`${failedRuns.length} forge simulation runs failed`);
   }
 
-  const durations = forgeResults.map(r => r.duration);
-  console.log(`Forge simulations completed in: ${durations.map(d => `${d}ms`).join(', ')}`);
+  const durations = forgeResults.map((r) => r.duration);
+  console.log(`Forge simulations completed in: ${durations.map((d) => `${d}ms`).join(', ')}`);
 
-  // Run misc-runner container
-  console.log(`Running misc-runner for job ${jobId}...`);
-  const miscResult = await runMiscRunner(jobId, jobDir);
+  // Process logs and upload to GCS (replaces misc-runner container)
+  console.log(`Processing and uploading logs for job ${jobId}...`);
+  const deckLists = job.decks.map((d) => d.dck);
+  await processAndUploadLogs(jobId, logsDir, deckLists);
 
-  if (miscResult.exitCode !== 0) {
-    throw new Error(`misc-runner failed with exit code ${miscResult.exitCode}`);
-  }
+  // Update job status to COMPLETED
+  await patchJobStatus(jobId, 'COMPLETED');
 
   console.log(`Job ${jobId} completed successfully`);
 }
+
+// ============================================================================
+// Pub/Sub Message Handlers
+// ============================================================================
 
 /**
  * Handle a Pub/Sub message
@@ -442,7 +603,11 @@ async function sendHeartbeat(
 /**
  * Handle a worker-report-in Pub/Sub message (frontend requested status)
  */
-async function handleReportInMessage(message: Message, workerId: string, subscriptionName: string): Promise<void> {
+async function handleReportInMessage(
+  message: Message,
+  workerId: string,
+  subscriptionName: string
+): Promise<void> {
   let data: WorkerReportInMessage;
   try {
     data = JSON.parse(message.data.toString());
@@ -467,9 +632,10 @@ async function handleReportInMessage(message: Message, workerId: string, subscri
   }
 }
 
-/**
- * Graceful shutdown handler
- */
+// ============================================================================
+// Shutdown Handler
+// ============================================================================
+
 let isShuttingDown = false;
 
 function handleShutdown(signal: string): void {
@@ -500,9 +666,10 @@ function handleShutdown(signal: string): void {
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 
-/**
- * Main entry point
- */
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
 async function main(): Promise<void> {
   await loadConfigFromSecretManager();
 
@@ -520,12 +687,13 @@ async function main(): Promise<void> {
   subscription = pubsub.subscription(SUBSCRIPTION_NAME);
   subscriptionReportIn = pubsub.subscription(REPORT_IN_SUBSCRIPTION_NAME);
 
-  console.log('Local Worker starting...');
+  console.log('Unified Worker starting...');
   console.log('Project:', PROJECT_ID);
   console.log('Subscription:', SUBSCRIPTION_NAME);
   console.log('Report-in subscription:', REPORT_IN_SUBSCRIPTION_NAME);
   console.log('API URL:', API_URL);
   console.log('Jobs directory:', JOBS_DIR);
+  console.log('Forge path:', FORGE_PATH);
 
   // Ensure jobs directory exists
   await fs.mkdir(JOBS_DIR, { recursive: true });
