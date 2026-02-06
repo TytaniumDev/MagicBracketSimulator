@@ -150,6 +150,11 @@ export function getDb(): Database.Database {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN deck_ids_json TEXT`);
+  } catch {
+    // Column already exists
+  }
 
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency_key ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL`);
 

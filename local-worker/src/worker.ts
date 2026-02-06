@@ -210,6 +210,81 @@ async function patchJobStatus(jobId: string, status: string, errorMessage?: stri
 }
 
 // ============================================================================
+// Deck cache (for deckIds path: on-demand fetch, shared cache, no jobDir/decks)
+// ============================================================================
+
+const DECK_CACHE_DIR = process.env.DECK_CACHE_DIR || path.resolve(process.cwd(), 'deck-cache');
+
+/**
+ * Sanitize deck ID to a safe .dck filename (no path chars).
+ * IDs are often "precon-id" or "doran-big-butts.dck"; use as-is if safe, else slugify.
+ */
+function sanitizeDeckIdToFilename(deckId: string): string {
+  const trimmed = deckId.trim();
+  if (!trimmed) return 'deck.dck';
+  // If it looks like a filename (ends with .dck, no path chars), use as-is
+  if (trimmed.endsWith('.dck') && !trimmed.includes('/') && !trimmed.includes('\\') && !trimmed.includes('..')) {
+    return trimmed;
+  }
+  // Slugify: lowercase, replace non-alnum with hyphen, ensure .dck
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9.-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 100) || 'deck';
+  return slug.endsWith('.dck') ? slug : `${slug}.dck`;
+}
+
+/**
+ * Fetch deck content from orchestrator (worker auth).
+ */
+async function fetchDeckContent(deckId: string): Promise<{ name: string; dck: string } | null> {
+  const API_URL = process.env.API_URL || 'http://localhost:3000';
+  const WORKER_SECRET = process.env.WORKER_SECRET || '';
+  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+  const url = `${API_URL}/api/decks/${encodeURIComponent(deckId)}/content`;
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (AUTH_TOKEN) {
+    (headers as Record<string, string>)['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  }
+  if (WORKER_SECRET) {
+    (headers as Record<string, string>)['X-Worker-Secret'] = WORKER_SECRET;
+  }
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) return null;
+    return (await response.json()) as { name: string; dck: string };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ensure deck is in cache; fetch on miss. Returns name and cache filename.
+ * Stores deck name in a sidecar .name file for when we read from cache later.
+ */
+async function ensureDeckInCache(deckId: string): Promise<{ name: string; cacheFilename: string }> {
+  await fs.mkdir(DECK_CACHE_DIR, { recursive: true });
+  const cacheFilename = sanitizeDeckIdToFilename(deckId);
+  const dckPath = path.join(DECK_CACHE_DIR, cacheFilename);
+  const namePath = path.join(DECK_CACHE_DIR, `${cacheFilename}.name`);
+
+  const existingDck = await fs.readFile(dckPath, 'utf-8').catch(() => null);
+  if (existingDck !== null) {
+    const name = await fs.readFile(namePath, 'utf-8').catch(() => null);
+    return { name: (name?.trim()) || cacheFilename.replace(/\.dck$/, ''), cacheFilename };
+  }
+
+  const content = await fetchDeckContent(deckId);
+  if (!content) {
+    throw new Error(`Failed to fetch deck content for ${deckId}`);
+  }
+  await fs.writeFile(dckPath, content.dck, 'utf-8');
+  await fs.writeFile(namePath, content.name, 'utf-8');
+  return { name: content.name, cacheFilename };
+}
+
+// ============================================================================
 // Dynamic Parallelism
 // ============================================================================
 
@@ -309,23 +384,28 @@ function runProcess(
 }
 
 /**
- * Run forge simulation as a child process
+ * Run forge simulation as a child process.
+ * When deckFilenames is provided, decksDir is the cache (or any dir containing those files); otherwise jobDir/decks with deck_0.dck ... deck_3.dck.
  */
 async function runForgeSim(
   jobDir: string,
   simulations: number,
-  runId: string
+  runId: string,
+  options?: { decksDir: string; deckFilenames: [string, string, string, string] }
 ): Promise<ProcessResult> {
-  const decksDir = path.resolve(jobDir, 'decks');
+  const decksDir = options?.decksDir ?? path.resolve(jobDir, 'decks');
   const logsDir = path.resolve(jobDir, 'logs');
+  const [d0, d1, d2, d3] = options?.deckFilenames ?? ['deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck'];
+  // Unique RUN_DECKS_DIR per run so parallel forge runs don't race (symlinks in run_sim.sh)
+  const runDecksDir = path.resolve(jobDir, 'run-decks', runId);
   const runSimScript = path.join(FORGE_PATH, 'run_sim.sh');
 
   const args = [
     '--decks',
-    'deck_0.dck',
-    'deck_1.dck',
-    'deck_2.dck',
-    'deck_3.dck',
+    d0,
+    d1,
+    d2,
+    d3,
     '--simulations',
     String(simulations),
     '--id',
@@ -336,6 +416,7 @@ async function runForgeSim(
     env: {
       DECKS_DIR: decksDir,
       LOGS_DIR: logsDir,
+      RUN_DECKS_DIR: runDecksDir,
     },
     timeout: 10 * 60 * 1000, // 10 minute timeout
   });
@@ -480,34 +561,49 @@ async function processJob(jobId: string): Promise<void> {
   // Update status to RUNNING
   await patchJobStatus(jobId, 'RUNNING');
 
-  // Create job directories
   const JOBS_DIR = process.env.JOBS_DIR || './jobs';
   const jobDir = path.join(JOBS_DIR, jobId);
-  const decksDir = path.join(jobDir, 'decks');
   const logsDir = path.join(jobDir, 'logs');
-
-  await fs.mkdir(decksDir, { recursive: true });
   await fs.mkdir(logsDir, { recursive: true });
 
-  // Set permissions (Linux/WSL)
-  try {
-    await fs.chmod(decksDir, 0o777);
-    await fs.chmod(logsDir, 0o777);
-  } catch {
-    // Ignore permission errors on Windows
+  let deckNames: string[];
+  let deckLists: string[];
+  let runForgeOptions: { decksDir: string; deckFilenames: [string, string, string, string] } | undefined;
+
+  if (job.deckIds && job.deckIds.length === 4) {
+    // Deck IDs path: ensure all 4 in cache, use cache for run_sim (no jobDir/decks)
+    console.log('Using deck cache for deck IDs:', job.deckIds.join(', '));
+    const resolved = await Promise.all(job.deckIds.map((id) => ensureDeckInCache(id)));
+    deckNames = resolved.map((r) => r.name);
+    const cacheFilenames = resolved.map((r) => r.cacheFilename) as [string, string, string, string];
+    runForgeOptions = { decksDir: DECK_CACHE_DIR, deckFilenames: cacheFilenames };
+    deckLists = await Promise.all(
+      cacheFilenames.map((f) => fs.readFile(path.join(DECK_CACHE_DIR, f), 'utf-8'))
+    );
+  } else if (job.decks && job.decks.length === 4) {
+    // Full decks path (backward compat): write jobDir/decks, use default filenames
+    const decksDir = path.join(jobDir, 'decks');
+    await fs.mkdir(decksDir, { recursive: true });
+    try {
+      await fs.chmod(decksDir, 0o777);
+      await fs.chmod(logsDir, 0o777);
+    } catch {
+      // Ignore permission errors on Windows
+    }
+    await Promise.all(
+      job.decks.map((deck, i) => {
+        const deckPath = path.join(decksDir, `deck_${i}.dck`);
+        return fs.writeFile(deckPath, deck.dck, 'utf-8');
+      })
+    );
+    deckNames = job.decks.map((d) => d.name);
+    deckLists = job.decks.map((d) => d.dck);
+  } else {
+    throw new Error('Job must have either deckIds (length 4) or decks (length 4)');
   }
 
-  // Write deck files
-  await Promise.all(
-    job.decks.map((deck, i) => {
-      const deckPath = path.join(decksDir, `deck_${i}.dck`);
-      return fs.writeFile(deckPath, deck.dck, 'utf-8');
-    })
-  );
-
-  // Write deck names for log processing
   const deckNamesPath = path.join(logsDir, 'deck_names.txt');
-  await fs.writeFile(deckNamesPath, job.decks.map((d) => d.name).join('\n'), 'utf-8');
+  await fs.writeFile(deckNamesPath, deckNames.join('\n'), 'utf-8');
 
   // Calculate dynamic parallelism based on system resources
   const requestedParallelism = job.parallelism || 4;
@@ -517,7 +613,9 @@ async function processJob(jobId: string): Promise<void> {
 
   // Run forge simulations in parallel
   const forgeResults = await Promise.all(
-    runs.map((sims, idx) => runForgeSim(jobDir, sims, `job_${jobId}_run${idx}`))
+    runs.map((sims, idx) =>
+      runForgeSim(jobDir, sims, `job_${jobId}_run${idx}`, runForgeOptions)
+    )
   );
 
   // Check for failures
@@ -531,8 +629,15 @@ async function processJob(jobId: string): Promise<void> {
 
   // Process logs and upload to GCS (replaces misc-runner container)
   console.log(`Processing and uploading logs for job ${jobId}...`);
-  const deckLists = job.decks.map((d) => d.dck);
   await processAndUploadLogs(jobId, logsDir, deckLists);
+
+  // Clean up per-run deck dirs (ephemeral copies; not reused)
+  const runDecksParent = path.join(jobDir, 'run-decks');
+  try {
+    await fs.rm(runDecksParent, { recursive: true });
+  } catch (err) {
+    console.warn(`Could not remove run-decks for job ${jobId}:`, err);
+  }
 
   // Update job status to COMPLETED
   await patchJobStatus(jobId, 'COMPLETED');

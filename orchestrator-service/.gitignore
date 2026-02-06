@@ -19,8 +19,8 @@ build/
 # Cache (Scryfall + deck metadata)
 .cache/
 
-# Jobs directory (temp files)
-jobs/
+# Jobs directory (temp files; not app/api/jobs routes)
+/jobs/
 
 # Logs
 *.log

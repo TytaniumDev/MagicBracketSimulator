@@ -92,13 +92,12 @@ for deck in "${DECKS[@]}"; do
     fi
 done
 
-# Create ephemeral deck directory for Forge
+# Create ephemeral deck directory for Forge; symlink decks so we don't copy (cache-friendly)
 rm -rf "${RUN_DECKS_DIR}"
 mkdir -p "${RUN_DECKS_DIR}"
-
-# Copy all 4 decks to Forge's deck directory
+DECKS_DIR_ABS="$(cd "$DECKS_DIR" && pwd)"
 for deck in "${DECKS[@]}"; do
-    cp "${DECKS_DIR}/${deck}" "${RUN_DECKS_DIR}/"
+    ln -s "${DECKS_DIR_ABS}/${deck}" "${RUN_DECKS_DIR}/${deck}"
 done
 
 # Ensure logs directory exists

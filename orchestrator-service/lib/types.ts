@@ -152,7 +152,8 @@ export interface DeckSlot {
 
 export interface Job {
   id: string;
-  decks: DeckSlot[]; // Always length 4
+  decks: DeckSlot[]; // Always length 4 (for backward compat; may be empty when deckIds used)
+  deckIds?: string[]; // Length 4 when set; worker uses cache + deck API when present
   status: JobStatus;
   resultJson?: AnalysisResult;
   simulations: number;
