@@ -1,6 +1,4 @@
 """Unit tests for the log condenser (log_parser)."""
-import pytest
-
 from log_parser import condense
 
 

@@ -1,7 +1,6 @@
 """Optional contract tests for POST /analyze and GET /health."""
 import os
 
-import pytest
 from fastapi.testclient import TestClient
 
 from main import app
