@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 interface Row {
   id: string;
   decks_json: string;
+  deck_ids_json?: string | null;
   status: string;
   simulations: number;
   created_at: string;
@@ -20,9 +21,14 @@ interface Row {
 
 function rowToJob(row: Row): Job {
   const decks = JSON.parse(row.decks_json) as DeckSlot[];
+  const deckIds =
+    row.deck_ids_json != null && row.deck_ids_json !== ''
+      ? (JSON.parse(row.deck_ids_json) as string[])
+      : undefined;
   return {
     id: row.id,
     decks,
+    ...(deckIds != null && deckIds.length === 4 && { deckIds }),
     status: row.status as JobStatus,
     simulations: row.simulations,
     createdAt: new Date(row.created_at),
@@ -48,7 +54,8 @@ export function createJob(
   decks: DeckSlot[],
   simulations: number,
   idempotencyKey?: string,
-  parallelism?: number
+  parallelism?: number,
+  deckIds?: string[]
 ): Job {
   if (idempotencyKey) {
     const existing = getJobByIdempotencyKey(idempotencyKey);
@@ -59,11 +66,12 @@ export function createJob(
   const db = getDb();
 
   db.prepare(
-    `INSERT INTO jobs (id, decks_json, status, simulations, created_at, idempotency_key, parallelism)
-     VALUES (?, ?, 'QUEUED', ?, ?, ?, ?)`
+    `INSERT INTO jobs (id, decks_json, deck_ids_json, status, simulations, created_at, idempotency_key, parallelism)
+     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?)`
   ).run(
     id,
     JSON.stringify(decks),
+    deckIds != null && deckIds.length === 4 ? JSON.stringify(deckIds) : null,
     simulations,
     createdAt,
     idempotencyKey ?? null,
@@ -72,6 +80,7 @@ export function createJob(
   return {
     id,
     decks,
+    ...(deckIds != null && deckIds.length === 4 && { deckIds }),
     status: 'QUEUED',
     simulations,
     createdAt: new Date(createdAt),

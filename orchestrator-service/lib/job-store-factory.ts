@@ -40,7 +40,7 @@ export async function getJobByIdempotencyKey(key: string): Promise<Job | null> {
 export async function createJob(
   decks: DeckSlot[],
   simulations: number,
-  options?: { idempotencyKey?: string; parallelism?: number; createdBy?: string }
+  options?: { idempotencyKey?: string; parallelism?: number; createdBy?: string; deckIds?: string[] }
 ): Promise<Job> {
   if (USE_FIRESTORE) {
     return firestoreStore.createJob({
@@ -49,13 +49,15 @@ export async function createJob(
       parallelism: options?.parallelism,
       idempotencyKey: options?.idempotencyKey,
       createdBy: options?.createdBy ?? 'unknown',
+      deckIds: options?.deckIds,
     });
   }
   return sqliteStore.createJob(
     decks,
     simulations,
     options?.idempotencyKey,
-    options?.parallelism
+    options?.parallelism,
+    options?.deckIds
   );
 }
 

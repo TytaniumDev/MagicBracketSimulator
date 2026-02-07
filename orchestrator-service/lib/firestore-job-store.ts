@@ -15,9 +15,11 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
   if (!doc.exists) return null;
   
   const data = doc.data()!;
+  const deckIds = Array.isArray(data.deckIds) && data.deckIds.length === 4 ? data.deckIds as string[] : undefined;
   return {
     id: doc.id,
     decks: data.decks || [],
+    ...(deckIds != null && { deckIds }),
     status: data.status as JobStatus,
     simulations: data.simulations,
     parallelism: data.parallelism,
@@ -37,6 +39,7 @@ export interface CreateJobData {
   parallelism?: number;
   idempotencyKey?: string;
   createdBy: string;
+  deckIds?: string[];
 }
 
 /**
@@ -56,6 +59,7 @@ export async function createJob(data: CreateJobData): Promise<Job> {
 
   const jobData = {
     decks: data.decks,
+    ...(data.deckIds != null && data.deckIds.length === 4 && { deckIds: data.deckIds }),
     status: 'QUEUED' as JobStatus,
     simulations: data.simulations,
     parallelism: data.parallelism || 4,
@@ -89,6 +93,7 @@ export async function createJob(data: CreateJobData): Promise<Job> {
   return {
     id: jobRef.id,
     decks: data.decks,
+    ...(data.deckIds != null && data.deckIds.length === 4 && { deckIds: data.deckIds }),
     status: 'QUEUED',
     simulations: data.simulations,
     parallelism: data.parallelism || 4,
