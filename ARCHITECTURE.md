@@ -13,7 +13,7 @@ The system supports two deployment modes:
 
 ---
 
-## GCP Cloud Architecture (Recommended for Production)
+## Architecture: GCP Mode (Production)
 
 ```mermaid
 flowchart TB
@@ -98,7 +98,9 @@ sequenceDiagram
 
 ---
 
-## Local Development Architecture (Original)
+## Architecture: Local Mode (Default)
+
+> **Note:** "Local Mode" is the default for `npm run dev`. It uses specific services (Log Analyzer, Analysis Service) that are replaced by Cloud Run/Misc Runner in GCP Mode.
 
 ## High-Level Architecture
 
@@ -300,8 +302,8 @@ There is **no** explicit global “max concurrent containers across all jobs” 
 | **local-worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
 | **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
 | **forge-simulation-engine/** | Docker-based Forge simulation runner | Both |
-| **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
-| **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route | Local only |
+| **forge-log-analyzer/** | (Local Mode) Log condensing service | Local |
+| **analysis-service/** | (Local Mode) Python + Gemini Analysis | Local |
 
 ---
 

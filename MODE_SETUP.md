@@ -111,7 +111,7 @@ npm run dev
 |---------|---------|
 | orchestrator-service | API backend with SQLite |
 | frontend | React UI |
-| analysis-service | OpenAI analysis |
+| analysis-service | Gemini analysis |
 | forge-log-analyzer | Log processing |
 | worker (polling) | Polls orchestrator for jobs |
 

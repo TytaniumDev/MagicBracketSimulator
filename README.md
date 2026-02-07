@@ -32,7 +32,15 @@ An attempt to better figure out commander brackets through simulation.
                     └─────────────────┘
 ```
 
-## Running the full app
+## Deployment Modes
+
+This system supports two modes:
+1. **Local Mode (Default):** Runs everything on your machine. Best for development.
+2. **GCP Mode:** Runs API on Cloud Run and Worker on your machine. Best for production/scale.
+
+See **[MODE_SETUP.md](MODE_SETUP.md)** for detailed setup instructions for both modes.
+
+## Running the full app (Local Mode)
 
 **Prerequisites:** Node.js 18+, Python 3.11+ with [uv](https://github.com/astral-sh/uv), Docker (with `forge-sim` image built). See [orchestrator-service/README.md](orchestrator-service/README.md) and [analysis-service/README.md](analysis-service/README.md) for setup (`.env` files, `GEMINI_API_KEY`, etc.).
 
