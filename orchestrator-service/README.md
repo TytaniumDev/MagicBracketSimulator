@@ -52,7 +52,7 @@ docker build -t forge-sim --no-cache .
 npm run dev
 ```
 
-The API will be available at http://localhost:3000. The root path shows a placeholder; use the **frontend** app (see repo root `frontend/`) for the web UI at http://localhost:5173.
+The API will be available at http://localhost:3000. The root path shows a placeholder; use the **frontend** app (see repo root `frontend/` package) for the web UI at http://localhost:5173.
 
 The integrated worker will start automatically when the dev server starts, polling for queued jobs.
 
@@ -68,7 +68,7 @@ npm start
 - **Next.js 15+ App Router** - API routes only; the web UI lives in the repo root `frontend/` package and calls these APIs over HTTP.
 - **SQLite Job Store** - Persistent storage in `data/jobs.db` (jobs survive restarts)
 - **Integrated Worker** - Polls for jobs, spawns Docker containers, sends logs to Log Analyzer
-- **On-Demand Analysis** - AI analysis (Gemini) is triggered by user action via `/api/jobs/[id]/analyze`, not automatically after simulations
+- **On-Demand Analysis** - ⚠️ **[PLANNED]** AI analysis (Gemini) logic exists in `lib/gemini.ts`, but the API endpoint is currently **not implemented**.
 - **CORS** - API allows origins from `CORS_ALLOWED_ORIGINS` (comma-separated); default `http://localhost:5173`. In production set e.g. `https://magic-bracket-simulator.web.app`.
 
 ## API Routes
@@ -80,10 +80,12 @@ npm start
 | `/api/jobs` | POST | Create a new simulation job |
 | `/api/jobs/[id]` | GET | Get job status and results |
 | `/api/jobs/[id]` | DELETE | Delete a job (and its artifact directory) |
-| `/api/jobs/[id]/analyze` | POST | Trigger on-demand AI analysis (Gemini) |
+| `/api/jobs/[id]/analyze` | POST | ⚠️ **[NOT IMPLEMENTED]** Trigger on-demand AI analysis (Gemini) |
 | `/api/decks` | GET | List saved decks |
 | `/api/decks` | POST | Save a deck from URL or text |
 | `/api/decks/[id]` | DELETE | Delete a saved deck |
+
+> **Note on Analysis:** The business logic for Gemini analysis is implemented in `lib/gemini.ts`, but the route handler for `/api/jobs/[id]/analyze` is currently missing from the codebase. The frontend expects this route to exist, so the "Analyze" feature is currently unavailable.
 
 ### Create Job Request
 
@@ -107,6 +109,7 @@ orchestrator-service/
 │   ├── types.ts              # TypeScript types
 │   ├── precons.ts            # Precon loader
 │   ├── worker-loop.ts        # Background worker
+│   ├── gemini.ts             # Gemini AI logic (Route pending)
 │   └── ingestion/            # Deck parsing
 ├── middleware.ts             # CORS for /api/* (frontend at :5173)
 └── instrumentation.ts        # Worker startup

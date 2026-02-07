@@ -2,6 +2,15 @@
 
 This document describes the system architecture, with emphasis on the Docker-based Forge engine and how parallel execution works.
 
+> ⚠️ **Current Limitations / Known Issues**
+>
+> **Missing Analysis Endpoint:** The system is currently in a transitional state regarding AI analysis.
+> - The **Frontend** expects the Orchestrator Service to handle analysis requests via `POST /api/jobs/[id]/analyze`.
+> - The **Orchestrator Service** contains the business logic (`lib/gemini.ts`) but the API route implementation is currently **missing**.
+> - The **Legacy Analysis Service** (Python) is started by default in local development (port 8000) but is **not connected** to the frontend.
+>
+> **Impact:** The "Analyze" button in the UI will fail until the Orchestrator endpoint is implemented or the frontend is reconfigured.
+
 ---
 
 ## Deployment Modes
@@ -90,6 +99,7 @@ sequenceDiagram
     MiscRunner->>CloudRun: PATCH job COMPLETED
 
     User->>CloudRun: POST /api/jobs/:id/analyze
+    Note right of CloudRun: (Endpoint Implementation Pending)
     CloudRun->>GCS: Get analyze payload
     CloudRun->>CloudRun: Call Gemini API
     CloudRun->>Firestore: Store results
@@ -149,8 +159,8 @@ flowchart TB
     Worker --> Docker
     Docker --> Forge
     Worker -->|"POST logs"| LogAnalyzer
-    LogAnalyzer -->|"condensed logs"| Analysis
-    UI -->|"trigger analyze"| LogAnalyzer
+    LogAnalyzer -.->|"Unused"| Analysis
+    UI -.->|"Route Missing"| API
 ```
 
 ---
@@ -161,8 +171,8 @@ flowchart TB
 |-----------|------|------|
 | **Frontend** | 5173 | Web UI (Vite + React). Calls Orchestrator API and Log Analyzer. |
 | **Orchestrator** | 3000 | Next.js API (decks, precons, jobs) + background Worker. Job store in SQLite. |
-| **Log Analyzer** | 3001 | Ingests logs from Worker; condenses/structures; stores; can forward to Analysis Service. |
-| **Analysis Service** | 8000 | Python + Gemini. On-demand AI analysis of condensed logs. |
+| **Log Analyzer** | 3001 | Ingests logs from Worker; condenses/structures; stores. |
+| **Analysis Service** | 8000 | (Running but Unused) Python + Gemini service. Frontend attempts to use Orchestrator instead. |
 | **Forge (Docker)** | — | One image `forge-sim`; multiple containers run in parallel per job. |
 
 ---
@@ -195,10 +205,9 @@ sequenceDiagram
     Worker->>Orchestrator: Mark job COMPLETED
 
     User->>Frontend: View job or trigger analysis
-    Frontend->>LogAnalyzer: GET logs, POST analyze
-    LogAnalyzer->>Analysis: Forward payload
-    Analysis-->>LogAnalyzer: Bracket results
-    LogAnalyzer-->>Frontend: Analysis result
+    Frontend->>LogAnalyzer: GET logs
+    Frontend->>Orchestrator: POST /api/jobs/[id]/analyze
+    Orchestrator-->>Frontend: 404 Not Found (Implementation Pending)
 ```
 
 ---
@@ -301,7 +310,7 @@ There is **no** explicit global “max concurrent containers across all jobs” 
 | **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
 | **forge-simulation-engine/** | Docker-based Forge simulation runner | Both |
 | **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
-| **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route | Local only |
+| **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route (Pending) | Local only (Unused) |
 
 ---
 
