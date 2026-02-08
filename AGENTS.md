@@ -12,7 +12,8 @@
 - **Package Manager**: `npm` (Node), `uv` (Python)
 
 ## Setup
-- **Install All Dependencies**: `npm run install:all`
+- **Install Node Dependencies**: `npm run install:all`
+- **Install Python Dependencies**: `cd analysis-service && uv sync --extra dev`
 - **Start Dev Server**: `npm run dev`
 
 ## Testing & Verification
@@ -31,6 +32,7 @@
 
 ### Log Analyzer
 - **Dev**: `npm run dev --prefix forge-log-analyzer`
+- **Build**: `npm run build --prefix forge-log-analyzer`
 - **Test**: `npm run test --prefix forge-log-analyzer`
 
 ### Local Worker
