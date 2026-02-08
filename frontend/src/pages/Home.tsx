@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { useAuth } from '../contexts/AuthContext';
@@ -112,16 +112,20 @@ export default function Home() {
 
   const apiBase = getApiBase();
 
-  const precons = decks.filter((d) => d.isPrecon);
-  const communityDecks = decks.filter((d) => !d.isPrecon);
+  const precons = useMemo(() => decks.filter((d) => d.isPrecon), [decks]);
+  const communityDecks = useMemo(() => decks.filter((d) => !d.isPrecon), [decks]);
 
   // Build combined deck options
-  const deckOptions: DeckOption[] = decks.map((d) => ({
-    id: d.id,
-    name: d.name,
-    type: d.isPrecon ? ('precon' as const) : ('saved' as const),
-    deck: d,
-  }));
+  const deckOptions: DeckOption[] = useMemo(
+    () =>
+      decks.map((d) => ({
+        id: d.id,
+        name: d.name,
+        type: d.isPrecon ? ('precon' as const) : ('saved' as const),
+        deck: d,
+      })),
+    [decks]
+  );
 
   // Fetch all decks (unified API)
   const fetchDecks = useCallback(async () => {
