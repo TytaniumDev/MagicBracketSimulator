@@ -1,19 +1,29 @@
 # Magic Bracket Simulator — Architecture Overview
 
-This document describes the system architecture, with emphasis on the Docker-based Forge engine and how parallel execution works.
+*Last Updated: 2025-05-15*
+
+This document describes the system architecture, which operates in two distinct modes: **Local Development** (Docker-based) and **GCP Cloud** (Serverless + Unified Worker).
 
 ---
 
-## Deployment Modes
+## 1. The "Dual Mode" Architecture
 
-The system supports two deployment modes:
+The system is designed to run in two completely different configurations. It is critical to understand which mode you are operating in.
 
-1. **Local Development** - All services run locally (original architecture)
-2. **GCP Cloud Deployment** - Cloud Run API with local Docker workers
+| Feature | Local Development Mode | GCP Cloud Mode |
+| :--- | :--- | :--- |
+| **Orchestrator** | Next.js (Local Node.js) | Cloud Run (Serverless Container) |
+| **Job Queue** | SQLite (In-process polling) | Pub/Sub |
+| **Worker** | **Internal Worker** (inside Orchestrator) | **Unified Worker** (`local-worker/` container) |
+| **Simulation** | Spawns `docker run forge-sim` | Runs `run_sim.sh` directly (Child Process) |
+| **Logs** | Local Disk (`jobs/logs`) | Google Cloud Storage (GCS) |
+| **Analysis** | **Python Service** + Log Analyzer | **Orchestrator Internal** (via Gemini API) |
 
 ---
 
-## GCP Cloud Architecture (Recommended for Production)
+## 2. GCP Cloud Architecture (Production)
+
+In this mode, the Orchestrator is a stateless API. The heavy lifting is done by "Unified Workers" that pull jobs from Pub/Sub.
 
 ```mermaid
 flowchart TB
@@ -23,291 +33,118 @@ flowchart TB
         GCS[(Cloud Storage)]
         PubSub[Pub/Sub]
         FirebaseAuth[Firebase Auth]
+
         CloudRun --> Firestore
         CloudRun --> GCS
         CloudRun --> PubSub
         FirebaseAuth --> CloudRun
     end
 
-    subgraph local [Local Machine]
-        Worker[Local Worker<br/>Pub/Sub Pull]
-        ForgeSim[forge-sim container]
-        MiscRunner[misc-runner container<br/>Go]
-        Worker --> ForgeSim
-        Worker --> MiscRunner
+    subgraph unified_worker [Unified Worker Container]
+        Worker[Worker Process<br/>Node.js]
+        Forge[Forge Engine<br/>Child Process]
+
+        Worker -- Pulls Message --> PubSub
+        Worker -- Spawns --> Forge
+        Forge -- Game Logs --> Worker
+        Worker -- Uploads --> GCS
+        Worker -- Updates Status --> CloudRun
     end
 
     User --> CloudRun
-    PubSub -.-> Worker
-    MiscRunner --> GCS
-    MiscRunner --> CloudRun
 ```
 
-### GCP Components
+### Component Breakdown
 
-| Component | Service | Purpose |
-|-----------|---------|---------|
-| **API + Frontend** | Cloud Run | Single Next.js app serving API routes and optional frontend |
-| **Job Metadata** | Firestore | Job state, deck references, results |
-| **Artifacts** | Cloud Storage | Raw logs, condensed logs, analysis payloads |
-| **Job Queue** | Pub/Sub | Triggers local workers when jobs are created |
-| **Authentication** | Firebase Auth | Google sign-in with email allowlist |
-| **Secrets** | Secret Manager | Gemini API key and other secrets |
+| Component | Directory | Role |
+| :--- | :--- | :--- |
+| **Orchestrator API** | `orchestrator-service/` | Handles API requests, stores job state in Firestore, pushes "Job Created" events to Pub/Sub. |
+| **Unified Worker** | `local-worker/` | A standalone Node.js app. It pulls jobs, runs simulations **internally** (no Docker-in-Docker), condenses logs, and uploads artifacts to GCS. |
+| **Analysis** | `orchestrator-service/lib/gemini.ts` | The Orchestrator fetches condensed logs from GCS and calls the Gemini API directly to generate brackets. |
 
-### Local Components (GCP Mode)
+### Data Flow (GCP)
 
-| Component | Directory | Purpose |
-|-----------|-----------|---------|
-| **Local Worker** | `local-worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
-| **Forge Sim** | `forge-simulation-engine/` | Runs MTG simulations (unchanged) |
-| **Misc Runner** | `misc-runner/` | Go container: condenses logs, uploads to GCS |
-
-### GCP Data Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant CloudRun as Cloud Run
-    participant Firestore
-    participant PubSub
-    participant LocalWorker as Local Worker
-    participant ForgeSim as forge-sim
-    participant MiscRunner as misc-runner
-    participant GCS
-
-    User->>CloudRun: POST /api/jobs (create job)
-    CloudRun->>Firestore: Store job (QUEUED)
-    CloudRun->>PubSub: Publish job-created message
-    CloudRun-->>User: 201 Created
-
-    PubSub->>LocalWorker: Pull message
-    LocalWorker->>CloudRun: GET job details
-    LocalWorker->>ForgeSim: Run simulations
-    ForgeSim-->>LocalWorker: Game logs
-
-    LocalWorker->>MiscRunner: Condense logs
-    MiscRunner->>GCS: Upload artifacts
-    MiscRunner->>CloudRun: PATCH job COMPLETED
-
-    User->>CloudRun: POST /api/jobs/:id/analyze
-    CloudRun->>GCS: Get analyze payload
-    CloudRun->>CloudRun: Call Gemini API
-    CloudRun->>Firestore: Store results
-    CloudRun-->>User: Analysis results
-```
+1.  **Job Creation:** User POSTs to Orchestrator. Job saved to Firestore (QUEUED). Message published to Pub/Sub.
+2.  **Execution:** Unified Worker pulls message. Fetches job details.
+3.  **Simulation:** Worker spawns `run_sim.sh` (Forge) as a child process.
+4.  **Log Processing:** Worker reads raw logs, condenses them (JSON), and uploads to GCS.
+5.  **Completion:** Worker patches job status to COMPLETED.
+6.  **Analysis:** User requests analysis. Orchestrator reads GCS payload, calls Gemini, returns results.
 
 ---
 
-## Local Development Architecture (Original)
+## 3. Local Development Architecture
 
-## High-Level Architecture
+In this mode, the Orchestrator acts as a monolith. It runs an internal worker loop that manages Docker containers on your local machine.
 
 ```mermaid
 flowchart TB
-    subgraph user[" "]
-        Browser["User / Browser"]
+    subgraph host [Local Machine]
+        Frontend[Vite Frontend<br/>:5173]
+
+        subgraph orchestrator_stack [Orchestrator Service]
+            API[Next.js API<br/>:3000]
+            InternalWorker[Internal Worker Loop]
+            SQLite[(SQLite DB)]
+
+            API --> SQLite
+            InternalWorker -- Polls --> SQLite
+        end
+
+        subgraph docker_swarm [Docker]
+            C1[Container: forge-sim]
+            C2[Container: forge-sim]
+            InternalWorker -- Spawns --> C1
+            InternalWorker -- Spawns --> C2
+        end
+
+        subgraph analysis_stack [Analysis Pipeline]
+            LogAnalyzer[Forge Log Analyzer<br/>Express :3001]
+            AnalysisService[Analysis Service<br/>Python :8000]
+
+            InternalWorker -- POST Logs --> LogAnalyzer
+            LogAnalyzer -- POST Payload --> AnalysisService
+        end
     end
 
-    subgraph frontend["Frontend"]
-        UI["Web UI - Vite + React port 5173"]
-    end
-
-    subgraph orchestrator["Orchestrator"]
-        API["API - decks, precons, jobs"]
-        Store[(SQLite Job Store)]
-        Worker["Worker Loop"]
-        API --> Store
-        Worker --> Store
-    end
-
-    subgraph loganalyzer["Log Analyzer"]
-        Condenser["Condense / Structure logs"]
-        StoreLogs["Store raw logs - port 3001"]
-    end
-
-    subgraph docker["Docker"]
-        C1["Container 1"]
-        C2["Container 2"]
-        C3["Container N - forge-sim image"]
-        N1["1-8 containers per job"]
-    end
-
-    subgraph forge["Forge Engine"]
-        RunSim["run_sim.sh"]
-        Xvfb["xvfb"]
-        ForgeCLI["Forge CLI sim"]
-        RunSim --> Xvfb --> ForgeCLI
-    end
-
-    subgraph analysis["Analysis Service"]
-        Gemini["Gemini AI - port 8000"]
-    end
-
-    Browser --> UI
-    UI --> API
-    UI --> Condenser
-    Worker --> Docker
-    Docker --> Forge
-    Worker -->|"POST logs"| LogAnalyzer
-    LogAnalyzer -->|"condensed logs"| Analysis
-    UI -->|"trigger analyze"| LogAnalyzer
+    Frontend --> API
+    Frontend --> LogAnalyzer
 ```
 
----
+### Component Breakdown
 
-## Component Summary
+| Component | Directory | Role |
+| :--- | :--- | :--- |
+| **Orchestrator** | `orchestrator-service/` | Runs the API *and* a background worker loop (`worker/worker.ts`). |
+| **Forge Sim** | `forge-simulation-engine/` | The Docker image (`forge-sim`) used to run simulations in isolation. |
+| **Log Analyzer** | `forge-log-analyzer/` | An Express app that receives raw logs from the worker, stores them on disk, and exposes them for analysis. |
+| **Analysis Service** | `analysis-service/` | A Python (FastAPI/Uvicorn) service that runs the Gemini logic locally. |
 
-| Component | Port | Role |
-|-----------|------|------|
-| **Frontend** | 5173 | Web UI (Vite + React). Calls Orchestrator API and Log Analyzer. |
-| **Orchestrator** | 3000 | Next.js API (decks, precons, jobs) + background Worker. Job store in SQLite. |
-| **Log Analyzer** | 3001 | Ingests logs from Worker; condenses/structures; stores; can forward to Analysis Service. |
-| **Analysis Service** | 8000 | Python + Gemini. On-demand AI analysis of condensed logs. |
-| **Forge (Docker)** | — | One image `forge-sim`; multiple containers run in parallel per job. |
+### Data Flow (Local)
 
----
-
-## Data Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend
-    participant Orchestrator
-    participant Worker
-    participant Docker
-    participant LogAnalyzer
-    participant Analysis
-
-    User->>Frontend: Create job - 4 decks, simulations, parallelism
-    Frontend->>Orchestrator: POST /api/jobs
-    Orchestrator->>Orchestrator: Store job QUEUED
-
-    Worker->>Orchestrator: Poll next QUEUED job
-    Worker->>Worker: Write 4 deck files to job decks dir
-    par Parallel containers
-        Worker->>Docker: docker run forge-sim run 0
-        Worker->>Docker: docker run forge-sim run 1
-        Worker->>Docker: docker run forge-sim run N
-    end
-    Docker-->>Worker: Logs in job logs dir
-    Worker->>LogAnalyzer: POST job logs with deck lists
-    Worker->>Orchestrator: Mark job COMPLETED
-
-    User->>Frontend: View job or trigger analysis
-    Frontend->>LogAnalyzer: GET logs, POST analyze
-    LogAnalyzer->>Analysis: Forward payload
-    Analysis-->>LogAnalyzer: Bracket results
-    LogAnalyzer-->>Frontend: Analysis result
-```
+1.  **Job Creation:** User POSTs to Orchestrator. Job saved to SQLite.
+2.  **Execution:** Internal Worker polls SQLite. Finds QUEUED job.
+3.  **Simulation:** Worker spawns `docker run forge-sim` containers (one per parallel slot).
+4.  **Log Processing:** Worker collects logs from disk (`jobs/logs/`), sends them to Log Analyzer (`:3001`).
+5.  **Completion:** Job marked COMPLETED.
+6.  **Analysis:** Frontend requests analysis via Log Analyzer (`:3001/analyze`). Log Analyzer forwards to Python Service (`:8000`).
 
 ---
 
-## Docker and Forge Engine
+## 4. Key Differences & "Gotchas"
 
-### One Image, Multiple Containers per Job
+1.  **The "Worker" Ambiguity:**
+    *   In **Local Mode**, the "Worker" is a file inside Orchestrator (`worker/worker.ts`).
+    *   In **GCP Mode**, the "Worker" is the code in `local-worker/` (better named "Unified Worker").
 
-- **Single image**: `forge-sim`, built from `forge-simulation-engine/Dockerfile` (Eclipse Temurin 17, Forge release, xvfb, precons, `run_sim.sh` entrypoint).
-- **Per job**: The worker spawns **multiple** `docker run` processes **in parallel**. So you get **multiple container instances** at once, all using the same image.
+2.  **Simulation Execution:**
+    *   **Local:** Uses Docker-in-Docker pattern (Orchestrator spawns Containers).
+    *   **GCP:** Uses Child Processes (Worker container spawns Shell Scripts).
 
-```mermaid
-flowchart LR
-    subgraph job["One job"]
-        W["Worker - 20 sims, parallelism 4"]
-    end
+3.  **Log Storage:**
+    *   **Local:** Filesystem (`jobs/logs`) + Log Analyzer memory/disk.
+    *   **GCP:** Google Cloud Storage (Buckets).
 
-    subgraph containers["Parallel containers - same image"]
-        D1["Run 0 - 5 games"]
-        D2["Run 1 - 5 games"]
-        D3["Run 2 - 5 games"]
-        D4["Run 3 - 5 games"]
-    end
-
-    W --> D1
-    W --> D2
-    W --> D3
-    W --> D4
-```
-
-- **Simulation split**: Total simulations are divided across `parallelism` runs (e.g. 20 sims, parallelism 4 → four containers with 5 games each). Each container gets the same deck mount but a distinct `--id` (e.g. `job_<id>_run0`, `job_<id>_run1`) so log filenames don’t clash.
-- **Volumes**: Each `docker run` mounts the same job dirs: `jobs/<jobId>/decks` → `/app/decks`, `jobs/<jobId>/logs` → `/app/logs`. All containers write into the same logs directory with different filename prefixes.
-
-### Forge Inside the Container
-
-Each container runs the same flow:
-
-| Step | What happens |
-|------|----------------|
-| **Entrypoint** | `/app/run_sim.sh` (`forge-simulation-engine/run_sim.sh`) |
-| **Input** | `/app/decks` (mounted from worker’s `jobs/<jobId>/decks/`) with 4 `.dck` files; `--id` and `--simulations` per run |
-| **Execution** | Copies decks into Forge’s Commander deck path; runs Forge under **xvfb** (virtual display): `xvfb-run ... forge.sh sim -d ... -f Commander -n <simulations> -c 300` |
-| **Output** | Logs written under `/app/logs` (mounted from worker’s `jobs/<jobId>/logs/`) as `{runId}_game_1.txt`, etc. Worker reads these after all containers exit |
-
----
-
-## Parallelism and Limits
-
-### How Many Parallel Tasks?
-
-- **Jobs**: The worker processes **one job at a time**. It’s a single loop: pick next QUEUED job → `await processJob(job)` → repeat. So there is no parallel execution of **different** jobs.
-- **Containers (within one job)**: For the **current** job, the worker runs up to **N** containers in parallel, where **N = that job’s parallelism** (or default/env).
-
-```mermaid
-flowchart TB
-    subgraph limits["Concurrency limits"]
-        J["Jobs in flight = 1"]
-        C["Containers in flight = 1 to 8"]
-    end
-
-    subgraph source["Where N comes from"]
-        Default["Default 4"]
-        Env["FORGE_PARALLELISM env"]
-        JobParam["Per-job parallelism 1-16"]
-        JobParam --> C
-        Env --> Default
-        Default --> C
-    end
-```
-
-### Where the Parallelism Value Comes From
-
-| Source | Description |
-|--------|-------------|
-| **Default** | `DEFAULT_PARALLELISM = 4` in `orchestrator-service/worker/worker.ts` |
-| **Environment** | `FORGE_PARALLELISM` overrides the default if set |
-| **Per job** | Request body when creating the job can send `parallelism` (frontend does this); validated to 1–16 |
-
-Effective parallelism for a job: `job.parallelism ?? FORGE_PARALLELISM ?? 4`, clamped by the 1–16 API validation.
-
-### Explicit Limits
-
-| Limit | Value | Location |
-|-------|--------|----------|
-| **Per-job parallelism** | 1–16 | `PARALLELISM_MIN` / `PARALLELISM_MAX` in `orchestrator-service/lib/types.ts` |
-| **Max concurrent Docker containers** | Same as current job’s parallelism | 1–16 |
-| **Concurrent jobs** | 1 | Worker loop processes a single job at a time |
-
-There is **no** explicit global “max concurrent containers across all jobs” — effectively it’s “one job at a time, up to 16 containers for that job.” The next job starts only after the current one finishes. Beyond that, the real ceiling is host CPU/memory and Docker daemon limits.
-
----
-
-## Repo Layout (reference)
-
-| Directory | Purpose | Mode |
-|-----------|---------|------|
-| **frontend/** | Web UI (Vite + React) with Firebase Auth | Both |
-| **orchestrator-service/** | Next.js API: decks, precons, jobs, Gemini analysis | Both |
-| **local-worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
-| **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
-| **forge-simulation-engine/** | Docker-based Forge simulation runner | Both |
-| **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
-| **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route | Local only |
-
----
-
-## Quick Reference: Key Code
-
-- **Worker parallelism and Docker spawn**: `orchestrator-service/worker/worker.ts` — `splitSimulations`, `processJob`, `runForgeDocker`.
-- **Job store and types**: `orchestrator-service/lib/job-store.ts`, `orchestrator-service/lib/types.ts` — `PARALLELISM_MIN` / `PARALLELISM_MAX`, `createJob(..., parallelism?)`.
-- **Forge container entrypoint**: `forge-simulation-engine/run_sim.sh`.
-- **Image build**: `forge-simulation-engine/Dockerfile`.
+4.  **Analysis Logic:**
+    *   **Local:** Python Service (`analysis-service`).
+    *   **GCP:** TypeScript Library (`lib/gemini.ts` inside Orchestrator).
