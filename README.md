@@ -9,7 +9,7 @@
 
 Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge, Docker, and Gemini AI.
 
-![Magic Bracket Simulator UI](https://placehold.co/800x400?text=Magic+Bracket+Simulator+Dashboard)
+![Magic Bracket Simulator UI](docs/images/hero-screenshot.png)
 
 ## Quick Start
 
