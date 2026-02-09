@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ticks } from 'd3-array';
 
 function scaleLabels(min: number, max: number): number[] {
@@ -16,7 +17,7 @@ interface SliderWithInputProps {
   className?: string;
 }
 
-export function SliderWithInput({
+export const SliderWithInput = memo(function SliderWithInput({
   label,
   value,
   onChange,
@@ -62,4 +63,4 @@ export function SliderWithInput({
       </div>
     </div>
   );
-}
+});

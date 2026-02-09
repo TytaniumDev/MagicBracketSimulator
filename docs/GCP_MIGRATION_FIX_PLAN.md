@@ -1,5 +1,7 @@
 # GCP Migration Fix Plan
 
+> **Note:** All file paths in this document are relative to the repository root unless otherwise specified.
+
 ## Architecture Overview (What Each Component Does)
 
 Your current architecture is well-designed for GCP's free tier. Here's what each piece does:

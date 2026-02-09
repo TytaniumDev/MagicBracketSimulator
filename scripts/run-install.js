@@ -36,6 +36,7 @@ function main() {
       'npm install --prefix orchestrator-service',
       'npm install --prefix frontend',
       'npm install --prefix forge-log-analyzer',
+      'npm install --prefix local-worker',
     ].join(' && ');
     const r = spawnSync('wsl', ['-e', 'bash', '-c', wslCmd], { stdio: 'inherit' });
     process.exit(r.status != null ? r.status : r.signal ? 128 + r.signal : 0);
@@ -50,6 +51,8 @@ function main() {
   r = spawnSync('npm', ['install', '--prefix', 'frontend'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
   r = spawnSync('npm', ['install', '--prefix', 'forge-log-analyzer'], opts);
+  if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
+  r = spawnSync('npm', ['install', '--prefix', 'local-worker'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
 }
 

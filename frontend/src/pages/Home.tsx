@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { useAuth } from '../contexts/AuthContext';
@@ -112,16 +112,20 @@ export default function Home() {
 
   const apiBase = getApiBase();
 
-  const precons = decks.filter((d) => d.isPrecon);
-  const communityDecks = decks.filter((d) => !d.isPrecon);
+  const precons = useMemo(() => decks.filter((d) => d.isPrecon), [decks]);
+  const communityDecks = useMemo(() => decks.filter((d) => !d.isPrecon), [decks]);
 
   // Build combined deck options
-  const deckOptions: DeckOption[] = decks.map((d) => ({
-    id: d.id,
-    name: d.name,
-    type: d.isPrecon ? ('precon' as const) : ('saved' as const),
-    deck: d,
-  }));
+  const deckOptions: DeckOption[] = useMemo(
+    () =>
+      decks.map((d) => ({
+        id: d.id,
+        name: d.name,
+        type: d.isPrecon ? ('precon' as const) : ('saved' as const),
+        deck: d,
+      })),
+    [decks]
+  );
 
   // Fetch all decks (unified API)
   const fetchDecks = useCallback(async () => {
@@ -515,12 +519,21 @@ export default function Home() {
                   {communityDecks.map((deck) => (
                     <div
                       key={deck.id}
-                      className={`flex items-center justify-between p-2 rounded cursor-pointer ${
+                      role="checkbox"
+                      aria-checked={selectedDeckIds.includes(deck.id)}
+                      tabIndex={0}
+                      className={`flex items-center justify-between p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
                         selectedDeckIds.includes(deck.id)
                           ? 'bg-blue-600/30 border border-blue-500'
-                          : 'bg-gray-600 hover:bg-gray-500'
+                          : 'bg-gray-600 hover:bg-gray-500 border border-transparent'
                       }`}
                       onClick={() => handleDeckToggle(deck.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault();
+                          handleDeckToggle(deck.id);
+                        }
+                      }}
                     >
                       <div className="flex-1 min-w-0">
                         <span className="text-sm flex items-center">
@@ -553,6 +566,7 @@ export default function Home() {
                             handleDeleteDeck(deck);
                           }}
                           disabled={isDeleting === deck.id}
+                          aria-label={`Delete deck ${deck.name}`}
                           className={`ml-2 px-2 py-0.5 rounded text-xs ${
                             isDeleting === deck.id
                               ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
@@ -577,12 +591,21 @@ export default function Home() {
                 {precons.map((deck) => (
                   <div
                     key={deck.id}
-                    className={`flex items-center p-2 rounded cursor-pointer ${
+                    role="checkbox"
+                    aria-checked={selectedDeckIds.includes(deck.id)}
+                    tabIndex={0}
+                    className={`flex items-center p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
                       selectedDeckIds.includes(deck.id)
                         ? 'bg-blue-600/30 border border-blue-500'
-                        : 'bg-gray-600 hover:bg-gray-500'
+                        : 'bg-gray-600 hover:bg-gray-500 border border-transparent'
                     }`}
                     onClick={() => handleDeckToggle(deck.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === ' ' || e.key === 'Enter') {
+                        e.preventDefault();
+                        handleDeckToggle(deck.id);
+                      }
+                    }}
                   >
                     <div className="flex-1 min-w-0">
                       <span className="text-sm flex items-center">
@@ -731,6 +754,7 @@ export default function Home() {
                   onClick={(e) => handleDeleteJob(e, run.id)}
                   disabled={deletingJobId === run.id}
                   title="Delete run"
+                  aria-label={`Delete run ${run.name}`}
                   className={`flex-shrink-0 p-2 rounded text-gray-400 hover:text-red-200 hover:bg-red-900/30 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 ${
                     deletingJobId === run.id ? 'cursor-not-allowed' : ''
                   }`}

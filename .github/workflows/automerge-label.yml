@@ -1,0 +1,63 @@
+name: Auto Label PRs
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  add-label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const labelName = 'automerge';
+            const { owner, repo, number } = context.issue;
+
+            // Check if label exists, create if not
+            try {
+              await github.rest.issues.getLabel({
+                owner,
+                repo,
+                name: labelName
+              });
+              console.log(`Label "${labelName}" already exists.`);
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`Label "${labelName}" not found. Creating it...`);
+                try {
+                  await github.rest.issues.createLabel({
+                    owner,
+                    repo,
+                    name: labelName,
+                    color: '0E8A16', // Greenish
+                    description: 'Automatically merge this PR'
+                  });
+                  console.log(`Label "${labelName}" created successfully.`);
+                } catch (createError) {
+                  // If creation fails (e.g. race condition or permissions), log but try to proceed
+                  console.log(`Failed to create label "${labelName}": ${createError.message}`);
+                }
+              } else {
+                console.log(`Error checking label "${labelName}": ${error.message}`);
+                // Proceed anyway, maybe it exists but getLabel failed for some reason?
+              }
+            }
+
+            // Add label to PR
+            try {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: number,
+                labels: [labelName]
+              });
+              console.log(`Added label "${labelName}" to PR #${number}.`);
+            } catch (error) {
+              console.log(`Failed to add label to PR #${number}: ${error.message}`);
+              process.exit(1); // Fail the workflow if we can't add the label
+            }
