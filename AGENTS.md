@@ -12,8 +12,8 @@
 - **Package Manager**: `npm` (Node), `uv` (Python)
 
 ## Setup
-- **Install Node Dependencies**: `npm run install:all`
-- **Install Python Dependencies**: `cd analysis-service && uv sync --extra dev`
+- **Install Dependencies**: `npm run install:all` (Handles Node & Root)
+- **Install Python Deps**: `cd analysis-service && uv sync --extra dev` (If not using script)
 - **Start Dev Server**: `npm run dev`
 
 ## Testing & Verification
@@ -27,8 +27,7 @@
 - **Test**: `npm run test:unit --prefix orchestrator-service`
 
 ### Analysis Service
-- **Install**: `cd analysis-service && uv sync --extra dev`
-- **Test**: `cd analysis-service && uv run pytest`
+- **Test (SSOT)**: `cd analysis-service && ../scripts/ci-analysis.sh`
 
 ### Log Analyzer
 - **Dev**: `npm run dev --prefix forge-log-analyzer`
