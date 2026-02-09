@@ -43,6 +43,9 @@ export function toDck(deck: ParsedDeck): string {
  * - Handle double-faced cards (keep as-is, Forge uses "CardName // BackName")
  */
 function cleanCardName(name: string): string {
+  // Sanitize: replace newlines with space, remove other control characters
+  name = name.replace(/[\r\n]+/g, ' ').replace(/[\x00-\x1F\x7F]/g, '');
+
   // Remove set code suffix (pipe notation like "Sol Ring|2XM")
   const pipeIndex = name.indexOf('|');
   if (pipeIndex !== -1) {
