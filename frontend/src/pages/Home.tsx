@@ -401,7 +401,11 @@ export default function Home() {
         </p>
 
         <div className="flex gap-2 mb-3">
+          <label htmlFor="deck-url-input" className="sr-only">
+            Deck URL
+          </label>
           <input
+            id="deck-url-input"
             type="url"
             value={deckUrl}
             onChange={(e) => setDeckUrl(e.target.value)}
@@ -440,7 +444,11 @@ export default function Home() {
             </div>
 
             <div className="mb-3">
+              <label htmlFor="deck-name-input" className="sr-only">
+                Deck Name (optional)
+              </label>
               <input
+                id="deck-name-input"
                 type="text"
                 value={deckName}
                 onChange={(e) => setDeckName(e.target.value)}
@@ -449,7 +457,11 @@ export default function Home() {
               />
             </div>
 
+            <label htmlFor="deck-text-input" className="sr-only">
+              Deck List
+            </label>
             <textarea
+              id="deck-text-input"
               value={deckText}
               onChange={(e) => setDeckText(e.target.value)}
               placeholder={`Paste your deck list here...\n\nExample:\n1 Sol Ring\n1 Command Tower\n1 Arcane Signet`}
