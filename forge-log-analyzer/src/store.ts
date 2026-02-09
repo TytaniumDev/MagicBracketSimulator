@@ -106,6 +106,36 @@ function readGameLogFiles(jobDir: string): string[] {
   return blobs.flatMap(splitConcatenatedGames);
 }
 
+/**
+ * Counts the number of game log files for a job without reading their content.
+ * Assuming storeJobLogs has already split them into individual files.
+ */
+function countGameLogFiles(jobId: string): number {
+  const jobDir = getJobDir(jobId);
+  if (!fs.existsSync(jobDir)) {
+    return 0;
+  }
+  const files = fs.readdirSync(jobDir);
+  return files.filter((f) => /^game_\d+\.txt$/.test(f)).length;
+}
+
+/**
+ * Retrieves stored metadata for a job (without reading raw logs).
+ */
+function getJobMeta(jobId: string): Omit<StoredJobLogs, 'gameLogs'> | null {
+  const metaPath = getMetaFilePath(jobId);
+  if (!fs.existsSync(metaPath)) {
+    return null;
+  }
+  try {
+    const metaContent = fs.readFileSync(metaPath, 'utf-8');
+    return JSON.parse(metaContent);
+  } catch (error) {
+    console.error(`[Store] Error reading meta for job ${jobId}:`, error);
+    return null;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Storage Operations
 // -----------------------------------------------------------------------------
@@ -253,42 +283,26 @@ export function storeJobLogs(
  * Retrieves stored logs for a job.
  *
  * Reads from raw text files + meta.json.
+ *
+ * @deprecated Use getJobMeta for metadata only, or getRawLogs for full logs.
  */
 export function getJobLogs(jobId: string): StoredJobLogs | null {
+  const meta = getJobMeta(jobId);
+  if (!meta) {
+    return null;
+  }
+
+  // Read raw logs
   const jobDir = getJobDir(jobId);
-  const metaPath = getMetaFilePath(jobId);
-
-  if (!fs.existsSync(metaPath)) {
+  const gameLogs = readGameLogFiles(jobDir);
+  if (gameLogs.length === 0) {
     return null;
   }
 
-  try {
-    const metaContent = fs.readFileSync(metaPath, 'utf-8');
-    const meta = JSON.parse(metaContent) as {
-      deckNames?: string[];
-      deckLists?: string[];
-      ingestedAt: string;
-      condensed?: CondensedGame[];
-      structured?: StructuredGame[];
-      analyzePayload?: AnalyzePayload;
-    };
-    const gameLogs = readGameLogFiles(jobDir);
-    if (gameLogs.length === 0) {
-      return null;
-    }
-    return {
-      gameLogs,
-      deckNames: meta.deckNames,
-      deckLists: meta.deckLists,
-      ingestedAt: meta.ingestedAt,
-      condensed: meta.condensed,
-      structured: meta.structured,
-      analyzePayload: meta.analyzePayload,
-    };
-  } catch (error) {
-    console.error(`[Store] Error reading meta for job ${jobId}:`, error);
-    return null;
-  }
+  return {
+    ...meta,
+    gameLogs,
+  };
 }
 
 /**
@@ -296,14 +310,7 @@ export function getJobLogs(jobId: string): StoredJobLogs | null {
  */
 function writeMeta(
   jobId: string,
-  meta: {
-    deckNames?: string[];
-    deckLists?: string[];
-    ingestedAt: string;
-    condensed?: CondensedGame[];
-    structured?: StructuredGame[];
-    analyzePayload?: AnalyzePayload;
-  }
+  meta: Omit<StoredJobLogs, 'gameLogs'>
 ): void {
   fs.writeFileSync(getMetaFilePath(jobId), JSON.stringify(meta, null, 2), 'utf-8');
 }
@@ -329,23 +336,32 @@ export function getRawLogs(jobId: string): string[] | null {
  * @returns Array of condensed games, or null if job not found
  */
 export function getCondensedLogs(jobId: string): CondensedGame[] | null {
-  const data = getJobLogs(jobId);
-  if (!data) {
+  const meta = getJobMeta(jobId);
+  if (!meta) {
     return null;
   }
 
-  // Check if already computed and game count matches (e.g. after splitting concatenated games)
-  if (data.condensed && data.condensed.length === data.gameLogs.length) {
-    return data.condensed;
+  // Verify consistency with file count (fast check)
+  const fileCount = countGameLogFiles(jobId);
+  if (fileCount === 0) {
+    return null;
   }
 
+  // Check if already computed and game count matches
+  if (meta.condensed && meta.condensed.length === fileCount) {
+    return meta.condensed;
+  }
+
+  // Need raw logs to compute
+  const rawLogs = getRawLogs(jobId);
+  if (!rawLogs) return null;
+
   // Compute condensed logs
-  const condensed = condenseGames(data.gameLogs);
+  const condensed = condenseGames(rawLogs);
 
   // Cache in meta.json
-  const meta = JSON.parse(fs.readFileSync(getMetaFilePath(jobId), 'utf-8'));
-  meta.condensed = condensed;
-  writeMeta(jobId, meta);
+  const newMeta = { ...meta, condensed };
+  writeMeta(jobId, newMeta);
 
   return condensed;
 }
@@ -360,41 +376,38 @@ export function getCondensedLogs(jobId: string): CondensedGame[] | null {
  * @returns Array of structured games, or null if job not found
  */
 export function getStructuredLogs(jobId: string): StructuredGame[] | null {
-  const data = getJobLogs(jobId);
-  if (!data) {
+  const meta = getJobMeta(jobId);
+  if (!meta) {
     return null;
   }
 
-  // Check if already computed and valid (avoid serving bad cache from old parsing bugs)
-  if (data.structured) {
-    const invalid = data.structured.some(
-      (game, i) =>
-        game.totalTurns === 0 &&
-        game.players.length === 0 &&
-        data.gameLogs[i]?.includes('Turn: Turn')
-    );
-    // Also invalidate if lifePerTurn is missing (added in a later version)
-    const missingLifePerTurn = data.structured.some((g) => !g.lifePerTurn);
-    // Invalidate if winningTurn is missing (added for round-based turns)
-    const missingWinningTurn = data.structured.some((g) => g.winner && g.winningTurn === undefined);
-    // Invalidate if game count changed (e.g. after splitting concatenated games)
-    const countMismatch = data.structured.length !== data.gameLogs.length;
-    if (!invalid && !missingLifePerTurn && !missingWinningTurn && !countMismatch) {
-      return data.structured;
-    }
-    // Invalid or outdated cache; recompute
-    const meta = JSON.parse(fs.readFileSync(getMetaFilePath(jobId), 'utf-8'));
-    delete meta.structured;
-    writeMeta(jobId, meta);
+  // Verify consistency with file count (fast check)
+  const fileCount = countGameLogFiles(jobId);
+  if (fileCount === 0) {
+    return null;
   }
 
+  // Check if already computed and valid
+  if (meta.structured && meta.structured.length === fileCount) {
+    // Basic validation of cached structure (check one sample if possible, or trust length match)
+    // Detailed validation would require reading logs, defeating the optimization purpose.
+    // We assume length match is sufficient for cache validity here.
+    const invalid = meta.structured.some((g) => !g.lifePerTurn || (g.winner && g.winningTurn === undefined));
+    if (!invalid) {
+      return meta.structured;
+    }
+  }
+
+  // Need raw logs to compute
+  const rawLogs = getRawLogs(jobId);
+  if (!rawLogs) return null;
+
   // Compute structured logs
-  const structured = structureGames(data.gameLogs, data.deckNames);
+  const structured = structureGames(rawLogs, meta.deckNames);
 
   // Cache in meta.json
-  const meta = JSON.parse(fs.readFileSync(getMetaFilePath(jobId), 'utf-8'));
-  meta.structured = structured;
-  writeMeta(jobId, meta);
+  const newMeta = { ...meta, structured };
+  writeMeta(jobId, newMeta);
 
   return structured;
 }
@@ -406,8 +419,8 @@ export function getStructuredLogs(jobId: string): StructuredGame[] | null {
  * @returns Array of deck names, or undefined if not set
  */
 export function getDeckNames(jobId: string): string[] | undefined {
-  const data = getJobLogs(jobId);
-  return data?.deckNames;
+  const meta = getJobMeta(jobId);
+  return meta?.deckNames;
 }
 
 /**
@@ -420,25 +433,29 @@ export function getDeckNames(jobId: string): string[] | undefined {
  * @returns The analyze payload, or null if job not found or payload not pre-computed
  */
 export function getAnalyzePayload(jobId: string): AnalyzePayload | null {
-  const data = getJobLogs(jobId);
-  if (!data) {
+  const meta = getJobMeta(jobId);
+  if (!meta) {
     return null;
   }
 
   // Check if we have a valid new-format payload (has 'decks' and 'outcomes')
-  const payload = data.analyzePayload;
+  const payload = meta.analyzePayload;
   if (payload && 'decks' in payload && 'outcomes' in payload) {
     return payload;
   }
 
-  // Rebuild payload using new slim format from condensed data
-  if (data.condensed && data.deckNames) {
-    const analyzePayload = buildAnalyzePayload(data.condensed, data.deckNames, data.deckLists);
+  // Need condensed logs to build payload.
+  // Use getCondensedLogs() which handles lazy loading/computing of condensed logs.
+  const condensed = getCondensedLogs(jobId);
+  if (condensed && meta.deckNames) {
+    const analyzePayload = buildAnalyzePayload(condensed, meta.deckNames, meta.deckLists);
 
-    // Cache the payload
-    const meta = JSON.parse(fs.readFileSync(getMetaFilePath(jobId), 'utf-8'));
-    meta.analyzePayload = analyzePayload;
-    writeMeta(jobId, meta);
+    // Cache the payload - refetch meta to be safe
+    const currentMeta = getJobMeta(jobId);
+    if (currentMeta) {
+      const newMeta = { ...currentMeta, analyzePayload };
+      writeMeta(jobId, newMeta);
+    }
 
     return analyzePayload;
   }
@@ -453,9 +470,8 @@ export function getAnalyzePayload(jobId: string): AnalyzePayload | null {
  * @returns true if logs exist
  */
 export function hasJobLogs(jobId: string): boolean {
-  const jobDir = getJobDir(jobId);
   const metaPath = getMetaFilePath(jobId);
-  return fs.existsSync(metaPath) && readGameLogFiles(jobDir).length > 0;
+  return fs.existsSync(metaPath) && countGameLogFiles(jobId) > 0;
 }
 
 /**
@@ -488,16 +504,16 @@ export function deleteJobLogs(jobId: string): boolean {
  * @param jobId - The unique job identifier
  */
 export function invalidateCache(jobId: string): void {
-  const data = getJobLogs(jobId);
-  if (!data) {
+  const meta = getJobMeta(jobId);
+  if (!meta) {
     return;
   }
 
   // Remove cached data
-  const meta = JSON.parse(fs.readFileSync(getMetaFilePath(jobId), 'utf-8'));
-  delete meta.condensed;
-  delete meta.structured;
-  writeMeta(jobId, meta);
+  const newMeta = { ...meta };
+  delete newMeta.condensed;
+  delete newMeta.structured;
+  writeMeta(jobId, newMeta);
 }
 
 /**
@@ -516,7 +532,7 @@ export function listJobs(): string[] {
       .filter((e) => e.isDirectory())
       .filter((e) => {
         const metaPath = path.join(DATA_DIR, e.name, 'meta.json');
-        return fs.existsSync(metaPath) && readGameLogFiles(path.join(DATA_DIR, e.name)).length > 0;
+        return fs.existsSync(metaPath) && countGameLogFiles(e.name) > 0;
       })
       .map((e) => e.name);
   } catch (error) {
