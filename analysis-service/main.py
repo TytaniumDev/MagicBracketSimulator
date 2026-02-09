@@ -6,7 +6,6 @@ It returns bracket ratings for each deck.
 """
 import os
 from pathlib import Path
-from typing import Any
 
 from dotenv import load_dotenv
 

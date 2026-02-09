@@ -98,13 +98,13 @@ def _build_user_prompt(
         turns_lost_on = outcome.get("turns_lost_on", [])
         
         parts.append(f"### Deck {i+1}: {deck_name}\n\n")
-        parts.append(f"**Performance:**\n")
+        parts.append("**Performance:**\n")
         parts.append(f"- Wins: {wins} / {total_games}\n")
         if winning_turns:
             avg_win_turn = sum(winning_turns) / len(winning_turns)
             parts.append(f"- Winning turns: {winning_turns} (avg: {avg_win_turn:.1f})\n")
         else:
-            parts.append(f"- Winning turns: none\n")
+            parts.append("- Winning turns: none\n")
         if turns_lost_on:
             avg_loss_turn = sum(turns_lost_on) / len(turns_lost_on)
             parts.append(f"- Turns lost on: {turns_lost_on} (avg: {avg_loss_turn:.1f})\n")
