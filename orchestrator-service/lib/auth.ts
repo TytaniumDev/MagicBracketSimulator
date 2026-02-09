@@ -1,6 +1,7 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { NextRequest } from 'next/server';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 // Initialize Firebase Admin SDK (singleton)
 let firebaseApp: App | undefined;
@@ -134,5 +135,14 @@ export function forbiddenResponse(message: string = 'Forbidden'): Response {
 export function isWorkerRequest(req: NextRequest): boolean {
   const secret = req.headers.get('X-Worker-Secret');
   const expected = process.env.WORKER_SECRET;
-  return !!expected && !!secret && secret === expected;
+
+  if (!expected || !secret) {
+    return false;
+  }
+
+  // Use constant-time comparison to prevent timing attacks
+  const secretHash = createHash('sha256').update(secret).digest();
+  const expectedHash = createHash('sha256').update(expected).digest();
+
+  return timingSafeEqual(secretHash, expectedHash);
 }
