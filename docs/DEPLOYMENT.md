@@ -24,7 +24,7 @@ If opening the project from Windows (e.g., Cursor with a `\\wsl.localhost\...` p
 
 ## Deployment and Secrets
 
-*   **GCP vs Local Mode:** See [../MODE_SETUP.md](../MODE_SETUP.md) for details.
+*   **GCP vs Local Mode:** See [MODE_SETUP.md](MODE_SETUP.md) for details.
 *   **Secrets:** See [SECRETS_SETUP.md](SECRETS_SETUP.md) for step-by-step instructions.
     *   Frontend API URL is committed in `frontend/public/config.json`.
     *   Use Secret Manager for worker config.
