@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-*   **Node.js:** 18+
+*   **Node.js:** 20+
 *   **Python:** 3.11+ with [uv](https://github.com/astral-sh/uv)
 *   **Docker:** Required for `forge-sim` (must have image built).
 
