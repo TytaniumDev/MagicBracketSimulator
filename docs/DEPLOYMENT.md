@@ -3,10 +3,12 @@
 ## Prerequisites
 
 *   **Node.js:** 18+
-*   **Python:** 3.11+ with [uv](https://github.com/astral-sh/uv)
-*   **Docker:** Required for `forge-sim` (must have image built).
+*   **Python:** 3.11+ with [uv](https://github.com/astral-sh/uv) (for Local Mode analysis)
+*   **Docker:**
+    *   **Local Mode:** Required to run `forge-sim` containers.
+    *   **GCP Mode:** Required to run the `unified-worker` container locally (or deploy to Cloud Run).
 
-See [orchestrator-service/README.md](../orchestrator-service/README.md) and [analysis-service/README.md](../analysis-service/README.md) for detailed setup (e.g., `.env` files, `GEMINI_API_KEY`).
+See [orchestrator-service/README.md](../orchestrator-service/README.md) and [analysis-service/README.md](../analysis-service/README.md) for service-specific details.
 
 ### Windows Setup (WSL)
 
@@ -16,7 +18,7 @@ If opening the project from Windows (e.g., Cursor with a `\\wsl.localhost\...` p
     ```bash
     sudo apt update && sudo apt install -y nodejs npm
     ```
-*   For the analysis service, install `uv` in WSL:
+*   For the analysis service (Local Mode), install `uv` in WSL:
     ```bash
     curl -LsSf https://astral.sh/uv/install.sh | sh
     # Restart terminal or source ~/.bashrc
@@ -24,10 +26,23 @@ If opening the project from Windows (e.g., Cursor with a `\\wsl.localhost\...` p
 
 ## Deployment and Secrets
 
-*   **GCP vs Local Mode:** See [MODE_SETUP.md](MODE_SETUP.md) for details.
+*   **GCP vs Local Mode:** See [MODE_SETUP.md](MODE_SETUP.md) for detailed configuration and running instructions.
 *   **Secrets:** See [SECRETS_SETUP.md](SECRETS_SETUP.md) for step-by-step instructions.
     *   Frontend API URL is committed in `frontend/public/config.json`.
-    *   Use Secret Manager for worker config.
+    *   Use Google Secret Manager for `unified-worker` configuration in production.
+
+### Building and Deploying Unified Worker (GCP)
+
+To deploy the Unified Worker to Google Cloud Run (or similar):
+
+1.  **Build the container image:**
+    ```bash
+    gcloud builds submit --tag gcr.io/[PROJECT_ID]/unified-worker -f unified-worker/Dockerfile .
+    ```
+
+2.  **Deploy to Cloud Run (or run on VM):**
+    Ensure the service account has `pubsub.subscriber`, `storage.objectAdmin`, and `datastore.user` roles.
+    Set environment variables as defined in [MODE_SETUP.md](MODE_SETUP.md).
 
 ### Finding your Cloud Run URL
 
