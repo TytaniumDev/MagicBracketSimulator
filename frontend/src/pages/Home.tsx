@@ -566,14 +566,19 @@ export default function Home() {
                             handleDeleteDeck(deck);
                           }}
                           disabled={isDeleting === deck.id}
+                          title="Delete deck"
                           aria-label={`Delete deck ${deck.name}`}
-                          className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                            isDeleting === deck.id
-                              ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                              : 'bg-red-600/50 text-red-200 hover:bg-red-600'
+                          className={`ml-2 p-1 rounded hover:bg-red-900/30 text-red-200 hover:text-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 ${
+                            isDeleting === deck.id ? 'cursor-not-allowed opacity-50' : ''
                           }`}
                         >
-                          {isDeleting === deck.id ? '...' : 'X'}
+                          {isDeleting === deck.id ? (
+                            <div className="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full" />
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
                         </button>
                       )}
                     </div>
@@ -760,7 +765,7 @@ export default function Home() {
                   }`}
                 >
                   {deletingJobId === run.id ? (
-                    <span className="text-xs">…</span>
+                    <div className="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full" />
                   ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
