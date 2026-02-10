@@ -24,7 +24,8 @@
 ### Orchestrator Service
 - **Lint**: `npm run lint --prefix orchestrator-service`
 - **Build**: `npm run build --prefix orchestrator-service`
-- **Test**: `npm run test:unit --prefix orchestrator-service`
+- **Test**: `npm run test:unit --prefix orchestrator-service` (Runs full unit suite: game-logs, ingestion, auth)
+- **Integration Test**: `npm run test:integration --prefix orchestrator-service`
 
 ### Analysis Service
 - **Install**: `cd analysis-service && uv sync --extra dev`
@@ -40,7 +41,7 @@
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
-- **Deploy**: `.github/workflows/deploy.yml` (Runs on push to main)
+- **Deploy**: `.github/workflows/deploy.yml` (Runs on push to main; automatically builds and deploys to Firebase)
 
 ## Project Structure
 - `frontend/`: React app
@@ -48,3 +49,4 @@
 - `analysis-service/`: Python/Gemini power analysis
 - `local-worker/`: Docker simulation runner
 - `forge-log-analyzer/`: TypeScript log parser
+- `scripts/`: Shared automation scripts
