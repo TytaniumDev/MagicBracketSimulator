@@ -49,6 +49,7 @@ function cleanCardName(name: string): string {
     name = name.substring(0, pipeIndex);
   }
 
-  // Trim whitespace
-  return name.trim();
+  // Security: Remove control characters (including newlines) to prevent file format injection
+  // Replace with space to preserve separation if needed
+  return name.replace(/[\x00-\x1F\x7F]+/g, ' ').trim();
 }
