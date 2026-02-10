@@ -8,12 +8,14 @@ This document describes the system architecture, with emphasis on the Docker-bas
 
 The system supports two deployment modes:
 
-1. **Local Development** - All services run locally (original architecture)
-2. **GCP Cloud Deployment** - Cloud Run API with local Docker workers
+1. **Local Development** - All services run locally, using Docker to spawn simulation containers.
+2. **GCP Cloud Deployment** - Cloud Run API with local "Unified Workers" that run simulations internally.
 
 ---
 
 ## GCP Cloud Architecture (Recommended for Production)
+
+In GCP Mode, the architecture uses a **Unified Worker** model. The worker is a single container that packages Node.js (for orchestration), Java (for Forge), and the Forge binaries. It pulls jobs from Pub/Sub and executes simulations as *internal child processes* (bypassing Docker-in-Docker), then uploads results directly to Cloud Storage.
 
 ```mermaid
 flowchart TB
@@ -30,17 +32,14 @@ flowchart TB
     end
 
     subgraph local [Local Machine]
-        Worker[Local Worker<br/>Pub/Sub Pull]
-        ForgeSim[forge-sim container]
-        MiscRunner[misc-runner container<br/>Go]
-        Worker --> ForgeSim
-        Worker --> MiscRunner
+        UnifiedWorker[Unified Worker Container<br/>Node.js + Java + Forge]
+        UnifiedWorker -- Pulls --> PubSub
+        UnifiedWorker -- Spawns --> SimProcess[Child Process: run_sim.sh]
     end
 
     User --> CloudRun
-    PubSub -.-> Worker
-    MiscRunner --> GCS
-    MiscRunner --> CloudRun
+    UnifiedWorker --> GCS
+    UnifiedWorker --> CloudRun
 ```
 
 ### GCP Components
@@ -50,17 +49,16 @@ flowchart TB
 | **API + Frontend** | Cloud Run | Single Next.js app serving API routes and optional frontend |
 | **Job Metadata** | Firestore | Job state, deck references, results |
 | **Artifacts** | Cloud Storage | Raw logs, condensed logs, analysis payloads |
-| **Job Queue** | Pub/Sub | Triggers local workers when jobs are created |
+| **Job Queue** | Pub/Sub | Triggers workers when jobs are created |
 | **Authentication** | Firebase Auth | Google sign-in with email allowlist |
-| **Secrets** | Secret Manager | Gemini API key and other secrets |
+| **Secrets** | Secret Manager | Gemini API key and worker configuration |
 
 ### Local Components (GCP Mode)
 
 | Component | Directory | Purpose |
 |-----------|-----------|---------|
-| **Local Worker** | `local-worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
-| **Forge Sim** | `forge-simulation-engine/` | Runs MTG simulations (unchanged) |
-| **Misc Runner** | `misc-runner/` | Go container: condenses logs, uploads to GCS |
+| **Unified Worker** | `local-worker/` + `unified-worker/` | Single container that pulls from Pub/Sub, runs simulations internally, and uploads to GCS. |
+| **Misc Runner** | `misc-runner/` | **(Legacy/Deprecated)** Formerly used for log condensing; now integrated into Unified Worker. |
 
 ### GCP Data Flow
 
@@ -70,9 +68,8 @@ sequenceDiagram
     participant CloudRun as Cloud Run
     participant Firestore
     participant PubSub
-    participant LocalWorker as Local Worker
-    participant ForgeSim as forge-sim
-    participant MiscRunner as misc-runner
+    participant UnifiedWorker
+    participant SimProcess as Child Process (Forge)
     participant GCS
 
     User->>CloudRun: POST /api/jobs (create job)
@@ -80,14 +77,18 @@ sequenceDiagram
     CloudRun->>PubSub: Publish job-created message
     CloudRun-->>User: 201 Created
 
-    PubSub->>LocalWorker: Pull message
-    LocalWorker->>CloudRun: GET job details
-    LocalWorker->>ForgeSim: Run simulations
-    ForgeSim-->>LocalWorker: Game logs
+    PubSub->>UnifiedWorker: Pull message
+    UnifiedWorker->>CloudRun: GET job details
+    UnifiedWorker->>UnifiedWorker: Calculate dynamic parallelism
+    par Parallel Child Processes
+        UnifiedWorker->>SimProcess: spawn(run_sim.sh, run 0)
+        UnifiedWorker->>SimProcess: spawn(run_sim.sh, run 1)
+    end
+    SimProcess-->>UnifiedWorker: Game logs written to disk
 
-    LocalWorker->>MiscRunner: Condense logs
-    MiscRunner->>GCS: Upload artifacts
-    MiscRunner->>CloudRun: PATCH job COMPLETED
+    UnifiedWorker->>UnifiedWorker: Condense logs (internal)
+    UnifiedWorker->>GCS: Upload artifacts
+    UnifiedWorker->>CloudRun: PATCH job COMPLETED
 
     User->>CloudRun: POST /api/jobs/:id/analyze
     CloudRun->>GCS: Get analyze payload
@@ -99,6 +100,8 @@ sequenceDiagram
 ---
 
 ## Local Development Architecture (Original)
+
+In Local Mode, the Orchestrator service (running on the host) manages the job queue and spawns **Docker containers** (`forge-sim`) for each simulation run. This mimics the isolation of cloud environments but uses local resources.
 
 ## High-Level Architecture
 
@@ -115,7 +118,7 @@ flowchart TB
     subgraph orchestrator["Orchestrator"]
         API["API - decks, precons, jobs"]
         Store[(SQLite Job Store)]
-        Worker["Worker Loop"]
+        Worker["Worker Loop (Node.js)"]
         API --> Store
         Worker --> Store
     end
@@ -163,11 +166,11 @@ flowchart TB
 | **Orchestrator** | 3000 | Next.js API (decks, precons, jobs) + background Worker. Job store in SQLite. |
 | **Log Analyzer** | 3001 | Ingests logs from Worker; condenses/structures; stores; can forward to Analysis Service. |
 | **Analysis Service** | 8000 | Python + Gemini. On-demand AI analysis of condensed logs. |
-| **Forge (Docker)** | — | One image `forge-sim`; multiple containers run in parallel per job. |
+| **Forge (Docker)** | — | Used in Local Mode. One image `forge-sim`; multiple containers run in parallel per job. |
 
 ---
 
-## Data Flow
+## Data Flow (Local Mode)
 
 ```mermaid
 sequenceDiagram
@@ -205,7 +208,7 @@ sequenceDiagram
 
 ## Docker and Forge Engine
 
-### One Image, Multiple Containers per Job
+### One Image, Multiple Containers per Job (Local Mode)
 
 - **Single image**: `forge-sim`, built from `forge-simulation-engine/Dockerfile` (Eclipse Temurin 17, Forge release, xvfb, precons, `run_sim.sh` entrypoint).
 - **Per job**: The worker spawns **multiple** `docker run` processes **in parallel**. So you get **multiple container instances** at once, all using the same image.
@@ -297,17 +300,19 @@ There is **no** explicit global “max concurrent containers across all jobs” 
 |-----------|---------|------|
 | **frontend/** | Web UI (Vite + React) with Firebase Auth | Both |
 | **orchestrator-service/** | Next.js API: decks, precons, jobs, Gemini analysis | Both |
-| **local-worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
-| **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
-| **forge-simulation-engine/** | Docker-based Forge simulation runner | Both |
-| **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
-| **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route | Local only |
+| **local-worker/** | Source code for the Unified Worker (GCP Mode) | GCP |
+| **unified-worker/** | Docker configuration for the Unified Worker | GCP |
+| **misc-runner/** | (Legacy) Go container for log condensing | Legacy |
+| **forge-simulation-engine/** | Docker-based Forge simulation runner | Local Mode |
+| **forge-log-analyzer/** | Log condensing service | Local Mode |
+| **analysis-service/** | Python + Gemini service | Local Mode |
 
 ---
 
 ## Quick Reference: Key Code
 
-- **Worker parallelism and Docker spawn**: `orchestrator-service/worker/worker.ts` — `splitSimulations`, `processJob`, `runForgeDocker`.
+- **Unified Worker (GCP)**: `local-worker/src/worker.ts` — `processJob`, `runForgeSim`, `processAndUploadLogs`.
+- **Local Worker (Local Mode)**: `orchestrator-service/worker/worker.ts` — `runForgeDocker`.
 - **Job store and types**: `orchestrator-service/lib/job-store.ts`, `orchestrator-service/lib/types.ts` — `PARALLELISM_MIN` / `PARALLELISM_MAX`, `createJob(..., parallelism?)`.
 - **Forge container entrypoint**: `forge-simulation-engine/run_sim.sh`.
-- **Image build**: `forge-simulation-engine/Dockerfile`.
+- **Unified Worker Build**: `unified-worker/Dockerfile`.

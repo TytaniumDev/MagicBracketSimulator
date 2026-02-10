@@ -9,8 +9,8 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 | Database | SQLite | Firestore |
 | File Storage | Local filesystem | Cloud Storage (GCS) |
 | Job Queue | Polling-based worker | Pub/Sub |
-| Analysis | analysis-service + forge-log-analyzer | Gemini API + misc-runner |
-| Worker | orchestrator-service/worker | local-worker (Pub/Sub subscriber) |
+| Analysis | analysis-service + forge-log-analyzer | Gemini API (via Orchestrator) |
+| Worker | orchestrator-service/worker (Node) | Unified Worker (Docker Container) |
 
 ## Mode Detection
 
@@ -36,7 +36,7 @@ At startup, you'll see log messages like:
    - Pub/Sub topic and subscription
 2. Service account key with permissions for Firestore, GCS, and Pub/Sub
 3. Gemini API key (for AI analysis)
-4. Docker installed (for local-worker)
+4. Docker installed (for unified-worker)
 
 ### Configuration Files
 
@@ -52,16 +52,13 @@ NODE_ENV="development"
 FORGE_ENGINE_PATH="../forge-simulation-engine"
 ```
 
-#### local-worker/.env
+#### unified-worker/.env (or environment variables)
+The Unified Worker reads configuration primarily from environment variables or Google Secret Manager. Key variables:
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
 PUBSUB_SUBSCRIPTION="job-created-worker"
 GCS_BUCKET="magic-bracket-simulator-artifacts"
 API_URL="http://localhost:3000"  # or Cloud Run URL
-FORGE_SIM_IMAGE="forge-sim:latest"
-MISC_RUNNER_IMAGE="misc-runner:latest"
-JOBS_DIR="./jobs"
 WORKER_SECRET="shared-secret-for-worker-auth"
 ```
 
@@ -72,10 +69,15 @@ WORKER_SECRET="shared-secret-for-worker-auth"
 npm run dev:gcp
 ```
 
-**Terminal 2: Local Worker (processes jobs via Pub/Sub)**
+**Terminal 2: Unified Worker (processes jobs via Pub/Sub)**
+To run the worker locally in a way that mimics production (using the Docker container with Forge included):
+
 ```bash
-npm run worker:gcp
+cd unified-worker
+docker-compose up --build
 ```
+
+*Note: You can also run `npm run worker:gcp` from the root if you have Forge installed locally and `FORGE_PATH` set, but using Docker is recommended to match the cloud environment.*
 
 ### Services in GCP Mode
 
@@ -83,9 +85,7 @@ npm run worker:gcp
 |---------|---------|---------------|
 | orchestrator-service | API backend, Firestore/Pub/Sub integration | Local or Cloud Run |
 | frontend | React UI | Local or Firebase Hosting |
-| local-worker | Receives Pub/Sub messages, runs Docker containers | Your machine |
-| forge-sim | MTG simulation engine | Docker (via local-worker) |
-| misc-runner | Log condensing, GCS uploads | Docker (via local-worker) |
+| Unified Worker | Receives Pub/Sub messages, runs simulations internally | Docker (via `unified-worker`) |
 
 ---
 
@@ -93,7 +93,8 @@ npm run worker:gcp
 
 ### Prerequisites
 1. Node.js 18+
-2. No GCP configuration needed
+2. Docker (required for `forge-sim` container)
+3. No GCP configuration needed
 
 ### Configuration
 Simply ensure `GOOGLE_CLOUD_PROJECT` is **not set** in `orchestrator-service/.env`, or delete the `.env` file.
@@ -114,6 +115,7 @@ npm run dev
 | analysis-service | OpenAI analysis |
 | forge-log-analyzer | Log processing |
 | worker (polling) | Polls orchestrator for jobs |
+| forge-sim | Docker container for simulations |
 
 ---
 
@@ -133,21 +135,25 @@ This loads all precon deck files from `forge-simulation-engine/precons/` into Fi
 
 ## Docker Images
 
-Build the Docker images required for local-worker:
+### For GCP Mode (Unified Worker)
+Build the single container that includes Node.js, Java, and Forge:
 
 ```bash
-# Build forge-sim
+cd unified-worker
+docker build -t unified-worker:latest -f Dockerfile ..
+```
+
+### For Local Mode
+Build the simulation container required by the local orchestrator:
+
+```bash
 cd forge-simulation-engine
 docker build -t forge-sim:latest .
-
-# Build misc-runner
-cd ../misc-runner
-docker build -t misc-runner:latest .
 ```
 
 Verify images exist:
 ```bash
-docker images | grep -E "(forge-sim|misc-runner)"
+docker images | grep -E "(unified-worker|forge-sim)"
 ```
 
 ---
@@ -159,8 +165,8 @@ docker images | grep -E "(forge-sim|misc-runner)"
 - Ensure the .env file is being loaded (Next.js loads it automatically)
 
 ### Worker can't connect to API
-- Verify `API_URL` in `local-worker/.env`
-- For local testing, use `http://localhost:3000`
+- Verify `API_URL` in `unified-worker` environment
+- For local testing, use `http://localhost:3000` (or `host.docker.internal` if running in Docker)
 - For Cloud Run, use the deployed URL
 
 ### Pub/Sub messages not received
@@ -172,6 +178,6 @@ docker images | grep -E "(forge-sim|misc-runner)"
 - Verify service account has Firestore read/write permissions
 
 ### Jobs stuck in QUEUED
-- Ensure local-worker is running and connected to Pub/Sub
+- Ensure unified-worker is running and connected to Pub/Sub
 - Check worker logs for errors
-- Verify `WORKER_SECRET` matches between orchestrator and local-worker
+- Verify `WORKER_SECRET` matches between orchestrator and worker

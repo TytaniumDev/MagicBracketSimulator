@@ -4,7 +4,7 @@
 
 *   **Node.js:** 18+
 *   **Python:** 3.11+ with [uv](https://github.com/astral-sh/uv)
-*   **Docker:** Required for `forge-sim` (must have image built).
+*   **Docker:** Required for Local Mode (`forge-sim` image) and GCP Mode (`unified-worker` image).
 
 See [orchestrator-service/README.md](../orchestrator-service/README.md) and [analysis-service/README.md](../analysis-service/README.md) for detailed setup (e.g., `.env` files, `GEMINI_API_KEY`).
 
@@ -24,7 +24,7 @@ If opening the project from Windows (e.g., Cursor with a `\\wsl.localhost\...` p
 
 ## Deployment and Secrets
 
-*   **GCP vs Local Mode:** See [MODE_SETUP.md](MODE_SETUP.md) for details.
+*   **GCP vs Local Mode:** See [MODE_SETUP.md](MODE_SETUP.md) for details on which Docker images to build.
 *   **Secrets:** See [SECRETS_SETUP.md](SECRETS_SETUP.md) for step-by-step instructions.
     *   Frontend API URL is committed in `frontend/public/config.json`.
     *   Use Secret Manager for worker config.
