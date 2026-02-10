@@ -12,3 +12,4 @@
 *   **Root Clutter:** Moved `ARCHITECTURE.md`, `MODE_SETUP.md`, and `GCP_MIGRATION_FIX_PLAN.md` to `docs/` to keep the root clean and focused on the "Landing Page" experience.
 *   **Golden Template Alignment:** Reordered `README.md` to strictly follow the "Golden Template" (Title -> Links -> Badges -> Hook -> Hero Visual).
 *   **Internal Link Repair:** Updated `docs/DEPLOYMENT.md` and `CONTRIBUTING.md` to reflect the new file locations.
+*   **Header Organization:** The "Critical Link Array" and badges were visually disjointed. Combined them into a centered header block with high-quality "Tech Stack" badges to improve "Curb Appeal".

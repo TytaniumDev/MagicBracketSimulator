@@ -1,8 +1,16 @@
 # Magic Bracket Simulator
 
+<div align="center">
+
+[![Status](https://img.shields.io/badge/Status-Active-success?style=flat-square)]()
+[![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Docker-blue?style=flat-square)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white&style=flat-square)]()
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white&style=flat-square)]()
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white&style=flat-square)]()
+
 [🚀 Launch App](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [📖 Documentation](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [🐞 Report Bug](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
-![Status](https://img.shields.io/badge/Status-Active-success) ![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Docker-blue)
+</div>
 
 Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge, Docker, and Gemini AI.
 
