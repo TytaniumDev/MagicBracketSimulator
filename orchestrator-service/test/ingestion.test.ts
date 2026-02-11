@@ -4,7 +4,7 @@
  * Run with: npx tsx test/ingestion.test.ts
  */
 
-import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl } from '../lib/ingestion';
+import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl, toDck } from '../lib/ingestion';
 import { extractManaboxDeckId } from '../lib/ingestion/manabox';
 
 interface TestResult {
@@ -94,6 +94,40 @@ async function runTests() {
 
   test('isArchidektUrl accepts Archidekt URL', () => {
     assert(isArchidektUrl('https://archidekt.com/decks/123456'), 'Expected true');
+  });
+
+  // -------------------------------------------------------------------------
+  // Security Checks (File Format Injection)
+  // -------------------------------------------------------------------------
+
+  test('toDck sanitizes newlines in deck name', () => {
+    const maliciousDeck = {
+      name: 'Normal Name\n[metadata]\nInjected=True',
+      commanders: [{ name: 'Sol Ring', quantity: 1, isCommander: true }],
+      mainboard: [{ name: 'Forest', quantity: 99 }]
+    };
+    const output = toDck(maliciousDeck);
+
+    // Check that newlines are replaced with spaces
+    assert(output.includes('Name=Normal Name [metadata] Injected=True'), 'Name should be sanitized');
+    // Ensure injection didn't create a new line
+    const injectedKeyRegex = /^Injected=True/m;
+    assert(!injectedKeyRegex.test(output), 'Deck name should not allow newline injection');
+  });
+
+  test('toDck sanitizes newlines in card names', () => {
+    const maliciousDeck = {
+      name: 'Normal Name',
+      commanders: [{ name: 'Sol Ring\nInjectedCard', quantity: 1, isCommander: true }],
+      mainboard: [{ name: 'Forest', quantity: 99 }]
+    };
+    const output = toDck(maliciousDeck);
+
+    // Check that newlines are replaced with spaces
+    assert(output.includes('1 Sol Ring InjectedCard'), 'Card name should be sanitized');
+    // Ensure injection didn't create a new line
+    const injectedCardRegex = /^InjectedCard/m;
+    assert(!injectedCardRegex.test(output), 'Card name should not allow newline injection');
   });
 
   // -------------------------------------------------------------------------
