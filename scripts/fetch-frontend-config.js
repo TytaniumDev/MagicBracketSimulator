@@ -20,7 +20,7 @@ const { execSync } = require('child_process');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', 'frontend', '.env') });
-require('dotenv').config({ path: path.join(__dirname, '..', 'local-worker', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', 'worker', '.env') });
 
 /** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
 function getProjectFromGcloud() {

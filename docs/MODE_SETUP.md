@@ -9,8 +9,8 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 | Database | SQLite | Firestore |
 | File Storage | Local filesystem | Cloud Storage (GCS) |
 | Job Queue | Polling-based worker | Pub/Sub |
-| Analysis | analysis-service + forge-log-analyzer | Gemini API + misc-runner |
-| Worker | orchestrator-service/worker | local-worker (Pub/Sub subscriber) |
+| Analysis | api (Gemini integration) | api + misc-runner |
+| Worker | worker/ (polling) | worker/ (Pub/Sub subscriber) |
 
 ## Mode Detection
 
@@ -36,11 +36,11 @@ At startup, you'll see log messages like:
    - Pub/Sub topic and subscription
 2. Service account key with permissions for Firestore, GCS, and Pub/Sub
 3. Gemini API key (for AI analysis)
-4. Docker installed (for local-worker)
+4. Docker installed (for worker)
 
 ### Configuration Files
 
-#### orchestrator-service/.env
+#### api/.env
 ```bash
 GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
 GCS_BUCKET="magic-bracket-simulator-artifacts"
@@ -49,10 +49,10 @@ GEMINI_API_KEY="your-gemini-api-key"
 GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 WORKER_SECRET="shared-secret-for-worker-auth"
 NODE_ENV="development"
-FORGE_ENGINE_PATH="../forge-simulation-engine"
+FORGE_ENGINE_PATH="../worker/forge-engine"
 ```
 
-#### local-worker/.env
+#### worker/.env
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
@@ -67,7 +67,7 @@ WORKER_SECRET="shared-secret-for-worker-auth"
 
 ### Running GCP Mode
 
-**Terminal 1: Orchestrator + Frontend**
+**Terminal 1: API + Frontend**
 ```bash
 npm run dev:gcp
 ```
@@ -81,11 +81,11 @@ npm run worker:gcp
 
 | Service | Purpose | Where it runs |
 |---------|---------|---------------|
-| orchestrator-service | API backend, Firestore/Pub/Sub integration | Local or Cloud Run |
+| api | API backend, Firestore/Pub/Sub integration | Local or Cloud Run |
 | frontend | React UI | Local or Firebase Hosting |
-| local-worker | Receives Pub/Sub messages, runs Docker containers | Your machine |
-| forge-sim | MTG simulation engine | Docker (via local-worker) |
-| misc-runner | Log condensing, GCS uploads | Docker (via local-worker) |
+| worker | Receives Pub/Sub messages, runs Docker containers | Your machine |
+| forge-sim | MTG simulation engine | Docker (via worker) |
+| misc-runner | Log condensing, GCS uploads | Docker (via worker) |
 
 ---
 
@@ -96,7 +96,7 @@ npm run worker:gcp
 2. No GCP configuration needed
 
 ### Configuration
-Simply ensure `GOOGLE_CLOUD_PROJECT` is **not set** in `orchestrator-service/.env`, or delete the `.env` file.
+Simply ensure `GOOGLE_CLOUD_PROJECT` is **not set** in `api/.env`, or delete the `.env` file.
 
 ### Running LOCAL Mode
 ```bash
@@ -109,11 +109,10 @@ npm run dev
 
 | Service | Purpose |
 |---------|---------|
-| orchestrator-service | API backend with SQLite |
+| api | API backend with SQLite, Gemini integration |
 | frontend | React UI |
-| analysis-service | OpenAI analysis |
-| forge-log-analyzer | Log processing |
-| worker (polling) | Polls orchestrator for jobs |
+| worker (polling) | Polls API for jobs |
+| forge-sim | MTG simulation engine (Docker) |
 
 ---
 
@@ -122,22 +121,22 @@ npm run dev
 Before using GCP mode, seed the precon decks to Firestore:
 
 ```bash
-cd orchestrator-service
+cd api
 export $(grep -v '^#' .env | xargs)
 npx tsx scripts/seed-decks.ts
 ```
 
-This loads all precon deck files from `forge-simulation-engine/precons/` into Firestore.
+This loads all precon deck files from `worker/forge-engine/precons/` into Firestore.
 
 ---
 
 ## Docker Images
 
-Build the Docker images required for local-worker:
+Build the Docker images required for worker:
 
 ```bash
 # Build forge-sim
-cd forge-simulation-engine
+cd worker/forge-engine
 docker build -t forge-sim:latest .
 
 # Build misc-runner
@@ -155,11 +154,11 @@ docker images | grep -E "(forge-sim|misc-runner)"
 ## Troubleshooting
 
 ### "Running in LOCAL mode" when expecting GCP
-- Check that `GOOGLE_CLOUD_PROJECT` is set in `orchestrator-service/.env`
+- Check that `GOOGLE_CLOUD_PROJECT` is set in `api/.env`
 - Ensure the .env file is being loaded (Next.js loads it automatically)
 
 ### Worker can't connect to API
-- Verify `API_URL` in `local-worker/.env`
+- Verify `API_URL` in `worker/.env`
 - For local testing, use `http://localhost:3000`
 - For Cloud Run, use the deployed URL
 
@@ -172,6 +171,6 @@ docker images | grep -E "(forge-sim|misc-runner)"
 - Verify service account has Firestore read/write permissions
 
 ### Jobs stuck in QUEUED
-- Ensure local-worker is running and connected to Pub/Sub
+- Ensure worker is running and connected to Pub/Sub
 - Check worker logs for errors
-- Verify `WORKER_SECRET` matches between orchestrator and local-worker
+- Verify `WORKER_SECRET` matches between API and worker

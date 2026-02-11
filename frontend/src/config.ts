@@ -5,7 +5,6 @@
 
 export interface RuntimeConfig {
   apiUrl?: string;
-  logAnalyzerUrl?: string;
 }
 
 let cached: RuntimeConfig = {};
@@ -13,7 +12,7 @@ let loadPromise: Promise<RuntimeConfig> | null = null;
 
 /**
  * Fetch /config.json and cache result. Safe to call multiple times (returns same promise).
- * Call before app render so getApiBase() / getLogAnalyzerBase() use it.
+ * Call before app render so getApiBase() uses it.
  */
 export function loadRuntimeConfig(): Promise<RuntimeConfig> {
   if (loadPromise) return loadPromise;
@@ -26,7 +25,6 @@ export function loadRuntimeConfig(): Promise<RuntimeConfig> {
         if (j && typeof j === 'object') {
           cached = {
             apiUrl: typeof j.apiUrl === 'string' ? j.apiUrl.replace(/\/$/, '') : undefined,
-            logAnalyzerUrl: typeof j.logAnalyzerUrl === 'string' ? j.logAnalyzerUrl.replace(/\/$/, '') : undefined,
           };
         }
       }

@@ -6,7 +6,7 @@
 *   **Python:** 3.11+ with [uv](https://github.com/astral-sh/uv)
 *   **Docker:** Required for `forge-sim` (must have image built).
 
-See [orchestrator-service/README.md](../orchestrator-service/README.md) and [analysis-service/README.md](../analysis-service/README.md) for detailed setup (e.g., `.env` files, `GEMINI_API_KEY`).
+See [api/README.md](../api/README.md) and [analysis-service/README.md](../analysis-service/README.md) for detailed setup (e.g., `.env` files, `GEMINI_API_KEY`).
 
 ### Windows Setup (WSL)
 

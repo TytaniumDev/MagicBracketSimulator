@@ -1,7 +1,7 @@
 import { auth } from './firebase';
 import { getRuntimeConfig } from './config';
 
-function getOrchestratorBase(): string {
+function resolveApiBase(): string {
   const runtime = getRuntimeConfig();
   if (runtime.apiUrl) return runtime.apiUrl;
   if (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL.length > 0)
@@ -11,26 +11,15 @@ function getOrchestratorBase(): string {
   return 'http://localhost:3000';
 }
 
-function getLogAnalyzerBaseUrl(): string {
-  const runtime = getRuntimeConfig();
-  if (runtime.logAnalyzerUrl) return runtime.logAnalyzerUrl;
-  if (typeof import.meta.env.VITE_LOG_ANALYZER_URL === 'string' && import.meta.env.VITE_LOG_ANALYZER_URL.length > 0)
-    return (import.meta.env.VITE_LOG_ANALYZER_URL as string).replace(/\/$/, '');
-  return 'http://localhost:3001';
-}
-
 export function getApiBase(): string {
-  return getOrchestratorBase();
-}
-
-export function getLogAnalyzerBase(): string {
-  return getLogAnalyzerBaseUrl();
+  return resolveApiBase();
 }
 
 /**
  * Get the current Firebase ID token for authenticated requests
  */
 export async function getFirebaseIdToken(): Promise<string | null> {
+  if (!auth) return 'local-mock-token';
   const user = auth.currentUser;
   if (!user) return null;
   try {

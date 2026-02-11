@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getApiBase, getLogAnalyzerBase, fetchWithAuth } from '../api';
+import { getApiBase, fetchWithAuth } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
@@ -133,7 +133,6 @@ export default function JobStatusPage() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   
   const apiBase = getApiBase();
-  const logAnalyzerBase = getLogAnalyzerBase();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch job status
@@ -177,7 +176,7 @@ export default function JobStatusPage() {
     if (structuredGames !== null) return; // Already fetched
     
     setStructuredError(null);
-    fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/structured`)
+    fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/structured`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) return { games: [], deckNames: [] };
@@ -190,7 +189,7 @@ export default function JobStatusPage() {
         setDeckNames(data.deckNames ?? null);
       })
       .catch((err) => setStructuredError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [id, logAnalyzerBase, job, structuredGames]);
+  }, [id, apiBase, job, structuredGames]);
 
   // Fetch color identity for deck names (job.deckNames, deckNames from logs, result.results)
   useEffect(() => {
@@ -217,7 +216,7 @@ export default function JobStatusPage() {
     if (analyzePayload !== null) return; // Already fetched
     
     setAnalyzePayloadError(null);
-    fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/analyze-payload`)
+    fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/analyze-payload`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) return null;
@@ -231,14 +230,14 @@ export default function JobStatusPage() {
         }
       })
       .catch((err) => setAnalyzePayloadError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [id, logAnalyzerBase, job, analyzePayload]);
+  }, [id, apiBase, job, analyzePayload]);
 
   // Fetch exact prompt preview when user expands "data sent to Gemini"
   useEffect(() => {
     if (!id || !showPayload || !analyzePayload) return;
     setPromptPreviewError(null);
     setPromptPreview(null);
-    fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/analyze-prompt-preview`)
+    fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/analyze-prompt-preview`)
       .then(async (res) => {
         if (!res.ok) {
           const text = await res.text();
@@ -257,7 +256,7 @@ export default function JobStatusPage() {
         setPromptPreview(data);
       })
       .catch((err) => setPromptPreviewError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [id, logAnalyzerBase, showPayload, analyzePayload]);
+  }, [id, apiBase, showPayload, analyzePayload]);
 
   // Fetch raw and condensed logs when log panel is opened
   useEffect(() => {
@@ -266,7 +265,7 @@ export default function JobStatusPage() {
     // Fetch raw logs
     if (rawLogs === null) {
       setRawLogsError(null);
-      fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/raw`)
+      fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/raw`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { gameLogs: [] };
@@ -281,7 +280,7 @@ export default function JobStatusPage() {
     // Fetch condensed logs
     if (condensedLogs === null) {
       setCondensedError(null);
-      fetchWithAuth(`${logAnalyzerBase}/jobs/${id}/logs/condensed`)
+      fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/condensed`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { condensed: [] };
@@ -292,7 +291,7 @@ export default function JobStatusPage() {
         .then((data) => setCondensedLogs(data.condensed ?? []))
         .catch((err) => setCondensedError(err instanceof Error ? err.message : 'Unknown error'));
     }
-  }, [id, logAnalyzerBase, showLogPanel, rawLogs, condensedLogs]);
+  }, [id, apiBase, showLogPanel, rawLogs, condensedLogs]);
 
   // Compute win tally and winning turns from structured games (must be before early returns)
   const { winTally, winTurns } = useMemo(() => {

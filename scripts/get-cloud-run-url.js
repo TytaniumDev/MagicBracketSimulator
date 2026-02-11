@@ -15,7 +15,7 @@
 const path = require('path');
 const { execSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-require('dotenv').config({ path: path.join(__dirname, '..', 'local-worker', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', 'worker', '.env') });
 
 /** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
 function getProjectFromGcloud() {
@@ -97,7 +97,7 @@ try {
     }
   }
 
-  console.log('Use one of the URLs above as API_URL / VITE_API_URL (orchestrator backend).');
+  console.log('Use one of the URLs above as API_URL / VITE_API_URL (API backend).');
   console.log('Firebase Console (App Hosting): https://console.firebase.google.com/project/' + projectId + '/apphosting');
   console.log('GCP Cloud Run: https://console.cloud.google.com/run?project=' + projectId);
 } catch (err) {

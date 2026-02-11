@@ -40,21 +40,18 @@ venv/
 .eggs/
 
 # Job store (SQLite DB - shared across processes)
-orchestrator-service/data/
+api/data/
 
-# Local worker jobs directory and stable worker ID file
-local-worker/jobs/
-local-worker/worker-id
-orchestrator-service/jobs/
+# Worker jobs directory and stable worker ID file
+worker/jobs/
+worker/worker-id
+worker/deck-cache/
 
 # Forge simulation (generated logs)
-forge-simulation-engine/logs/
-
-# Go build artifacts
-misc-runner/misc-runner
+worker/forge-engine/logs/
 
 # Forge installer (too large for GitHub; Dockerfile downloads at build time)
-forge-simulation-engine/forge-installer*.jar
+worker/forge-engine/forge-installer*.jar
 
 # Logs
 *.log
