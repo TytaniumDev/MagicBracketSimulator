@@ -35,8 +35,8 @@
 - **Build**: `npm run build --prefix forge-log-analyzer`
 - **Test**: `npm run test --prefix forge-log-analyzer`
 
-### Local Worker
-- **Build**: `npm run build --prefix local-worker`
+### Simulation Worker
+- **Build**: `npm run build --prefix simulation-worker`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
@@ -46,5 +46,5 @@
 - `frontend/`: React app
 - `orchestrator-service/`: Next.js API & ingestion
 - `analysis-service/`: Python/Gemini power analysis
-- `local-worker/`: Docker simulation runner
+- `simulation-worker/`: Docker simulation runner
 - `forge-log-analyzer/`: TypeScript log parser

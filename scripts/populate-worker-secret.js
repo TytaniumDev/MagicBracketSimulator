@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Interactive script to populate Google Secret Manager with local-worker config.
+ * Interactive script to populate Google Secret Manager with simulation-worker config.
  * Run from repo root: node scripts/populate-worker-secret.js
  *
  * Prereqs: GOOGLE_CLOUD_PROJECT set (env or .env); gcloud auth application-default login
@@ -12,7 +12,7 @@ const readline = require('readline');
 const { execSync } = require('child_process');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-require('dotenv').config({ path: path.join(__dirname, '..', 'local-worker', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', 'simulation-worker', '.env') });
 
 /** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
 function getProjectFromGcloud() {
@@ -29,7 +29,7 @@ function getProjectFromGcloud() {
 }
 
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || getProjectFromGcloud();
-const SECRET_NAME = 'local-worker-config';
+const SECRET_NAME = 'simulation-worker-config';
 
 const CONSOLE_BASE = 'https://console.cloud.google.com';
 const RUN_URL = `${CONSOLE_BASE}/run?project=`;
@@ -79,7 +79,7 @@ For Application Default Credentials (so you don't need a key file on this machin
 async function main() {
   console.log(`
 This script will create or update the Secret Manager secret "${SECRET_NAME}"
-so the local-worker can run without a .env file on each machine.
+so the simulation-worker can run without a .env file on each machine.
 
 You need:
   • GOOGLE_CLOUD_PROJECT set (env or .env)

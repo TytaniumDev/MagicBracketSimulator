@@ -186,6 +186,28 @@ export function getNextQueuedJob(): Job | undefined {
   return row ? rowToJob(row) : undefined;
 }
 
+/**
+ * Atomically claim the next QUEUED job by transitioning it to RUNNING.
+ * Returns the claimed job, or undefined if no QUEUED jobs exist.
+ */
+export function claimNextJob(): Job | undefined {
+  const db = getDb();
+  const now = new Date().toISOString();
+  // SQLite doesn't support UPDATE ... RETURNING with LIMIT in all versions,
+  // so we use a transaction: select then update.
+  const claimTx = db.transaction(() => {
+    const row = db
+      .prepare("SELECT * FROM jobs WHERE status = 'QUEUED' ORDER BY created_at ASC LIMIT 1")
+      .get() as Row | undefined;
+    if (!row) return undefined;
+    db.prepare("UPDATE jobs SET status = 'RUNNING', started_at = ? WHERE id = ? AND status = 'QUEUED'")
+      .run(now, row.id);
+    return { ...row, status: 'RUNNING', started_at: now } as Row;
+  });
+  const row = claimTx();
+  return row ? rowToJob(row) : undefined;
+}
+
 export function listJobs(): Job[] {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as Row[];

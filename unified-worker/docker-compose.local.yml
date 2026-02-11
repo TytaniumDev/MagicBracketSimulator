@@ -1,0 +1,7 @@
+# Local development override — no Pub/Sub, no GCP credentials
+# Usage: docker compose -f unified-worker/docker-compose.yml -f unified-worker/docker-compose.local.yml up
+services:
+  unified-worker:
+    environment:
+      - API_URL=http://host.docker.internal:3000
+      # No PUBSUB_SUBSCRIPTION → triggers polling mode

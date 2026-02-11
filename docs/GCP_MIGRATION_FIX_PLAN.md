@@ -27,7 +27,7 @@ Your current architecture is well-designed for GCP's free tier. Here's what each
    - **Free tier**: 10GB messages per month
 
 ### Local Components (Your Machine)
-5. **local-worker** - Node.js process on your machine
+5. **simulation-worker** - Node.js process on your machine
    - Subscribes to Pub/Sub for job events
    - Runs Docker containers (forge-sim, misc-runner)
    - Why local? Heavy CPU work (MTG simulations) would cost money in cloud
@@ -77,7 +77,7 @@ Your current architecture is well-designed for GCP's free tier. Here's what each
 - `orchestrator-service/lib/firestore-decks.ts` (expects precons in Firestore)
 
 ### Issue 3: Local Worker Configuration Mismatch ⚠️
-**Problem**: `local-worker/.env` points to Cloud Run URL that may not be deployed yet
+**Problem**: `simulation-worker/.env` points to Cloud Run URL that may not be deployed yet
 
 **Impact**:
 - Worker can't fetch job details
@@ -85,7 +85,7 @@ Your current architecture is well-designed for GCP's free tier. Here's what each
 - Jobs stuck in QUEUED state
 
 **Files affected**:
-- `local-worker/.env` (API_URL points to Cloud Run)
+- `simulation-worker/.env` (API_URL points to Cloud Run)
 
 ### Issue 4: No Mode Detection Logging ℹ️
 **Problem**: No visibility into which mode (local vs GCP) the system is running in
@@ -143,7 +143,7 @@ GEMINI_API_KEY="<your-actual-key>"
 # Firebase Admin credentials (path to service account key JSON)
 GOOGLE_APPLICATION_CREDENTIALS="/home/wsl/magic-bracket-simulator-worker-key.json"
 
-# Worker secret (for local-worker and misc-runner authentication)
+# Worker secret (for simulation-worker and misc-runner authentication)
 WORKER_SECRET="<generate-a-random-secret>"
 
 # Local development settings (not needed when deployed to Cloud Run)
@@ -153,13 +153,13 @@ FORGE_ENGINE_PATH="../forge-simulation-engine"
 
 **Critical values**:
 - `GOOGLE_CLOUD_PROJECT`: Must be set to activate GCP mode (Firestore, Pub/Sub, GCS)
-- `GOOGLE_APPLICATION_CREDENTIALS`: Path to service account key (already exists at `/home/wsl/magic-bracket-simulator-worker-key.json` based on local-worker config)
-- `WORKER_SECRET`: Generate a secure random string, must match in local-worker/.env
+- `GOOGLE_APPLICATION_CREDENTIALS`: Path to service account key (already exists at `/home/wsl/magic-bracket-simulator-worker-key.json` based on simulation-worker config)
+- `WORKER_SECRET`: Generate a secure random string, must match in simulation-worker/.env
 
 **Verification**: Starting orchestrator should log "Mode: GCP (Firestore)"
 
-#### Step 1.2: Update local-worker/.env
-Ensure `local-worker/.env` has:
+#### Step 1.2: Update simulation-worker/.env
+Ensure `simulation-worker/.env` has:
 - `WORKER_SECRET` matching orchestrator (add if missing)
 - `API_URL` set to either:
   - `http://localhost:3000` (for local orchestrator testing)
@@ -167,7 +167,7 @@ Ensure `local-worker/.env` has:
 
 **Files to create/modify**:
 - `orchestrator-service/.env` - **CREATE**
-- `local-worker/.env` - **MODIFY** (add WORKER_SECRET)
+- `simulation-worker/.env` - **MODIFY** (add WORKER_SECRET)
 
 ---
 
@@ -243,7 +243,7 @@ Update `package.json` to add:
     "dev": "node scripts/run-dev.js",
     "dev:local": "node ./node_modules/concurrently/dist/bin/concurrently.js -n analysis,log-analyzer,orchestrator,frontend,worker -c blue,cyan,green,yellow,magenta \"npm run analysis\" \"npm run log-analyzer\" \"npm run orchestrator\" \"npm run frontend\" \"npm run worker\"",
     "dev:gcp": "node ./node_modules/concurrently/dist/bin/concurrently.js -n orchestrator,frontend -c green,yellow \"npm run orchestrator\" \"npm run frontend\"",
-    "worker:gcp": "npm run dev --prefix local-worker"
+    "worker:gcp": "npm run dev --prefix simulation-worker"
   }
 }
 ```
@@ -251,7 +251,7 @@ Update `package.json` to add:
 **Usage**:
 - `npm run dev:local` - LOCAL mode (SQLite, polling worker, legacy services)
 - `npm run dev:gcp` - GCP mode (Firestore, Pub/Sub, NO legacy services)
-- `npm run worker:gcp` - Run local-worker separately (for GCP mode)
+- `npm run worker:gcp` - Run simulation-worker separately (for GCP mode)
 
 #### Step 4.2: Update run-dev.js to detect mode
 Modify `scripts/run-dev.js` to check for `GOOGLE_CLOUD_PROJECT` in orchestrator .env and run appropriate script
@@ -301,7 +301,7 @@ gcloud builds submit --config cloudbuild.yaml
 
 Or use the existing Cloud Run deployment command
 
-#### Step 6.3: Update local-worker/.env with Cloud Run URL
+#### Step 6.3: Update simulation-worker/.env with Cloud Run URL
 Set `API_URL` to the deployed Cloud Run URL
 
 **Alternative**: For local testing, set `API_URL=http://localhost:3000` and run orchestrator locally
@@ -309,7 +309,7 @@ Set `API_URL` to the deployed Cloud Run URL
 **Files involved**:
 - `orchestrator-service/cloudbuild.yaml`
 - `orchestrator-service/Dockerfile`
-- `local-worker/.env`
+- `simulation-worker/.env`
 
 ---
 
@@ -387,7 +387,7 @@ Create `analysis-service/README.md` explaining:
 **Setup**:
 1. Orchestrator running (local or Cloud Run)
 2. Docker images built
-3. local-worker/.env configured with correct API_URL
+3. simulation-worker/.env configured with correct API_URL
 4. Start worker: `npm run worker:gcp`
 
 **Tests**:
@@ -440,7 +440,7 @@ Create `analysis-service/README.md` explaining:
 
 ### Critical Files to Modify:
 1. `orchestrator-service/.env` - **CREATE** (enables GCP mode)
-2. `local-worker/.env` - **MODIFY** (add WORKER_SECRET, verify API_URL)
+2. `simulation-worker/.env` - **MODIFY** (add WORKER_SECRET, verify API_URL)
 3. `orchestrator-service/lib/job-store-factory.ts` - **MODIFY** (add logging)
 4. `orchestrator-service/lib/deck-store-factory.ts` - **MODIFY** (add logging)
 

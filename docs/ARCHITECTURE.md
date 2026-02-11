@@ -58,7 +58,7 @@ flowchart TB
 
 | Component | Directory | Purpose |
 |-----------|-----------|---------|
-| **Local Worker** | `local-worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
+| **Simulation Worker** | `simulation-worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
 | **Forge Sim** | `forge-simulation-engine/` | Runs MTG simulations (unchanged) |
 | **Misc Runner** | `misc-runner/` | Go container: condenses logs, uploads to GCS |
 
@@ -297,7 +297,7 @@ There is **no** explicit global “max concurrent containers across all jobs” 
 |-----------|---------|------|
 | **frontend/** | Web UI (Vite + React) with Firebase Auth | Both |
 | **orchestrator-service/** | Next.js API: decks, precons, jobs, Gemini analysis | Both |
-| **local-worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
+| **simulation-worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
 | **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
 | **forge-simulation-engine/** | Docker-based Forge simulation runner | Both |
 | **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |

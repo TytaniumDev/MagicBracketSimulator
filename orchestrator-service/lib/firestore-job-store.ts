@@ -272,4 +272,38 @@ export async function claimJob(id: string): Promise<boolean> {
   }
 }
 
+/**
+ * Atomically claim the next QUEUED job by transitioning it to RUNNING.
+ * Returns the claimed job, or null if no QUEUED jobs exist.
+ */
+export async function claimNextJob(): Promise<Job | null> {
+  // Find the oldest queued job
+  const snapshot = await jobsCollection
+    .where('status', '==', 'QUEUED')
+    .orderBy('createdAt', 'asc')
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  const doc = snapshot.docs[0];
+  const claimed = await firestore.runTransaction(async (transaction) => {
+    const jobRef = jobsCollection.doc(doc.id);
+    const jobDoc = await transaction.get(jobRef);
+    if (!jobDoc.exists) return null;
+    const data = jobDoc.data()!;
+    if (data.status !== 'QUEUED') return null; // Already claimed by another worker
+
+    transaction.update(jobRef, {
+      status: 'RUNNING',
+      startedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return doc.id;
+  });
+
+  if (!claimed) return null;
+  return getJob(claimed);
+}
+
 export { firestore };

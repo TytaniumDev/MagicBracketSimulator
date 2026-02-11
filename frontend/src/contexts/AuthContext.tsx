@@ -8,7 +8,7 @@ import {
   getIdToken,
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db, googleProvider } from '../firebase';
+import { auth, db, googleProvider, isFirebaseConfigured } from '../firebase';
 
 const ALLOWED_USERS_COLLECTION = 'allowedUsers';
 
@@ -38,13 +38,48 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+/**
+ * Create a mock User object for local mode (when Firebase is not configured).
+ * Satisfies the parts of the User interface consumed by the app.
+ */
+function createLocalMockUser(): User {
+  return {
+    uid: 'local-user',
+    email: 'local@dev',
+    displayName: 'Local User',
+    photoURL: null,
+    emailVerified: true,
+    isAnonymous: false,
+    phoneNumber: null,
+    providerId: 'local',
+    metadata: {} as User['metadata'],
+    providerData: [],
+    refreshToken: '',
+    tenantId: null,
+    delete: () => Promise.resolve(),
+    getIdToken: () => Promise.resolve('local-mock-token'),
+    getIdTokenResult: () => Promise.resolve({} as Awaited<ReturnType<User['getIdTokenResult']>>),
+    reload: () => Promise.resolve(),
+    toJSON: () => ({}),
+  } as User;
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    // Local mode: Firebase is not configured, provide a mock user immediately
+    if (!isFirebaseConfigured) {
+      setUser(createLocalMockUser());
+      setIsAllowed(true);
+      setLoading(false);
+      return;
+    }
+
+    // GCP mode: use real Firebase Auth
+    const unsubscribe = onAuthStateChanged(auth!, async (firebaseUser) => {
       setUser(firebaseUser);
       if (!firebaseUser) {
         setIsAllowed(null);
@@ -52,7 +87,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
       try {
-        const allowedRef = doc(db, ALLOWED_USERS_COLLECTION, firebaseUser.uid);
+        const allowedRef = doc(db!, ALLOWED_USERS_COLLECTION, firebaseUser.uid);
         const snap = await getDoc(allowedRef);
         setIsAllowed(snap.exists());
       } catch (err) {
@@ -67,8 +102,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signInWithGoogle = async () => {
+    if (!isFirebaseConfigured) return;
     try {
-      await signInWithPopup(auth, googleProvider);
+      await signInWithPopup(auth!, googleProvider!);
     } catch (error) {
       console.error('Error signing in with Google:', error);
       throw error;
@@ -76,8 +112,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const signInWithEmail = async (email: string, password: string) => {
+    if (!isFirebaseConfigured) return;
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth!, email, password);
     } catch (error) {
       console.error('Error signing in with email/password:', error);
       throw error;
@@ -85,8 +122,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const signOut = async () => {
+    if (!isFirebaseConfigured) return;
     try {
-      await firebaseSignOut(auth);
+      await firebaseSignOut(auth!);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
@@ -94,6 +132,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const getToken = async (): Promise<string | null> => {
+    if (!isFirebaseConfigured) return 'local-mock-token';
     if (!user) return null;
     try {
       return await getIdToken(user);

@@ -10,12 +10,12 @@ FROM node:20-slim AS node-builder
 WORKDIR /build
 
 # Copy package files and install dependencies
-COPY local-worker/package*.json ./
+COPY simulation-worker/package*.json ./
 RUN npm ci
 
 # Copy source and build TypeScript
-COPY local-worker/tsconfig.json ./
-COPY local-worker/src/ ./src/
+COPY simulation-worker/tsconfig.json ./
+COPY simulation-worker/src/ ./src/
 RUN npm run build
 
 # =============================================================================
@@ -74,7 +74,7 @@ RUN sed -i 's/\r$//' /app/forge/run_sim.sh && chmod +x /app/forge/run_sim.sh
 # Copy Node.js worker
 COPY --from=node-builder /build/dist /app/worker/dist
 COPY --from=node-builder /build/node_modules /app/worker/node_modules
-COPY local-worker/package.json /app/worker/
+COPY simulation-worker/package.json /app/worker/
 
 # Create directories
 RUN mkdir -p /app/jobs /home/worker/.cache/forge /home/worker/.forge/decks/commander \

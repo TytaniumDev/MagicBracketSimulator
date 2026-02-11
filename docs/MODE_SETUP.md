@@ -10,7 +10,7 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 | File Storage | Local filesystem | Cloud Storage (GCS) |
 | Job Queue | Polling-based worker | Pub/Sub |
 | Analysis | analysis-service + forge-log-analyzer | Gemini API + misc-runner |
-| Worker | orchestrator-service/worker | local-worker (Pub/Sub subscriber) |
+| Worker | orchestrator-service/worker | simulation-worker (Pub/Sub subscriber) |
 
 ## Mode Detection
 
@@ -36,7 +36,7 @@ At startup, you'll see log messages like:
    - Pub/Sub topic and subscription
 2. Service account key with permissions for Firestore, GCS, and Pub/Sub
 3. Gemini API key (for AI analysis)
-4. Docker installed (for local-worker)
+4. Docker installed (for simulation-worker)
 
 ### Configuration Files
 
@@ -52,7 +52,7 @@ NODE_ENV="development"
 FORGE_ENGINE_PATH="../forge-simulation-engine"
 ```
 
-#### local-worker/.env
+#### simulation-worker/.env
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
@@ -83,9 +83,9 @@ npm run worker:gcp
 |---------|---------|---------------|
 | orchestrator-service | API backend, Firestore/Pub/Sub integration | Local or Cloud Run |
 | frontend | React UI | Local or Firebase Hosting |
-| local-worker | Receives Pub/Sub messages, runs Docker containers | Your machine |
-| forge-sim | MTG simulation engine | Docker (via local-worker) |
-| misc-runner | Log condensing, GCS uploads | Docker (via local-worker) |
+| simulation-worker | Receives Pub/Sub messages, runs Docker containers | Your machine |
+| forge-sim | MTG simulation engine | Docker (via simulation-worker) |
+| misc-runner | Log condensing, GCS uploads | Docker (via simulation-worker) |
 
 ---
 
@@ -133,7 +133,7 @@ This loads all precon deck files from `forge-simulation-engine/precons/` into Fi
 
 ## Docker Images
 
-Build the Docker images required for local-worker:
+Build the Docker images required for simulation-worker:
 
 ```bash
 # Build forge-sim
@@ -159,7 +159,7 @@ docker images | grep -E "(forge-sim|misc-runner)"
 - Ensure the .env file is being loaded (Next.js loads it automatically)
 
 ### Worker can't connect to API
-- Verify `API_URL` in `local-worker/.env`
+- Verify `API_URL` in `simulation-worker/.env`
 - For local testing, use `http://localhost:3000`
 - For Cloud Run, use the deployed URL
 
@@ -172,6 +172,6 @@ docker images | grep -E "(forge-sim|misc-runner)"
 - Verify service account has Firestore read/write permissions
 
 ### Jobs stuck in QUEUED
-- Ensure local-worker is running and connected to Pub/Sub
+- Ensure simulation-worker is running and connected to Pub/Sub
 - Check worker logs for errors
-- Verify `WORKER_SECRET` matches between orchestrator and local-worker
+- Verify `WORKER_SECRET` matches between orchestrator and simulation-worker

@@ -124,6 +124,14 @@ export async function updateJobResult(id: string, result: AnalysisResult): Promi
   sqliteStore.updateJobResult(id, result);
 }
 
+export async function claimNextJob(): Promise<Job | null> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.claimNextJob();
+  }
+  const job = sqliteStore.claimNextJob();
+  return job ?? null;
+}
+
 export async function deleteJob(id: string): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.deleteJob(id);

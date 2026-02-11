@@ -3,12 +3,17 @@ import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { NextRequest } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
-// Initialize Firebase Admin SDK (singleton)
+// Local mode: skip Firebase Auth entirely when GOOGLE_CLOUD_PROJECT is not set
+const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
+
+const LOCAL_MOCK_USER: AuthUser = { uid: 'local-user', email: 'local@dev' };
+
+// Initialize Firebase Admin SDK (singleton) — only used in GCP mode
 let firebaseApp: App | undefined;
 
 function getFirebaseApp(): App {
   if (firebaseApp) return firebaseApp;
-  
+
   const existingApps = getApps();
   if (existingApps.length > 0) {
     firebaseApp = existingApps[0];
@@ -55,8 +60,13 @@ const ALLOWLIST_ENABLED = ALLOWED_EMAILS.length > 0;
  * @throws Error if token is invalid or user not allowed
  */
 export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
+  // In local mode, skip Firebase token verification and return a mock user
+  if (IS_LOCAL_MODE) {
+    return LOCAL_MOCK_USER;
+  }
+
   const authHeader = req.headers.get('Authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new Error('No authorization token provided');
   }
@@ -130,7 +140,7 @@ export function forbiddenResponse(message: string = 'Forbidden'): Response {
 
 /**
  * Check if request is from worker (X-Worker-Secret header matches WORKER_SECRET env)
- * Used for PATCH/GET jobs by local-worker and misc-runner
+ * Used for PATCH/GET jobs by simulation-worker and misc-runner
  */
 export function isWorkerRequest(req: NextRequest): boolean {
   const secret = req.headers.get('X-Worker-Secret');
