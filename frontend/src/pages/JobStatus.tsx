@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getApiBase, getLogAnalyzerBase, fetchWithAuth } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
+import GameLogs from '../components/GameLogs';
+import { CondensedGame } from '../types';
+import { getEventColor } from '../utils/colors';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
 
@@ -35,22 +38,6 @@ interface Job {
 }
 
 // Types for Log Analyzer responses
-interface GameEvent {
-  type: string;
-  line: string;
-  turn?: number;
-  player?: string;
-}
-
-interface CondensedGame {
-  keptEvents: GameEvent[];
-  manaPerTurn: Record<string, { manaEvents: number }>;
-  cardsDrawnPerTurn: Record<string, number>;
-  turnCount: number;
-  winner?: string;
-  winningTurn?: number;
-}
-
 interface DeckAction {
   line: string;
   eventType?: string;
@@ -74,8 +61,6 @@ interface StructuredGame {
   winner?: string;
   winningTurn?: number;
 }
-
-type LogViewTab = 'raw' | 'condensed';
 
 // Event type filter options for the UI
 const EVENT_FILTER_OPTIONS = [
@@ -104,7 +89,6 @@ export default function JobStatusPage() {
   const [error, setError] = useState<string | null>(null);
   const [showRawJson, setShowRawJson] = useState(false);
   const [showLogPanel, setShowLogPanel] = useState(false);
-  const [logViewTab, setLogViewTab] = useState<LogViewTab>('condensed');
   
   // Log data states
   const [rawLogs, setRawLogs] = useState<string[] | null>(null);
@@ -960,111 +944,12 @@ export default function JobStatusPage() {
             </button>
             
             {showLogPanel && (
-              <div className="mt-4">
-                {/* Tab buttons */}
-                <div className="flex gap-2 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setLogViewTab('condensed')}
-                    className={`px-3 py-1 rounded text-sm ${
-                      logViewTab === 'condensed'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    Condensed (AI Input)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLogViewTab('raw')}
-                    className={`px-3 py-1 rounded text-sm ${
-                      logViewTab === 'raw'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    Raw Logs
-                  </button>
-                </div>
-                
-                {/* Condensed Logs View */}
-                {logViewTab === 'condensed' && (
-                  <div>
-                    {condensedError && (
-                      <p className="text-sm text-red-400 mb-2">{condensedError}</p>
-                    )}
-                    {condensedLogs && condensedLogs.length === 0 && !condensedError && (
-                      <p className="text-sm text-gray-500">
-                        Condensed logs not available.
-                      </p>
-                    )}
-                    {condensedLogs && condensedLogs.length > 0 && (
-                      <div className="space-y-4">
-                        <p className="text-xs text-gray-400">
-                          This is the condensed data sent to the AI for bracket analysis.
-                        </p>
-                        {condensedLogs.map((game, i) => (
-                          <div key={i} className="bg-gray-900 rounded p-3">
-                            <h4 className="text-xs font-semibold text-gray-500 mb-2">
-                              Game {i + 1}
-                              {game.winner && ` - Winner: ${game.winner}`}
-                              {game.winningTurn && ` (Turn ${game.winningTurn})`}
-                            </h4>
-                            <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-                              <div className="bg-gray-800 rounded p-2">
-                                <span className="text-gray-400">Turn Count: </span>
-                                <span className="text-white">{game.turnCount}</span>
-                              </div>
-                              <div className="bg-gray-800 rounded p-2">
-                                <span className="text-gray-400">Events Kept: </span>
-                                <span className="text-white">{game.keptEvents.length}</span>
-                              </div>
-                            </div>
-                            <div className="space-y-1 max-h-64 overflow-y-auto">
-                              {game.keptEvents.map((event, j) => (
-                                <div
-                                  key={j}
-                                  className="text-xs font-mono py-0.5 border-l-2 pl-2"
-                                  style={{ borderColor: getEventColor(event.type) }}
-                                >
-                                  <span className="text-gray-500">[{event.type}]</span>{' '}
-                                  <span className="text-gray-300">{event.line}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              
-                {/* Raw Logs View */}
-                {logViewTab === 'raw' && (
-                  <div>
-                    {rawLogsError && (
-                      <p className="text-sm text-red-400 mb-2">{rawLogsError}</p>
-                    )}
-                    {rawLogs != null && rawLogs.length === 0 && !rawLogsError && (
-                      <p className="text-sm text-gray-500">
-                        Logs not available (job may still be running or logs were cleaned up).
-                      </p>
-                    )}
-                    {rawLogs != null && rawLogs.length > 0 && (
-                      <div className="space-y-4">
-                        {rawLogs.map((log, i) => (
-                          <div key={i} className="bg-gray-900 rounded p-3">
-                            <h4 className="text-xs font-semibold text-gray-500 mb-2">Game {i + 1}</h4>
-                            <pre className="text-xs overflow-auto max-h-64 whitespace-pre-wrap text-gray-400 font-mono">
-                              {log}
-                            </pre>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <GameLogs
+                rawLogs={rawLogs}
+                rawLogsError={rawLogsError}
+                condensedLogs={condensedLogs}
+                condensedError={condensedError}
+              />
             )}
           </div>
         )}
@@ -1079,30 +964,3 @@ export default function JobStatusPage() {
   );
 }
 
-/**
- * Returns a color for a given event type (for visual distinction in the UI).
- */
-function getEventColor(eventType: string | undefined): string {
-  switch (eventType) {
-    case 'spell_cast':
-      return '#60a5fa'; // blue-400
-    case 'spell_cast_high_cmc':
-      return '#a78bfa'; // violet-400
-    case 'land_played':
-      return '#34d399'; // emerald-400
-    case 'life_change':
-      return '#f87171'; // red-400
-    case 'win_condition':
-      return '#4ade80'; // green-400
-    case 'zone_change_gy_to_bf':
-      return '#fbbf24'; // amber-400
-    case 'commander_cast':
-      return '#c084fc'; // purple-400
-    case 'draw_extra':
-      return '#22d3ee'; // cyan-400
-    case 'combat':
-      return '#fb923c'; // orange-400
-    default:
-      return '#6b7280'; // gray-500
-  }
-}
