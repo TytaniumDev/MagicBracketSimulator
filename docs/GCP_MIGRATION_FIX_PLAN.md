@@ -1,5 +1,7 @@
 # GCP Migration Fix Plan
 
+> **DEPRECATED:** This document describes a historical migration plan. For current architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 > **Note:** All file paths in this document are relative to the repository root unless otherwise specified.
 
 ## Architecture Overview (What Each Component Does)
