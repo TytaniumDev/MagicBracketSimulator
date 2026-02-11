@@ -28,6 +28,8 @@
 
 ### Analysis Service
 - **Install**: `cd analysis-service && uv sync --extra dev`
+- **Lint**: `cd analysis-service && uv run ruff check .`
+- **Format**: `cd analysis-service && uv run ruff format .`
 - **Test**: `cd analysis-service && uv run pytest`
 
 ### Log Analyzer
@@ -36,6 +38,7 @@
 - **Test**: `npm run test --prefix forge-log-analyzer`
 
 ### Local Worker
+- **Dev**: `npm run dev --prefix local-worker`
 - **Build**: `npm run build --prefix local-worker`
 
 ## Deployment
