@@ -1,8 +1,0 @@
-# Exclude docs and plans from image
-PRD.md
-*.plan.md
-agent-plans/
-.git/
-.gitignore
-*.md
-test/
