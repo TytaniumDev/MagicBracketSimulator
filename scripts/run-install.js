@@ -33,9 +33,9 @@ function main() {
       'export PATH="$(echo "$PATH" | tr \':\' \'\\n\' | grep -v \'^/mnt/\' | tr \'\\n\' \':\' | sed \'s/:$//\')"',
       `cd ${JSON.stringify(wslPath)}`,
       'npm install',
-      'npm install --prefix orchestrator-service',
+      'npm install --prefix api',
       'npm install --prefix frontend',
-      'npm install --prefix simulation-worker',
+      'npm install --prefix worker',
     ].join(' && ');
     const r = spawnSync('wsl', ['-e', 'bash', '-c', wslCmd], { stdio: 'inherit' });
     process.exit(r.status != null ? r.status : r.signal ? 128 + r.signal : 0);
@@ -45,11 +45,11 @@ function main() {
   const opts = { cwd: repoRoot, stdio: "inherit" };
   let r = spawnSync('npm', ['install'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
-  r = spawnSync('npm', ['install', '--prefix', 'orchestrator-service'], opts);
+  r = spawnSync('npm', ['install', '--prefix', 'api'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
   r = spawnSync('npm', ['install', '--prefix', 'frontend'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
-  r = spawnSync('npm', ['install', '--prefix', 'simulation-worker'], opts);
+  r = spawnSync('npm', ['install', '--prefix', 'worker'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
 }
 

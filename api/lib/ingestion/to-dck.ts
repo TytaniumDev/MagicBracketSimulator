@@ -12,7 +12,7 @@ export interface ParsedDeck {
 
 /**
  * Converts a ParsedDeck to .dck format for Forge
- * See: forge-simulation-engine/precons/Lorehold Legacies.dck for reference
+ * See: worker/forge-engine/precons/Lorehold Legacies.dck for reference
  */
 export function toDck(deck: ParsedDeck): string {
   const lines: string[] = [];

@@ -15,7 +15,7 @@
 const path = require('path');
 const { execSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-require('dotenv').config({ path: path.join(__dirname, '..', 'simulation-worker', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', 'worker', '.env') });
 
 /** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
 function getProjectFromGcloud() {

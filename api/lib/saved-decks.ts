@@ -8,7 +8,7 @@ export interface SavedDeck {
 }
 
 function getDecksDir(): string {
-  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../forge-simulation-engine';
+  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../worker/forge-engine';
   return path.resolve(forgeEnginePath, 'decks');
 }
 

@@ -92,7 +92,7 @@ export async function readDeckContent(id: string): Promise<{ name: string; dck: 
 
   const precon = loadPrecons().find((p) => p.id === id);
   if (precon) {
-    const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../forge-simulation-engine';
+    const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../worker/forge-engine';
     const preconPath = path.resolve(forgeEnginePath, 'precons', precon.filename);
     try {
       const dck = fs.readFileSync(preconPath, 'utf-8');

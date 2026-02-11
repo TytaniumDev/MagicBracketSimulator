@@ -1,7 +1,7 @@
 {
-  "name": "simulation-worker",
+  "name": "worker",
   "version": "1.0.0",
-  "description": "Unified worker that pulls jobs from Pub/Sub and runs forge simulations",
+  "description": "Unified worker: pulls jobs via Pub/Sub or polling, runs Forge simulations as child processes",
   "main": "dist/worker.js",
   "scripts": {
     "build": "tsc",

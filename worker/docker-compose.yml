@@ -1,12 +1,12 @@
-# Unified Worker - Single container deployment
+# Worker - Single container deployment
 # Runs Forge simulations + log processing without Docker-in-Docker
 
 services:
-  unified-worker:
+  worker:
     build:
-      context: ..
-      dockerfile: unified-worker/Dockerfile
-    container_name: unified-worker
+      context: .
+      dockerfile: Dockerfile
+    container_name: magic-bracket-worker
     restart: unless-stopped
 
     environment:

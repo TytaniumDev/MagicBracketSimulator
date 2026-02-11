@@ -9,7 +9,7 @@ export function loadPrecons(): Precon[] {
     return cachedPrecons;
   }
 
-  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../forge-simulation-engine';
+  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../worker/forge-engine';
   const manifestPath = path.resolve(forgeEnginePath, 'precons', 'manifest.json');
 
   try {
@@ -93,7 +93,7 @@ export function readPreconContentByIdOrName(idOrName: string): { name: string; d
 }
 
 function readPreconFile(precon: Precon): { name: string; dck: string } | undefined {
-  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../forge-simulation-engine';
+  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../worker/forge-engine';
   const preconPath = path.resolve(forgeEnginePath, 'precons', precon.filename);
 
   try {

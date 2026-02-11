@@ -1,4 +1,4 @@
-# Unified Worker - Single container for Forge simulations + log processing
+# Worker - Single container for Forge simulations + log processing
 # Combines: Node.js worker + Java/Forge simulator + xvfb
 # No Docker-in-Docker - uses process-based parallelism
 
@@ -10,12 +10,12 @@ FROM node:20-slim AS node-builder
 WORKDIR /build
 
 # Copy package files and install dependencies
-COPY simulation-worker/package*.json ./
+COPY package*.json ./
 RUN npm ci
 
 # Copy source and build TypeScript
-COPY simulation-worker/tsconfig.json ./
-COPY simulation-worker/src/ ./src/
+COPY tsconfig.json ./
+COPY src/ ./src/
 RUN npm run build
 
 # =============================================================================
@@ -66,15 +66,15 @@ RUN if [ -z "$FORGE_VERSION" ]; then \
     && echo "Forge ${FORGE_VERSION} extracted successfully" \
     && rm -rf /tmp/forge_extract /tmp/forge.tar.bz2
 
-# Copy precons and run script from forge-simulation-engine
-COPY forge-simulation-engine/precons/ /app/forge/res/precons/
-COPY forge-simulation-engine/run_sim.sh /app/forge/
+# Copy precons and run script from forge-engine
+COPY forge-engine/precons/ /app/forge/res/precons/
+COPY forge-engine/run_sim.sh /app/forge/
 RUN sed -i 's/\r$//' /app/forge/run_sim.sh && chmod +x /app/forge/run_sim.sh
 
 # Copy Node.js worker
 COPY --from=node-builder /build/dist /app/worker/dist
 COPY --from=node-builder /build/node_modules /app/worker/node_modules
-COPY simulation-worker/package.json /app/worker/
+COPY package.json /app/worker/
 
 # Create directories
 RUN mkdir -p /app/jobs /home/worker/.cache/forge /home/worker/.forge/decks/commander \

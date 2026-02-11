@@ -6,9 +6,9 @@ Scans precons/ for .dck files, derives id/name/filename (and optionally
 primaryCommander from .dck content). Merges with existing manifest.json
 when present (preserves set, colors, etc.; adds new entries for new .dck files).
 
-Usage: run from forge-simulation-engine/ or project root:
+Usage: run from worker/forge-engine/ or project root:
   python scripts/generate_manifest.py
-  # or: python forge-simulation-engine/scripts/generate_manifest.py
+  # or: python worker/forge-engine/scripts/generate_manifest.py
 """
 
 import json
@@ -27,10 +27,10 @@ def find_precons_dir() -> Path:
     if precons.is_dir():
         return precons
     # Maybe we're at repo root
-    precons = base / "forge-simulation-engine" / "precons"
+    precons = base / "worker" / "forge-engine" / "precons"
     if precons.is_dir():
         return precons
-    raise SystemExit("precons/ directory not found (run from forge-simulation-engine/ or repo root)")
+    raise SystemExit("precons/ directory not found (run from worker/forge-engine/ or repo root)")
 
 
 def to_kebab(s: str) -> str:

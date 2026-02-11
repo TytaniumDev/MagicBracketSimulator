@@ -11,7 +11,7 @@ import * as path from 'path';
 import { Firestore, Timestamp } from '@google-cloud/firestore';
 
 const forgeEnginePath =
-  process.env.FORGE_ENGINE_PATH || path.resolve(process.cwd(), '../forge-simulation-engine');
+  process.env.FORGE_ENGINE_PATH || path.resolve(process.cwd(), '../worker/forge-engine');
 const manifestPath = path.resolve(forgeEnginePath, 'precons', 'manifest.json');
 
 interface PreconManifest {

@@ -58,8 +58,8 @@ flowchart TB
 
 | Component | Directory | Purpose |
 |-----------|-----------|---------|
-| **Simulation Worker** | `simulation-worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
-| **Forge Sim** | `forge-simulation-engine/` | Runs MTG simulations (unchanged) |
+| **Simulation Worker** | `worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
+| **Forge Sim** | `worker/forge-engine/` | Runs MTG simulations (unchanged) |
 | **Misc Runner** | `misc-runner/` | Go container: condenses logs, uploads to GCS |
 
 ### GCP Data Flow
@@ -207,7 +207,7 @@ sequenceDiagram
 
 ### One Image, Multiple Containers per Job
 
-- **Single image**: `forge-sim`, built from `forge-simulation-engine/Dockerfile` (Eclipse Temurin 17, Forge release, xvfb, precons, `run_sim.sh` entrypoint).
+- **Single image**: `forge-sim`, built from `worker/forge-engine/Dockerfile` (Eclipse Temurin 17, Forge release, xvfb, precons, `run_sim.sh` entrypoint).
 - **Per job**: The worker spawns **multiple** `docker run` processes **in parallel**. So you get **multiple container instances** at once, all using the same image.
 
 ```mermaid
@@ -238,7 +238,7 @@ Each container runs the same flow:
 
 | Step | What happens |
 |------|----------------|
-| **Entrypoint** | `/app/run_sim.sh` (`forge-simulation-engine/run_sim.sh`) |
+| **Entrypoint** | `/app/run_sim.sh` (`worker/forge-engine/run_sim.sh`) |
 | **Input** | `/app/decks` (mounted from worker’s `jobs/<jobId>/decks/`) with 4 `.dck` files; `--id` and `--simulations` per run |
 | **Execution** | Copies decks into Forge’s Commander deck path; runs Forge under **xvfb** (virtual display): `xvfb-run ... forge.sh sim -d ... -f Commander -n <simulations> -c 300` |
 | **Output** | Logs written under `/app/logs` (mounted from worker’s `jobs/<jobId>/logs/`) as `{runId}_game_1.txt`, etc. Worker reads these after all containers exit |
@@ -273,7 +273,7 @@ flowchart TB
 
 | Source | Description |
 |--------|-------------|
-| **Default** | `DEFAULT_PARALLELISM = 4` in `orchestrator-service/worker/worker.ts` |
+| **Default** | `DEFAULT_PARALLELISM = 4` in `api/worker/worker.ts` |
 | **Environment** | `FORGE_PARALLELISM` overrides the default if set |
 | **Per job** | Request body when creating the job can send `parallelism` (frontend does this); validated to 1–16 |
 
@@ -283,7 +283,7 @@ Effective parallelism for a job: `job.parallelism ?? FORGE_PARALLELISM ?? 4`, cl
 
 | Limit | Value | Location |
 |-------|--------|----------|
-| **Per-job parallelism** | 1–16 | `PARALLELISM_MIN` / `PARALLELISM_MAX` in `orchestrator-service/lib/types.ts` |
+| **Per-job parallelism** | 1–16 | `PARALLELISM_MIN` / `PARALLELISM_MAX` in `api/lib/types.ts` |
 | **Max concurrent Docker containers** | Same as current job’s parallelism | 1–16 |
 | **Concurrent jobs** | 1 | Worker loop processes a single job at a time |
 
@@ -296,10 +296,10 @@ There is **no** explicit global “max concurrent containers across all jobs” 
 | Directory | Purpose | Mode |
 |-----------|---------|------|
 | **frontend/** | Web UI (Vite + React) with Firebase Auth | Both |
-| **orchestrator-service/** | Next.js API: decks, precons, jobs, Gemini analysis | Both |
-| **simulation-worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
+| **api/** | Next.js API: decks, precons, jobs, Gemini analysis | Both |
+| **worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
 | **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
-| **forge-simulation-engine/** | Docker-based Forge simulation runner | Both |
+| **worker/forge-engine/** | Docker-based Forge simulation runner | Both |
 | **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
 | **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route | Local only |
 
@@ -307,7 +307,7 @@ There is **no** explicit global “max concurrent containers across all jobs” 
 
 ## Quick Reference: Key Code
 
-- **Worker parallelism and Docker spawn**: `orchestrator-service/worker/worker.ts` — `splitSimulations`, `processJob`, `runForgeDocker`.
-- **Job store and types**: `orchestrator-service/lib/job-store.ts`, `orchestrator-service/lib/types.ts` — `PARALLELISM_MIN` / `PARALLELISM_MAX`, `createJob(..., parallelism?)`.
-- **Forge container entrypoint**: `forge-simulation-engine/run_sim.sh`.
-- **Image build**: `forge-simulation-engine/Dockerfile`.
+- **Worker parallelism and Docker spawn**: `api/worker/worker.ts` — `splitSimulations`, `processJob`, `runForgeDocker`.
+- **Job store and types**: `api/lib/job-store.ts`, `api/lib/types.ts` — `PARALLELISM_MIN` / `PARALLELISM_MAX`, `createJob(..., parallelism?)`.
+- **Forge container entrypoint**: `worker/forge-engine/run_sim.sh`.
+- **Image build**: `worker/forge-engine/Dockerfile`.

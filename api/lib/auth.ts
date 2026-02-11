@@ -140,7 +140,7 @@ export function forbiddenResponse(message: string = 'Forbidden'): Response {
 
 /**
  * Check if request is from worker (X-Worker-Secret header matches WORKER_SECRET env)
- * Used for PATCH/GET jobs by simulation-worker and misc-runner
+ * Used for PATCH/GET jobs by worker and misc-runner
  */
 export function isWorkerRequest(req: NextRequest): boolean {
   const secret = req.headers.get('X-Worker-Secret');

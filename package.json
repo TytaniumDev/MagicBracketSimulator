@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "install:all": "node -e \"var p=require('path'),c=require('child_process');var r=process.env.INIT_CWD||process.cwd();var s=c.spawnSync(process.execPath,[p.join(r,'scripts','run-install.js')],{stdio:'inherit'});process.exit(s.status!==null?s.status:1)\"",
-    "orchestrator": "npm run dev --prefix orchestrator-service",
+    "orchestrator": "npm run dev --prefix api",
     "frontend": "npm run dev --prefix frontend",
     "dev": "node -e \"var p=require('path'),c=require('child_process');var r=process.env.INIT_CWD||process.cwd();var s=c.spawnSync(process.execPath,[p.join(r,'scripts','run-dev.js')],{stdio:'inherit'});process.exit(s.status!==null?s.status:1)\"",
     "dev:inner": "node ./node_modules/concurrently/dist/bin/concurrently.js -n orchestrator,frontend -c green,yellow \"npm run orchestrator\" \"npm run frontend\"",

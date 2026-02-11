@@ -22,9 +22,9 @@
 - **Build**: `npm run build --prefix frontend`
 
 ### Orchestrator Service
-- **Lint**: `npm run lint --prefix orchestrator-service`
-- **Build**: `npm run build --prefix orchestrator-service`
-- **Test**: `npm run test:unit --prefix orchestrator-service`
+- **Lint**: `npm run lint --prefix api`
+- **Build**: `npm run build --prefix api`
+- **Test**: `npm run test:unit --prefix api`
 
 ### Analysis Service
 - **Install**: `cd analysis-service && uv sync --extra dev`
@@ -36,7 +36,7 @@
 - **Test**: `npm run test --prefix forge-log-analyzer`
 
 ### Simulation Worker
-- **Build**: `npm run build --prefix simulation-worker`
+- **Build**: `npm run build --prefix worker`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
@@ -44,7 +44,7 @@
 
 ## Project Structure
 - `frontend/`: React app
-- `orchestrator-service/`: Next.js API & ingestion
+- `api/`: Next.js API & ingestion
 - `analysis-service/`: Python/Gemini power analysis
-- `simulation-worker/`: Docker simulation runner
+- `worker/`: Docker simulation runner
 - `forge-log-analyzer/`: TypeScript log parser

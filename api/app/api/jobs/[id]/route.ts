@@ -130,7 +130,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
 /**
  * PATCH /api/jobs/[id] - Update job (status, gamesCompleted, errorMessage, dockerRunDurationsMs)
- * Used by simulation-worker and misc-runner
+ * Used by worker and misc-runner
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const allowed = await allowJobReadOrUpdate(request);

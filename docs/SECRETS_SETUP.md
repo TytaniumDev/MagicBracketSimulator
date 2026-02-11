@@ -1,13 +1,13 @@
 # Secrets and credentials setup
 
-Step-by-step instructions for where to create and store secrets used by Magic Bracket Simulator: Firebase/GCP, frontend build, and simulation-worker. **Goal: store no secrets on your local machine** — use Secret Manager and (for CI) GitHub Secrets.
+Step-by-step instructions for where to create and store secrets used by Magic Bracket Simulator: Firebase/GCP, frontend build, and worker. **Goal: store no secrets on your local machine** — use Secret Manager and (for CI) GitHub Secrets.
 
-**No .env required:** Scripts and the simulation-worker resolve the GCP project from `gcloud config get-value project` when `GOOGLE_CLOUD_PROJECT` is not set. So you can use only:
+**No .env required:** Scripts and the worker resolve the GCP project from `gcloud config get-value project` when `GOOGLE_CLOUD_PROJECT` is not set. So you can use only:
 
 - `gcloud auth application-default login`
 - `gcloud config set project YOUR_PROJECT_ID`
 
-Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the simulation-worker with **no .env file**.
+Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the worker with **no .env file**.
 
 ---
 
@@ -16,16 +16,16 @@ Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the simula
 | Secret / credential | Where to set it | Used by |
 |--------------------|-----------------|---------|
 | Firebase / GCP project config | Firebase Console, GCP Console | Frontend (Firebase Hosting), Orchestrator (Cloud Run) |
-| GCP credentials (ADC or key) | `gcloud auth application-default login` or key file | simulation-worker, scripts (Secret Manager access) |
-| Worker / API env (e.g. WORKER_SECRET) | Orchestrator env (Cloud Run); simulation-worker: **Secret Manager** (or .env) | Orchestrator, simulation-worker |
-| **simulation-worker config** (API_URL, GCS_BUCKET, etc.) | **Google Secret Manager** (`npm run populate-worker-secret`) or simulation-worker .env | simulation-worker |
+| GCP credentials (ADC or key) | `gcloud auth application-default login` or key file | worker, scripts (Secret Manager access) |
+| Worker / API env (e.g. WORKER_SECRET) | Orchestrator env (Cloud Run); worker: **Secret Manager** (or .env) | Orchestrator, worker |
+| **worker config** (API_URL, GCS_BUCKET, etc.) | **Google Secret Manager** (`npm run populate-worker-secret`) or worker .env | worker |
 | **Frontend API URL** | **Committed** in `frontend/public/config.json` (stable App Hosting URL). **Not a secret** — visible when the app loads. Always used as-is; no override. | Frontend (Firebase Hosting) |
 
 ---
 
 ## 0. Finding your orchestrator URL
 
-You need the orchestrator URL for **API_URL** (simulation-worker). For the frontend, it’s already set in committed `frontend/public/config.json` (stable App Hosting URL: `https://orchestrator--magic-bracket-simulator.us-central1.hosted.app` — not a secret, visible when the app loads).
+You need the orchestrator URL for **API_URL** (worker). For the frontend, it’s already set in committed `frontend/public/config.json` (stable App Hosting URL: `https://orchestrator--magic-bracket-simulator.us-central1.hosted.app` — not a secret, visible when the app loads).
 
 ### Option A – gcloud (no browser)
 
@@ -68,7 +68,7 @@ Use this URL when running `npm run populate-worker-secret`. The frontend always 
 - Ensure you have a GCP project (e.g. `magic-bracket-simulator`) linked to Firebase.
 - Firebase Console: [Project settings](https://console.firebase.google.com/project/_/settings/general) – note project ID and (for frontend) the Firebase config (API key, auth domain, etc.).
 
-### 1.2 Service account key for simulation-worker
+### 1.2 Service account key for worker
 
 **Where:** GCP Console → **IAM & Admin** → **Service accounts** → select (or create) a service account → **Keys**.
 
@@ -83,14 +83,14 @@ Use this URL when running `npm run populate-worker-secret`. The frontend always 
    - **Storage Object Admin** (or appropriate GCS role for the artifacts bucket),
    - **Cloud Datastore User** (or **Firestore** roles if using Firestore).
 4. Open the service account → **Keys** → **Add key** → **Create new key** → **JSON**. Download the JSON file.
-5. **On your Mac (or host running simulation-worker):**
+5. **On your Mac (or host running worker):**
    - Save the JSON somewhere safe (e.g. `~/.config/magicbracket/worker-key.json`).
-   - Grant the service account **Secret Manager Secret Accessor** (so the worker can read `simulation-worker-config`). Optionally **Secret Manager Admin** if you will run the populate script with this key.
+   - Grant the service account **Secret Manager Secret Accessor** (so the worker can read `worker-config`). Optionally **Secret Manager Admin** if you will run the populate script with this key.
    - **No .env required:** Use `gcloud config set project YOUR_PROJECT_ID` and (if not using ADC) set `GOOGLE_APPLICATION_CREDENTIALS` in env or a minimal `.env`. The rest of the worker config comes from Secret Manager (see below).
 
-### 1.3 simulation-worker config via Secret Manager (no .env copy on each machine)
+### 1.3 worker config via Secret Manager (no .env copy on each machine)
 
-**One-time setup:** Run the interactive script from the repo root. It prompts for each value and gives **clickable links** to where to get it in GCP Console, then creates/updates the secret `simulation-worker-config` in Secret Manager.
+**One-time setup:** Run the interactive script from the repo root. It prompts for each value and gives **clickable links** to where to get it in GCP Console, then creates/updates the secret `worker-config` in Secret Manager.
 
 ```bash
 # From repo root. No .env needed if gcloud default project is set:
@@ -146,7 +146,7 @@ Set at least:
 - `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `PUBSUB_TOPIC`, and any secrets (e.g. Gemini API key) already used.
 - **WORKER_SECRET** (optional but recommended): a shared secret string. Set the same value in:
   - Cloud Run (orchestrator) env,
-  - simulation-worker config (in Secret Manager via `npm run populate-worker-secret`, or in `.env` if not using Secret Manager).
+  - worker config (in Secret Manager via `npm run populate-worker-secret`, or in `.env` if not using Secret Manager).
 
 ---
 
@@ -154,10 +154,10 @@ Set at least:
 
 - [ ] **GCP project:** `gcloud config set project YOUR_PROJECT_ID` (or set `GOOGLE_CLOUD_PROJECT` in env). No .env required.
 - [ ] **Cloud Run URL:** Use `npm run get-cloud-run-url` or Firebase/GCP Console (see §0).
-- [ ] **GCP credentials:** Use `gcloud auth application-default login` (or a key) so scripts and simulation-worker can read Secret Manager. No key file required if using ADC.
-- [ ] **simulation-worker config:** Run `npm run populate-worker-secret` once; on each machine set only gcloud default project and ADC. No .env needed.
+- [ ] **GCP credentials:** Use `gcloud auth application-default login` (or a key) so scripts and worker can read Secret Manager. No key file required if using ADC.
+- [ ] **worker config:** Run `npm run populate-worker-secret` once; on each machine set only gcloud default project and ADC. No .env needed.
 - [ ] **Frontend config:** Committed `config.json` has the stable App Hosting URL (always used as-is).
-- [ ] **Orchestrator (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in simulation-worker config (in Secret Manager via populate-worker-secret).
+- [ ] **Orchestrator (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in worker config (in Secret Manager via populate-worker-secret).
 
 ---
 

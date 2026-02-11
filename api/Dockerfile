@@ -1,4 +1,4 @@
-# Dockerfile for Next.js orchestrator-service on Cloud Run
+# Dockerfile for Next.js API on Cloud Run
 # Optimized for production deployment with standalone output
 
 # Build stage - use slim (Debian-based) for native module compatibility
