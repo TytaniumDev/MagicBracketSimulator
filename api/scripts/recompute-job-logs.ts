@@ -6,10 +6,10 @@
  * stored as 4 games can be corrected to 12 games).
  *
  * Prerequisites:
- * - Raw log files must still exist in orchestrator-service/jobs/<jobId>/logs/
+ * - Raw log files must still exist in api/jobs/<jobId>/logs/
  * - Log Analyzer must be running (LOG_ANALYZER_URL)
  *
- * Usage (from orchestrator-service directory):
+ * Usage (from api directory):
  *   npx tsx scripts/recompute-job-logs.ts <jobId>
  *
  * Example:

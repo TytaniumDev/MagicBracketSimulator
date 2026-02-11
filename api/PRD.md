@@ -1,7 +1,7 @@
-# Product Requirement Document: Orchestrator Service
+# Product Requirement Document: API Service
 
 ## 1. Overview
-The **Orchestrator Service** is the user-facing "brain" of the application. It handles deck ingestion from external sites (Moxfield/Archidekt/ManaBox), manages the queue of simulation jobs, and displays the final results.
+The **API Service** is the user-facing "brain" of the application. It handles deck ingestion from external sites (Moxfield/Archidekt/ManaBox), manages the queue of simulation jobs, and displays the final results.
 
 ## 2. Goals
 -   **Easy Onboarding**: Users need a deck URL (Moxfield, Archidekt, or ManaBox) to add decks.
@@ -52,7 +52,7 @@ The **Orchestrator Service** is the user-facing "brain" of the application. It h
         8.  Mark `COMPLETED`.
 
 ### 3.3 Opponent Selection Logic
--   The Orchestrator maintains a list of the 50 predefined precons (matching the Forge Engine's internal list).
+-   The API maintains a list of the 50 predefined precons (matching the Forge Engine's internal list).
 -   **Randomizer**: Randomly selects 3 unique names from this list to pass to the Docker container.
 
 ## 4. Key Workflows

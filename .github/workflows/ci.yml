@@ -30,8 +30,8 @@ jobs:
       - name: Build
         run: npm run build
 
-  orchestrator:
-    name: Orchestrator Service
+  api:
+    name: API
     runs-on: ubuntu-latest
     defaults:
       run:

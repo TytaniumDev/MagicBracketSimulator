@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify Next.js lockfile and @next/swc warnings are fixed.
-# Run from orchestrator-service: ./scripts/verify-next-warnings.sh
+# Run from api: ./scripts/verify-next-warnings.sh
 # If node_modules is root-owned, run first: sudo chown -R $(whoami):$(whoami) node_modules
 
 set -e

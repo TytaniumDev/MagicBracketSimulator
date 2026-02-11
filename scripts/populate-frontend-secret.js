@@ -81,7 +81,7 @@ before building or deploying the frontend (or run that in CI).
 
   const apiUrl = await prompt(
     rl,
-    'apiUrl – Orchestrator URL (default: stable App Hosting URL in committed config.json)',
+    'apiUrl – API URL (default: stable App Hosting URL in committed config.json)',
     null,
     ''
   );

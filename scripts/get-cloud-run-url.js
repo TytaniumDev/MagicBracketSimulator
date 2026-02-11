@@ -97,7 +97,7 @@ try {
     }
   }
 
-  console.log('Use one of the URLs above as API_URL / VITE_API_URL (orchestrator backend).');
+  console.log('Use one of the URLs above as API_URL / VITE_API_URL (API backend).');
   console.log('Firebase Console (App Hosting): https://console.firebase.google.com/project/' + projectId + '/apphosting');
   console.log('GCP Cloud Run: https://console.cloud.google.com/run?project=' + projectId);
 } catch (err) {

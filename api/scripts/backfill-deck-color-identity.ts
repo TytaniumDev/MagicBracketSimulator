@@ -5,7 +5,7 @@
  * Idempotent: skips entries that already have colorIdentity. Safe to re-run
  * after adding new precons or decks.
  *
- * Usage (from orchestrator-service directory):
+ * Usage (from api directory):
  *   npx tsx scripts/backfill-deck-color-identity.ts
  */
 

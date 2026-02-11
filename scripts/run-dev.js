@@ -48,9 +48,9 @@ function main() {
   // Run concurrently via node (avoids npx/shell "Permission denied" on some setups)
   const concurrentlyPath = path.join(repoRoot, 'node_modules/concurrently/dist/bin/concurrently.js');
   const args = [
-    '-n', 'orchestrator,frontend',
+    '-n', 'api,frontend',
     '-c', 'green,yellow',
-    'npm run orchestrator',
+    'npm run api',
     'npm run frontend',
   ];
   const child = spawn(process.execPath, [concurrentlyPath, ...args], {

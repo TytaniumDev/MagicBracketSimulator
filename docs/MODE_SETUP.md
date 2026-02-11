@@ -9,8 +9,8 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 | Database | SQLite | Firestore |
 | File Storage | Local filesystem | Cloud Storage (GCS) |
 | Job Queue | Polling-based worker | Pub/Sub |
-| Analysis | analysis-service + forge-log-analyzer | Gemini API + misc-runner |
-| Worker | api/worker | worker (Pub/Sub subscriber) |
+| Analysis | api (Gemini integration) | api + misc-runner |
+| Worker | worker/ (polling) | worker/ (Pub/Sub subscriber) |
 
 ## Mode Detection
 
@@ -67,7 +67,7 @@ WORKER_SECRET="shared-secret-for-worker-auth"
 
 ### Running GCP Mode
 
-**Terminal 1: Orchestrator + Frontend**
+**Terminal 1: API + Frontend**
 ```bash
 npm run dev:gcp
 ```
@@ -109,11 +109,10 @@ npm run dev
 
 | Service | Purpose |
 |---------|---------|
-| api | API backend with SQLite |
+| api | API backend with SQLite, Gemini integration |
 | frontend | React UI |
-| analysis-service | OpenAI analysis |
-| forge-log-analyzer | Log processing |
-| worker (polling) | Polls orchestrator for jobs |
+| worker (polling) | Polls API for jobs |
+| forge-sim | MTG simulation engine (Docker) |
 
 ---
 
@@ -174,4 +173,4 @@ docker images | grep -E "(forge-sim|misc-runner)"
 ### Jobs stuck in QUEUED
 - Ensure worker is running and connected to Pub/Sub
 - Check worker logs for errors
-- Verify `WORKER_SECRET` matches between orchestrator and worker
+- Verify `WORKER_SECRET` matches between API and worker

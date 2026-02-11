@@ -60,7 +60,7 @@ export interface AnalyzePayload {
 // Job data from API
 export interface JobData {
   id: string;
-  decks?: DeckSlot[]; // present when orchestrator returns full decks (backward compat)
+  decks?: DeckSlot[]; // present when the API returns full decks (backward compat)
   deckIds?: string[]; // length 4 when set; worker uses cache + deck API
   deckNames?: string[];
   simulations: number;

@@ -13,7 +13,6 @@
 
 ## Setup
 - **Install Node Dependencies**: `npm run install:all`
-- **Install Python Dependencies**: `cd analysis-service && uv sync --extra dev`
 - **Start Dev Server**: `npm run dev`
 
 ## Testing & Verification
@@ -21,19 +20,10 @@
 - **Lint**: `npm run lint --prefix frontend`
 - **Build**: `npm run build --prefix frontend`
 
-### Orchestrator Service
+### API
 - **Lint**: `npm run lint --prefix api`
 - **Build**: `npm run build --prefix api`
 - **Test**: `npm run test:unit --prefix api`
-
-### Analysis Service
-- **Install**: `cd analysis-service && uv sync --extra dev`
-- **Test**: `cd analysis-service && uv run pytest`
-
-### Log Analyzer
-- **Dev**: `npm run dev --prefix forge-log-analyzer`
-- **Build**: `npm run build --prefix forge-log-analyzer`
-- **Test**: `npm run test --prefix forge-log-analyzer`
 
 ### Simulation Worker
 - **Build**: `npm run build --prefix worker`
@@ -44,7 +34,5 @@
 
 ## Project Structure
 - `frontend/`: React app
-- `api/`: Next.js API & ingestion
-- `analysis-service/`: Python/Gemini power analysis
+- `api/`: Next.js API, ingestion, and analysis
 - `worker/`: Docker simulation runner
-- `forge-log-analyzer/`: TypeScript log parser

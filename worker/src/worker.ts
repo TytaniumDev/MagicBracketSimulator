@@ -23,7 +23,7 @@ if (!process.env.GOOGLE_CLOUD_PROJECT) {
  * 2. Receives jobs via Pub/Sub (if PUBSUB_SUBSCRIPTION set) or polls GET /api/jobs/next
  * 3. Fetches job details from the API
  * 4. Runs forge simulations as child processes (parallel)
- * 5. POSTs raw logs + deck metadata to orchestrator API
+ * 5. POSTs raw logs + deck metadata to the API
  * 6. Acknowledges the Pub/Sub message (or polls for next job) when complete
  */
 
@@ -231,7 +231,7 @@ function sanitizeDeckIdToFilename(deckId: string): string {
 }
 
 /**
- * Fetch deck content from orchestrator (worker auth).
+ * Fetch deck content from the API (worker auth).
  */
 async function fetchDeckContent(deckId: string): Promise<{ name: string; dck: string } | null> {
   const API_URL = process.env.API_URL || 'http://localhost:3000';
@@ -487,7 +487,7 @@ async function readGameLogs(
 }
 
 /**
- * Process logs and POST to orchestrator API (replaces GCS upload)
+ * Process logs and POST to the API (replaces GCS upload)
  */
 async function processAndUploadLogs(
   jobId: string,
@@ -506,7 +506,7 @@ async function processAndUploadLogs(
     throw new Error('No game logs found');
   }
 
-  console.log(`POSTing ${rawLogs.length} game logs to orchestrator API...`);
+  console.log(`POSTing ${rawLogs.length} game logs to the API...`);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
@@ -615,7 +615,7 @@ async function processJob(jobId: string): Promise<void> {
   const durations = forgeResults.map((r) => r.duration);
   console.log(`Forge simulations completed in: ${durations.map((d) => `${d}ms`).join(', ')}`);
 
-  // Process logs and POST to orchestrator API
+  // Process logs and POST to the API
   console.log(`Processing and posting logs for job ${jobId}...`);
   await processAndUploadLogs(jobId, logsDir, deckLists);
 

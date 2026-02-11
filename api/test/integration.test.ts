@@ -1,11 +1,11 @@
 /**
- * Integration tests for the Orchestrator Service
+ * Integration tests for the API service
  * 
  * Run with: npx tsx test/integration.test.ts
  * 
  * Prerequisites:
  * - Next.js dev server running: npm run dev
- * - For full E2E: Docker with forge-sim image, Analysis Service running
+ * - For full E2E: Docker with forge-sim image
  */
 
 const BASE_URL = process.env.TEST_URL || 'http://localhost:3000';

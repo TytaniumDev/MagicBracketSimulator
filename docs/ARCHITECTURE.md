@@ -112,11 +112,11 @@ flowchart TB
         UI["Web UI - Vite + React port 5173"]
     end
 
-    subgraph orchestrator["Orchestrator"]
-        API["API - decks, precons, jobs"]
+    subgraph api["API"]
+        Api["Next.js API - decks, precons, jobs"]
         Store[(SQLite Job Store)]
         Worker["Worker Loop"]
-        API --> Store
+        Api --> Store
         Worker --> Store
     end
 
@@ -144,7 +144,7 @@ flowchart TB
     end
 
     Browser --> UI
-    UI --> API
+    UI --> Api
     UI --> Condenser
     Worker --> Docker
     Docker --> Forge
@@ -159,8 +159,8 @@ flowchart TB
 
 | Component | Port | Role |
 |-----------|------|------|
-| **Frontend** | 5173 | Web UI (Vite + React). Calls Orchestrator API and Log Analyzer. |
-| **Orchestrator** | 3000 | Next.js API (decks, precons, jobs) + background Worker. Job store in SQLite. |
+| **Frontend** | 5173 | Web UI (Vite + React). Calls API and log analyzer. |
+| **API** | 3000 | Next.js API (decks, precons, jobs, analysis) + background worker. Job store in SQLite. |
 | **Log Analyzer** | 3001 | Ingests logs from Worker; condenses/structures; stores; can forward to Analysis Service. |
 | **Analysis Service** | 8000 | Python + Gemini. On-demand AI analysis of condensed logs. |
 | **Forge (Docker)** | — | One image `forge-sim`; multiple containers run in parallel per job. |
@@ -173,17 +173,17 @@ flowchart TB
 sequenceDiagram
     participant User
     participant Frontend
-    participant Orchestrator
+    participant Api
     participant Worker
     participant Docker
     participant LogAnalyzer
     participant Analysis
 
     User->>Frontend: Create job - 4 decks, simulations, parallelism
-    Frontend->>Orchestrator: POST /api/jobs
-    Orchestrator->>Orchestrator: Store job QUEUED
+    Frontend->>Api: POST /api/jobs
+    Api->>Api: Store job QUEUED
 
-    Worker->>Orchestrator: Poll next QUEUED job
+    Worker->>Api: Poll next QUEUED job
     Worker->>Worker: Write 4 deck files to job decks dir
     par Parallel containers
         Worker->>Docker: docker run forge-sim run 0
@@ -192,7 +192,7 @@ sequenceDiagram
     end
     Docker-->>Worker: Logs in job logs dir
     Worker->>LogAnalyzer: POST job logs with deck lists
-    Worker->>Orchestrator: Mark job COMPLETED
+    Worker->>Api: Mark job COMPLETED
 
     User->>Frontend: View job or trigger analysis
     Frontend->>LogAnalyzer: GET logs, POST analyze
@@ -301,7 +301,7 @@ There is **no** explicit global “max concurrent containers across all jobs” 
 | **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
 | **worker/forge-engine/** | Docker-based Forge simulation runner | Both |
 | **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
-| **analysis-service/** | (Legacy) Python + Gemini - replaced by orchestrator route | Local only |
+| **analysis-service/** | (Legacy) Python + Gemini - replaced by API route | Local only |
 
 ---
 

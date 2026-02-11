@@ -1,7 +1,7 @@
 import { auth } from './firebase';
 import { getRuntimeConfig } from './config';
 
-function getOrchestratorBase(): string {
+function resolveApiBase(): string {
   const runtime = getRuntimeConfig();
   if (runtime.apiUrl) return runtime.apiUrl;
   if (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL.length > 0)
@@ -12,7 +12,7 @@ function getOrchestratorBase(): string {
 }
 
 export function getApiBase(): string {
-  return getOrchestratorBase();
+  return resolveApiBase();
 }
 
 /**

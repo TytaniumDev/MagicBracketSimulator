@@ -28,7 +28,7 @@
 .idea/
 .cursor/
 
-# Other services (not needed for orchestrator deployment)
+# Other services (not needed for API deployment)
 analysis-service/
 frontend/
 local-worker/

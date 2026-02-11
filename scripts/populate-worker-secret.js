@@ -99,9 +99,9 @@ You need:
 
   const API_URL = await prompt(
     rl,
-    'API_URL – Orchestrator URL (App Hosting: https://orchestrator--magic-bracket-simulator.us-central1.hosted.app)',
+    'API_URL – API URL (App Hosting: https://api--magic-bracket-simulator.us-central1.hosted.app)',
     runUrl,
-    'https://orchestrator--magic-bracket-simulator.us-central1.hosted.app'
+    'https://api--magic-bracket-simulator.us-central1.hosted.app'
   );
 
   const GCS_BUCKET = await prompt(
@@ -126,9 +126,9 @@ You need:
   );
 
   console.log(`
-  WORKER_SECRET – Shared secret between worker and orchestrator API.
+  WORKER_SECRET – Shared secret between worker and API.
   If you don't have one: generate with: openssl rand -hex 32
-  Set the same value in your Cloud Run orchestrator env (WORKER_SECRET).
+  Set the same value in your Cloud Run API env (WORKER_SECRET).
 `);
   const WORKER_SECRET = await prompt(
     rl,
