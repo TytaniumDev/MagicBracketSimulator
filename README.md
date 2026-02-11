@@ -1,17 +1,23 @@
+<div align="center">
+
 # Magic Bracket Simulator
 
 [🚀 Launch App](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [📖 Documentation](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [🐞 Report Bug](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
 ![Status](https://img.shields.io/badge/Status-Active-success) ![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Docker-blue)
 
-Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge, Docker, and Gemini AI.
+Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets.<br>
+Powered by Forge, Docker, and Gemini AI.
 
 ![Magic Bracket Simulator UI](docs/images/hero-screenshot.png)
+
+</div>
 
 ## Quick Start
 
 Run the full stack locally with just two commands.
-See [Deployment Guide](docs/DEPLOYMENT.md) for detailed setup.
+
+> **Prerequisites:** [Node.js](https://nodejs.org) 18+ and [uv](https://github.com/astral-sh/uv) (for AI analysis features).
 
 ```bash
 # 1. Install dependencies
@@ -21,7 +27,7 @@ npm run install:all
 npm run dev
 ```
 
-Visit **http://localhost:5173** to start simulating.
+Visit **http://localhost:5173** to start simulating. See [Deployment Guide](docs/DEPLOYMENT.md) for detailed setup.
 
 ## Key Features
 
