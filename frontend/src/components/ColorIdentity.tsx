@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 const WUBRG_ORDER = ['W', 'U', 'B', 'R', 'G'] as const;
 const MANA_SYMBOL_SVG: Record<string, string> = {
   W: 'https://svgs.scryfall.io/card-symbols/W.svg',
@@ -19,7 +21,8 @@ interface ColorIdentityProps {
   className?: string;
 }
 
-export function ColorIdentity({ colorIdentity, className = '' }: ColorIdentityProps) {
+// Memoized to prevent re-renders in large lists (e.g. deck lists) when parent re-renders but props are unchanged.
+export const ColorIdentity = memo(function ColorIdentity({ colorIdentity, className = '' }: ColorIdentityProps) {
   if (!colorIdentity?.length) return null;
   const present = WUBRG_ORDER.filter((c) => colorIdentity.includes(c));
   return (
@@ -39,4 +42,4 @@ export function ColorIdentity({ colorIdentity, className = '' }: ColorIdentityPr
       ))}
     </span>
   );
-}
+});
