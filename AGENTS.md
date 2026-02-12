@@ -7,9 +7,8 @@
 
 ## Tooling
 - **Node.js**: 20+ (managed by `npm`)
-- **Python**: 3.11+ (managed by `uv`)
 - **Docker**: Required for simulation engine
-- **Package Manager**: `npm` (Node), `uv` (Python)
+- **Package Manager**: `npm`
 
 ## Setup
 - **Install Node Dependencies**: `npm run install:all`
