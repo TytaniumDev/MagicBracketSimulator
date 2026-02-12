@@ -19,7 +19,7 @@ export function toDck(deck: ParsedDeck): string {
 
   // Metadata section
   lines.push('[metadata]');
-  lines.push(`Name=${deck.name}`);
+  lines.push(`Name=${sanitizeName(deck.name)}`);
   lines.push('Format=Commander');
 
   // Commander section
@@ -38,9 +38,18 @@ export function toDck(deck: ParsedDeck): string {
 }
 
 /**
+ * Sanitize deck name to prevent injection attacks (newlines, control chars)
+ */
+function sanitizeName(name: string): string {
+  // Replace newlines and control characters with spaces
+  return name.replace(/[\r\n\x00-\x1F]+/g, ' ').trim();
+}
+
+/**
  * Clean card name for Forge:
  * - Strip set codes (e.g., "Sol Ring|2XM" -> "Sol Ring")
  * - Handle double-faced cards (keep as-is, Forge uses "CardName // BackName")
+ * - Sanitize to prevent injection
  */
 function cleanCardName(name: string): string {
   // Remove set code suffix (pipe notation like "Sol Ring|2XM")
@@ -49,6 +58,6 @@ function cleanCardName(name: string): string {
     name = name.substring(0, pipeIndex);
   }
 
-  // Trim whitespace
-  return name.trim();
+  // Use sanitizeName to also remove newlines/control chars from card names
+  return sanitizeName(name);
 }
