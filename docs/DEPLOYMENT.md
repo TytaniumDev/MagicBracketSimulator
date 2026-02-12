@@ -3,43 +3,95 @@
 ## Prerequisites
 
 *   **Node.js:** 18+
-*   **Python:** 3.11+ with [uv](https://github.com/astral-sh/uv)
-*   **Docker:** Required for `forge-sim` (must have image built).
+*   **Docker:** Required for running the Unified Worker (simulations).
+*   **Google Cloud SDK:** (Optional) For deploying to GCP.
 
-See [api/README.md](../api/README.md) and [analysis-service/README.md](../analysis-service/README.md) for detailed setup (e.g., `.env` files, `GEMINI_API_KEY`).
+## Local Development Setup
 
-### Windows Setup (WSL)
-
-If opening the project from Windows (e.g., Cursor with a `\\wsl.localhost\...` path):
-*   `npm run dev` will re-run inside WSL.
-*   You need Node and npm installed **inside WSL** (not just Windows).
-    ```bash
-    sudo apt update && sudo apt install -y nodejs npm
-    ```
-*   For the analysis service, install `uv` in WSL:
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    # Restart terminal or source ~/.bashrc
-    ```
-
-## Deployment and Secrets
-
-*   **GCP vs Local Mode:** See [MODE_SETUP.md](MODE_SETUP.md) for details.
-*   **Secrets:** See [SECRETS_SETUP.md](SECRETS_SETUP.md) for step-by-step instructions.
-    *   Frontend API URL is committed in `frontend/public/config.json`.
-    *   Use Secret Manager for worker config.
-
-### Finding your Cloud Run URL
-
-Run `npm run get-cloud-run-url` (requires gcloud), or check the [Firebase Console](https://console.firebase.google.com/) or [GCP Console](https://console.cloud.google.com/run).
-
-### Firebase Hosting (Frontend)
-
-To deploy the frontend to Firebase Hosting:
+### 1. Install Dependencies
+Run the following command from the root directory to install dependencies for all services (API, Frontend, Worker):
 
 ```bash
-firebase deploy --only hosting
+npm run install:all
 ```
 
-**CI/CD:**
-Merges to `main` trigger a GitHub Actions workflow that runs tests and deploys to Firebase Hosting. ensure **FIREBASE_TOKEN** is configured in GitHub Secrets.
+### 2. Start the API and Frontend
+This command starts the Next.js API (port 3000) and the React Frontend (port 5173).
+
+```bash
+npm run dev
+```
+Visit **http://localhost:5173** to view the app.
+
+### 3. Start the Simulation Worker
+The worker processes jobs from the API. You can run it in two ways:
+
+#### Option A: Docker (Recommended)
+Running the worker in Docker ensures all dependencies (Java, Forge, xvfb) are present without manual installation.
+
+```bash
+# From the root directory
+docker compose -f worker/docker-compose.yml -f worker/docker-compose.local.yml up --build
+```
+
+#### Option B: Manual (Advanced)
+If you prefer to run the worker on your host machine, you must have **Java 17+** and **Forge** installed.
+
+1.  Install Java 17 JRE.
+2.  Download Forge and extract it.
+3.  Set the `FORGE_PATH` environment variable to your Forge directory (the one containing `forge.sh`).
+    ```bash
+    export FORGE_PATH=/path/to/forge
+    ```
+4.  Run the worker:
+    ```bash
+    cd worker
+    npm run dev
+    ```
+
+## GCP Deployment
+
+### 1. Build and Push the Worker Image
+The Unified Worker runs as a single container in Cloud Run (or Compute Engine) that handles both the Node.js worker logic and the internal Java Forge processes.
+
+```bash
+# Build for linux/amd64 (required for Cloud Run)
+docker build --platform linux/amd64 -t gcr.io/YOUR_PROJECT/unified-worker:latest ./worker
+docker push gcr.io/YOUR_PROJECT/unified-worker:latest
+```
+
+### 2. Deploy the API (Cloud Run)
+The API and Frontend are deployed as a single Next.js service.
+
+```bash
+# Example using gcloud
+gcloud run deploy magic-bracket-api \
+  --source . \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated
+```
+
+### 3. Deploy the Worker
+Deploy the worker image. Ensure it has the correct environment variables (API URL, Pub/Sub subscription).
+
+```bash
+gcloud run deploy magic-bracket-worker \
+  --image gcr.io/YOUR_PROJECT/unified-worker:latest \
+  --platform managed \
+  --region us-central1 \
+  --no-allow-unauthenticated \
+  --set-env-vars API_URL=https://your-api-url.a.run.app,PUBSUB_SUBSCRIPTION=job-created-worker
+```
+
+## Secrets
+
+See [docs/SECRETS_SETUP.md](SECRETS_SETUP.md) for configuring:
+*   `GEMINI_API_KEY` (for Analysis)
+*   Firebase Admin SDK
+*   Worker Secrets
+
+## Troubleshooting
+
+*   **Worker not picking up jobs:** Ensure the API URL in the worker matches your running API (e.g., `http://host.docker.internal:3000` for Docker on Mac/Windows).
+*   **Forge errors:** Check the worker logs. If running locally without Docker, ensure Java 17 is in your PATH.
