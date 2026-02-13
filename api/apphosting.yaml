@@ -29,3 +29,6 @@ secretEnv:
   - variable: WORKER_SECRET
     secret: worker-secret
     version: latest
+  - variable: MOXFIELD_USER_AGENT
+    secret: moxfield-user-agent
+    version: latest
