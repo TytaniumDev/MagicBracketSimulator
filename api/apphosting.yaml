@@ -9,6 +9,7 @@ runConfig:
   cpu: 1
   concurrency: 80
 
+# Environment variables and secrets (single env array per Firebase App Hosting docs)
 env:
   - variable: GOOGLE_CLOUD_PROJECT
     value: magic-bracket-simulator
@@ -21,14 +22,10 @@ env:
   # CORS: allow the deployed frontend (middleware sends one origin per request)
   - variable: CORS_ALLOWED_ORIGINS
     value: https://magic-bracket-simulator.web.app
-
-secretEnv:
+  # Secrets from Cloud Secret Manager (variable + secret per docs)
   - variable: GEMINI_API_KEY
     secret: gemini-api-key
-    version: latest
   - variable: WORKER_SECRET
     secret: worker-secret
-    version: latest
   - variable: MOXFIELD_USER_AGENT
     secret: moxfield-user-agent
-    version: latest

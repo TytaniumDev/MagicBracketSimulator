@@ -184,7 +184,7 @@ Set at least:
 
 ### 3.1 Firebase App Hosting (API backend) and Moxfield
 
-The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secrets are referenced there (`secretEnv`: `GEMINI_API_KEY`, `WORKER_SECRET`, `MOXFIELD_USER_AGENT`). For the backend to read them at runtime you must **grant the App Hosting backend access** to each secret:
+The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secrets are referenced there in the `env` array (`GEMINI_API_KEY`, `WORKER_SECRET`, `MOXFIELD_USER_AGENT`). For the backend to read them at runtime you must **grant the App Hosting backend access** to each secret:
 
 1. Create the secret (if not already in Secret Manager):
    ```bash
