@@ -8,6 +8,7 @@
  *   npm run populate-worker-secret -- --defaults                # accept all defaults (WORKER_SECRET optional)
  *   npm run populate-worker-secret -- --defaults --worker-secret=abc123
  *   npm run populate-worker-secret -- --defaults --api-url=https://custom-url.com
+ *   npm run populate-worker-secret -- --defaults --gcs-bucket=my-bucket --pubsub-worker-report-in-subscription=my-sub
  *
  * Prereqs: GOOGLE_CLOUD_PROJECT set (env or .env); gcloud auth application-default login
  * (or GOOGLE_APPLICATION_CREDENTIALS pointing to a key with Secret Manager access).
@@ -119,7 +120,7 @@ You need:
     API_URL = getArgValue('api-url') || defaults.API_URL;
     GCS_BUCKET = getArgValue('gcs-bucket') || defaults.GCS_BUCKET;
     PUBSUB_SUBSCRIPTION = getArgValue('pubsub-subscription') || defaults.PUBSUB_SUBSCRIPTION;
-    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = defaults.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION;
+    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = getArgValue('pubsub-worker-report-in-subscription') || defaults.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION;
     WORKER_SECRET = getArgValue('worker-secret') || defaults.WORKER_SECRET;
 
     console.log('\n--- Using defaults (--defaults mode) ---');

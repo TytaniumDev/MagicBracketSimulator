@@ -48,61 +48,50 @@ You can run the worker on any machine with Docker — e.g., a headless Mac Mini,
 
 - Docker installed and running
 - `gcloud` CLI installed (for authentication and Secret Manager access)
+- `jq` installed (`brew install jq` / `apt install jq`)
 - Network access to your API URL (direct internet, Tailscale, VPN, etc.)
 
-### One-Time Setup
+### Quick Setup (Recommended)
 
-1. **Authenticate with GCP:**
-   ```bash
-   gcloud auth login
-   gcloud config set project YOUR_PROJECT_ID
-   gcloud auth application-default login
-   ```
+Secrets are managed via GitHub Actions and GCP Secret Manager. No manual `.env` creation, no interactive prompts, no PAT juggling.
 
-2. **Clone the repo:**
-   ```bash
-   git clone https://github.com/TytaniumDev/MagicBracketSimulator.git
-   cd MagicBracketSimulator
-   ```
+**First, populate Secret Manager** (one-time, from any machine):
+1. Add all required secrets to your GitHub repo (**Settings > Secrets > Actions**). See [SECRETS_SETUP.md](SECRETS_SETUP.md) for the full list.
+2. Run the **Provision Worker** workflow from the GitHub Actions tab (or `gh workflow run provision-worker.yml`). This syncs your secrets into GCP Secret Manager.
 
-3. **Populate Secret Manager** (if not already done from another machine):
-   ```bash
-   npm install         # installs root deps (Secret Manager client)
-   npm run populate-worker-secret
-   ```
-   Or with defaults:
-   ```bash
-   npm run populate-worker-secret -- --defaults --worker-secret=YOUR_SECRET
-   ```
-
-4. **Build the worker container:**
-   ```bash
-   docker compose -f worker/docker-compose.yml build
-   ```
-
-### Running
+**Then, on each worker machine:**
 
 ```bash
-# GCP mode (Pub/Sub, production API)
-docker compose -f worker/docker-compose.yml up -d
+# 1. Install prerequisites (macOS example)
+brew install --cask google-cloud-sdk
+brew install jq
+
+# 2. GCP auth (one-time, opens browser)
+gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
+
+# 3. Clone and run
+git clone https://github.com/TytaniumDev/MagicBracketSimulator.git
+cd MagicBracketSimulator
+./scripts/setup-worker.sh
 ```
 
-The worker will:
-- Load config from Secret Manager (API_URL, GCS_BUCKET, PUBSUB_SUBSCRIPTION, WORKER_SECRET)
-- Subscribe to Pub/Sub for job messages
-- Run Forge simulations and POST results back to the API
+The setup script reads all config from Secret Manager, writes `worker/sa.json` and `worker/.env`, logs into GHCR, and starts the worker + Watchtower. That's it.
+
+**To update secrets later:**
+1. Update the secret in GitHub repo settings
+2. Re-run the Provision Worker workflow
+3. On each worker machine: `./scripts/setup-worker.sh`
+
+### What the Worker Does
+
+- Loads runtime config from Secret Manager (API_URL, GCS_BUCKET, PUBSUB_SUBSCRIPTION, WORKER_SECRET)
+- Subscribes to Pub/Sub for job messages
+- Runs Forge simulations and POSTs results back to the API
 
 ### Credentials
 
-The docker-compose.yml mounts your GCP credentials into the container. By default
-it maps `~/.config/gcloud/application_default_credentials.json`. If using a
-service account key file, set `GOOGLE_APPLICATION_CREDENTIALS` in a `.env` file
-next to docker-compose.yml:
-
-```bash
-# worker/.env (only if using a key file instead of ADC)
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/your-key.json
-```
+The `setup-worker.sh` script places a service account key at `worker/sa.json` and configures `docker-compose.yml` to mount it into the container. If you prefer gcloud ADC instead, remove `SA_KEY_PATH` from `worker/.env` and the compose file will fall back to `~/.config/gcloud/application_default_credentials.json`.
 
 ### macOS Tips (Headless Mac Mini)
 
@@ -130,51 +119,17 @@ alongside the worker on your remote machine, polls GHCR for new images every 5 m
 and automatically pulls and restarts the worker container. Compatible with Docker 29+.
 No SSH or CI access to the machine required.
 
-**Setup on the worker machine:**
+The `setup-worker.sh` script configures Watchtower automatically (GHCR credentials
+are read from Secret Manager). No manual PAT setup needed.
 
-1. Create a GitHub PAT with `read:packages` scope
-2. Set credentials in `worker/.env`:
-   ```bash
-   # worker/.env
-   IMAGE_NAME=ghcr.io/tytaniumdev/magicbracketsimulator/worker
-   GHCR_USER=your-github-username
-   GHCR_TOKEN=ghp_your_token_here
-   ```
-3. Start worker + Watchtower:
-   ```bash
-   docker login ghcr.io -u YOUR_GITHUB_USER -p YOUR_GHCR_TOKEN
-   docker compose -f worker/docker-compose.yml -f worker/docker-compose.watchtower.yml up -d
-   ```
+### Manual Setup (Alternative)
 
-Watchtower will now auto-update the worker whenever a new image is pushed to GHCR.
+If you prefer not to use the automated setup:
 
-**Worker machine bootstrap:**
-
-```bash
-# 1. Install Docker
-# macOS: Install Docker Desktop from https://docker.com
-# Linux: curl -fsSL https://get.docker.com | sh
-
-# 2. Install gcloud CLI
-# https://cloud.google.com/sdk/docs/install
-
-# 3. Clone repo
-git clone https://github.com/TytaniumDev/MagicBracketSimulator.git ~/MagicBracketSimulator
-cd ~/MagicBracketSimulator
-
-# 4. GCP auth (one-time)
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
-gcloud auth application-default login
-
-# 5. Populate Secret Manager (one-time, if not done from another machine)
-npm install
-npm run populate-worker-secret
-
-# 6. Start worker + Watchtower
-docker login ghcr.io -u YOUR_GITHUB_USER -p YOUR_GHCR_TOKEN
-docker compose -f worker/docker-compose.yml -f worker/docker-compose.watchtower.yml up -d
-```
+1. Create `worker/.env` with `SA_KEY_PATH`, `IMAGE_NAME`, `GHCR_USER`, `GHCR_TOKEN` (see `worker/.env.example`)
+2. Place your GCP service account key at the path specified by `SA_KEY_PATH`
+3. `docker login ghcr.io -u YOUR_GITHUB_USER -p YOUR_GHCR_TOKEN`
+4. `docker compose -f worker/docker-compose.yml -f worker/docker-compose.watchtower.yml up -d`
 
 ### Monitoring
 

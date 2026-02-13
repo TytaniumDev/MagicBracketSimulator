@@ -1,0 +1,122 @@
+name: Provision Worker
+
+# Syncs secrets from GitHub Secrets into GCP Secret Manager so that
+# remote worker machines can bootstrap with just `gcloud auth` + setup-worker.sh.
+#
+# Run this workflow:
+#   - After adding/changing secrets in GitHub repo settings
+#   - From the Actions tab (manual trigger) or via: gh workflow run provision-worker.yml
+
+on:
+  workflow_dispatch:
+    inputs:
+      worker_id:
+        description: "Optional worker identifier (for multi-machine setups)"
+        required: false
+        default: ""
+
+jobs:
+  provision:
+    name: Sync Secrets to GCP Secret Manager
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Extract GCP project ID from SA key
+        id: project
+        env:
+          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          PROJECT_ID=$(echo "$SA_KEY" | jq -r '.project_id')
+          echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
+          echo "Using GCP project: $PROJECT_ID"
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        run: npm ci --prefix api
+
+      - name: Derive IMAGE_NAME
+        run: echo "IMAGE_NAME=$(echo ghcr.io/${GITHUB_REPOSITORY}/worker | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Populate simulation-worker-config in Secret Manager
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ steps.project.outputs.project_id }}
+          SECRET_API_URL: ${{ secrets.API_URL }}
+          SECRET_GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          SECRET_PUBSUB_SUBSCRIPTION: ${{ secrets.PUBSUB_SUBSCRIPTION }}
+          SECRET_PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: ${{ secrets.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION }}
+          SECRET_WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+        run: |
+          node scripts/populate-worker-secret.js \
+            --defaults \
+            --api-url="$SECRET_API_URL" \
+            --gcs-bucket="$SECRET_GCS_BUCKET" \
+            --pubsub-subscription="$SECRET_PUBSUB_SUBSCRIPTION" \
+            --pubsub-worker-report-in-subscription="$SECRET_PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION" \
+            --worker-secret="$SECRET_WORKER_SECRET"
+
+      - name: Populate worker-host-config in Secret Manager
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ steps.project.outputs.project_id }}
+          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          node -e "
+            const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
+
+            async function main() {
+              const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+              const secretId = 'worker-host-config';
+              const parent = 'projects/' + projectId;
+              const fullName = parent + '/secrets/' + secretId;
+
+              const config = {
+                sa_key: JSON.parse(process.env.SA_KEY),
+                IMAGE_NAME: process.env.IMAGE_NAME,
+                GHCR_USER: process.env.GHCR_USER,
+                GHCR_TOKEN: process.env.GHCR_TOKEN,
+              };
+
+              const client = new SecretManagerServiceClient();
+              const payload = Buffer.from(JSON.stringify(config, null, 2), 'utf8');
+
+              // Create secret if it doesn't exist
+              try {
+                await client.getSecret({ name: fullName });
+              } catch (e) {
+                if (e.code === 5 || (e.message && e.message.includes('NOT_FOUND'))) {
+                  await client.createSecret({
+                    parent,
+                    secretId,
+                    secret: { replication: { automatic: {} } },
+                  });
+                  console.log('Created secret: ' + secretId);
+                } else {
+                  throw e;
+                }
+              }
+
+              const [version] = await client.addSecretVersion({
+                parent: fullName,
+                payload: { data: payload },
+              });
+              const versionNum = version.name?.split('/').pop() ?? 'latest';
+              console.log('Done. Secret \"' + secretId + '\" updated (version: ' + versionNum + ').');
+            }
+
+            main().catch(err => { console.error(err); process.exit(1); });
+          "
