@@ -79,4 +79,4 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
       - name: Deploy Hosting & Firestore
-        run: npx firebase-tools@13 deploy --only hosting,firestore --force
+        run: npx firebase-tools@latest deploy --only hosting,firestore --force
