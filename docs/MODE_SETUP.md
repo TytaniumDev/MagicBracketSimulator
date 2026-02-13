@@ -9,7 +9,7 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 | Database | SQLite | Firestore |
 | File Storage | Local filesystem | Cloud Storage (GCS) |
 | Job Queue | Polling-based worker | Pub/Sub |
-| Analysis | api (Gemini integration) | api + misc-runner |
+| Analysis | api (Gemini integration) | api (Gemini integration) |
 | Worker | worker/ (polling) | worker/ (Pub/Sub subscriber) |
 
 ## Mode Detection
@@ -59,9 +59,6 @@ GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
 PUBSUB_SUBSCRIPTION="job-created-worker"
 GCS_BUCKET="magic-bracket-simulator-artifacts"
 API_URL="http://localhost:3000"  # or Cloud Run URL
-FORGE_SIM_IMAGE="forge-sim:latest"
-MISC_RUNNER_IMAGE="misc-runner:latest"
-JOBS_DIR="./jobs"
 WORKER_SECRET="shared-secret-for-worker-auth"
 ```
 
@@ -83,9 +80,7 @@ npm run worker:gcp
 |---------|---------|---------------|
 | api | API backend, Firestore/Pub/Sub integration | Local or Cloud Run |
 | frontend | React UI | Local or Firebase Hosting |
-| worker | Receives Pub/Sub messages, runs Docker containers | Your machine |
-| forge-sim | MTG simulation engine | Docker (via worker) |
-| misc-runner | Log condensing, GCS uploads | Docker (via worker) |
+| worker | Unified container: Forge simulation + log processing + Pub/Sub subscriber | Docker on your machine |
 
 ---
 
@@ -111,8 +106,7 @@ npm run dev
 |---------|---------|
 | api | API backend with SQLite, Gemini integration |
 | frontend | React UI |
-| worker (polling) | Polls API for jobs |
-| forge-sim | MTG simulation engine (Docker) |
+| worker (polling) | Unified container: Forge simulation + log processing, polls API for jobs |
 
 ---
 
@@ -130,23 +124,12 @@ This loads all precon deck files from `worker/forge-engine/precons/` into Firest
 
 ---
 
-## Docker Images
+## Docker Image
 
-Build the Docker images required for worker:
+Build the unified worker container:
 
 ```bash
-# Build forge-sim
-cd worker/forge-engine
-docker build -t forge-sim:latest .
-
-# Build misc-runner
-cd ../misc-runner
-docker build -t misc-runner:latest .
-```
-
-Verify images exist:
-```bash
-docker images | grep -E "(forge-sim|misc-runner)"
+docker compose -f worker/docker-compose.yml build
 ```
 
 ---

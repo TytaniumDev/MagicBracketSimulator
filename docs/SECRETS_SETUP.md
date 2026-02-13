@@ -85,12 +85,12 @@ Use this URL when running `npm run populate-worker-secret`. The frontend always 
 4. Open the service account → **Keys** → **Add key** → **Create new key** → **JSON**. Download the JSON file.
 5. **On your Mac (or host running worker):**
    - Save the JSON somewhere safe (e.g. `~/.config/magicbracket/worker-key.json`).
-   - Grant the service account **Secret Manager Secret Accessor** (so the worker can read `worker-config`). Optionally **Secret Manager Admin** if you will run the populate script with this key.
+   - Grant the service account **Secret Manager Secret Accessor** (so the worker can read `simulation-worker-config`). Optionally **Secret Manager Admin** if you will run the populate script with this key.
    - **No .env required:** Use `gcloud config set project YOUR_PROJECT_ID` and (if not using ADC) set `GOOGLE_APPLICATION_CREDENTIALS` in env or a minimal `.env`. The rest of the worker config comes from Secret Manager (see below).
 
 ### 1.3 worker config via Secret Manager (no .env copy on each machine)
 
-**One-time setup:** Run the interactive script from the repo root. It prompts for each value and gives **clickable links** to where to get it in GCP Console, then creates/updates the secret `worker-config` in Secret Manager.
+**One-time setup:** Run the interactive script from the repo root. It prompts for each value and gives **clickable links** to where to get it in GCP Console, then creates/updates the secret `simulation-worker-config` in Secret Manager.
 
 ```bash
 # From repo root. No .env needed if gcloud default project is set:
@@ -100,8 +100,9 @@ npm run populate-worker-secret
 # or: GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run populate-worker-secret
 ```
 
-- The script asks for: **API_URL**, **GCS_BUCKET**, **PUBSUB_SUBSCRIPTION**, **WORKER_SECRET**, **FORGE_SIM_IMAGE**, **MISC_RUNNER_IMAGE**, **JOBS_DIR**.
+- The script asks for: **API_URL**, **GCS_BUCKET**, **PUBSUB_SUBSCRIPTION**, **PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION**, **WORKER_SECRET**.
 - For each, it prints a link (e.g. Cloud Run, Storage, Pub/Sub) so you can copy the value from the console.
+- Use `--defaults` to accept all defaults without prompts: `npm run populate-worker-secret -- --defaults --worker-secret=YOUR_SECRET`
 - After you fill values, it creates or updates the secret. On any **new machine**, you only need the gcloud default project (`gcloud config set project ...`) and Application Default Credentials (or the service account key with Secret Manager access); **no .env needed** and no need to copy or re-enter all values.
 
 **IAM:** The identity the worker uses (ADC or service account key) must have **Secret Manager Secret Accessor** on the secret (or project). Same key can have Pub/Sub, GCS, Firestore roles as before.

@@ -36,6 +36,7 @@ Visit **http://localhost:5173** to start simulating.
 *   **[Deployment Guide](docs/DEPLOYMENT.md):** Detailed setup instructions, prerequisites, and cloud deployment.
 *   **[Mode Setup](docs/MODE_SETUP.md):** Configure for Local vs GCP operation.
 *   **[Secrets Setup](docs/SECRETS_SETUP.md):** How to configure API keys and credentials.
+*   **[Remote Worker Setup](docs/DEPLOYMENT.md#remote-worker-headless-machine):** Deploy the worker on a separate machine with auto-updates via Watchtower.
 
 ## Contributing
 
