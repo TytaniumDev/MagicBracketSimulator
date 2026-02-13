@@ -92,7 +92,7 @@ jobs:
         run: npm ci --prefix frontend
 
       - name: Deploy to Firebase
-        run: npx firebase-tools deploy --only hosting,apphosting:api,firestore --token "$FIREBASE_TOKEN"
+        run: npx firebase-tools deploy --only hosting,apphosting:api,firestore --token "$FIREBASE_TOKEN" --debug
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
