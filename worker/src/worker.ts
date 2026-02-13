@@ -110,7 +110,9 @@ async function loadConfigFromSecretManager(): Promise<void> {
       typeof payload === 'string' ? payload : Buffer.from(payload).toString('utf8');
     const config = JSON.parse(data) as Record<string, string>;
     for (const [key, value] of Object.entries(config)) {
-      if (value !== undefined && value !== '' && process.env[key] === undefined) {
+      const current = process.env[key];
+      const unset = current === undefined || current === '';
+      if (value !== undefined && value !== '' && unset) {
         process.env[key] = value;
       }
     }

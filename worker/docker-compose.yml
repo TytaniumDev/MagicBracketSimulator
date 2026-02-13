@@ -9,6 +9,8 @@ services:
       dockerfile: Dockerfile
     container_name: magic-bracket-worker
     restart: unless-stopped
+    env_file:
+      - .env
 
     environment:
       # GCP Configuration
@@ -19,9 +21,8 @@ services:
       - PUBSUB_SUBSCRIPTION=${PUBSUB_SUBSCRIPTION:-job-created-worker}
       - PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION=${PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION:-worker-report-in-worker}
 
-      # API
+      # API (WORKER_SECRET from Secret Manager in GCP, or from env_file: .env for local)
       - API_URL=${API_URL:-https://magicbracket.com}
-      - WORKER_SECRET=${WORKER_SECRET}
 
       # Storage
       - GCS_BUCKET=${GCS_BUCKET:-magic-bracket-simulator-artifacts}
