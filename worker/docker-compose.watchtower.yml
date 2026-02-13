@@ -3,13 +3,16 @@
 #
 # Requires GHCR_USER and GHCR_TOKEN env vars (or in worker/.env) for private repos.
 # Generate a GitHub PAT with read:packages scope.
+#
+# Uses nickfedor/watchtower (containrrr/watchtower is archived and incompatible with Docker 29+ API 1.44).
 
 services:
   watchtower:
-    image: containrrr/watchtower
+    image: nickfedor/watchtower:latest
     container_name: watchtower
     restart: unless-stopped
     environment:
+      - DOCKER_API_VERSION=1.44
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=300
       - WATCHTOWER_LABEL_ENABLE=true

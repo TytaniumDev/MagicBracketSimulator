@@ -125,9 +125,10 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/your-key.json
 The `deploy-worker.yml` GitHub Actions workflow builds a multi-arch Docker image
 (amd64 + arm64) and pushes it to GHCR on every merge to `main`.
 
-[Watchtower](https://containrrr.dev/watchtower/) runs alongside the worker on your
-remote machine, polls GHCR for new images every 5 minutes, and automatically pulls
-and restarts the worker container. No SSH or CI access to the machine required.
+[Watchtower](https://watchtower.nickfedor.com/) (image: `nickfedor/watchtower`) runs
+alongside the worker on your remote machine, polls GHCR for new images every 5 minutes,
+and automatically pulls and restarts the worker container. Compatible with Docker 29+.
+No SSH or CI access to the machine required.
 
 **Setup on the worker machine:**
 
