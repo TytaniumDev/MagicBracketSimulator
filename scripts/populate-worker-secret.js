@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /**
- * Interactive script to populate Google Secret Manager with worker config.
+ * Populate Google Secret Manager with worker config.
  * Run from repo root: node scripts/populate-worker-secret.js
+ *
+ * Usage:
+ *   npm run populate-worker-secret                              # interactive
+ *   npm run populate-worker-secret -- --defaults                # accept all defaults (WORKER_SECRET optional)
+ *   npm run populate-worker-secret -- --defaults --worker-secret=abc123
+ *   npm run populate-worker-secret -- --defaults --api-url=https://custom-url.com
  *
  * Prereqs: GOOGLE_CLOUD_PROJECT set (env or .env); gcloud auth application-default login
  * (or GOOGLE_APPLICATION_CREDENTIALS pointing to a key with Secret Manager access).
@@ -13,6 +19,15 @@ const { execSync } = require('child_process');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', 'worker', '.env') });
+
+// Parse CLI flags
+const args = process.argv.slice(2);
+const USE_DEFAULTS = args.includes('--defaults');
+function getArgValue(name) {
+  const prefix = `--${name}=`;
+  const arg = args.find(a => a.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : undefined;
+}
 
 /** Get GCP project from gcloud config when GOOGLE_CLOUD_PROJECT is not set (no .env needed). */
 function getProjectFromGcloud() {
@@ -29,7 +44,7 @@ function getProjectFromGcloud() {
 }
 
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || getProjectFromGcloud();
-const SECRET_NAME = 'worker-config';
+const SECRET_NAME = 'simulation-worker-config';
 
 const CONSOLE_BASE = 'https://console.cloud.google.com';
 const RUN_URL = `${CONSOLE_BASE}/run?project=`;
@@ -48,7 +63,7 @@ function prompt(rl, message, helpUrl, defaultValue) {
     if (helpUrl) {
       const pid = PROJECT_ID || 'YOUR_PROJECT_ID';
       const href = helpUrl.startsWith('http') ? helpUrl : CONSOLE_BASE + helpUrl + pid;
-      console.log('\n  → ' + link(href, 'Open in browser'));
+      console.log('\n  \u2192 ' + link(href, 'Open in browser'));
     }
     rl.question(`\n${message}${defaultStr}: `, (answer) => {
       const trimmed = (answer || '').trim();
@@ -63,9 +78,9 @@ async function checkPrereqs() {
 ERROR: GCP project is not set.
 
 Either:
-  • gcloud config set project YOUR_PROJECT_ID   (no .env needed)
-  • GOOGLE_CLOUD_PROJECT=your-project npm run populate-worker-secret
-  • Or set GOOGLE_CLOUD_PROJECT in your environment or .env
+  \u2022 gcloud config set project YOUR_PROJECT_ID   (no .env needed)
+  \u2022 GOOGLE_CLOUD_PROJECT=your-project npm run populate-worker-secret
+  \u2022 Or set GOOGLE_CLOUD_PROJECT in your environment or .env
 
 For Application Default Credentials (so you don't need a key file on this machine):
   ${link(ADC_DOCS, 'Set up ADC')}
@@ -82,83 +97,90 @@ This script will create or update the Secret Manager secret "${SECRET_NAME}"
 so the worker can run without a .env file on each machine.
 
 You need:
-  • GOOGLE_CLOUD_PROJECT set (env or .env)
-  • gcloud auth application-default login (or a service account key with Secret Manager access)
+  \u2022 GOOGLE_CLOUD_PROJECT set (env or .env)
+  \u2022 gcloud auth application-default login (or a service account key with Secret Manager access)
 `);
 
   await checkPrereqs();
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // Default values
+  const defaults = {
+    API_URL: 'https://api--magic-bracket-simulator.us-central1.hosted.app',
+    GCS_BUCKET: `${PROJECT_ID}-artifacts`,
+    PUBSUB_SUBSCRIPTION: 'job-created-worker',
+    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: 'worker-report-in-worker',
+    WORKER_SECRET: '',
+  };
 
-  const runUrl = RUN_URL + PROJECT_ID;
-  const storageUrl = STORAGE_URL + PROJECT_ID;
-  const pubsubUrl = PUBSUB_URL + PROJECT_ID;
-  const secretsUrl = SECRETS_URL + PROJECT_ID;
+  let API_URL, GCS_BUCKET, PUBSUB_SUBSCRIPTION, PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION, WORKER_SECRET;
 
-  console.log('\n--- Values to store (press Enter to accept default) ---');
+  if (USE_DEFAULTS) {
+    // Non-interactive mode: use defaults with CLI overrides
+    API_URL = getArgValue('api-url') || defaults.API_URL;
+    GCS_BUCKET = getArgValue('gcs-bucket') || defaults.GCS_BUCKET;
+    PUBSUB_SUBSCRIPTION = getArgValue('pubsub-subscription') || defaults.PUBSUB_SUBSCRIPTION;
+    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = defaults.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION;
+    WORKER_SECRET = getArgValue('worker-secret') || defaults.WORKER_SECRET;
 
-  const API_URL = await prompt(
-    rl,
-    'API_URL – API URL (App Hosting: https://api--magic-bracket-simulator.us-central1.hosted.app)',
-    runUrl,
-    'https://api--magic-bracket-simulator.us-central1.hosted.app'
-  );
+    console.log('\n--- Using defaults (--defaults mode) ---');
+    console.log(`  API_URL: ${API_URL}`);
+    console.log(`  GCS_BUCKET: ${GCS_BUCKET}`);
+    console.log(`  PUBSUB_SUBSCRIPTION: ${PUBSUB_SUBSCRIPTION}`);
+    console.log(`  PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: ${PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION}`);
+    console.log(`  WORKER_SECRET: ${WORKER_SECRET ? '(set)' : '(not set)'}`);
+  } else {
+    // Interactive mode
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-  const GCS_BUCKET = await prompt(
-    rl,
-    'GCS_BUCKET – Bucket name for job artifacts',
-    storageUrl,
-    `${PROJECT_ID}-artifacts`
-  );
+    const runUrl = RUN_URL + PROJECT_ID;
+    const storageUrl = STORAGE_URL + PROJECT_ID;
+    const pubsubUrl = PUBSUB_URL + PROJECT_ID;
+    const secretsUrl = SECRETS_URL + PROJECT_ID;
 
-  const PUBSUB_SUBSCRIPTION = await prompt(
-    rl,
-    'PUBSUB_SUBSCRIPTION – Subscription the worker pulls from (e.g. job-created-worker)',
-    pubsubUrl,
-    'job-created-worker'
-  );
+    console.log('\n--- Values to store (press Enter to accept default) ---');
 
-  const PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = await prompt(
-    rl,
-    'PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION – Subscription for frontend-triggered worker status (e.g. worker-report-in-worker)',
-    pubsubUrl,
-    'worker-report-in-worker'
-  );
+    API_URL = await prompt(
+      rl,
+      'API_URL \u2013 API URL (App Hosting: https://api--magic-bracket-simulator.us-central1.hosted.app)',
+      runUrl,
+      defaults.API_URL
+    );
 
-  console.log(`
-  WORKER_SECRET – Shared secret between worker and API.
+    GCS_BUCKET = await prompt(
+      rl,
+      'GCS_BUCKET \u2013 Bucket name for job artifacts',
+      storageUrl,
+      defaults.GCS_BUCKET
+    );
+
+    PUBSUB_SUBSCRIPTION = await prompt(
+      rl,
+      'PUBSUB_SUBSCRIPTION \u2013 Subscription the worker pulls from',
+      pubsubUrl,
+      defaults.PUBSUB_SUBSCRIPTION
+    );
+
+    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = await prompt(
+      rl,
+      'PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION \u2013 Subscription for frontend-triggered worker status',
+      pubsubUrl,
+      defaults.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION
+    );
+
+    console.log(`
+  WORKER_SECRET \u2013 Shared secret between worker and API.
   If you don't have one: generate with: openssl rand -hex 32
   Set the same value in your Cloud Run API env (WORKER_SECRET).
 `);
-  const WORKER_SECRET = await prompt(
-    rl,
-    'WORKER_SECRET',
-    secretsUrl,
-    ''
-  );
+    WORKER_SECRET = await prompt(
+      rl,
+      'WORKER_SECRET',
+      secretsUrl,
+      defaults.WORKER_SECRET
+    );
 
-  const FORGE_SIM_IMAGE = await prompt(
-    rl,
-    'FORGE_SIM_IMAGE – Docker image name for forge-sim',
-    null,
-    'forge-sim:latest'
-  );
-
-  const MISC_RUNNER_IMAGE = await prompt(
-    rl,
-    'MISC_RUNNER_IMAGE – Docker image name for misc-runner',
-    null,
-    'misc-runner:latest'
-  );
-
-  const JOBS_DIR = await prompt(
-    rl,
-    'JOBS_DIR – Local path for job files on this machine',
-    null,
-    './jobs'
-  );
-
-  rl.close();
+    rl.close();
+  }
 
   const config = {
     API_URL,
@@ -166,9 +188,6 @@ You need:
     PUBSUB_SUBSCRIPTION,
     PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION,
     WORKER_SECRET,
-    FORGE_SIM_IMAGE,
-    MISC_RUNNER_IMAGE,
-    JOBS_DIR,
   };
   // Omit empty optional
   if (!config.WORKER_SECRET) delete config.WORKER_SECRET;
@@ -202,8 +221,8 @@ You need:
 Done. Secret "${SECRET_NAME}" updated (version: ${version.name?.split('/').pop() ?? 'latest'}).
 
 On any machine: set GOOGLE_CLOUD_PROJECT and use gcloud auth application-default login
-(or a service account key with Secret Manager Secret Accessor). No .env needed; run:
-  npm run worker:gcp
+(or a service account key with Secret Manager Secret Accessor). No .env needed.
+Start the worker with: docker compose -f worker/docker-compose.yml up
 `);
   } catch (err) {
     const msg = err.message || String(err);

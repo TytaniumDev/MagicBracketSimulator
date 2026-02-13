@@ -3,6 +3,7 @@
 
 services:
   worker:
+    image: ${IMAGE_NAME:-magic-bracket-worker}:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile

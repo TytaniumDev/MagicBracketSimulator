@@ -1,0 +1,23 @@
+# Watchtower auto-update overlay — polls GHCR for new worker images
+# Usage: docker compose -f worker/docker-compose.yml -f worker/docker-compose.watchtower.yml up -d
+#
+# Requires GHCR_USER and GHCR_TOKEN env vars (or in worker/.env) for private repos.
+# Generate a GitHub PAT with read:packages scope.
+
+services:
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=true
+      - REPO_USER=${GHCR_USER}
+      - REPO_PASS=${GHCR_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  worker:
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
