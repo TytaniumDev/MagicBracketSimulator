@@ -182,6 +182,22 @@ Set at least:
   - Cloud Run (API) env,
   - worker config (in Secret Manager via `npm run populate-worker-secret`, or in `.env` if not using Secret Manager).
 
+### 3.1 Firebase App Hosting (API backend) and Moxfield
+
+The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secrets are referenced there (`secretEnv`: `GEMINI_API_KEY`, `WORKER_SECRET`, `MOXFIELD_USER_AGENT`). For the backend to read them at runtime you must **grant the App Hosting backend access** to each secret:
+
+1. Create the secret (if not already in Secret Manager):
+   ```bash
+   firebase apphosting:secrets:set moxfield-user-agent
+   ```
+   When prompted, enter your Moxfield User-Agent string and confirm adding permissions.
+
+2. If you created the secret in [Cloud Secret Manager](https://console.cloud.google.com/security/secret-manager) instead of the CLI, grant access so the backend can read it:
+   ```bash
+   firebase apphosting:secrets:grantaccess moxfield-user-agent
+   ```
+   Use your backend ID (e.g. from Firebase Console → Build → App Hosting → your backend). Without this step, `MOXFIELD_USER_AGENT` is not injected and `/api/moxfield-status` returns `enabled: false`; full Moxfield URL import will then fail until access is granted and the backend is redeployed.
+
 ---
 
 ## 4. Checklist summary (no secrets on your machine)
@@ -192,6 +208,7 @@ Set at least:
 - [ ] **Worker machine:** Run `./scripts/setup-worker.sh` — reads from Secret Manager, no manual config.
 - [ ] **Frontend config:** Committed `config.json` has the stable App Hosting URL (always used as-is).
 - [ ] **API (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in worker config.
+- [ ] **API (Firebase App Hosting):** If using Moxfield URL import, run `firebase apphosting:secrets:grantaccess moxfield-user-agent` (and `apphosting:secrets:set moxfield-user-agent` if the secret does not exist yet). See §3.1.
 
 ---
 

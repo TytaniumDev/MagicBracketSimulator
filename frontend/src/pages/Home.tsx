@@ -192,33 +192,52 @@ export default function Home() {
 
     try {
       let body: Record<string, string>;
+      const tryingMoxfieldUrl = isMoxfieldUrl && !!deckUrl.trim();
 
-      if (showManualPaste) {
-        // Moxfield API not available - use manual paste
-        if (!deckText.trim()) throw new Error('Please paste your deck list from Moxfield');
+      // Always try full Moxfield URL first when we have one (API uses custom User-Agent).
+      // Only use manual paste when user has pasted text and no URL to try.
+      if (isMoxfieldUrl && deckUrl.trim()) {
+        body = { deckUrl: deckUrl.trim() };
+      } else if (isMoxfieldUrl && deckText.trim()) {
         body = { deckText: deckText.trim(), deckLink: deckUrl.trim() };
         if (deckName.trim()) {
           body.deckName = deckName.trim();
         }
-      } else {
-        // URL can be fetched directly (including Moxfield when API is enabled)
-        if (!deckUrl.trim()) throw new Error('Please enter a deck URL');
+      } else if (deckUrl.trim()) {
         body = { deckUrl: deckUrl.trim() };
+      } else {
+        throw new Error(showManualPaste ? 'Please paste your deck list from Moxfield' : 'Please enter a deck URL');
       }
 
-      const response = await fetchWithAuth(`${apiBase}/api/decks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const doPost = async () => {
+        const res = await fetchWithAuth(`${apiBase}/api/decks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        return { response: res, data };
+      };
 
-      const data = await response.json();
+      let result = await doPost();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to save deck');
+      // If we tried Moxfield URL and it failed, retry once then switch to manual paste
+      if (tryingMoxfieldUrl && !result.response.ok) {
+        result = await doPost();
+        if (!result.response.ok) {
+          setMoxfieldEnabled(false);
+          setSaveError(
+            'Couldn\'t import from Moxfield automatically. Please paste your deck list below (Export → MTGO on Moxfield).'
+          );
+          return;
+        }
       }
 
-      setSaveMessage(`Deck saved: "${data.name}"`);
+      if (!result.response.ok) {
+        throw new Error(result.data.error || 'Failed to save deck');
+      }
+
+      setSaveMessage(`Deck saved: "${result.data.name}"`);
       await fetchDecks();
       setDeckUrl('');
       setDeckText('');
@@ -349,20 +368,18 @@ export default function Home() {
             placeholder="https://moxfield.com/decks/... or https://archidekt.com/decks/..."
             className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {!showManualPaste && (
-            <button
-              type="button"
-              onClick={handleSaveDeck}
-              disabled={isSaving || !deckUrl.trim()}
-              className={`px-4 py-2 rounded-md ${
-                isSaving || !deckUrl.trim()
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-            >
-              {isSaving ? 'Adding...' : 'Add Deck'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleSaveDeck}
+            disabled={isSaving || !deckUrl.trim()}
+            className={`px-4 py-2 rounded-md ${
+              isSaving || !deckUrl.trim()
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-green-600 text-white hover:bg-green-700'
+            }`}
+          >
+            {isSaving ? 'Adding...' : 'Add Deck'}
+          </button>
         </div>
 
         {showManualPaste && (
