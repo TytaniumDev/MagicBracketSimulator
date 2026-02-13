@@ -34,7 +34,7 @@ services:
 
     volumes:
       # GCP credentials
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}:/secrets/sa.json:ro
+      - ${SA_KEY_PATH:-${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}}:/secrets/sa.json:ro
 
       # Persistent job storage (optional - for debugging)
       - ./jobs:/app/jobs

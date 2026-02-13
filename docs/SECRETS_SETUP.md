@@ -88,24 +88,49 @@ Use this URL when running `npm run populate-worker-secret`. The frontend always 
    - Grant the service account **Secret Manager Secret Accessor** (so the worker can read `simulation-worker-config`). Optionally **Secret Manager Admin** if you will run the populate script with this key.
    - **No .env required:** Use `gcloud config set project YOUR_PROJECT_ID` and (if not using ADC) set `GOOGLE_APPLICATION_CREDENTIALS` in env or a minimal `.env`. The rest of the worker config comes from Secret Manager (see below).
 
-### 1.3 worker config via Secret Manager (no .env copy on each machine)
+### 1.3 Worker config via Secret Manager
 
-**One-time setup:** Run the interactive script from the repo root. It prompts for each value and gives **clickable links** to where to get it in GCP Console, then creates/updates the secret `simulation-worker-config` in Secret Manager.
+#### Option A: Automated via GitHub Actions (recommended)
+
+The **Provision Worker** workflow reads secrets from GitHub repo settings and syncs them into GCP Secret Manager. No interactive prompts, no gcloud on your dev machine.
+
+1. Add the following secrets to your GitHub repo (**Settings > Secrets > Actions**):
+
+   | Secret | Description |
+   |---|---|
+   | `GCP_SA_KEY` | GCP service account key JSON (from step 1.2) |
+   | `WORKER_SECRET` | Shared secret between worker and API |
+   | `API_URL` | Production API URL (see §0) |
+   | `GCS_BUCKET` | Cloud Storage bucket name (e.g. `magic-bracket-simulator-artifacts`) |
+   | `PUBSUB_SUBSCRIPTION` | Pub/Sub subscription for jobs (e.g. `job-created-worker`) |
+   | `PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION` | Pub/Sub subscription for worker report-in (e.g. `worker-report-in-worker`) |
+   | `GHCR_USER` | GitHub username (for Watchtower to pull worker images) |
+   | `GHCR_TOKEN` | GitHub PAT with `read:packages` scope (for Watchtower) |
+
+2. Run the **Provision Worker** workflow from the GitHub Actions tab or via:
+   ```bash
+   gh workflow run provision-worker.yml
+   ```
+
+This populates two secrets in GCP Secret Manager:
+- `simulation-worker-config` — worker runtime config (API_URL, GCS_BUCKET, etc.)
+- `worker-host-config` — host machine config (SA key, GHCR creds, IMAGE_NAME)
+
+#### Option B: Manual (interactive script)
+
+If you prefer not to use GitHub Actions, run the interactive script directly:
 
 ```bash
-# From repo root. No .env needed if gcloud default project is set:
 gcloud config set project magic-bracket-simulator
+npm install
 npm run populate-worker-secret
-# or: node scripts/populate-worker-secret.js
-# or: GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run populate-worker-secret
 ```
 
-- The script asks for: **API_URL**, **GCS_BUCKET**, **PUBSUB_SUBSCRIPTION**, **PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION**, **WORKER_SECRET**.
-- For each, it prints a link (e.g. Cloud Run, Storage, Pub/Sub) so you can copy the value from the console.
-- Use `--defaults` to accept all defaults without prompts: `npm run populate-worker-secret -- --defaults --worker-secret=YOUR_SECRET`
-- After you fill values, it creates or updates the secret. On any **new machine**, you only need the gcloud default project (`gcloud config set project ...`) and Application Default Credentials (or the service account key with Secret Manager access); **no .env needed** and no need to copy or re-enter all values.
+Use `--defaults` for non-interactive mode: `npm run populate-worker-secret -- --defaults --worker-secret=YOUR_SECRET`
 
-**IAM:** The identity the worker uses (ADC or service account key) must have **Secret Manager Secret Accessor** on the secret (or project). Same key can have Pub/Sub, GCS, Firestore roles as before.
+#### IAM requirements
+
+The identity the worker uses (ADC or service account key) must have **Secret Manager Secret Accessor** on the project. Same key can have Pub/Sub, GCS, Firestore roles as before. For the provision workflow, the SA key also needs **Secret Manager Admin** (to create/update secrets).
 
 ---
 
@@ -124,7 +149,15 @@ npm run build --prefix frontend
 
 A GitHub Actions workflow (`.github/workflows/deploy.yml`) runs on **push to main** (after a PR is merged). It runs the same tests as CI (frontend lint/build, API lint/build/test); if all pass, it deploys the frontend to **Firebase Hosting**.
 
-**Required GitHub secret:** **FIREBASE_TOKEN** – Firebase CI token. Locally run `firebase login:ci`, then in the repo **Settings → Secrets and variables → Actions** add a secret named `FIREBASE_TOKEN` with that value.
+**Required GitHub secrets:**
+- **FIREBASE_TOKEN** – Firebase CI token. Run `firebase login:ci` locally, then add as a secret.
+- **VITE_FIREBASE_*** (all six) – Firebase web config for Google sign-in. Without these, the deployed app shows "Local User" instead of Google sign-in. Get them from [Firebase Console → Project Settings → Your apps](https://console.firebase.google.com/project/_/settings/general) (Web app config):
+  - `VITE_FIREBASE_API_KEY`
+  - `VITE_FIREBASE_AUTH_DOMAIN` (e.g. `magic-bracket-simulator.firebaseapp.com`)
+  - `VITE_FIREBASE_PROJECT_ID` (e.g. `magic-bracket-simulator`)
+  - `VITE_FIREBASE_STORAGE_BUCKET` (e.g. `magic-bracket-simulator.appspot.com`)
+  - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+  - `VITE_FIREBASE_APP_ID`
 
 ### Local dev (no deploy)
 
@@ -154,17 +187,32 @@ Set at least:
 ## 4. Checklist summary (no secrets on your machine)
 
 - [ ] **GCP project:** `gcloud config set project YOUR_PROJECT_ID` (or set `GOOGLE_CLOUD_PROJECT` in env). No .env required.
-- [ ] **Cloud Run URL:** Use `npm run get-cloud-run-url` or Firebase/GCP Console (see §0).
-- [ ] **GCP credentials:** Use `gcloud auth application-default login` (or a key) so scripts and worker can read Secret Manager. No key file required if using ADC.
-- [ ] **worker config:** Run `npm run populate-worker-secret` once; on each machine set only gcloud default project and ADC. No .env needed.
+- [ ] **GitHub Secrets:** Add all worker/GHCR secrets (see §1.3 Option A) to GitHub repo settings.
+- [ ] **Provision Worker:** Run the GitHub Actions workflow to sync secrets to GCP Secret Manager.
+- [ ] **Worker machine:** Run `./scripts/setup-worker.sh` — reads from Secret Manager, no manual config.
 - [ ] **Frontend config:** Committed `config.json` has the stable App Hosting URL (always used as-is).
-- [ ] **API (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in worker config (in Secret Manager via populate-worker-secret).
+- [ ] **API (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in worker config.
 
 ---
 
-## 5. GitHub Actions – Firebase Hosting deploy (push to main)
+## 5. GitHub Actions secrets
 
-**Required:** In the repo **Settings → Secrets and variables → Actions**, add **FIREBASE_TOKEN**. From your machine run `firebase login:ci`, then paste the token into a new secret named `FIREBASE_TOKEN`. The workflow uses the committed `frontend/public/config.json`; no other secrets are needed for the frontend.
+**Required secrets** (repo **Settings → Secrets and variables → Actions**):
+
+### Firebase Hosting deploy (push to main)
+
+1. **FIREBASE_TOKEN** – Run `firebase login:ci` locally, paste the token into a secret named `FIREBASE_TOKEN`.
+2. **VITE_FIREBASE_*** (all six) – Firebase web config. Without these, the deployed app uses mock "Local User" auth instead of Google sign-in. Copy from Firebase Console → Project Settings → Your apps → Web app:
+   - `VITE_FIREBASE_API_KEY`
+   - `VITE_FIREBASE_AUTH_DOMAIN`
+   - `VITE_FIREBASE_PROJECT_ID`
+   - `VITE_FIREBASE_STORAGE_BUCKET`
+   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+   - `VITE_FIREBASE_APP_ID`
+
+### Provision Worker (manual trigger)
+
+See §1.3 Option A for the full list: `GCP_SA_KEY`, `WORKER_SECRET`, `API_URL`, `GCS_BUCKET`, `PUBSUB_SUBSCRIPTION`, `PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION`, `GHCR_USER`, `GHCR_TOKEN`.
 
 ---
 

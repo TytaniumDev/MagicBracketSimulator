@@ -16,6 +16,7 @@ firebase-admin-key.json
 magic-bracket-worker-key.json
 *.pem
 service-account*.json
+**/sa.json
 
 # Node
 node_modules/
