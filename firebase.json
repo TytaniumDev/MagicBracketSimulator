@@ -13,6 +13,6 @@
   "hosting": {
     "public": "frontend/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "predeploy": ["npm run build --prefix frontend"]
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
   }
 }
