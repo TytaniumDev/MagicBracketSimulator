@@ -194,9 +194,11 @@ The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secret
 
 2. If you created the secret in [Cloud Secret Manager](https://console.cloud.google.com/security/secret-manager) instead of the CLI, grant access so the backend can read it:
    ```bash
-   firebase apphosting:secrets:grantaccess moxfield-user-agent
+   firebase apphosting:secrets:grantaccess moxfield-user-agent --backend api
    ```
-   Use your backend ID (e.g. from Firebase Console → Build → App Hosting → your backend). Without this step, `MOXFIELD_USER_AGENT` is not injected and `/api/moxfield-status` returns `enabled: false`; full Moxfield URL import will then fail until access is granted and the backend is redeployed.
+   Use your backend ID (e.g. from Firebase Console → Build → App Hosting → your backend). Without this step, `MOXFIELD_USER_AGENT` is not injected and `/api/moxfield-status` returns `enabled: false`; full Moxfield URL import will then fail until access is granted.
+
+3. **Trigger a new rollout** after granting access. Secrets are injected when a new revision is built; the currently running revision will not see the secret until you redeploy. Either push a new commit to your App Hosting live branch (e.g. `main`) to trigger an automatic rollout, or in [Firebase Console](https://console.firebase.google.com/) go to **Build** → **App Hosting** → your backend → **Rollouts** and create a new rollout. Until a new rollout completes, the API will keep returning `enabled: false` for `/api/moxfield-status`.
 
 ---
 
