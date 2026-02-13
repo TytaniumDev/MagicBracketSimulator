@@ -3,10 +3,13 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "apphosting": {
-    "source": ".",
-    "apphosting.yaml": "./api/apphosting.yaml"
-  },
+  "apphosting": [
+    {
+      "backendId": "api",
+      "rootDir": "./api",
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"]
+    }
+  ],
   "hosting": {
     "public": "frontend/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],

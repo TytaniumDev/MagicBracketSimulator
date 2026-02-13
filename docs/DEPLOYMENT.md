@@ -44,12 +44,7 @@ Merges to `main` trigger a GitHub Actions workflow that runs tests and deploys t
 
 You can run the worker on any machine with Docker — e.g., a headless Mac Mini, a spare Linux box, or a cloud VM. The worker connects to the GCP-hosted API over the network; no local API or frontend required.
 
-### Prerequisites
-
-- Docker installed and running
-- `gcloud` CLI installed (for authentication and Secret Manager access)
-- `jq` installed (`brew install jq` / `apt install jq`)
-- Network access to your API URL (direct internet, Tailscale, VPN, etc.)
+> **Unix only:** The worker setup script must be run on a Unix system (macOS, Linux, or WSL). It will install `jq` and the `gcloud` CLI if missing, prompt for GCP project and auth, then configure and start the worker. You only need Docker installed and running beforehand.
 
 ### Quick Setup (Recommended)
 
@@ -59,24 +54,15 @@ Secrets are managed via GitHub Actions and GCP Secret Manager. No manual `.env` 
 1. Add all required secrets to your GitHub repo (**Settings > Secrets > Actions**). See [SECRETS_SETUP.md](SECRETS_SETUP.md) for the full list.
 2. Run the **Provision Worker** workflow from the GitHub Actions tab (or `gh workflow run provision-worker.yml`). This syncs your secrets into GCP Secret Manager.
 
-**Then, on each worker machine:**
+**Then, on each worker machine** (macOS, Linux, or WSL — install Docker first):
 
 ```bash
-# 1. Install prerequisites (macOS example)
-brew install --cask google-cloud-sdk
-brew install jq
-
-# 2. GCP auth (one-time, opens browser)
-gcloud auth application-default login
-gcloud config set project YOUR_PROJECT_ID
-
-# 3. Clone and run
 git clone https://github.com/TytaniumDev/MagicBracketSimulator.git
 cd MagicBracketSimulator
 ./scripts/setup-worker.sh
 ```
 
-The setup script reads all config from Secret Manager, writes `worker/sa.json` and `worker/.env`, logs into GHCR, and starts the worker + Watchtower. That's it.
+The script installs `jq` and `gcloud` if needed, runs GCP auth (browser), reads config from Secret Manager, writes `worker/sa.json` and `worker/.env`, logs into GHCR, and starts the worker + Watchtower.
 
 **To update secrets later:**
 1. Update the secret in GitHub repo settings

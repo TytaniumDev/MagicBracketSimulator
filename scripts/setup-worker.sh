@@ -3,12 +3,9 @@ set -euo pipefail
 
 # setup-worker.sh — Bootstrap a remote worker machine from GCP Secret Manager.
 #
-# Prerequisites:
-#   - gcloud CLI installed and authenticated:
-#       gcloud auth application-default login
-#       gcloud config set project <PROJECT_ID>
-#   - Docker installed and running
-#   - jq installed (brew install jq / apt install jq)
+# Must be run on a Unix system (macOS, Linux, or WSL). The script will install
+# jq and gcloud CLI if missing, prompt for GCP project and auth, then configure
+# and start the worker. Docker must be installed and running (see docs).
 #
 # Usage:
 #   ./scripts/setup-worker.sh                    # standard setup
@@ -19,6 +16,15 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKER_DIR="$REPO_ROOT/worker"
 SECRET_NAME="worker-host-config"
 
+# ── Unix-only ────────────────────────────────────────────────────────
+case "$(uname -s)" in
+  Linux|Darwin) ;;
+  *)
+    echo "This script must be run on a Unix system (macOS, Linux, or WSL)."
+    exit 1
+    ;;
+esac
+
 # ── Parse arguments ──────────────────────────────────────────────────
 WORKER_ID=""
 for arg in "$@"; do
@@ -28,56 +34,105 @@ for arg in "$@"; do
       echo "Usage: $0 [--worker-id=NAME]"
       echo ""
       echo "Bootstraps a remote worker by reading config from GCP Secret Manager."
-      echo "Prerequisites: gcloud CLI (authenticated), Docker, jq."
+      echo "Run on a Unix system (macOS, Linux, or WSL). Docker must be installed."
       exit 0
       ;;
     *) echo "Unknown argument: $arg"; exit 1 ;;
   esac
 done
 
-# ── Preflight checks ────────────────────────────────────────────────
+# ── Ensure jq ────────────────────────────────────────────────────────
+ensure_jq() {
+  if command -v jq &>/dev/null; then return; fi
+  echo "jq not found; installing..."
+  case "$(uname -s)" in
+    Darwin)
+      if ! command -v brew &>/dev/null; then
+        echo "ERROR: jq is required. Install Homebrew from https://brew.sh, then re-run this script."
+        exit 1
+      fi
+      brew install jq
+      ;;
+    Linux)
+      if command -v apt-get &>/dev/null; then
+        sudo apt-get update && sudo apt-get install -y jq
+      else
+        echo "ERROR: jq is required. Install it (e.g. apt install jq or dnf install jq) and re-run."
+        exit 1
+      fi
+      ;;
+  esac
+}
+
+# ── Ensure gcloud CLI ────────────────────────────────────────────────
+ensure_gcloud() {
+  if command -v gcloud &>/dev/null; then return; fi
+  echo "gcloud CLI not found; installing..."
+  case "$(uname -s)" in
+    Darwin)
+      if ! command -v brew &>/dev/null; then
+        echo "ERROR: gcloud is required. Install Homebrew from https://brew.sh, then re-run this script."
+        exit 1
+      fi
+      brew install --cask google-cloud-sdk
+      # Cask installs gcloud; ensure this shell can see it
+      BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/usr/local")
+      export PATH="$BREW_PREFIX/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/bin:$PATH"
+      ;;
+    Linux)
+      if command -v apt-get &>/dev/null; then
+        sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates gnupg
+        sudo mkdir -p /usr/share/keyrings
+        curl -sSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+        sudo apt-get update && sudo apt-get install -y google-cloud-cli
+      else
+        echo "ERROR: gcloud is required. Install from https://cloud.google.com/sdk/docs/install then re-run."
+        exit 1
+      fi
+      ;;
+  esac
+  if ! command -v gcloud &>/dev/null; then
+    echo "ERROR: gcloud still not in PATH. Open a new terminal and re-run, or add the SDK bin to PATH."
+    exit 1
+  fi
+}
+
+# ── Preflight: install deps and auth ──────────────────────────────────
 echo "=== Magic Bracket Worker Setup ==="
 echo ""
 
-# Check jq
-if ! command -v jq &>/dev/null; then
-  echo "ERROR: jq not found. Install it:"
-  echo "  macOS:  brew install jq"
-  echo "  Linux:  sudo apt install jq"
-  exit 1
-fi
+ensure_jq
+ensure_gcloud
 
-# Check gcloud
-if ! command -v gcloud &>/dev/null; then
-  echo "ERROR: gcloud CLI not found. Install it:"
-  echo "  macOS:  brew install --cask google-cloud-sdk"
-  echo "  Linux:  https://cloud.google.com/sdk/docs/install"
-  exit 1
-fi
+# Resolve gcloud path (in case we just installed it and PATH isn't updated in this shell)
+GCLOUD=$(command -v gcloud)
+export PATH="$(dirname "$GCLOUD"):$PATH"
 
-# Check gcloud project
-PROJECT_ID=$(gcloud config get-value project 2>/dev/null || true)
-if [ -z "$PROJECT_ID" ]; then
-  echo "ERROR: No GCP project set. Run: gcloud config set project YOUR_PROJECT_ID"
-  exit 1
+# Ensure GCP project is set
+PROJECT_ID=$("$GCLOUD" config get-value project 2>/dev/null || true)
+if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
+  echo "No GCP project set."
+  read -r -p "Enter your GCP project ID: " PROJECT_ID
+  [ -z "$PROJECT_ID" ] && { echo "ERROR: Project ID required."; exit 1; }
+  "$GCLOUD" config set project "$PROJECT_ID"
 fi
 echo "GCP project: $PROJECT_ID"
 
-# Check gcloud ADC
-if ! gcloud auth application-default print-access-token &>/dev/null 2>&1; then
-  echo "ERROR: No Application Default Credentials. Run: gcloud auth application-default login"
-  exit 1
+# Ensure Application Default Credentials
+if ! "$GCLOUD" auth application-default print-access-token &>/dev/null; then
+  echo "GCP login required (browser will open)."
+  "$GCLOUD" auth application-default login
 fi
 echo "GCP credentials: OK"
 
-# Check Docker
+# Docker is required; we don't auto-install it
 if ! command -v docker &>/dev/null; then
-  echo "ERROR: Docker not found. Install Docker Desktop (macOS) or docker engine (Linux)."
+  echo "ERROR: Docker not found. Install Docker Desktop (macOS) or the Docker engine (Linux), then re-run."
   exit 1
 fi
-
 if ! docker info &>/dev/null 2>&1; then
-  echo "ERROR: Docker daemon not running. Start Docker Desktop or the docker service."
+  echo "ERROR: Docker daemon not running. Start Docker Desktop or: sudo systemctl start docker"
   exit 1
 fi
 echo "Docker: OK"
@@ -127,13 +182,12 @@ fi
 chmod 600 "$WORKER_DIR/.env"
 echo "  worker/.env"
 
-# ── Stop existing containers ─────────────────────────────────────────
-if docker ps -q --filter "name=magic-bracket-worker" 2>/dev/null | grep -q .; then
-  echo ""
-  echo "Stopping existing worker containers..."
-  cd "$WORKER_DIR"
-  docker compose -f docker-compose.yml -f docker-compose.watchtower.yml down 2>/dev/null || true
-fi
+# ── Stop and remove existing containers ──────────────────────────────
+# (including stopped/exited ones, which still hold the container name)
+echo ""
+echo "Stopping existing worker containers..."
+cd "$WORKER_DIR"
+docker compose -f docker-compose.yml -f docker-compose.watchtower.yml down 2>/dev/null || true
 
 # ── Docker login to GHCR ─────────────────────────────────────────────
 echo ""

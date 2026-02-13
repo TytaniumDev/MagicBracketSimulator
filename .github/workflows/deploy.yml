@@ -1,9 +1,10 @@
-# Deploy to Firebase Hosting on push to main (after PR merge when CI is green).
+# Deploy all Firebase services on push to main (after PR merge when CI is green).
+# Deploys: Hosting (frontend), App Hosting (api backend), Firestore (rules + indexes)
 # Requires GitHub secrets:
 #   - FIREBASE_TOKEN (run: firebase login:ci)
 #   - VITE_FIREBASE_* (Firebase web config for Google sign-in; get from Firebase Console > Project Settings > Your apps)
 # Frontend uses committed frontend/public/config.json (stable App Hosting URL).
-name: Deploy to Firebase Hosting
+name: Deploy Firebase
 
 on:
   push:
@@ -71,7 +72,7 @@ jobs:
         run: npm run test:unit
 
   deploy:
-    name: Deploy Hosting
+    name: Deploy Firebase
     runs-on: ubuntu-latest
     needs: [frontend, api]
     steps:
@@ -90,8 +91,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
-      - name: Deploy to Firebase Hosting
-        run: npx firebase-tools deploy --only hosting --token "$FIREBASE_TOKEN"
+      - name: Deploy to Firebase
+        run: npx firebase-tools deploy --only hosting,apphosting:api,firestore --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
