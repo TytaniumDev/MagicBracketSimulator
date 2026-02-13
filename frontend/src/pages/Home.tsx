@@ -118,10 +118,21 @@ export default function Home() {
 
   // Check if Moxfield direct import is available
   useEffect(() => {
-    fetch(`${apiBase}/api/moxfield-status`)
-      .then((res) => res.json())
-      .then((data) => setMoxfieldEnabled(data.enabled))
-      .catch(() => setMoxfieldEnabled(false));
+    const url = `${apiBase}/api/moxfield-status`;
+    fetch('http://127.0.0.1:1026/ingest/11c89cba-1ae5-4e5d-9178-21fb760379c4', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'frontend/src/pages/Home.tsx:moxfield-status', message: 'moxfield-status fetch start', data: { apiBase, url }, timestamp: Date.now(), hypothesisId: 'B' }) }).catch(() => {});
+    fetch(url)
+      .then((res) => {
+        fetch('http://127.0.0.1:1026/ingest/11c89cba-1ae5-4e5d-9178-21fb760379c4', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'frontend/src/pages/Home.tsx:moxfield-status', message: 'moxfield-status response', data: { ok: res.ok, status: res.status }, timestamp: Date.now(), hypothesisId: 'E' }) }).catch(() => {});
+        return res.json();
+      })
+      .then((data) => {
+        fetch('http://127.0.0.1:1026/ingest/11c89cba-1ae5-4e5d-9178-21fb760379c4', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'frontend/src/pages/Home.tsx:moxfield-status', message: 'moxfield-status data', data: { enabled: data?.enabled, hasEnabled: 'enabled' in (data || {}) }, timestamp: Date.now(), hypothesisId: 'C' }) }).catch(() => {});
+        setMoxfieldEnabled(data.enabled);
+      })
+      .catch((err) => {
+        fetch('http://127.0.0.1:1026/ingest/11c89cba-1ae5-4e5d-9178-21fb760379c4', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'frontend/src/pages/Home.tsx:moxfield-status', message: 'moxfield-status catch', data: { errMessage: err?.message }, timestamp: Date.now(), hypothesisId: 'E' }) }).catch(() => {});
+        setMoxfieldEnabled(false);
+      });
   }, [apiBase]);
 
   // Fetch past runs and poll when jobs are in progress
