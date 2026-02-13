@@ -184,10 +184,13 @@ echo "  worker/.env"
 
 # ── Stop and remove existing containers ──────────────────────────────
 # (including stopped/exited ones, which still hold the container name)
+# Use both compose down and explicit rm so we remove containers even if they
+# were started from a different project/directory (e.g. repo root).
 echo ""
 echo "Stopping existing worker containers..."
 cd "$WORKER_DIR"
 docker compose -f docker-compose.yml -f docker-compose.watchtower.yml down 2>/dev/null || true
+docker rm -f magic-bracket-worker watchtower 2>/dev/null || true
 
 # ── Docker login to GHCR ─────────────────────────────────────────────
 echo ""
