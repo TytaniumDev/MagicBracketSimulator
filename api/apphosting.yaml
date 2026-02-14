@@ -1,7 +1,4 @@
 # Firebase App Hosting configuration
-buildConfig:
-  rootDirectory: api
-
 runConfig:
   minInstances: 0
   maxInstances: 1
