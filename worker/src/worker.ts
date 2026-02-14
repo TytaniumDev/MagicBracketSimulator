@@ -393,8 +393,15 @@ async function runForgeSim(
   const decksDir = options?.decksDir ?? path.resolve(jobDir, 'decks');
   const logsDir = path.resolve(jobDir, 'logs');
   const [d0, d1, d2, d3] = options?.deckFilenames ?? ['deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck'];
-  // Unique RUN_DECKS_DIR per run so parallel forge runs don't race (symlinks in run_sim.sh)
-  const runDecksDir = path.resolve(jobDir, 'run-decks', runId);
+
+  // Each parallel run gets its own HOME directory so that Forge's hardcoded
+  // Commander deck path (~/.forge/decks/commander/) is isolated per process.
+  // Forge resolves -d filenames from $HOME/.forge/decks/commander/ when
+  // -f Commander is set; overriding RUN_DECKS_DIR alone doesn't work because
+  // Forge ignores it and uses its own internal path.
+  const runHome = path.resolve(jobDir, 'run-homes', runId);
+  await fs.mkdir(path.join(runHome, '.forge', 'decks', 'commander'), { recursive: true });
+
   const runSimScript = path.join(FORGE_PATH, 'run_sim.sh');
 
   const args = [
@@ -411,9 +418,11 @@ async function runForgeSim(
 
   return runProcess('/bin/bash', [runSimScript, ...args], {
     env: {
+      HOME: runHome,
       DECKS_DIR: decksDir,
       LOGS_DIR: logsDir,
-      RUN_DECKS_DIR: runDecksDir,
+      // RUN_DECKS_DIR intentionally omitted — defaults to $HOME/.forge/decks/commander
+      // which is unique per run thanks to the isolated HOME above.
     },
     timeout: 10 * 60 * 1000, // 10 minute timeout
   });
@@ -621,12 +630,12 @@ async function processJob(jobId: string): Promise<void> {
   console.log(`Processing and posting logs for job ${jobId}...`);
   await processAndUploadLogs(jobId, logsDir, deckLists);
 
-  // Clean up per-run deck dirs (ephemeral copies; not reused)
-  const runDecksParent = path.join(jobDir, 'run-decks');
+  // Clean up per-run HOME dirs (ephemeral; contain .forge/decks symlinks)
+  const runHomesParent = path.join(jobDir, 'run-homes');
   try {
-    await fs.rm(runDecksParent, { recursive: true });
+    await fs.rm(runHomesParent, { recursive: true });
   } catch (err) {
-    console.warn(`Could not remove run-decks for job ${jobId}:`, err);
+    console.warn(`Could not remove run-homes for job ${jobId}:`, err);
   }
 
   // Update job status to COMPLETED
