@@ -14,15 +14,8 @@ const MIN_REQUEST_INTERVAL_MS = 1000; // 1 request per second
  */
 export function isMoxfieldApiEnabled(): boolean {
   const ua = process.env.MOXFIELD_USER_AGENT;
-  const uaDefined = ua !== undefined && ua !== null;
   const trimLen = typeof ua === 'string' ? ua.trim().length : 0;
-  const result = !!ua && trimLen > 0;
-  // #region agent log
-  try {
-    fetch('http://127.0.0.1:1026/ingest/11c89cba-1ae5-4e5d-9178-21fb760379c4', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api/lib/moxfield-service.ts:isMoxfieldApiEnabled', message: 'Moxfield env check', data: { uaDefined, trimLen, result }, timestamp: Date.now(), hypothesisId: 'A' }) }).catch(() => {});
-  } catch (_) {}
-  // #endregion
-  return result;
+  return !!ua && trimLen > 0;
 }
 
 /**

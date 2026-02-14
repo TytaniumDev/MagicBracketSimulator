@@ -19,19 +19,38 @@ export function extractMoxfieldDeckId(url: string): string | null {
 
 interface MoxfieldCard {
   quantity: number;
+  boardType: string;
   card: {
     name: string;
   };
 }
 
+interface MoxfieldBoard {
+  count: number;
+  cards: Record<string, MoxfieldCard>;
+}
+
 interface MoxfieldDeckResponse {
   name: string;
-  mainboard: Record<string, MoxfieldCard>;
-  commanders: Record<string, MoxfieldCard>;
+  boards: {
+    mainboard?: MoxfieldBoard;
+    commanders?: MoxfieldBoard;
+    companions?: MoxfieldBoard;
+    [key: string]: MoxfieldBoard | undefined;
+  };
+}
+
+function boardCards(board: MoxfieldBoard | undefined, isCommander: boolean): DeckCard[] {
+  if (!board?.cards) return [];
+  return Object.values(board.cards).map(entry => ({
+    name: entry.card.name,
+    quantity: entry.quantity,
+    ...(isCommander ? { isCommander: true } : {}),
+  }));
 }
 
 export async function fetchMoxfieldDeck(deckId: string): Promise<ParsedDeck> {
-  const url = `${MOXFIELD_API_BASE}/decks/${deckId}`;
+  const url = `${MOXFIELD_API_BASE}/decks/all/${deckId}`;
 
   const response = await moxfieldFetch(url);
 
@@ -49,16 +68,11 @@ export async function fetchMoxfieldDeck(deckId: string): Promise<ParsedDeck> {
 
   const data: MoxfieldDeckResponse = await response.json();
 
-  const commanders: DeckCard[] = Object.values(data.commanders || {}).map(entry => ({
-    name: entry.card.name,
-    quantity: entry.quantity,
-    isCommander: true,
-  }));
-
-  const mainboard: DeckCard[] = Object.values(data.mainboard || {}).map(entry => ({
-    name: entry.card.name,
-    quantity: entry.quantity,
-  }));
+  const commanders = [
+    ...boardCards(data.boards.commanders, true),
+    ...boardCards(data.boards.companions, true),
+  ];
+  const mainboard = boardCards(data.boards.mainboard, false);
 
   return {
     name: data.name,
