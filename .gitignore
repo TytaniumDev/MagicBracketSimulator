@@ -65,3 +65,7 @@ Thumbs.db
 # IDE (optional – remove if you commit shared settings)
 .vscode/
 .idea/
+
+# Local secrets & agent plans
+.cursor/secrets.local
+agent-plans/
