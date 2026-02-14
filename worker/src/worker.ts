@@ -132,6 +132,17 @@ async function loadConfigFromSecretManager(): Promise<void> {
 }
 
 // ============================================================================
+// Concurrency Control
+// ============================================================================
+
+/**
+ * Simple mutex to ensure only one job processes at a time.
+ * Pub/Sub flowControl.maxMessages=1 is the primary guard, but this is a safety net
+ * to prevent deck-file collisions and resource exhaustion if messages arrive concurrently.
+ */
+let isProcessingJob = false;
+
+// ============================================================================
 // Subscriptions (for shutdown handler)
 // ============================================================================
 
@@ -271,6 +282,7 @@ function runProcess(
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
+    let timedOut = false;
 
     // On macOS, wrap with caffeinate to prevent sleep during execution
     let finalCommand = command;
@@ -291,6 +303,7 @@ function runProcess(
     let timeoutId: NodeJS.Timeout | null = null;
     if (options.timeout) {
       timeoutId = setTimeout(() => {
+        timedOut = true;
         console.error(`Process timed out after ${options.timeout}ms, killing...`);
         proc.kill('SIGTERM');
         setTimeout(() => proc.kill('SIGKILL'), 5000);
@@ -302,9 +315,22 @@ function runProcess(
       reject(error);
     });
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
       if (timeoutId) clearTimeout(timeoutId);
-      resolve({ exitCode: code || 0, duration: Date.now() - startTime });
+      // When a process is killed by a signal (e.g. SIGTERM from timeout),
+      // Node.js returns code=null. Previously `null || 0` silently masked
+      // this as success. Now we properly detect killed/timed-out processes.
+      let exitCode: number;
+      if (timedOut) {
+        exitCode = 124; // Standard timeout exit code (like GNU timeout)
+      } else if (code !== null) {
+        exitCode = code;
+      } else if (signal) {
+        exitCode = 128 + (signal === 'SIGTERM' ? 15 : signal === 'SIGKILL' ? 9 : 1);
+      } else {
+        exitCode = 0;
+      }
+      resolve({ exitCode, duration: Date.now() - startTime });
     });
   });
 }
@@ -536,7 +562,12 @@ async function processJob(jobId: string): Promise<void> {
 // ============================================================================
 
 /**
- * Handle a Pub/Sub message
+ * Handle a Pub/Sub message.
+ *
+ * Only one job is processed at a time. If a message arrives while another job
+ * is already running, we nack() it so Pub/Sub redelivers later (with backoff).
+ * This prevents deck-file collisions and resource exhaustion that occur when
+ * two Forge simulation sets run concurrently in the same container.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleMessage(message: any): Promise<void> {
@@ -553,6 +584,15 @@ async function handleMessage(message: any): Promise<void> {
   const { jobId } = messageData;
   console.log(`Received job-created message for job ${jobId}`);
 
+  // Safety net: reject concurrent jobs even if flowControl.maxMessages=1 somehow
+  // allows a second message through (e.g. race during ack processing).
+  if (isProcessingJob) {
+    console.warn(`Already processing a job, nacking message for job ${jobId} (will retry)`);
+    message.nack();
+    return;
+  }
+
+  isProcessingJob = true;
   try {
     await processJob(jobId);
     message.ack();
@@ -562,6 +602,8 @@ async function handleMessage(message: any): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await patchJobStatus(jobId, 'FAILED', errorMessage);
     message.nack(); // Nack to trigger retry (with backoff)
+  } finally {
+    isProcessingJob = false;
   }
 }
 
@@ -663,11 +705,21 @@ async function main(): Promise<void> {
 
     const { PubSub } = await import('@google-cloud/pubsub');
     const pubsub = new PubSub({ projectId: PROJECT_ID });
-    subscription = pubsub.subscription(SUBSCRIPTION_NAME);
+    subscription = pubsub.subscription(SUBSCRIPTION_NAME, {
+      // CRITICAL: Only deliver one message at a time.
+      // Without this, Pub/Sub delivers up to 100 messages concurrently,
+      // causing multiple jobs to run simultaneously. This leads to:
+      // - Deck file collisions (shared /home/worker/.forge/decks/commander/)
+      // - Resource exhaustion (multiple Forge JVM processes exceeding memory)
+      // - Silent crashes where one job dies and the other hits timeout
+      flowControl: {
+        maxMessages: 1,
+      },
+    });
 
     console.log('Project:', PROJECT_ID);
     console.log('Subscription:', SUBSCRIPTION_NAME);
-    console.log('Subscribing to Pub/Sub messages...');
+    console.log('Subscribing to Pub/Sub messages (maxMessages=1, sequential processing)...');
 
     subscription.on('message', handleMessage);
     subscription.on('error', (error: unknown) => {
