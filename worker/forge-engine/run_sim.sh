@@ -1,6 +1,6 @@
 #!/bin/bash
 # Forge Simulation Engine - Entrypoint Script
-# Parses CLI args, copies decks, invokes Forge sim, captures logs to /app/logs/{job_id}_game_{n}.txt
+# Parses CLI args, validates decks, invokes Forge sim, captures logs to {LOGS_DIR}/{job_id}_game_{n}.txt
 set -euo pipefail
 
 # Change to script directory if FORGE_PATH is set, otherwise /app
@@ -17,11 +17,8 @@ DECKS=()
 JOB_ID=""
 
 # Paths - use env vars if set, otherwise defaults for standalone container
-DECKS_DIR="${DECKS_DIR:-/app/decks}"
-# Forge looks for Commander decks in ~/.forge/decks/commander/ when -f Commander is set
-# The -D flag should override this, but in practice it doesn't for format-specific modes
-# So we copy decks to Forge's default Commander deck path
-RUN_DECKS_DIR="${RUN_DECKS_DIR:-$HOME/.forge/decks/commander}"
+# DECKS_DIR should point to where .dck files live (Forge's commander deck dir)
+DECKS_DIR="${DECKS_DIR:-/home/worker/.forge/decks/commander}"
 LOGS_DIR="${LOGS_DIR:-/app/logs}"
 
 # Forge launcher - check FORGE_PATH first, then script dir, then /app
@@ -90,14 +87,6 @@ for deck in "${DECKS[@]}"; do
         echo "Error: Deck missing [Main] section: ${deck}" >&2
         exit 1
     fi
-done
-
-# Create ephemeral deck directory for Forge; symlink decks so we don't copy (cache-friendly)
-rm -rf "${RUN_DECKS_DIR}"
-mkdir -p "${RUN_DECKS_DIR}"
-DECKS_DIR_ABS="$(cd "$DECKS_DIR" && pwd)"
-for deck in "${DECKS[@]}"; do
-    ln -s "${DECKS_DIR_ABS}/${deck}" "${RUN_DECKS_DIR}/${deck}"
 done
 
 # Ensure logs directory exists
