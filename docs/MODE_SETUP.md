@@ -82,6 +82,10 @@ npm run worker:gcp
 | frontend | React UI | Local or Firebase Hosting |
 | worker | Unified container: Forge simulation + log processing + Pub/Sub subscriber | Docker on your machine |
 
+### Deployed API (Firebase App Hosting / Cloud Run)
+
+When the API is deployed via Firebase App Hosting, it runs on Cloud Run. The **Cloud Run service account** (the identity that executes the API) must have **Cloud Datastore User** (`roles/datastore.user`) on the project so it can read/write Firestore (decks, jobs). If this role is missing, creating or listing jobs will fail with `7 PERMISSION_DENIED: User not authorized to perform this action`. See **Troubleshooting → Firestore permission errors** below for how to grant it.
+
 ---
 
 ## LOCAL Mode Setup
@@ -149,9 +153,17 @@ docker compose -f worker/docker-compose.yml build
 - Check `PUBSUB_SUBSCRIPTION` matches the subscription name in GCP
 - Verify service account has `pubsub.subscriber` permission
 
-### Firestore permission errors
-- Ensure service account key path is correct
-- Verify service account has Firestore read/write permissions
+### Firestore permission errors (e.g. `7 PERMISSION_DENIED: User not authorized to perform this action`)
+- **Deployed API (Firebase App Hosting / Cloud Run):** The backend runs as a Cloud Run service account. That identity must have **Cloud Datastore User** so it can read/write Firestore (decks, jobs). Grant the role on the project:
+  - GCP Console → **IAM & Admin** → **IAM** → find the service account used by your App Hosting backend (e.g. `PROJECT_NUMBER-compute@developer.gserviceaccount.com` or the one shown in **Firebase** → **App Hosting** → your backend → **Settings**).
+  - Click **Edit** (pencil) for that member → **Add another role** → **Cloud Datastore User** → Save.
+  - Or via gcloud (replace `PROJECT_ID` and `SERVICE_ACCOUNT_EMAIL`):
+    ```bash
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+      --member="serviceAccount:SERVICE_ACCOUNT_EMAIL" \
+      --role="roles/datastore.user"
+    ```
+- **Local API:** Ensure service account key path is correct and the key’s account has Firestore read/write (e.g. Cloud Datastore User).
 
 ### Jobs stuck in QUEUED
 - Ensure worker is running and connected to Pub/Sub

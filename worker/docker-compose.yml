@@ -19,10 +19,10 @@ services:
 
       # Pub/Sub
       - PUBSUB_SUBSCRIPTION=${PUBSUB_SUBSCRIPTION:-job-created-worker}
-      - PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION=${PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION:-worker-report-in-worker}
+      - PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION=${PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION:-worker-report-in-sub}
 
-      # API (WORKER_SECRET from Secret Manager in GCP, or from env_file: .env for local)
-      - API_URL=${API_URL:-https://magicbracket.com}
+      # API — WORKER_SECRET comes from Secret Manager at runtime; URL is not secret
+      - API_URL=${API_URL:-https://api--magic-bracket-simulator.us-central1.hosted.app}
 
       # Storage
       - GCS_BUCKET=${GCS_BUCKET:-magic-bracket-simulator-artifacts}

@@ -111,7 +111,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (isGcpMode()) {
-      await publishJobCreated(job.id);
+      try {
+        await publishJobCreated(job.id);
+      } catch (pubsubError) {
+        // Log but don't fail — the job is already persisted in Firestore.
+        // The worker can still discover it via polling or a future Pub/Sub retry.
+        console.error(`Failed to publish Pub/Sub notification for job ${job.id}:`, pubsubError);
+      }
     }
 
     return NextResponse.json(
