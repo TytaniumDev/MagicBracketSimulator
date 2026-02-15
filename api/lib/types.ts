@@ -164,6 +164,8 @@ export interface Job {
   startedAt?: Date;
   completedAt?: Date;
   dockerRunDurationsMs?: number[];
+  workerId?: string;
+  claimedAt?: Date;
 }
 
 export interface CreateJobRequest {
