@@ -160,7 +160,7 @@ export default function Home() {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
           }
-        }, 3000);
+        }, 10000);
       }
     });
 

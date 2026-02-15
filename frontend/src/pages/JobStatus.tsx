@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
+import { useJobStream } from '../hooks/useJobStream';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
 
@@ -32,6 +33,8 @@ interface Job {
   completedAt?: string | null;
   durationMs?: number | null;
   dockerRunDurationsMs?: number[] | null;
+  workerId?: string;
+  claimedAt?: string | null;
 }
 
 // Types for Log Analyzer responses
@@ -133,41 +136,65 @@ export default function JobStatusPage() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   
   const apiBase = getApiBase();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch job status
+  // Primary: SSE stream for real-time job updates
+  const { job: streamJob, error: streamError, connected: sseConnected } = useJobStream<Job>(id);
+
+  // Sync SSE data into component state
   useEffect(() => {
-    if (!id) return;
+    if (streamJob) setJob(streamJob);
+  }, [streamJob]);
+
+  useEffect(() => {
+    if (streamError) setError(streamError);
+  }, [streamError]);
+
+  // Fallback: Poll if SSE hasn't connected within 5 seconds
+  useEffect(() => {
+    if (!id || sseConnected) return;
+
     const controller = new AbortController();
-    const fetchJob = () => {
-      fetchWithAuth(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
-        .then((res) => {
-          if (!res.ok) {
-            if (res.status === 404) throw new Error('Job not found');
-            throw new Error('Failed to load job');
-          }
-          return res.json();
-        })
-        .then((data) => {
-          setJob(data);
-          if (data.status === 'COMPLETED' || data.status === 'FAILED') {
-            if (intervalRef.current) {
-              clearInterval(intervalRef.current);
-              intervalRef.current = null;
+    let fallbackActive = false;
+
+    const timeoutId = setTimeout(() => {
+      // SSE didn't connect in time, start polling as fallback
+      fallbackActive = true;
+      const fetchJob = () => {
+        fetchWithAuth(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
+          .then((res) => {
+            if (!res.ok) {
+              if (res.status === 404) throw new Error('Job not found');
+              throw new Error('Failed to load job');
             }
-          }
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') setError(err.message);
-        });
-    };
-    fetchJob();
-    intervalRef.current = setInterval(fetchJob, 2000);
+            return res.json();
+          })
+          .then((data) => {
+            setJob(data);
+            if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+              if (fallbackIntervalRef.current) {
+                clearInterval(fallbackIntervalRef.current);
+                fallbackIntervalRef.current = null;
+              }
+            }
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') setError(err.message);
+          });
+      };
+      fetchJob();
+      fallbackIntervalRef.current = setInterval(fetchJob, 5000);
+    }, 5000);
+
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      clearTimeout(timeoutId);
+      if (fallbackActive && fallbackIntervalRef.current) {
+        clearInterval(fallbackIntervalRef.current);
+        fallbackIntervalRef.current = null;
+      }
       controller.abort();
     };
-  }, [id, apiBase]);
+  }, [id, apiBase, sseConnected]);
 
   // Fetch structured logs for Deck Actions when job is completed/failed
   useEffect(() => {
@@ -191,6 +218,11 @@ export default function JobStatusPage() {
       .catch((err) => setStructuredError(err instanceof Error ? err.message : 'Unknown error'));
   }, [id, apiBase, job, structuredGames]);
 
+  // Stable keys for color identity dependencies (avoid re-fetching on every poll cycle)
+  const deckNamesKey = job?.deckNames?.join(',') ?? '';
+  const logDeckNamesKey = deckNames?.join(',') ?? '';
+  const resultDeckNamesKey = job?.resultJson?.results?.map(r => r.deck_name).join(',') ?? '';
+
   // Fetch color identity for deck names (job.deckNames, deckNames from logs, result.results)
   useEffect(() => {
     if (!job) return;
@@ -206,8 +238,8 @@ export default function JobStatusPage() {
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using specific job properties to avoid refetching on status updates
-  }, [apiBase, job?.id, job?.deckNames, deckNames, job?.resultJson?.results]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- using serialized keys to avoid refetching when object references change but values don't
+  }, [apiBase, job?.id, deckNamesKey, logDeckNamesKey, resultDeckNamesKey]);
 
   // Fetch analyze payload when job is completed (for on-demand analysis)
   useEffect(() => {
@@ -442,6 +474,11 @@ export default function JobStatusPage() {
           >
             {statusLabel}
           </span>
+          {job.workerId && (
+            <span className="ml-3 text-gray-500 text-xs font-mono">
+              Worker: {job.workerId.slice(0, 8)}
+            </span>
+          )}
         </div>
         <div>
           <span className="text-gray-400">Simulations: </span>

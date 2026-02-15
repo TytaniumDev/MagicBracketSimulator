@@ -44,6 +44,9 @@ import {
 const SECRET_NAME = 'simulation-worker-config';
 const WORKER_ID_FILE = 'worker-id';
 
+// Module-scoped worker ID, set in main() after initialization
+let currentWorkerId = '';
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -205,6 +208,9 @@ async function patchJobStatus(jobId: string, status: string, errorMessage?: stri
   const body: Record<string, unknown> = { status };
   if (errorMessage) {
     body.errorMessage = errorMessage;
+  }
+  if (status === 'RUNNING' && currentWorkerId) {
+    body.workerId = currentWorkerId;
   }
 
   try {
@@ -687,8 +693,8 @@ async function main(): Promise<void> {
   const JOBS_DIR = process.env.JOBS_DIR || './jobs';
   const usePubSub = !!process.env.PUBSUB_SUBSCRIPTION;
 
-  const workerId = await getOrCreateWorkerId(JOBS_DIR);
-  console.log('Worker ID:', workerId.slice(0, 8) + '...');
+  currentWorkerId = await getOrCreateWorkerId(JOBS_DIR);
+  console.log('Worker ID:', currentWorkerId.slice(0, 8) + '...');
 
   console.log('Worker starting...');
   console.log('Mode:', usePubSub ? 'Pub/Sub' : 'Polling');

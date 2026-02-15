@@ -30,6 +30,8 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     errorMessage: data.errorMessage,
     resultJson: data.resultJson,
     dockerRunDurationsMs: data.dockerRunDurationsMs,
+    ...(data.workerId && { workerId: data.workerId }),
+    ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
   };
 }
 
@@ -133,12 +135,17 @@ export async function updateJobStatus(id: string, status: JobStatus): Promise<vo
 /**
  * Set job started timestamp
  */
-export async function setJobStartedAt(id: string): Promise<void> {
-  await jobsCollection.doc(id).update({
+export async function setJobStartedAt(id: string, workerId?: string): Promise<void> {
+  const updateData: Record<string, unknown> = {
     status: 'RUNNING' as JobStatus,
     startedAt: FieldValue.serverTimestamp(),
+    claimedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  };
+  if (workerId) {
+    updateData.workerId = workerId;
+  }
+  await jobsCollection.doc(id).update(updateData);
 }
 
 /**
@@ -245,12 +252,12 @@ export async function deleteJob(id: string): Promise<void> {
 /**
  * Atomically transition job status (for worker)
  */
-export async function claimJob(id: string): Promise<boolean> {
+export async function claimJob(id: string, workerId?: string): Promise<boolean> {
   try {
     await firestore.runTransaction(async (transaction) => {
       const jobRef = jobsCollection.doc(id);
       const jobDoc = await transaction.get(jobRef);
-      
+
       if (!jobDoc.exists) {
         throw new Error('Job not found');
       }
@@ -260,11 +267,16 @@ export async function claimJob(id: string): Promise<boolean> {
         throw new Error('Job is not queued');
       }
 
-      transaction.update(jobRef, {
+      const updateData: Record<string, unknown> = {
         status: 'RUNNING',
         startedAt: FieldValue.serverTimestamp(),
+        claimedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      };
+      if (workerId) {
+        updateData.workerId = workerId;
+      }
+      transaction.update(jobRef, updateData);
     });
     return true;
   } catch {
@@ -276,7 +288,7 @@ export async function claimJob(id: string): Promise<boolean> {
  * Atomically claim the next QUEUED job by transitioning it to RUNNING.
  * Returns the claimed job, or null if no QUEUED jobs exist.
  */
-export async function claimNextJob(): Promise<Job | null> {
+export async function claimNextJob(workerId?: string): Promise<Job | null> {
   // Find the oldest queued job
   const snapshot = await jobsCollection
     .where('status', '==', 'QUEUED')
@@ -294,11 +306,16 @@ export async function claimNextJob(): Promise<Job | null> {
     const data = jobDoc.data()!;
     if (data.status !== 'QUEUED') return null; // Already claimed by another worker
 
-    transaction.update(jobRef, {
+    const updateData: Record<string, unknown> = {
       status: 'RUNNING',
       startedAt: FieldValue.serverTimestamp(),
+      claimedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (workerId) {
+      updateData.workerId = workerId;
+    }
+    transaction.update(jobRef, updateData);
     return doc.id;
   });
 
