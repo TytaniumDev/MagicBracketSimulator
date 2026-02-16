@@ -76,12 +76,12 @@ export async function updateJobStatus(id: string, status: JobStatus): Promise<vo
   sqliteStore.updateJobStatus(id, status);
 }
 
-export async function setJobStartedAt(id: string, workerId?: string): Promise<void> {
+export async function setJobStartedAt(id: string, workerId?: string, workerName?: string): Promise<void> {
   if (USE_FIRESTORE) {
-    await firestoreStore.setJobStartedAt(id, workerId);
+    await firestoreStore.setJobStartedAt(id, workerId, workerName);
     return;
   }
-  sqliteStore.setJobStartedAt(id, workerId);
+  sqliteStore.setJobStartedAt(id, workerId, workerName);
 }
 
 export async function updateJobProgress(id: string, gamesCompleted: number): Promise<void> {

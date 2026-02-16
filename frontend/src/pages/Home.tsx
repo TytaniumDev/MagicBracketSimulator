@@ -4,6 +4,8 @@ import { getApiBase, fetchWithAuth } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
+import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
+import { useWorkerStatus } from '../hooks/useWorkerStatus';
 
 interface Deck {
   id: string;
@@ -84,6 +86,7 @@ export default function Home() {
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const apiBase = getApiBase();
+  const { workers, queueDepth, isLoading: workersLoading } = useWorkerStatus();
 
   const precons = useMemo(() => decks.filter((d) => d.isPrecon), [decks]);
   const communityDecks = useMemo(() => decks.filter((d) => !d.isPrecon), [decks]);
@@ -615,6 +618,9 @@ export default function Home() {
           {isSubmitting ? 'Submitting...' : 'Run Simulations'}
         </button>
       </form>
+
+      {/* Worker Status Banner */}
+      <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} />
 
       {/* Past Runs Section */}
       <div className="mb-8">

@@ -29,6 +29,7 @@ if (!process.env.GOOGLE_CLOUD_PROJECT) {
  */
 
 import * as fs from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 
 import {
@@ -50,8 +51,68 @@ import {
 const SECRET_NAME = 'simulation-worker-config';
 const WORKER_ID_FILE = 'worker-id';
 
-// Module-scoped worker ID, set in main() after initialization
+// Module-scoped worker ID and name, set in main() after initialization
 let currentWorkerId = '';
+let currentWorkerName = '';
+
+// Heartbeat tracking
+let heartbeatJobId: string | undefined;
+let activeSimCount = 0;
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+const workerStartTime = Date.now();
+
+// ============================================================================
+// Worker Naming
+// ============================================================================
+
+const WORKER_ADJECTIVES = [
+  'Arcane', 'Blazing', 'Crimson', 'Dark', 'Eldritch', 'Fierce', 'Golden',
+  'Hallowed', 'Infernal', 'Jade', 'Keen', 'Lunar', 'Mystic', 'Noble',
+  'Obsidian', 'Primal', 'Radiant', 'Shadow', 'Titanic', 'Undying',
+  'Verdant', 'Wicked', 'Ancient', 'Burning', 'Celestial', 'Dread',
+  'Ethereal', 'Feral', 'Ghostly', 'Hollow', 'Iron', 'Jeweled',
+  'Kindled', 'Lifeless', 'Molten', 'Nether', 'Omen', 'Phantom',
+  'Quicksilver', 'Rune', 'Storm', 'Thunder', 'Umbral', 'Void',
+  'Wild', 'Zealous', 'Amber', 'Brazen', 'Crystal',
+];
+
+const WORKER_NOUNS = [
+  'Phoenix', 'Golem', 'Dragon', 'Sphinx', 'Hydra', 'Wurm', 'Angel',
+  'Demon', 'Elemental', 'Knight', 'Shaman', 'Wizard', 'Titan', 'Specter',
+  'Griffin', 'Serpent', 'Colossus', 'Sentinel', 'Oracle', 'Revenant',
+  'Behemoth', 'Leviathan', 'Basilisk', 'Chimera', 'Djinn', 'Gargoyle',
+  'Juggernaut', 'Kraken', 'Manticore', 'Nightmare', 'Ogre', 'Paladin',
+  'Ranger', 'Scion', 'Templar', 'Unicorn', 'Valkyrie', 'Wraith',
+  'Archon', 'Banshee', 'Centaur', 'Drake', 'Falcon', 'Herald',
+  'Invoker', 'Mage', 'Nomad', 'Outcast', 'Rogue', 'Thane',
+];
+
+/**
+ * Generate a deterministic two-word name from a worker ID.
+ * Hash-based so it's stable across restarts with the same ID.
+ */
+function generateWorkerName(workerId: string): string {
+  let hash = 0;
+  for (let i = 0; i < workerId.length; i++) {
+    hash = ((hash << 5) - hash + workerId.charCodeAt(i)) | 0;
+  }
+  // Use absolute value to handle negative hashes
+  const h = Math.abs(hash);
+  const adj = WORKER_ADJECTIVES[h % WORKER_ADJECTIVES.length];
+  const noun = WORKER_NOUNS[Math.floor(h / WORKER_ADJECTIVES.length) % WORKER_NOUNS.length];
+  return `${adj}${noun}`;
+}
+
+/**
+ * Get the worker's display name.
+ * Priority: WORKER_NAME env var > auto-generated from worker ID > hostname
+ */
+function getWorkerName(workerId: string): string {
+  const envName = process.env.WORKER_NAME?.trim();
+  if (envName && envName.length > 0) return envName;
+  if (workerId) return generateWorkerName(workerId);
+  return os.hostname();
+}
 
 // ============================================================================
 // Configuration
@@ -227,7 +288,10 @@ async function patchJobStatus(jobId: string, status: string, errorMessage?: stri
   const body: Record<string, unknown> = { status };
   if (errorMessage) body.errorMessage = errorMessage;
   if (dockerRunDurationsMs) body.dockerRunDurationsMs = dockerRunDurationsMs;
-  if (status === 'RUNNING' && currentWorkerId) body.workerId = currentWorkerId;
+  if (status === 'RUNNING' && currentWorkerId) {
+    body.workerId = currentWorkerId;
+    body.workerName = currentWorkerName;
+  }
 
   try {
     const response = await fetch(url, {
@@ -402,9 +466,11 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
         }
 
         // Report RUNNING
+        activeSimCount++;
         await reportSimulationStatus(jobId, simId, {
           state: 'RUNNING',
           workerId: currentWorkerId,
+          workerName: currentWorkerName,
         });
 
         const result = await runSimulationSwarmService(
@@ -428,6 +494,7 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
 
         // Update job-level progress
         completedCount++;
+        activeSimCount = Math.max(0, activeSimCount - 1);
         await updateJobProgress(jobId, completedCount);
       } finally {
         semaphore.release();
@@ -494,8 +561,42 @@ async function processJob(jobId: string): Promise<void> {
     throw new Error('Job must have exactly 4 decks with full content');
   }
 
+  heartbeatJobId = jobId;
   await patchJobStatus(jobId, 'RUNNING');
-  await processJobWithSwarm(jobId, job);
+  try {
+    await processJobWithSwarm(jobId, job);
+  } finally {
+    heartbeatJobId = undefined;
+    activeSimCount = 0;
+  }
+}
+
+// ============================================================================
+// Heartbeat
+// ============================================================================
+
+/**
+ * Send a heartbeat to the API so the frontend knows this worker is online.
+ */
+async function sendHeartbeat(capacity: number): Promise<void> {
+  const url = `${getApiUrl()}/api/workers/heartbeat`;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({
+        workerId: currentWorkerId,
+        workerName: currentWorkerName,
+        status: heartbeatJobId ? 'busy' : 'idle',
+        currentJobId: heartbeatJobId,
+        capacity,
+        activeSimulations: activeSimCount,
+        uptimeMs: Date.now() - workerStartTime,
+      }),
+    });
+  } catch {
+    // Non-fatal: heartbeat failure shouldn't crash the worker
+  }
 }
 
 // ============================================================================
@@ -601,6 +702,12 @@ function handleShutdown(signal: string): void {
 
   console.log(`Received ${signal}, shutting down gracefully...`);
 
+  // Stop heartbeat
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+
   // Clean up orphaned swarm services
   cleanupSwarmServices()
     .catch((err) => console.warn('Swarm cleanup error:', err))
@@ -637,7 +744,9 @@ async function main(): Promise<void> {
   const usePubSub = !!process.env.PUBSUB_SUBSCRIPTION;
 
   currentWorkerId = await getOrCreateWorkerId(JOBS_DIR);
+  currentWorkerName = getWorkerName(currentWorkerId);
   console.log('Worker ID:', currentWorkerId.slice(0, 8) + '...');
+  console.log('Worker Name:', currentWorkerName);
 
   console.log('Worker starting...');
   console.log('Mode: Swarm Orchestrator');
@@ -650,6 +759,11 @@ async function main(): Promise<void> {
 
   // Pre-pull simulation image on this node
   await ensureSimulationImage();
+
+  // Start heartbeat interval (every 15 seconds)
+  const heartbeatCapacity = await calculateSwarmCapacity(16);
+  sendHeartbeat(heartbeatCapacity); // Initial heartbeat
+  heartbeatInterval = setInterval(() => sendHeartbeat(heartbeatCapacity), 15_000);
 
   if (usePubSub) {
     const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';

@@ -7,6 +7,7 @@ export interface SimulationStatus {
   index: number;
   state: SimulationState;
   workerId?: string;
+  workerName?: string;
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;

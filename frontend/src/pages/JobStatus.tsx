@@ -34,7 +34,10 @@ interface Job {
   durationMs?: number | null;
   dockerRunDurationsMs?: number[] | null;
   workerId?: string;
+  workerName?: string;
   claimedAt?: string | null;
+  queuePosition?: number;
+  workers?: { online: number; idle: number; busy: number };
 }
 
 // Types for Log Analyzer responses
@@ -409,6 +412,11 @@ export default function JobStatusPage() {
               ? 'Cancelled'
               : 'Failed';
 
+  // Compute time in queue for QUEUED jobs
+  const queuedAgo = job.status === 'QUEUED' && job.createdAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(job.createdAt).getTime()) / 1000))
+    : null;
+
   const handleCancel = async () => {
     if (!id) return;
     setIsCancelling(true);
@@ -483,6 +491,75 @@ export default function JobStatusPage() {
       <p className="text-gray-500 text-xs mb-6">ID: {job.id}</p>
 
       <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+        {/* Rich Queue Info Panel for QUEUED jobs */}
+        {job.status === 'QUEUED' && (
+          <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+              </span>
+              <span className="text-yellow-400 font-semibold text-lg">Waiting in Queue</span>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={isCancelling}
+                className="ml-auto px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCancelling ? 'Cancelling...' : 'Cancel Job'}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              {/* Queue position */}
+              <div className="bg-gray-800/50 rounded p-3">
+                <div className="text-gray-400 text-xs mb-1">Queue Position</div>
+                <div className="text-white font-medium">
+                  {job.queuePosition != null
+                    ? job.queuePosition === 0
+                      ? 'Next up'
+                      : `#${job.queuePosition + 1} in queue (${job.queuePosition} job${job.queuePosition !== 1 ? 's' : ''} ahead)`
+                    : 'Calculating...'}
+                </div>
+              </div>
+              {/* Worker availability */}
+              <div className="bg-gray-800/50 rounded p-3">
+                <div className="text-gray-400 text-xs mb-1">Workers</div>
+                {job.workers ? (
+                  job.workers.online > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-white font-medium">
+                        {job.workers.online} online
+                        {job.workers.idle > 0 && ` (${job.workers.idle} idle)`}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                      <span className="text-red-400 font-medium">No workers online</span>
+                    </div>
+                  )
+                ) : (
+                  <span className="text-gray-500">Checking...</span>
+                )}
+              </div>
+              {/* Time in queue */}
+              <div className="bg-gray-800/50 rounded p-3">
+                <div className="text-gray-400 text-xs mb-1">Time in Queue</div>
+                <div className="text-white font-medium">
+                  {queuedAgo != null
+                    ? queuedAgo < 60
+                      ? `${queuedAgo}s ago`
+                      : `${Math.floor(queuedAgo / 60)}m ${queuedAgo % 60}s ago`
+                    : '...'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Standard status display for non-QUEUED jobs */}
+        {job.status !== 'QUEUED' && (
         <div>
           <span className="text-gray-400">Status: </span>
           <span
@@ -498,12 +575,12 @@ export default function JobStatusPage() {
           >
             {statusLabel}
           </span>
-          {job.workerId && (
+          {(job.workerName || job.workerId) && (
             <span className="ml-3 text-gray-500 text-xs font-mono">
-              Worker: {job.workerId.slice(0, 8)}
+              Worker: {job.workerName || job.workerId?.slice(0, 8)}
             </span>
           )}
-          {(job.status === 'QUEUED' || job.status === 'RUNNING') && (
+          {job.status === 'RUNNING' && (
             <button
               type="button"
               onClick={handleCancel}
@@ -514,6 +591,7 @@ export default function JobStatusPage() {
             </button>
           )}
         </div>
+        )}
         <div>
           <span className="text-gray-400">Simulations: </span>
           <span>{job.simulations}</span>

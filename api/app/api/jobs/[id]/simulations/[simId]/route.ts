@@ -26,7 +26,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { state, workerId, durationMs, errorMessage, winner, winningTurn } = body;
+    const { state, workerId, workerName, durationMs, errorMessage, winner, winningTurn } = body;
 
     // Validate state if provided
     if (state !== undefined && !VALID_STATES.includes(state)) {
@@ -40,6 +40,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const update: Record<string, unknown> = {};
     if (state !== undefined) update.state = state;
     if (workerId !== undefined) update.workerId = workerId;
+    if (workerName !== undefined) update.workerName = workerName;
     if (durationMs !== undefined) update.durationMs = durationMs;
     if (errorMessage !== undefined) update.errorMessage = errorMessage;
     if (winner !== undefined) update.winner = winner;

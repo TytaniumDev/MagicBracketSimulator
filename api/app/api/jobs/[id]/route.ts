@@ -35,6 +35,7 @@ function jobToApiResponse(
     durationMs,
     dockerRunDurationsMs: job.dockerRunDurationsMs,
     workerId: job.workerId,
+    workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
   };
   // Worker needs decks and/or deckIds to run the job
@@ -152,7 +153,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { status, gamesCompleted, errorMessage, dockerRunDurationsMs, workerId } = body;
+    const { status, gamesCompleted, errorMessage, dockerRunDurationsMs, workerId, workerName } = body;
 
     const job = await jobStore.getJob(id);
     if (!job) {
@@ -160,7 +161,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     if (status === 'RUNNING') {
-      await jobStore.setJobStartedAt(id, workerId);
+      await jobStore.setJobStartedAt(id, workerId, workerName);
     } else if (status === 'COMPLETED') {
       await jobStore.setJobCompleted(id, dockerRunDurationsMs);
     } else if (status === 'FAILED') {

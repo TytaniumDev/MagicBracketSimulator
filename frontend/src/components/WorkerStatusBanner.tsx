@@ -1,0 +1,88 @@
+import { useState } from 'react';
+import type { WorkerInfo } from '../types/worker';
+
+interface WorkerStatusBannerProps {
+  workers: WorkerInfo[];
+  queueDepth: number;
+  isLoading: boolean;
+}
+
+function formatUptime(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+export function WorkerStatusBanner({ workers, queueDepth, isLoading }: WorkerStatusBannerProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (isLoading) return null;
+
+  const online = workers.length;
+  const idle = workers.filter((w) => w.status === 'idle').length;
+  const hasWorkers = online > 0;
+
+  return (
+    <div className="bg-gray-800 rounded-lg px-4 py-3 mb-6 border border-gray-700">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between text-sm"
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-block w-2.5 h-2.5 rounded-full ${
+              hasWorkers ? 'bg-green-500' : 'bg-red-500'
+            }`}
+          />
+          <span className="text-gray-300">
+            {hasWorkers
+              ? `${online} worker${online !== 1 ? 's' : ''} online${idle > 0 ? ` (${idle} idle)` : ''}`
+              : 'No workers online'}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {queueDepth > 0 && (
+            <span className="text-gray-400">
+              {queueDepth} job{queueDepth !== 1 ? 's' : ''} queued
+            </span>
+          )}
+          <span className="text-gray-500 text-xs">{expanded ? '▲' : '▼'}</span>
+        </div>
+      </button>
+
+      {expanded && workers.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
+          {workers.map((w) => (
+            <div
+              key={w.workerId}
+              className="flex items-center justify-between text-xs text-gray-400"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-block w-2 h-2 rounded-full ${
+                    w.status === 'idle' ? 'bg-green-500' : 'bg-blue-500'
+                  }`}
+                />
+                <span className="text-gray-300 font-medium">{w.workerName}</span>
+                <span className="text-gray-500">({w.status})</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {w.status === 'busy' && (
+                  <span>
+                    {w.activeSimulations}/{w.capacity} sims
+                  </span>
+                )}
+                <span>up {formatUptime(w.uptimeMs)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

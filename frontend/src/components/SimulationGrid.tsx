@@ -112,9 +112,9 @@ export function SimulationGrid({ simulations, totalSimulations }: SimulationGrid
               {hoveredSim.errorMessage}
             </div>
           )}
-          {hoveredSim.workerId && (
+          {(hoveredSim.workerName || hoveredSim.workerId) && (
             <div className="text-gray-500 text-xs">
-              Worker: {hoveredSim.workerId}
+              Worker: {hoveredSim.workerName || hoveredSim.workerId}
             </div>
           )}
         </div>

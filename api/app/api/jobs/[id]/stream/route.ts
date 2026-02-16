@@ -2,13 +2,19 @@ import { NextRequest } from 'next/server';
 import { optionalAuth, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
+import * as workerStore from '@/lib/worker-store-factory';
 import type { Job } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-function jobToStreamEvent(job: Job) {
+interface QueueInfo {
+  queuePosition?: number;
+  workers?: { online: number; idle: number; busy: number };
+}
+
+function jobToStreamEvent(job: Job, queueInfo?: QueueInfo) {
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();
@@ -30,8 +36,50 @@ function jobToStreamEvent(job: Job) {
     durationMs,
     dockerRunDurationsMs: job.dockerRunDurationsMs,
     workerId: job.workerId,
+    workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
+    ...(queueInfo?.queuePosition != null && { queuePosition: queueInfo.queuePosition }),
+    ...(queueInfo?.workers && { workers: queueInfo.workers }),
   };
+}
+
+/**
+ * Compute queue position for a QUEUED job and worker availability.
+ * Cached to avoid excessive queries.
+ */
+let cachedQueueInfo: { data: { allQueued: Job[]; workerStats: { online: number; idle: number; busy: number } }; at: number } | null = null;
+
+async function getQueueInfo(jobId: string, jobCreatedAt: Date): Promise<QueueInfo> {
+  const now = Date.now();
+  // Refresh cache every 10 seconds
+  if (!cachedQueueInfo || now - cachedQueueInfo.at > 10_000) {
+    try {
+      const [allJobs, activeWorkers] = await Promise.all([
+        jobStore.listJobs(),
+        workerStore.getActiveWorkers(),
+      ]);
+      const allQueued = allJobs.filter((j) => j.status === 'QUEUED');
+      const idle = activeWorkers.filter((w) => w.status === 'idle').length;
+      const busy = activeWorkers.length - idle;
+      cachedQueueInfo = {
+        data: {
+          allQueued,
+          workerStats: { online: activeWorkers.length, idle, busy },
+        },
+        at: now,
+      };
+    } catch {
+      return {};
+    }
+  }
+
+  const { allQueued, workerStats } = cachedQueueInfo.data;
+  // Queue position: count of QUEUED jobs created before this one
+  const position = allQueued.filter(
+    (j) => j.id !== jobId && j.createdAt.getTime() <= jobCreatedAt.getTime()
+  ).length;
+
+  return { queuePosition: position, workers: workerStats };
 }
 
 function isTerminalStatus(status: string): boolean {
@@ -128,8 +176,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
       };
 
-      // Send initial state immediately
-      send(jobToStreamEvent(initialJob));
+      // Send initial state immediately (with queue info if QUEUED)
+      const sendInitial = async () => {
+        const queueInfo = initialJob.status === 'QUEUED'
+          ? await getQueueInfo(id, initialJob.createdAt).catch(() => ({}))
+          : undefined;
+        send(jobToStreamEvent(initialJob, queueInfo));
+      };
+      sendInitial();
 
       // Send initial simulation statuses (if any exist)
       jobStore.getSimulationStatuses(id).then((sims) => {
@@ -149,7 +203,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
         // Listener 1: Job document changes
         const unsubJob = firestore.collection('jobs').doc(id).onSnapshot(
-          (snapshot) => {
+          async (snapshot) => {
             if (!snapshot.exists) {
               send({ error: 'Job not found' });
               unsubJob();
@@ -175,10 +229,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               resultJson: data.resultJson,
               dockerRunDurationsMs: data.dockerRunDurationsMs,
               ...(data.workerId && { workerId: data.workerId }),
+              ...(data.workerName && { workerName: data.workerName }),
               ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
             };
 
-            send(jobToStreamEvent(job));
+            const queueInfo = job.status === 'QUEUED'
+              ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
+              : undefined;
+            send(jobToStreamEvent(job, queueInfo));
 
             if (isTerminalStatus(job.status)) {
               unsubJob();
@@ -207,6 +265,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   index: d.index ?? 0,
                   state: d.state ?? 'PENDING',
                   ...(d.workerId && { workerId: d.workerId }),
+                  ...(d.workerName && { workerName: d.workerName }),
                   ...(d.startedAt && { startedAt: d.startedAt }),
                   ...(d.completedAt && { completedAt: d.completedAt }),
                   ...(d.durationMs != null && { durationMs: d.durationMs }),
@@ -249,10 +308,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }
 
             // Only send job event if data changed
-            const currentJobJson = JSON.stringify(jobToStreamEvent(job));
+            const queueInfo = job.status === 'QUEUED'
+              ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
+              : undefined;
+            const currentJobJson = JSON.stringify(jobToStreamEvent(job, queueInfo));
             if (currentJobJson !== lastJobJson) {
               lastJobJson = currentJobJson;
-              send(jobToStreamEvent(job));
+              send(jobToStreamEvent(job, queueInfo));
             }
 
             // Poll simulation statuses too

@@ -21,6 +21,8 @@ export interface SimulationStatus {
   state: SimulationState;
   /** Which worker is running this simulation */
   workerId?: string;
+  /** Human-readable worker name */
+  workerName?: string;
   /** When the simulation started (ISO string) */
   startedAt?: string;
   /** When the simulation finished (ISO string) */
@@ -200,7 +202,24 @@ export interface Job {
   completedAt?: Date;
   dockerRunDurationsMs?: number[];
   workerId?: string;
+  workerName?: string;
   claimedAt?: Date;
+}
+
+// -----------------------------------------------------------------------------
+// Worker Fleet Types
+// -----------------------------------------------------------------------------
+
+export interface WorkerInfo {
+  workerId: string;
+  workerName: string;
+  status: 'idle' | 'busy';
+  currentJobId?: string;
+  capacity: number;
+  activeSimulations: number;
+  uptimeMs: number;
+  lastHeartbeat: string; // ISO timestamp
+  version?: string;
 }
 
 export interface CreateJobRequest {

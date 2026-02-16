@@ -18,6 +18,7 @@ interface Row {
   completed_at?: string | null;
   docker_run_durations_ms?: string | null;
   worker_id?: string | null;
+  worker_name?: string | null;
   claimed_at?: string | null;
 }
 
@@ -42,6 +43,7 @@ function rowToJob(row: Row): Job {
     ...(row.completed_at && { completedAt: new Date(row.completed_at) }),
     ...(row.docker_run_durations_ms != null && row.docker_run_durations_ms !== '' && { dockerRunDurationsMs: JSON.parse(row.docker_run_durations_ms) as number[] }),
     ...(row.worker_id && { workerId: row.worker_id }),
+    ...(row.worker_name && { workerName: row.worker_name }),
     ...(row.claimed_at && { claimedAt: new Date(row.claimed_at) }),
   };
 }
@@ -104,10 +106,10 @@ export function updateJobStatus(id: string, status: JobStatus): boolean {
   return result.changes > 0;
 }
 
-export function setJobStartedAt(id: string, workerId?: string): boolean {
+export function setJobStartedAt(id: string, workerId?: string, workerName?: string): boolean {
   const db = getDb();
   const now = new Date().toISOString();
-  const result = db.prepare('UPDATE jobs SET started_at = ?, worker_id = ?, claimed_at = ? WHERE id = ?').run(now, workerId ?? null, now, id);
+  const result = db.prepare('UPDATE jobs SET started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ?').run(now, workerId ?? null, workerName ?? null, now, id);
   return result.changes > 0;
 }
 
@@ -213,7 +215,7 @@ export function getNextQueuedJob(): Job | undefined {
  * Atomically claim the next QUEUED job by transitioning it to RUNNING.
  * Returns the claimed job, or undefined if no QUEUED jobs exist.
  */
-export function claimNextJob(workerId?: string): Job | undefined {
+export function claimNextJob(workerId?: string, workerName?: string): Job | undefined {
   const db = getDb();
   const now = new Date().toISOString();
   // SQLite doesn't support UPDATE ... RETURNING with LIMIT in all versions,
@@ -223,9 +225,9 @@ export function claimNextJob(workerId?: string): Job | undefined {
       .prepare("SELECT * FROM jobs WHERE status = 'QUEUED' ORDER BY created_at ASC LIMIT 1")
       .get() as Row | undefined;
     if (!row) return undefined;
-    db.prepare("UPDATE jobs SET status = 'RUNNING', started_at = ?, worker_id = ?, claimed_at = ? WHERE id = ? AND status = 'QUEUED'")
-      .run(now, workerId ?? null, now, row.id);
-    return { ...row, status: 'RUNNING', started_at: now, worker_id: workerId ?? null, claimed_at: now } as Row;
+    db.prepare("UPDATE jobs SET status = 'RUNNING', started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ? AND status = 'QUEUED'")
+      .run(now, workerId ?? null, workerName ?? null, now, row.id);
+    return { ...row, status: 'RUNNING', started_at: now, worker_id: workerId ?? null, worker_name: workerName ?? null, claimed_at: now } as Row;
   });
   const row = claimTx();
   return row ? rowToJob(row) : undefined;
@@ -259,6 +261,7 @@ interface SimRow {
   idx: number;
   state: string;
   worker_id: string | null;
+  worker_name: string | null;
   started_at: string | null;
   completed_at: string | null;
   duration_ms: number | null;
@@ -273,6 +276,7 @@ function simRowToStatus(row: SimRow): SimulationStatus {
     index: row.idx,
     state: row.state as SimulationState,
     ...(row.worker_id != null && { workerId: row.worker_id }),
+    ...(row.worker_name != null && { workerName: row.worker_name }),
     ...(row.started_at != null && { startedAt: row.started_at }),
     ...(row.completed_at != null && { completedAt: row.completed_at }),
     ...(row.duration_ms != null && { durationMs: row.duration_ms }),
@@ -319,6 +323,10 @@ export function updateSimulationStatus(
   if (update.workerId !== undefined) {
     sets.push('worker_id = ?');
     values.push(update.workerId);
+  }
+  if (update.workerName !== undefined) {
+    sets.push('worker_name = ?');
+    values.push(update.workerName);
   }
   if (update.startedAt !== undefined) {
     sets.push('started_at = ?');

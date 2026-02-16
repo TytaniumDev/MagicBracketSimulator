@@ -31,6 +31,7 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     resultJson: data.resultJson,
     dockerRunDurationsMs: data.dockerRunDurationsMs,
     ...(data.workerId && { workerId: data.workerId }),
+    ...(data.workerName && { workerName: data.workerName }),
     ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
   };
 }
@@ -135,7 +136,7 @@ export async function updateJobStatus(id: string, status: JobStatus): Promise<vo
 /**
  * Set job started timestamp
  */
-export async function setJobStartedAt(id: string, workerId?: string): Promise<void> {
+export async function setJobStartedAt(id: string, workerId?: string, workerName?: string): Promise<void> {
   const updateData: Record<string, unknown> = {
     status: 'RUNNING' as JobStatus,
     startedAt: FieldValue.serverTimestamp(),
@@ -144,6 +145,9 @@ export async function setJobStartedAt(id: string, workerId?: string): Promise<vo
   };
   if (workerId) {
     updateData.workerId = workerId;
+  }
+  if (workerName) {
+    updateData.workerName = workerName;
   }
   await jobsCollection.doc(id).update(updateData);
 }
@@ -293,7 +297,7 @@ export async function deleteJob(id: string): Promise<void> {
 /**
  * Atomically transition job status (for worker)
  */
-export async function claimJob(id: string, workerId?: string): Promise<boolean> {
+export async function claimJob(id: string, workerId?: string, workerName?: string): Promise<boolean> {
   try {
     await firestore.runTransaction(async (transaction) => {
       const jobRef = jobsCollection.doc(id);
@@ -317,6 +321,9 @@ export async function claimJob(id: string, workerId?: string): Promise<boolean> 
       if (workerId) {
         updateData.workerId = workerId;
       }
+      if (workerName) {
+        updateData.workerName = workerName;
+      }
       transaction.update(jobRef, updateData);
     });
     return true;
@@ -329,7 +336,7 @@ export async function claimJob(id: string, workerId?: string): Promise<boolean> 
  * Atomically claim the next QUEUED job by transitioning it to RUNNING.
  * Returns the claimed job, or null if no QUEUED jobs exist.
  */
-export async function claimNextJob(workerId?: string): Promise<Job | null> {
+export async function claimNextJob(workerId?: string, workerName?: string): Promise<Job | null> {
   // Find the oldest queued job
   const snapshot = await jobsCollection
     .where('status', '==', 'QUEUED')
@@ -355,6 +362,9 @@ export async function claimNextJob(workerId?: string): Promise<Job | null> {
     };
     if (workerId) {
       updateData.workerId = workerId;
+    }
+    if (workerName) {
+      updateData.workerName = workerName;
     }
     transaction.update(jobRef, updateData);
     return doc.id;
@@ -415,6 +425,7 @@ export async function updateSimulationStatus(
 
   if (update.state !== undefined) updateData.state = update.state;
   if (update.workerId !== undefined) updateData.workerId = update.workerId;
+  if (update.workerName !== undefined) updateData.workerName = update.workerName;
   if (update.startedAt !== undefined) updateData.startedAt = update.startedAt;
   if (update.completedAt !== undefined) updateData.completedAt = update.completedAt;
   if (update.durationMs !== undefined) updateData.durationMs = update.durationMs;
@@ -442,6 +453,7 @@ export async function getSimulationStatuses(
       index: data.index ?? 0,
       state: (data.state ?? 'PENDING') as SimulationState,
       ...(data.workerId && { workerId: data.workerId }),
+      ...(data.workerName && { workerName: data.workerName }),
       ...(data.startedAt && { startedAt: data.startedAt }),
       ...(data.completedAt && { completedAt: data.completedAt }),
       ...(data.durationMs != null && { durationMs: data.durationMs }),

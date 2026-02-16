@@ -165,6 +165,11 @@ export function getDb(): Database.Database {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN worker_name TEXT`);
+  } catch {
+    // Column already exists
+  }
 
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency_key ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL`);
 
@@ -197,6 +202,7 @@ export function getDb(): Database.Database {
       idx INTEGER NOT NULL,
       state TEXT NOT NULL DEFAULT 'PENDING',
       worker_id TEXT,
+      worker_name TEXT,
       started_at TEXT,
       completed_at TEXT,
       duration_ms INTEGER,
@@ -205,6 +211,28 @@ export function getDb(): Database.Database {
       winning_turn INTEGER,
       PRIMARY KEY (job_id, sim_id),
       FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Add worker_name column to simulations if missing (migration)
+  try {
+    db.exec(`ALTER TABLE simulations ADD COLUMN worker_name TEXT`);
+  } catch {
+    // Column already exists
+  }
+
+  // Worker heartbeat tracking table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS worker_heartbeats (
+      worker_id TEXT PRIMARY KEY,
+      worker_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'idle',
+      current_job_id TEXT,
+      capacity INTEGER NOT NULL DEFAULT 0,
+      active_simulations INTEGER NOT NULL DEFAULT 0,
+      uptime_ms INTEGER NOT NULL DEFAULT 0,
+      last_heartbeat TEXT NOT NULL,
+      version TEXT
     )
   `);
 
