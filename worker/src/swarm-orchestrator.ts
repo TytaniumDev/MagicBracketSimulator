@@ -22,8 +22,8 @@ const SYSTEM_RESERVE_MB = 2048; // per node
 // Polling interval when waiting for a service to finish
 const SERVICE_POLL_MS = 3000;
 
-// Maximum time to wait for a single simulation (10 minutes)
-const SERVICE_TIMEOUT_MS = 10 * 60 * 1000;
+// Maximum time to wait for a single simulation (2 hours)
+const SERVICE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
 // ============================================================================
 // Types

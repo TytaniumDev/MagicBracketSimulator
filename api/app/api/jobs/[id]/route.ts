@@ -37,6 +37,7 @@ function jobToApiResponse(
     workerId: job.workerId,
     workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
+    retryCount: job.retryCount ?? 0,
   };
   // Worker needs decks and/or deckIds to run the job
   if (isWorker) {
@@ -73,9 +74,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
     }
 
-    const job = await jobStore.getJob(id);
+    let job = await jobStore.getJob(id);
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    // Attempt stale job recovery for RUNNING jobs
+    if (job.status === 'RUNNING') {
+      const recovered = await jobStore.recoverStaleJob(id);
+      if (recovered) {
+        job = await jobStore.getJob(id);
+        if (!job) {
+          return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+        }
+      }
     }
 
     const isWorker = isWorkerRequest(request);

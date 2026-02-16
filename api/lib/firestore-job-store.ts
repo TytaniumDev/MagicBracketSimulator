@@ -33,6 +33,7 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     ...(data.workerId && { workerId: data.workerId }),
     ...(data.workerName && { workerName: data.workerName }),
     ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
+    ...(data.retryCount != null && data.retryCount > 0 && { retryCount: data.retryCount }),
   };
 }
 
@@ -462,6 +463,33 @@ export async function getSimulationStatuses(
       ...(data.winningTurn != null && { winningTurn: data.winningTurn }),
     } as SimulationStatus;
   });
+}
+
+/**
+ * Reset a job for retry: set status to QUEUED, clear runtime fields, increment retryCount.
+ */
+export async function resetJobForRetry(id: string): Promise<boolean> {
+  const jobRef = jobsCollection.doc(id);
+  const jobDoc = await jobRef.get();
+  if (!jobDoc.exists) return false;
+
+  const data = jobDoc.data()!;
+  const currentRetryCount = data.retryCount ?? 0;
+
+  await jobRef.update({
+    status: 'QUEUED',
+    startedAt: FieldValue.delete(),
+    completedAt: FieldValue.delete(),
+    errorMessage: FieldValue.delete(),
+    gamesCompleted: FieldValue.delete(),
+    workerId: FieldValue.delete(),
+    workerName: FieldValue.delete(),
+    claimedAt: FieldValue.delete(),
+    dockerRunDurationsMs: FieldValue.delete(),
+    retryCount: currentRetryCount + 1,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return true;
 }
 
 /**

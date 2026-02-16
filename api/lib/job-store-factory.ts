@@ -5,6 +5,7 @@
 import { Job, JobStatus, DeckSlot, AnalysisResult, SimulationStatus } from './types';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
+import * as workerStore from './worker-store-factory';
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
@@ -176,12 +177,78 @@ export async function getSimulationStatuses(jobId: string): Promise<SimulationSt
   return sqliteStore.getSimulationStatuses(jobId);
 }
 
+export async function resetJobForRetry(id: string): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.resetJobForRetry(id);
+  }
+  return sqliteStore.resetJobForRetry(id);
+}
+
 export async function deleteSimulations(jobId: string): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.deleteSimulations(jobId);
     return;
   }
   sqliteStore.deleteSimulations(jobId);
+}
+
+// ─── Stale Job Recovery ──────────────────────────────────────────────────────
+
+/**
+ * Detect and recover a stale RUNNING job whose worker has died.
+ *
+ * If the job's worker is no longer sending heartbeats (2 min threshold):
+ *   - retryCount === 0 → reset job to QUEUED for automatic retry
+ *   - retryCount >= 1  → fail the job permanently
+ *
+ * Returns true if the job was recovered (retried or failed).
+ */
+export async function recoverStaleJob(jobId: string): Promise<boolean> {
+  const job = await getJob(jobId);
+  if (!job || job.status !== 'RUNNING' || !job.workerId) return false;
+
+  // Check if the worker is still alive (2 min heartbeat threshold)
+  const activeWorkers = await workerStore.getActiveWorkers(120_000);
+  const workerAlive = activeWorkers.some((w) => w.workerId === job.workerId);
+  if (workerAlive) return false;
+
+  const retryCount = job.retryCount ?? 0;
+
+  if (retryCount === 0) {
+    // First failure — retry the job
+    console.log(`[Recovery] Job ${jobId} worker ${job.workerId} is stale, retrying (attempt 1)`);
+    await deleteSimulations(jobId);
+    await resetJobForRetry(jobId);
+
+    // Re-publish to Pub/Sub in GCP mode so a worker picks it up
+    if (USE_FIRESTORE) {
+      try {
+        const { publishJobCreated } = await import('./pubsub');
+        await publishJobCreated(jobId);
+      } catch (err) {
+        console.warn(`[Recovery] Failed to publish retry for job ${jobId}:`, err);
+      }
+    }
+    return true;
+  }
+
+  // Already retried — fail permanently
+  console.log(`[Recovery] Job ${jobId} worker stale after retry, failing permanently`);
+
+  // Mark remaining PENDING/RUNNING sims as FAILED
+  const sims = await getSimulationStatuses(jobId);
+  for (const sim of sims) {
+    if (sim.state === 'PENDING' || sim.state === 'RUNNING') {
+      await updateSimulationStatus(jobId, sim.simId, {
+        state: 'FAILED',
+        errorMessage: 'Worker lost connection',
+        completedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  await setJobFailed(jobId, 'Worker lost connection (retry exhausted)');
+  return true;
 }
 
 /**

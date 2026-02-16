@@ -38,6 +38,7 @@ function jobToStreamEvent(job: Job, queueInfo?: QueueInfo) {
     workerId: job.workerId,
     workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
+    retryCount: job.retryCount ?? 0,
     ...(queueInfo?.queuePosition != null && { queuePosition: queueInfo.queuePosition }),
     ...(queueInfo?.workers && { workers: queueInfo.workers }),
   };
@@ -137,12 +138,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   // Verify job exists before starting stream
-  const initialJob = await jobStore.getJob(id);
+  let initialJob = await jobStore.getJob(id);
   if (!initialJob) {
     return new Response(JSON.stringify({ error: 'Job not found' }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Attempt stale job recovery on stream open
+  if (initialJob.status === 'RUNNING') {
+    const recovered = await jobStore.recoverStaleJob(id);
+    if (recovered) {
+      initialJob = (await jobStore.getJob(id)) ?? initialJob;
+    }
   }
 
   const encoder = new TextEncoder();
@@ -231,6 +240,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               ...(data.workerId && { workerId: data.workerId }),
               ...(data.workerName && { workerName: data.workerName }),
               ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
+              ...(data.retryCount != null && data.retryCount > 0 && { retryCount: data.retryCount }),
             };
 
             const queueInfo = job.status === 'QUEUED'
@@ -282,8 +292,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           );
 
+        // Periodic stale job recovery check (every 30s)
+        const recoveryInterval = setInterval(async () => {
+          if (closed) {
+            clearInterval(recoveryInterval);
+            return;
+          }
+          try {
+            await jobStore.recoverStaleJob(id);
+          } catch {
+            // Non-fatal: recovery check failed
+          }
+        }, 30_000);
+
         // Cleanup on client disconnect
         request.signal.addEventListener('abort', () => {
+          clearInterval(recoveryInterval);
           unsubJob();
           unsubSims();
           close();
@@ -338,8 +362,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           }
         }, 2000);
 
+        // Periodic stale job recovery check (every 30s)
+        const localRecoveryInterval = setInterval(async () => {
+          if (closed) {
+            clearInterval(localRecoveryInterval);
+            return;
+          }
+          try {
+            await jobStore.recoverStaleJob(id);
+          } catch {
+            // Non-fatal: recovery check failed
+          }
+        }, 30_000);
+
         request.signal.addEventListener('abort', () => {
           clearInterval(interval);
+          clearInterval(localRecoveryInterval);
           close();
         });
       }

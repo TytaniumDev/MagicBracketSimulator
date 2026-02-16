@@ -20,6 +20,7 @@ interface Row {
   worker_id?: string | null;
   worker_name?: string | null;
   claimed_at?: string | null;
+  retry_count?: number | null;
 }
 
 function rowToJob(row: Row): Job {
@@ -45,6 +46,7 @@ function rowToJob(row: Row): Job {
     ...(row.worker_id && { workerId: row.worker_id }),
     ...(row.worker_name && { workerName: row.worker_name }),
     ...(row.claimed_at && { claimedAt: new Date(row.claimed_at) }),
+    ...(row.retry_count != null && row.retry_count > 0 && { retryCount: row.retry_count }),
   };
 }
 
@@ -371,6 +373,28 @@ export function getSimulationStatuses(jobId: string): SimulationStatus[] {
     .prepare('SELECT * FROM simulations WHERE job_id = ? ORDER BY idx ASC')
     .all(jobId) as SimRow[];
   return rows.map(simRowToStatus);
+}
+
+/**
+ * Reset a job for retry: set status to QUEUED, clear runtime fields, increment retryCount.
+ */
+export function resetJobForRetry(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare(
+    `UPDATE jobs SET
+      status = 'QUEUED',
+      started_at = NULL,
+      completed_at = NULL,
+      error_message = NULL,
+      games_completed = NULL,
+      worker_id = NULL,
+      worker_name = NULL,
+      claimed_at = NULL,
+      docker_run_durations_ms = NULL,
+      retry_count = COALESCE(retry_count, 0) + 1
+    WHERE id = ?`
+  ).run(id);
+  return result.changes > 0;
 }
 
 /**

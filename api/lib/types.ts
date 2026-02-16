@@ -204,6 +204,7 @@ export interface Job {
   workerId?: string;
   workerName?: string;
   claimedAt?: Date;
+  retryCount?: number;
 }
 
 // -----------------------------------------------------------------------------
