@@ -48,6 +48,12 @@ docker compose -f worker/docker-compose.yml up --build
 docker compose -f worker/docker-compose.yml -f worker/docker-compose.local.yml up --build
 ```
 
+**Simulation image** (Docker, `simulation/`):
+```bash
+# Build simulation image (context must be repo root)
+docker build -f simulation/Dockerfile -t magic-bracket-simulation .
+```
+
 ### CI
 
 CI runs on PRs to `main` (.github/workflows/ci.yml): frontend lint+build, api lint+build+test:unit. Deploy workflow deploys frontend to Firebase Hosting after merge.
@@ -63,14 +69,17 @@ Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 ### Service Boundaries
 
 - **frontend/** — Vite + React + Tailwind v4 + Firebase Auth (Google sign-in). Calls the API over HTTP. Config in `frontend/public/config.json` (committed, not secret).
-- **api/** — Next.js 15 app: API routes under `app/api/`. Handles deck ingestion (Moxfield URLs, precon names, raw deck text), job lifecycle, and Gemini analysis. Uses factory pattern (`job-store-factory.ts`, `deck-store-factory.ts`) to swap SQLite/Firestore backends.
-- **worker/** — Unified Docker image. Pulls jobs via Pub/Sub (GCP) or HTTP polling (local). Runs Forge simulations as child processes, condenses logs, POSTs results to API.
+- **api/** — Next.js 15 app: API routes under `app/api/`. Handles deck ingestion (Moxfield URLs, precon names, raw deck text), job lifecycle, simulation tracking, and Gemini analysis. Uses factory pattern (`job-store-factory.ts`, `deck-store-factory.ts`) to swap SQLite/Firestore backends.
+- **worker/** — Slim Node.js Docker image (~100MB). Pulls jobs via Pub/Sub (GCP) or HTTP polling (local). Orchestrates simulation containers via Docker socket, reports per-simulation progress, aggregates logs, POSTs results to API.
   - **worker/forge-engine/** — Headless Forge simulator assets: `run_sim.sh` entrypoint, precon decks in `precons/`.
+- **simulation/** — Standalone Docker image (~750MB, Java 17 + Forge + xvfb). Runs exactly 1 game, writes log file, exits. Spawned by the worker via `docker run --rm`.
 
 ### Key Patterns
 
 - **Factory pattern for storage**: `api/lib/*-factory.ts` files return SQLite or Firestore implementations based on mode. The API routes use these factories, never import concrete stores directly.
-- **Worker parallelism**: One job at a time, but multiple Forge child processes per job (auto-scaled by CPU/RAM). See `worker/src/worker.ts` for `splitSimulations` and `processJob`.
+- **Worker + Simulation split**: Two Docker images. The worker (Node.js) orchestrates simulation containers (Java + Forge) with semaphore-bounded concurrency, auto-scaled by CPU/RAM. See `worker/src/worker.ts` for `processJobWithContainers`, `Semaphore`, and `calculateDynamicParallelism`.
+- **Per-simulation tracking**: Individual simulation states (PENDING/RUNNING/COMPLETED/FAILED) tracked via Firestore subcollection or SQLite table, streamed to frontend via SSE.
+- **Backward compatibility**: Worker auto-detects mode — container orchestration (default) or monolithic child processes (legacy, when `FORGE_PATH` is set).
 - **Deck resolution**: Supports Moxfield URLs, precon names, and raw deck text. Resolution happens in `api/lib/deck-resolver.ts` + `api/lib/moxfield-service.ts`.
 
 ### Frontend Structure
@@ -87,6 +96,10 @@ Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 Routes live under `api/app/api/`. Key endpoints:
 - `POST /api/jobs` — Create simulation job
 - `GET /api/jobs/:id` — Job status and results
+- `GET /api/jobs/:id/stream` — SSE stream for real-time job + simulation updates
+- `GET /api/jobs/:id/simulations` — Per-simulation statuses
+- `POST /api/jobs/:id/simulations` — Initialize simulation tracking (worker)
+- `PATCH /api/jobs/:id/simulations/:simId` — Update simulation status (worker)
 - `POST /api/jobs/:id/analyze` — Trigger Gemini analysis
 - Deck and precon CRUD endpoints
 

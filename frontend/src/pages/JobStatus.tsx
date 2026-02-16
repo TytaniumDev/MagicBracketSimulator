@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
+import { SimulationGrid } from '../components/SimulationGrid';
 import { useJobStream } from '../hooks/useJobStream';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
@@ -139,7 +140,7 @@ export default function JobStatusPage() {
   const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Primary: SSE stream for real-time job updates
-  const { job: streamJob, error: streamError, connected: sseConnected } = useJobStream<Job>(id);
+  const { job: streamJob, simulations: streamSimulations, error: streamError, connected: sseConnected } = useJobStream<Job>(id);
 
   // Sync SSE data into component state
   useEffect(() => {
@@ -531,6 +532,13 @@ export default function JobStatusPage() {
               />
             </div>
           </div>
+        )}
+        {/* Per-simulation grid — shown when simulation tracking data exists */}
+        {(job.status === 'RUNNING' || job.status === 'ANALYZING') && streamSimulations.length > 0 && (
+          <SimulationGrid
+            simulations={streamSimulations}
+            totalSimulations={job.simulations}
+          />
         )}
         {job.deckNames?.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

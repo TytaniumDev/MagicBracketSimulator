@@ -16,15 +16,16 @@ if (!process.env.GOOGLE_CLOUD_PROJECT) {
 }
 
 /**
- * Unified Worker: Runs forge simulations via Pub/Sub (GCP) or polling (local)
+ * Worker Orchestrator: Manages simulation containers via Docker socket
  *
  * This worker:
  * 1. Loads config from Google Secret Manager (if GOOGLE_CLOUD_PROJECT set) or env
  * 2. Receives jobs via Pub/Sub (if PUBSUB_SUBSCRIPTION set) or polls GET /api/jobs/next
  * 3. Fetches job details from the API
- * 4. Writes deck files to Forge's Commander deck directory
- * 5. Runs forge simulations as child processes (parallel)
- * 6. POSTs raw logs + deck metadata to the API
+ * 4. Writes deck files to a temp directory per-job
+ * 5. Spawns simulation containers (1 per game) with bounded concurrency
+ * 6. Reports per-simulation progress to the API
+ * 7. Aggregates logs and POSTs to the API
  */
 
 import { spawn, ChildProcess } from 'child_process';
@@ -51,17 +52,50 @@ let currentWorkerId = '';
 // Configuration
 // ============================================================================
 
-// Path to forge installation (set by unified container or local install)
-const FORGE_PATH = process.env.FORGE_PATH || '/app/forge';
+const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'magic-bracket-simulation:latest';
+const JOBS_DIR = process.env.JOBS_DIR || '/tmp/mbs-jobs';
 
-// Forge resolves Commander deck filenames from this hardcoded path.
-// All decks (precon or user) are written here before each job.
+// Legacy: if FORGE_PATH is set, we're in monolithic mode (backward compat)
+const FORGE_PATH = process.env.FORGE_PATH || '';
+const USE_CONTAINERS = !FORGE_PATH;
+
+// Forge's commander deck directory (only used in monolithic mode)
 const FORGE_COMMANDER_DECKS_DIR = '/home/worker/.forge/decks/commander';
 
 // Reserve ~2GB for system + worker overhead
 const SYSTEM_RESERVE_MB = 2048;
 // Each Forge sim needs ~500-600MB RAM
 const RAM_PER_SIM_MB = 600;
+
+// ============================================================================
+// Semaphore (bounded concurrency)
+// ============================================================================
+
+class Semaphore {
+  private count: number;
+  private waiting: (() => void)[] = [];
+
+  constructor(max: number) {
+    this.count = max;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.count > 0) {
+      this.count--;
+      return;
+    }
+    return new Promise<void>((resolve) => this.waiting.push(resolve));
+  }
+
+  release(): void {
+    if (this.waiting.length > 0) {
+      const next = this.waiting.shift()!;
+      next();
+    } else {
+      this.count++;
+    }
+  }
+}
 
 // ============================================================================
 // Worker ID Management
@@ -135,17 +169,6 @@ async function loadConfigFromSecretManager(): Promise<void> {
 }
 
 // ============================================================================
-// Concurrency Control
-// ============================================================================
-
-/**
- * Simple mutex to ensure only one job processes at a time.
- * Pub/Sub flowControl.maxMessages=1 is the primary guard, but this is a safety net
- * to prevent deck-file collisions and resource exhaustion if messages arrive concurrently.
- */
-let isProcessingJob = false;
-
-// ============================================================================
 // Subscriptions (for shutdown handler)
 // ============================================================================
 
@@ -156,26 +179,26 @@ let subscription: any = null;
 // API Functions
 // ============================================================================
 
+function getApiHeaders(): Record<string, string> {
+  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+  const WORKER_SECRET = process.env.WORKER_SECRET || '';
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
+  return headers;
+}
+
+function getApiUrl(): string {
+  return process.env.API_URL || 'http://localhost:3000';
+}
+
 /**
  * Fetch job details from API
  */
 async function fetchJob(jobId: string): Promise<JobData | null> {
-  const API_URL = process.env.API_URL || 'http://localhost:3000';
-  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
-  const WORKER_SECRET = process.env.WORKER_SECRET || '';
-  const url = `${API_URL}/api/jobs/${jobId}`;
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-  if (AUTH_TOKEN) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${AUTH_TOKEN}`;
-  }
-  if (WORKER_SECRET) {
-    (headers as Record<string, string>)['X-Worker-Secret'] = WORKER_SECRET;
-  }
-
+  const url = `${getApiUrl()}/api/jobs/${jobId}`;
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetch(url, { headers: getApiHeaders() });
     if (!response.ok) {
       console.error(`Failed to fetch job ${jobId}: ${response.status}`);
       return null;
@@ -190,33 +213,17 @@ async function fetchJob(jobId: string): Promise<JobData | null> {
 /**
  * Update job status via API
  */
-async function patchJobStatus(jobId: string, status: string, errorMessage?: string): Promise<void> {
-  const API_URL = process.env.API_URL || 'http://localhost:3000';
-  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
-  const WORKER_SECRET = process.env.WORKER_SECRET || '';
-  const url = `${API_URL}/api/jobs/${jobId}`;
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-  if (AUTH_TOKEN) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${AUTH_TOKEN}`;
-  }
-  if (WORKER_SECRET) {
-    (headers as Record<string, string>)['X-Worker-Secret'] = WORKER_SECRET;
-  }
-
+async function patchJobStatus(jobId: string, status: string, errorMessage?: string, dockerRunDurationsMs?: number[]): Promise<void> {
+  const url = `${getApiUrl()}/api/jobs/${jobId}`;
   const body: Record<string, unknown> = { status };
-  if (errorMessage) {
-    body.errorMessage = errorMessage;
-  }
-  if (status === 'RUNNING' && currentWorkerId) {
-    body.workerId = currentWorkerId;
-  }
+  if (errorMessage) body.errorMessage = errorMessage;
+  if (dockerRunDurationsMs) body.dockerRunDurationsMs = dockerRunDurationsMs;
+  if (status === 'RUNNING' && currentWorkerId) body.workerId = currentWorkerId;
 
   try {
     const response = await fetch(url, {
       method: 'PATCH',
-      headers,
+      headers: getApiHeaders(),
       body: JSON.stringify(body),
     });
     if (!response.ok) {
@@ -224,6 +231,61 @@ async function patchJobStatus(jobId: string, status: string, errorMessage?: stri
     }
   } catch (error) {
     console.error(`Error updating job status:`, error);
+  }
+}
+
+/**
+ * Update job progress (gamesCompleted count)
+ */
+async function updateJobProgress(jobId: string, gamesCompleted: number): Promise<void> {
+  const url = `${getApiUrl()}/api/jobs/${jobId}`;
+  try {
+    await fetch(url, {
+      method: 'PATCH',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ gamesCompleted }),
+    });
+  } catch {
+    // Non-fatal: progress update failing shouldn't crash the job
+  }
+}
+
+/**
+ * Initialize simulation tracking in the API
+ */
+async function apiInitializeSimulations(jobId: string, count: number): Promise<void> {
+  const url = `${getApiUrl()}/api/jobs/${jobId}/simulations`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ count }),
+    });
+    if (!response.ok) {
+      console.warn(`Failed to initialize simulations: ${response.status}`);
+    }
+  } catch (error) {
+    console.warn('Failed to initialize simulations:', error);
+  }
+}
+
+/**
+ * Report per-simulation status to the API
+ */
+async function reportSimulationStatus(
+  jobId: string,
+  simId: string,
+  update: Record<string, unknown>
+): Promise<void> {
+  const url = `${getApiUrl()}/api/jobs/${jobId}/simulations/${simId}`;
+  try {
+    await fetch(url, {
+      method: 'PATCH',
+      headers: getApiHeaders(),
+      body: JSON.stringify(update),
+    });
+  } catch {
+    // Non-fatal: simulation status update failing shouldn't crash the job
   }
 }
 
@@ -253,21 +315,6 @@ function calculateDynamicParallelism(requested: number): number {
   );
 
   return Math.max(1, optimal);
-}
-
-/**
- * Split simulations across parallel runs
- */
-function splitSimulations(total: number, parallelism: number): number[] {
-  const runs: number[] = [];
-  const base = Math.floor(total / parallelism);
-  const remainder = total % parallelism;
-
-  for (let i = 0; i < parallelism; i++) {
-    runs.push(base + (i < remainder ? 1 : 0));
-  }
-
-  return runs.filter((n) => n > 0);
 }
 
 // ============================================================================
@@ -323,12 +370,9 @@ function runProcess(
 
     proc.on('close', (code, signal) => {
       if (timeoutId) clearTimeout(timeoutId);
-      // When a process is killed by a signal (e.g. SIGTERM from timeout),
-      // Node.js returns code=null. Previously `null || 0` silently masked
-      // this as success. Now we properly detect killed/timed-out processes.
       let exitCode: number;
       if (timedOut) {
-        exitCode = 124; // Standard timeout exit code (like GNU timeout)
+        exitCode = 124;
       } else if (code !== null) {
         exitCode = code;
       } else if (signal) {
@@ -341,8 +385,96 @@ function runProcess(
   });
 }
 
+// ============================================================================
+// Simulation Execution — Container Mode (new)
+// ============================================================================
+
+interface SimulationResult {
+  simId: string;
+  index: number;
+  exitCode: number;
+  durationMs: number;
+  error?: string;
+}
+
 /**
- * Run forge simulation as a child process.
+ * Run a single simulation in a Docker container.
+ * Each container runs exactly 1 game, writes its log, then exits.
+ */
+async function runSimulationContainer(
+  jobId: string,
+  simId: string,
+  index: number,
+  deckDir: string,
+  logDir: string,
+  deckFilenames: [string, string, string, string]
+): Promise<SimulationResult> {
+  const startTime = Date.now();
+  const containerName = `sim-${jobId.slice(0, 8)}-${simId}`;
+
+  // Report RUNNING to API
+  await reportSimulationStatus(jobId, simId, {
+    state: 'RUNNING',
+    workerId: currentWorkerId,
+  });
+
+  const args = [
+    'run', '--rm',
+    '--name', containerName,
+    `--memory=${RAM_PER_SIM_MB}m`,
+    '--cpus=1',
+    // Mount deck files read-only into Forge's Commander deck directory
+    '-v', `${deckDir}:/home/simulator/.forge/decks/commander:ro`,
+    // Mount log output directory
+    '-v', `${logDir}:/app/logs`,
+    // Environment
+    '-e', `FORGE_PATH=/app/forge`,
+    '-e', `LOGS_DIR=/app/logs`,
+    SIMULATION_IMAGE,
+    '--decks', ...deckFilenames,
+    '--simulations', '1',
+    '--id', `${jobId}_${simId}`,
+  ];
+
+  let result: ProcessResult;
+  try {
+    result = await runProcess('docker', args, { timeout: 24 * 60 * 60 * 1000 });
+  } catch (error) {
+    const durationMs = Date.now() - startTime;
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    await reportSimulationStatus(jobId, simId, {
+      state: 'FAILED',
+      durationMs,
+      errorMessage: errorMsg,
+    });
+    return { simId, index, exitCode: 1, durationMs, error: errorMsg };
+  }
+
+  const durationMs = Date.now() - startTime;
+
+  if (result.exitCode !== 0) {
+    await reportSimulationStatus(jobId, simId, {
+      state: 'FAILED',
+      durationMs,
+      errorMessage: `Exit code ${result.exitCode}`,
+    });
+    return { simId, index, exitCode: result.exitCode, durationMs, error: `Exit code ${result.exitCode}` };
+  }
+
+  await reportSimulationStatus(jobId, simId, {
+    state: 'COMPLETED',
+    durationMs,
+  });
+
+  return { simId, index, exitCode: 0, durationMs };
+}
+
+// ============================================================================
+// Simulation Execution — Monolithic Mode (legacy, backward compat)
+// ============================================================================
+
+/**
+ * Run forge simulation as a child process (monolithic mode).
  * Decks must already be written to FORGE_COMMANDER_DECKS_DIR before calling this.
  */
 async function runForgeSim(
@@ -368,12 +500,27 @@ async function runForgeSim(
       DECKS_DIR: FORGE_COMMANDER_DECKS_DIR,
       LOGS_DIR: logsDir,
     },
-    timeout: 10 * 60 * 1000, // 10 minute timeout
+    timeout: 24 * 60 * 60 * 1000,
   });
 }
 
+/**
+ * Split simulations across parallel runs (monolithic mode)
+ */
+function splitSimulations(total: number, parallelism: number): number[] {
+  const runs: number[] = [];
+  const base = Math.floor(total / parallelism);
+  const remainder = total % parallelism;
+
+  for (let i = 0; i < parallelism; i++) {
+    runs.push(base + (i < remainder ? 1 : 0));
+  }
+
+  return runs.filter((n) => n > 0);
+}
+
 // ============================================================================
-// Log Processing (replaces misc-runner container)
+// Log Processing
 // ============================================================================
 
 /**
@@ -386,9 +533,7 @@ async function readGameLogs(
   let files: string[] = [];
 
   try {
-    // Read all files in logs directory
     const allFiles = await fs.readdir(logsDir);
-    // Filter for txt files matching job ID (excluding deck_names.txt)
     files = allFiles
       .filter((f) => f.includes(jobId) && f.endsWith('.txt') && f !== 'deck_names.txt')
       .map((f) => path.join(logsDir, f))
@@ -397,7 +542,7 @@ async function readGameLogs(
     // Directory might not exist
   }
 
-  // If no files match with job ID, try to find any .txt files (except deck_names.txt)
+  // Fallback: find any .txt files
   if (files.length === 0) {
     try {
       const allFiles = await fs.readdir(logsDir);
@@ -414,7 +559,6 @@ async function readGameLogs(
   for (const file of files) {
     try {
       const content = await fs.readFile(file, 'utf-8');
-      // Check if this file contains multiple concatenated games
       const games = splitConcatenatedGames(content);
       rawLogs.push(...games);
     } catch (err) {
@@ -442,17 +586,13 @@ async function readGameLogs(
 }
 
 /**
- * Process logs and POST to the API (replaces GCS upload)
+ * Process logs and POST to the API
  */
 async function processAndUploadLogs(
   jobId: string,
   logsDir: string,
   deckLists: string[]
 ): Promise<void> {
-  const API_URL = process.env.API_URL || 'http://localhost:3000';
-  const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
-  const WORKER_SECRET = process.env.WORKER_SECRET || '';
-
   console.log('Reading game logs...');
   const { rawLogs, deckNames } = await readGameLogs(logsDir, jobId);
   console.log(`Found ${rawLogs.length} game logs`);
@@ -462,13 +602,10 @@ async function processAndUploadLogs(
   }
 
   console.log(`POSTing ${rawLogs.length} game logs to the API...`);
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
-  if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
 
-  const response = await fetch(`${API_URL}/api/jobs/${jobId}/logs`, {
+  const response = await fetch(`${getApiUrl()}/api/jobs/${jobId}/logs`, {
     method: 'POST',
-    headers,
+    headers: getApiHeaders(),
     body: JSON.stringify({ gameLogs: rawLogs, deckNames, deckLists }),
   });
 
@@ -480,50 +617,119 @@ async function processAndUploadLogs(
 }
 
 // ============================================================================
-// Job Processing
+// Job Processing — Container Mode (new)
 // ============================================================================
 
 /**
- * Process a single job
+ * Process a job using Docker containers (1 container per simulation)
  */
-async function processJob(jobId: string): Promise<void> {
-  console.log(`Processing job ${jobId}...`);
+async function processJobWithContainers(jobId: string, job: JobData): Promise<void> {
+  const totalSims = job.simulations;
+  const capacity = calculateDynamicParallelism(totalSims);
 
-  // Fetch job details
-  const job = await fetchJob(jobId);
-  if (!job) {
-    throw new Error(`Job ${jobId} not found`);
+  const jobDir = path.join(JOBS_DIR, jobId);
+  const deckDir = path.join(jobDir, 'decks');
+  const logDir = path.join(jobDir, 'logs');
+  await fs.mkdir(deckDir, { recursive: true });
+  await fs.mkdir(logDir, { recursive: true });
+
+  // Write deck files
+  const deckFilenames: [string, string, string, string] = ['deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck'];
+  const deckNames = job.decks!.map((d) => d.name);
+  const deckLists = job.decks!.map((d) => d.dck);
+
+  await Promise.all(
+    job.decks!.map((deck, i) =>
+      fs.writeFile(path.join(deckDir, deckFilenames[i]), deck.dck, 'utf-8')
+    )
+  );
+
+  // Write deck_names.txt for log processing
+  await fs.writeFile(path.join(logDir, 'deck_names.txt'), deckNames.join('\n'), 'utf-8');
+
+  // Initialize per-simulation tracking in the API
+  await apiInitializeSimulations(jobId, totalSims);
+
+  // Generate simulation IDs
+  const simIds = Array.from({ length: totalSims }, (_, i) => ({
+    simId: `sim_${String(i).padStart(3, '0')}`,
+    index: i,
+  }));
+
+  console.log(`Running ${totalSims} simulations with concurrency=${capacity}`);
+
+  // Run simulations with bounded concurrency
+  const semaphore = new Semaphore(capacity);
+  const results: SimulationResult[] = [];
+  let completedCount = 0;
+
+  await Promise.all(
+    simIds.map(async ({ simId, index }) => {
+      await semaphore.acquire();
+      try {
+        const result = await runSimulationContainer(
+          jobId, simId, index, deckDir, logDir, deckFilenames
+        );
+        results.push(result);
+
+        // Update job-level progress
+        completedCount++;
+        await updateJobProgress(jobId, completedCount);
+      } finally {
+        semaphore.release();
+      }
+    })
+  );
+
+  // Check for complete failure
+  const succeeded = results.filter((r) => r.exitCode === 0);
+  const failed = results.filter((r) => r.exitCode !== 0);
+
+  const durations = results.map((r) => r.durationMs);
+  console.log(`Simulations completed: ${succeeded.length} succeeded, ${failed.length} failed`);
+  console.log(`Durations: ${durations.map((d) => `${d}ms`).join(', ')}`);
+
+  if (succeeded.length === 0) {
+    throw new Error(`All ${totalSims} simulations failed`);
   }
 
-  // Skip if not queued (might have been processed already)
-  if (job.status !== 'QUEUED') {
-    console.log(`Job ${jobId} is not QUEUED (status: ${job.status}), skipping`);
-    return;
+  // Process logs and POST to the API
+  console.log(`Processing and posting logs for job ${jobId}...`);
+  await processAndUploadLogs(jobId, logDir, deckLists);
+
+  // Update job status to COMPLETED
+  await patchJobStatus(jobId, 'COMPLETED', undefined, durations);
+
+  // Clean up temp files
+  try {
+    await fs.rm(jobDir, { recursive: true, force: true });
+  } catch {
+    console.warn(`Warning: Failed to clean up ${jobDir}`);
   }
 
-  if (!job.decks || job.decks.length !== 4) {
-    throw new Error('Job must have exactly 4 decks with full content');
-  }
+  console.log(`Job ${jobId} completed successfully`);
+}
 
-  // Update status to RUNNING
-  await patchJobStatus(jobId, 'RUNNING');
+// ============================================================================
+// Job Processing — Monolithic Mode (legacy)
+// ============================================================================
 
-  const JOBS_DIR = process.env.JOBS_DIR || './jobs';
+/**
+ * Process a job using child processes (legacy monolithic mode)
+ */
+async function processJobMonolithic(jobId: string, job: JobData): Promise<void> {
   const jobDir = path.join(JOBS_DIR, jobId);
   const logsDir = path.join(jobDir, 'logs');
   await fs.mkdir(logsDir, { recursive: true });
 
-  // Write all 4 decks directly to Forge's Commander deck directory.
-  // Forge resolves -d filenames from ~/.forge/decks/commander/ when -f Commander is set.
-  // All parallel runs of a single job use the same 4 decks, and only one job runs at a
-  // time, so writing here once is race-free.
+  // Write decks to Forge's Commander deck directory
   await fs.mkdir(FORGE_COMMANDER_DECKS_DIR, { recursive: true });
   const deckFilenames: [string, string, string, string] = ['deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck'];
-  const deckNames = job.decks.map((d) => d.name);
-  const deckLists = job.decks.map((d) => d.dck);
+  const deckNames = job.decks!.map((d) => d.name);
+  const deckLists = job.decks!.map((d) => d.dck);
 
   await Promise.all(
-    job.decks.map((deck, i) =>
+    job.decks!.map((deck, i) =>
       fs.writeFile(path.join(FORGE_COMMANDER_DECKS_DIR, deckFilenames[i]), deck.dck, 'utf-8')
     )
   );
@@ -531,7 +737,7 @@ async function processJob(jobId: string): Promise<void> {
   const deckNamesPath = path.join(logsDir, 'deck_names.txt');
   await fs.writeFile(deckNamesPath, deckNames.join('\n'), 'utf-8');
 
-  // Calculate dynamic parallelism based on system resources
+  // Calculate dynamic parallelism
   const requestedParallelism = job.parallelism || 4;
   const parallelism = calculateDynamicParallelism(requestedParallelism);
   const runs = splitSimulations(job.simulations, parallelism);
@@ -558,9 +764,69 @@ async function processJob(jobId: string): Promise<void> {
   await processAndUploadLogs(jobId, logsDir, deckLists);
 
   // Update job status to COMPLETED
-  await patchJobStatus(jobId, 'COMPLETED');
+  await patchJobStatus(jobId, 'COMPLETED', undefined, durations);
 
   console.log(`Job ${jobId} completed successfully`);
+}
+
+// ============================================================================
+// Job Processing (dispatcher)
+// ============================================================================
+
+/**
+ * Process a single job — dispatches to container or monolithic mode
+ */
+async function processJob(jobId: string): Promise<void> {
+  console.log(`Processing job ${jobId}...`);
+
+  // Fetch job details
+  const job = await fetchJob(jobId);
+  if (!job) {
+    throw new Error(`Job ${jobId} not found`);
+  }
+
+  // Skip if not queued
+  if (job.status !== 'QUEUED') {
+    console.log(`Job ${jobId} is not QUEUED (status: ${job.status}), skipping`);
+    return;
+  }
+
+  if (!job.decks || job.decks.length !== 4) {
+    throw new Error('Job must have exactly 4 decks with full content');
+  }
+
+  // Update status to RUNNING
+  await patchJobStatus(jobId, 'RUNNING');
+
+  if (USE_CONTAINERS) {
+    await processJobWithContainers(jobId, job);
+  } else {
+    await processJobMonolithic(jobId, job);
+  }
+}
+
+// ============================================================================
+// Docker Image Management
+// ============================================================================
+
+/**
+ * Pre-pull the simulation Docker image on startup.
+ * Non-fatal — the image might already be local.
+ */
+async function ensureSimulationImage(): Promise<void> {
+  console.log(`Pre-pulling simulation image: ${SIMULATION_IMAGE}`);
+  try {
+    const result = await runProcess('docker', ['pull', SIMULATION_IMAGE], {
+      timeout: 5 * 60 * 1000,
+    });
+    if (result.exitCode !== 0) {
+      console.warn(`Warning: Failed to pull simulation image (exit ${result.exitCode}). Using local image if available.`);
+    } else {
+      console.log('Simulation image pulled successfully');
+    }
+  } catch {
+    console.warn('Warning: Docker pull failed. Simulation image must be available locally.');
+  }
 }
 
 // ============================================================================
@@ -569,11 +835,8 @@ async function processJob(jobId: string): Promise<void> {
 
 /**
  * Handle a Pub/Sub message.
- *
- * Only one job is processed at a time. If a message arrives while another job
- * is already running, we nack() it so Pub/Sub redelivers later (with backoff).
- * This prevents deck-file collisions and resource exhaustion that occur when
- * two Forge simulation sets run concurrently in the same container.
+ * In container mode, multiple jobs can run concurrently since each simulation
+ * runs in an isolated container with no shared filesystem.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleMessage(message: any): Promise<void> {
@@ -590,15 +853,6 @@ async function handleMessage(message: any): Promise<void> {
   const { jobId } = messageData;
   console.log(`Received job-created message for job ${jobId}`);
 
-  // Safety net: reject concurrent jobs even if flowControl.maxMessages=1 somehow
-  // allows a second message through (e.g. race during ack processing).
-  if (isProcessingJob) {
-    console.warn(`Already processing a job, nacking message for job ${jobId} (will retry)`);
-    message.nack();
-    return;
-  }
-
-  isProcessingJob = true;
   try {
     await processJob(jobId);
     message.ack();
@@ -608,8 +862,6 @@ async function handleMessage(message: any): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await patchJobStatus(jobId, 'FAILED', errorMessage);
     message.nack(); // Nack to trigger retry (with backoff)
-  } finally {
-    isProcessingJob = false;
   }
 }
 
@@ -619,18 +871,13 @@ async function handleMessage(message: any): Promise<void> {
 // ============================================================================
 
 async function pollForJobs(): Promise<void> {
-  const API_URL = process.env.API_URL || 'http://localhost:3000';
-  const WORKER_SECRET = process.env.WORKER_SECRET || '';
   const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
 
-  console.log(`Polling for jobs at ${API_URL}/api/jobs/next every ${POLL_INTERVAL_MS}ms...`);
+  console.log(`Polling for jobs at ${getApiUrl()}/api/jobs/next every ${POLL_INTERVAL_MS}ms...`);
 
   while (!isShuttingDown) {
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
-
-      const res = await fetch(`${API_URL}/api/jobs/next`, { headers });
+      const res = await fetch(`${getApiUrl()}/api/jobs/next`, { headers: getApiHeaders() });
       if (res.status === 200) {
         const job = await res.json();
         try {
@@ -689,18 +936,23 @@ process.on('SIGINT', () => handleShutdown('SIGINT'));
 async function main(): Promise<void> {
   await loadConfigFromSecretManager();
 
-  const API_URL = process.env.API_URL || 'http://localhost:3000';
-  const JOBS_DIR = process.env.JOBS_DIR || './jobs';
   const usePubSub = !!process.env.PUBSUB_SUBSCRIPTION;
 
   currentWorkerId = await getOrCreateWorkerId(JOBS_DIR);
   console.log('Worker ID:', currentWorkerId.slice(0, 8) + '...');
 
   console.log('Worker starting...');
-  console.log('Mode:', usePubSub ? 'Pub/Sub' : 'Polling');
-  console.log('API URL:', API_URL);
+  console.log('Mode:', USE_CONTAINERS ? 'Container Orchestrator' : 'Monolithic (legacy)');
+  console.log('Transport:', usePubSub ? 'Pub/Sub' : 'Polling');
+  console.log('API URL:', getApiUrl());
   console.log('Jobs directory:', JOBS_DIR);
-  console.log('Forge path:', FORGE_PATH);
+
+  if (USE_CONTAINERS) {
+    console.log('Simulation image:', SIMULATION_IMAGE);
+    await ensureSimulationImage();
+  } else {
+    console.log('Forge path:', FORGE_PATH);
+  }
 
   // Ensure jobs directory exists
   await fs.mkdir(JOBS_DIR, { recursive: true });
@@ -711,21 +963,21 @@ async function main(): Promise<void> {
 
     const { PubSub } = await import('@google-cloud/pubsub');
     const pubsub = new PubSub({ projectId: PROJECT_ID });
+
+    // In container mode, we can handle multiple jobs concurrently since
+    // each simulation runs in an isolated container. The capacity is
+    // roughly how many simulations we can run in parallel.
+    const maxMessages = USE_CONTAINERS
+      ? calculateDynamicParallelism(16) // Fill capacity
+      : 1; // Monolithic mode: one job at a time to avoid deck-file collisions
+
     subscription = pubsub.subscription(SUBSCRIPTION_NAME, {
-      // CRITICAL: Only deliver one message at a time.
-      // Without this, Pub/Sub delivers up to 100 messages concurrently,
-      // causing multiple jobs to run simultaneously. This leads to:
-      // - Deck file collisions (shared /home/worker/.forge/decks/commander/)
-      // - Resource exhaustion (multiple Forge JVM processes exceeding memory)
-      // - Silent crashes where one job dies and the other hits timeout
-      flowControl: {
-        maxMessages: 1,
-      },
+      flowControl: { maxMessages },
     });
 
     console.log('Project:', PROJECT_ID);
     console.log('Subscription:', SUBSCRIPTION_NAME);
-    console.log('Subscribing to Pub/Sub messages (maxMessages=1, sequential processing)...');
+    console.log(`Subscribing to Pub/Sub messages (maxMessages=${maxMessages})...`);
 
     subscription.on('message', handleMessage);
     subscription.on('error', (error: unknown) => {

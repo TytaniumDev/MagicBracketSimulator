@@ -1,6 +1,41 @@
 export type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
 
 // -----------------------------------------------------------------------------
+// Per-Simulation Tracking Types
+// -----------------------------------------------------------------------------
+
+/** Lifecycle state for an individual simulation within a job. */
+export type SimulationState = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
+/**
+ * Status tracking for a single simulation within a job.
+ * In GCP mode these live in a Firestore subcollection: jobs/{jobId}/simulations/{simId}.
+ * In local mode they live in the `simulations` SQLite table.
+ */
+export interface SimulationStatus {
+  /** Unique ID for this simulation within the job (e.g., "sim_001") */
+  simId: string;
+  /** 0-based index within the job */
+  index: number;
+  /** Current state */
+  state: SimulationState;
+  /** Which worker is running this simulation */
+  workerId?: string;
+  /** When the simulation started (ISO string) */
+  startedAt?: string;
+  /** When the simulation finished (ISO string) */
+  completedAt?: string;
+  /** Duration in ms */
+  durationMs?: number;
+  /** Error message if FAILED */
+  errorMessage?: string;
+  /** Winner of this game (if completed) */
+  winner?: string;
+  /** Turn the game ended on */
+  winningTurn?: number;
+}
+
+// -----------------------------------------------------------------------------
 // Condenser Types (from forge-log-analyzer)
 // -----------------------------------------------------------------------------
 

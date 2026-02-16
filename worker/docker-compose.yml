@@ -1,5 +1,5 @@
-# Worker - Single container deployment
-# Runs Forge simulations + log processing without Docker-in-Docker
+# Worker Orchestrator - Manages simulation containers via Docker socket
+# Slim container: Node.js only, no Java/Forge
 
 services:
   worker:
@@ -29,23 +29,29 @@ services:
 
       # Worker
       - WORKER_ID=${WORKER_ID:-}
-      - JOBS_DIR=/app/jobs
-      - FORGE_PATH=/app/forge
+      - JOBS_DIR=/tmp/mbs-jobs
+
+      # Simulation image (must be pre-pulled or built on host)
+      - SIMULATION_IMAGE=${SIMULATION_IMAGE:-magic-bracket-simulation:latest}
 
     volumes:
+      # Mount Docker socket so worker can spawn simulation containers
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Shared temp directory for deck/log files (worker writes, simulation containers read/write)
+      - /tmp/mbs-jobs:/tmp/mbs-jobs
+
       # GCP credentials
       - ${SA_KEY_PATH:-${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}}:/secrets/sa.json:ro
 
-      # Persistent job storage (optional - for debugging)
-      - ./jobs:/app/jobs
-
-    # Resource limits (adjust based on machine)
+    # Resource limits — worker itself is lightweight (Node.js only)
+    # Simulation containers have their own resource limits
     deploy:
       resources:
         limits:
-          memory: 8G
+          memory: 512M
         reservations:
-          memory: 2G
+          memory: 128M
 
     logging:
       driver: json-file

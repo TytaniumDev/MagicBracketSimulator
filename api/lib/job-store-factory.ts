@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, DeckSlot, AnalysisResult } from './types';
+import { Job, JobStatus, DeckSlot, AnalysisResult, SimulationStatus } from './types';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 
@@ -139,3 +139,67 @@ export async function deleteJob(id: string): Promise<void> {
   }
   sqliteStore.deleteJob(id);
 }
+
+// ─── Per-Simulation Tracking ─────────────────────────────────────────────────
+
+export async function initializeSimulations(jobId: string, count: number): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.initializeSimulations(jobId, count);
+    return;
+  }
+  sqliteStore.initializeSimulations(jobId, count);
+}
+
+export async function updateSimulationStatus(
+  jobId: string,
+  simId: string,
+  update: Partial<SimulationStatus>
+): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.updateSimulationStatus(jobId, simId, update);
+    return;
+  }
+  sqliteStore.updateSimulationStatus(jobId, simId, update);
+}
+
+export async function getSimulationStatuses(jobId: string): Promise<SimulationStatus[]> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.getSimulationStatuses(jobId);
+  }
+  return sqliteStore.getSimulationStatuses(jobId);
+}
+
+export async function deleteSimulations(jobId: string): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.deleteSimulations(jobId);
+    return;
+  }
+  sqliteStore.deleteSimulations(jobId);
+}
+
+/**
+ * Derive the overall job status from the aggregate simulation states.
+ * Returns null if there are no simulations (legacy job without per-sim tracking).
+ */
+export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | null {
+  if (simulations.length === 0) return null;
+
+  const states = simulations.map((s) => s.state);
+  const allPending = states.every((s) => s === 'PENDING');
+  const anyRunning = states.some((s) => s === 'RUNNING');
+  const allDone = states.every((s) => s === 'COMPLETED' || s === 'FAILED');
+  const anyFailed = states.some((s) => s === 'FAILED');
+  const allFailed = states.every((s) => s === 'FAILED');
+
+  if (allPending) return 'QUEUED';
+  if (anyRunning || (!allDone && !allPending)) return 'RUNNING';
+  if (allDone) {
+    // If every single simulation failed, the whole job failed
+    if (allFailed) return 'FAILED';
+    // Otherwise, simulations are done — ready for log aggregation → analysis
+    return 'COMPLETED';
+  }
+
+  return 'RUNNING';
+}
+

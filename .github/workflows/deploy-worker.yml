@@ -1,8 +1,12 @@
-name: Deploy Worker Image
+name: Deploy Worker & Simulation Images
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'worker/**'
+      - 'simulation/**'
+      - '.github/workflows/deploy-worker.yml'
   workflow_dispatch:
 
 jobs:
@@ -29,8 +33,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set image name
-        run: echo "IMAGE_NAME=$(echo ghcr.io/${GITHUB_REPOSITORY}/worker | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      - name: Set image names
+        run: |
+          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          echo "WORKER_IMAGE=ghcr.io/${REPO_LOWER}/worker" >> $GITHUB_ENV
+          echo "SIMULATION_IMAGE=ghcr.io/${REPO_LOWER}/simulation" >> $GITHUB_ENV
+
+      # Build and push worker image (slim: Node.js + Docker CLI)
       - name: Build and push worker image
         uses: docker/build-push-action@v5
         with:
@@ -39,7 +48,22 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ env.WORKER_IMAGE }}:latest
+            ${{ env.WORKER_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      # Build and push simulation image (Java + Forge + xvfb)
+      # Context is repo root because Dockerfile references worker/forge-engine/
+      - name: Build and push simulation image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./simulation/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.SIMULATION_IMAGE }}:latest
+            ${{ env.SIMULATION_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=simulation
+          cache-to: type=gha,mode=max,scope=simulation

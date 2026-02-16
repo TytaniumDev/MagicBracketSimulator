@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import * as jobStore from '@/lib/job-store-factory';
+import type { SimulationState } from '@/lib/types';
+
+interface RouteParams {
+  params: Promise<{ id: string; simId: string }>;
+}
+
+const VALID_STATES: SimulationState[] = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'];
+
+/**
+ * PATCH /api/jobs/[id]/simulations/[simId] — Update a single simulation's status.
+ * Called by the worker to report per-simulation progress.
+ * Body: Partial<SimulationStatus> (state, workerId, durationMs, errorMessage, winner, winningTurn)
+ */
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  if (!isWorkerRequest(request)) {
+    return unauthorizedResponse('Worker authentication required');
+  }
+
+  try {
+    const { id, simId } = await params;
+    if (!id || !simId) {
+      return NextResponse.json({ error: 'Job ID and simulation ID are required' }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const { state, workerId, durationMs, errorMessage, winner, winningTurn } = body;
+
+    // Validate state if provided
+    if (state !== undefined && !VALID_STATES.includes(state)) {
+      return NextResponse.json(
+        { error: `Invalid state. Must be one of: ${VALID_STATES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Build update object, only including defined fields
+    const update: Record<string, unknown> = {};
+    if (state !== undefined) update.state = state;
+    if (workerId !== undefined) update.workerId = workerId;
+    if (durationMs !== undefined) update.durationMs = durationMs;
+    if (errorMessage !== undefined) update.errorMessage = errorMessage;
+    if (winner !== undefined) update.winner = winner;
+    if (winningTurn !== undefined) update.winningTurn = winningTurn;
+
+    // Add timestamps based on state transition
+    if (state === 'RUNNING') {
+      update.startedAt = new Date().toISOString();
+    } else if (state === 'COMPLETED' || state === 'FAILED') {
+      update.completedAt = new Date().toISOString();
+    }
+
+    await jobStore.updateSimulationStatus(id, simId, update);
+    return NextResponse.json({ updated: true });
+  } catch (error) {
+    console.error('PATCH /api/jobs/[id]/simulations/[simId] error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update simulation' },
+      { status: 500 }
+    );
+  }
+}

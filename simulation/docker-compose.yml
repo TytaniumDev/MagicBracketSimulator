@@ -1,0 +1,22 @@
+# Simulation Image - Build helper
+# This compose file is for building the simulation image only.
+# The simulation image is NOT run as a long-lived service —
+# it's invoked by the worker via `docker run` for each game.
+#
+# Build:
+#   docker compose -f simulation/docker-compose.yml build
+#
+# Or from repo root:
+#   docker build -f simulation/Dockerfile -t simulation .
+
+services:
+  simulation:
+    image: ${SIMULATION_IMAGE:-magic-bracket-simulation}:${IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: simulation/Dockerfile
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+          cpus: '1'
