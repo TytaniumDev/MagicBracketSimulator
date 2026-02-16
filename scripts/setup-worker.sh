@@ -160,6 +160,7 @@ echo "  worker/sa.json"
 
 # Extract host-level env vars → worker/.env
 IMAGE_NAME=$(echo "$HOST_CONFIG" | jq -r '.IMAGE_NAME')
+SIMULATION_IMAGE=$(echo "$HOST_CONFIG" | jq -r '.SIMULATION_IMAGE')
 GHCR_USER=$(echo "$HOST_CONFIG" | jq -r '.GHCR_USER')
 GHCR_TOKEN=$(echo "$HOST_CONFIG" | jq -r '.GHCR_TOKEN')
 
@@ -171,6 +172,7 @@ cat > "$WORKER_DIR/.env" <<EOF
 SA_KEY_PATH=./sa.json
 GOOGLE_CLOUD_PROJECT=$PROJECT_ID
 IMAGE_NAME=$IMAGE_NAME
+SIMULATION_IMAGE=${SIMULATION_IMAGE}:latest
 GHCR_USER=$GHCR_USER
 GHCR_TOKEN=$GHCR_TOKEN
 EOF
@@ -202,6 +204,10 @@ echo ""
 echo "Pulling latest worker image..."
 cd "$WORKER_DIR"
 docker compose -f docker-compose.yml -f docker-compose.watchtower.yml pull worker
+
+echo ""
+echo "Pulling latest simulation image: ${SIMULATION_IMAGE}:latest..."
+docker pull "${SIMULATION_IMAGE}:latest" || echo "Warning: Failed to pull simulation image. Worker will attempt to pull on startup."
 
 echo ""
 echo "Starting worker + Watchtower..."

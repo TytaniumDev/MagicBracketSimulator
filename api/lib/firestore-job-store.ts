@@ -1,5 +1,5 @@
 import { Firestore, Timestamp, FieldValue } from '@google-cloud/firestore';
-import { Job, JobStatus, DeckSlot, AnalysisResult } from './types';
+import { Job, JobStatus, DeckSlot, AnalysisResult, SimulationStatus, SimulationState } from './types';
 
 // Initialize Firestore client
 const firestore = new Firestore({
@@ -323,4 +323,112 @@ export async function claimNextJob(workerId?: string): Promise<Job | null> {
   return getJob(claimed);
 }
 
+// ─── Per-Simulation Tracking (Subcollection) ────────────────────────────────
+
+/**
+ * Get the simulations subcollection reference for a job.
+ */
+function simulationsCollection(jobId: string) {
+  return jobsCollection.doc(jobId).collection('simulations');
+}
+
+/**
+ * Initialize simulation status documents for a job.
+ * Creates `count` documents with state PENDING using batched writes.
+ */
+export async function initializeSimulations(
+  jobId: string,
+  count: number
+): Promise<void> {
+  const simCol = simulationsCollection(jobId);
+
+  // Firestore batches are limited to 500 operations
+  const batchSize = 500;
+  for (let batchStart = 0; batchStart < count; batchStart += batchSize) {
+    const batch = firestore.batch();
+    const end = Math.min(batchStart + batchSize, count);
+    for (let i = batchStart; i < end; i++) {
+      const simId = `sim_${String(i).padStart(3, '0')}`;
+      batch.set(simCol.doc(simId), {
+        simId,
+        index: i,
+        state: 'PENDING' as SimulationState,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+}
+
+/**
+ * Update a single simulation's status.
+ */
+export async function updateSimulationStatus(
+  jobId: string,
+  simId: string,
+  update: Partial<SimulationStatus>
+): Promise<void> {
+  const updateData: Record<string, unknown> = {
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (update.state !== undefined) updateData.state = update.state;
+  if (update.workerId !== undefined) updateData.workerId = update.workerId;
+  if (update.startedAt !== undefined) updateData.startedAt = update.startedAt;
+  if (update.completedAt !== undefined) updateData.completedAt = update.completedAt;
+  if (update.durationMs !== undefined) updateData.durationMs = update.durationMs;
+  if (update.errorMessage !== undefined) updateData.errorMessage = update.errorMessage;
+  if (update.winner !== undefined) updateData.winner = update.winner;
+  if (update.winningTurn !== undefined) updateData.winningTurn = update.winningTurn;
+
+  await simulationsCollection(jobId).doc(simId).update(updateData);
+}
+
+/**
+ * Get all simulation statuses for a job, ordered by index.
+ */
+export async function getSimulationStatuses(
+  jobId: string
+): Promise<SimulationStatus[]> {
+  const snapshot = await simulationsCollection(jobId)
+    .orderBy('index', 'asc')
+    .get();
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      simId: doc.id,
+      index: data.index ?? 0,
+      state: (data.state ?? 'PENDING') as SimulationState,
+      ...(data.workerId && { workerId: data.workerId }),
+      ...(data.startedAt && { startedAt: data.startedAt }),
+      ...(data.completedAt && { completedAt: data.completedAt }),
+      ...(data.durationMs != null && { durationMs: data.durationMs }),
+      ...(data.errorMessage && { errorMessage: data.errorMessage }),
+      ...(data.winner && { winner: data.winner }),
+      ...(data.winningTurn != null && { winningTurn: data.winningTurn }),
+    } as SimulationStatus;
+  });
+}
+
+/**
+ * Delete all simulation status documents for a job.
+ */
+export async function deleteSimulations(jobId: string): Promise<void> {
+  const simCol = simulationsCollection(jobId);
+  const snapshot = await simCol.get();
+  if (snapshot.empty) return;
+
+  const batchSize = 500;
+  for (let i = 0; i < snapshot.docs.length; i += batchSize) {
+    const batch = firestore.batch();
+    const slice = snapshot.docs.slice(i, i + batchSize);
+    for (const doc of slice) {
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
+  }
+}
+
 export { firestore };
+

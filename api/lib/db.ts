@@ -189,6 +189,25 @@ export function getDb(): Database.Database {
     // Already exists
   }
 
+  // Per-simulation tracking table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS simulations (
+      sim_id TEXT NOT NULL,
+      job_id TEXT NOT NULL,
+      idx INTEGER NOT NULL,
+      state TEXT NOT NULL DEFAULT 'PENDING',
+      worker_id TEXT,
+      started_at TEXT,
+      completed_at TEXT,
+      duration_ms INTEGER,
+      error_message TEXT,
+      winner TEXT,
+      winning_turn INTEGER,
+      PRIMARY KEY (job_id, sim_id),
+      FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    )
+  `);
+
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);
 

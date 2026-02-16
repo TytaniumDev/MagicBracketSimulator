@@ -1,313 +1,317 @@
 # Magic Bracket Simulator — Architecture Overview
 
-This document describes the system architecture, with emphasis on the Docker-based Forge engine and how parallel execution works.
+This document describes the system architecture, including the Worker + Simulation split design for parallel, resource-aware simulation execution.
 
 ---
 
 ## Deployment Modes
 
-The system supports two deployment modes:
+The system supports two deployment modes, auto-detected by the `GOOGLE_CLOUD_PROJECT` env var:
 
-1. **Local Development** - All services run locally (original architecture)
-2. **GCP Cloud Deployment** - Cloud Run API with local Docker workers
+| Mode | Storage | Queue | Auth | Worker Transport |
+|------|---------|-------|------|------------------|
+| **Local** (env unset) | SQLite + filesystem | HTTP polling | None | `GET /api/jobs/next` |
+| **GCP** (env set) | Firestore + Cloud Storage | Pub/Sub | Firebase Auth | Pub/Sub pull subscription |
 
 ---
 
-## GCP Cloud Architecture (Recommended for Production)
+## GCP Cloud Architecture (Production)
 
 ```mermaid
 flowchart TB
-    subgraph gcp [GCP Cloud - Free Tier]
-        CloudRun[Cloud Run<br/>Next.js App]
+    subgraph gcp [GCP Cloud]
+        AppHosting[App Hosting<br/>Next.js API]
         Firestore[(Firestore)]
         GCS[(Cloud Storage)]
         PubSub[Pub/Sub]
         FirebaseAuth[Firebase Auth]
-        CloudRun --> Firestore
-        CloudRun --> GCS
-        CloudRun --> PubSub
-        FirebaseAuth --> CloudRun
+        FirebaseHosting[Firebase Hosting<br/>React Frontend]
+        AppHosting --> Firestore
+        AppHosting --> GCS
+        AppHosting --> PubSub
+        FirebaseAuth --> AppHosting
     end
 
-    subgraph local [Local Machine]
-        Worker[Local Worker<br/>Pub/Sub Pull]
-        ForgeSim[forge-sim container]
-        MiscRunner[misc-runner container<br/>Go]
-        Worker --> ForgeSim
-        Worker --> MiscRunner
+    subgraph worker_host [Worker Host Machine]
+        Worker[Worker Container<br/>Node.js + Docker CLI]
+        Watchtower[Watchtower<br/>Auto-update]
+
+        subgraph sims [Simulation Containers]
+            Sim1[sim-xxx-000<br/>Java + Forge]
+            Sim2[sim-xxx-001]
+            SimN[sim-xxx-N]
+        end
+
+        Worker -->|docker run| Sim1
+        Worker -->|docker run| Sim2
+        Worker -->|docker run| SimN
+        Watchtower -.->|auto-update| Worker
     end
 
-    User --> CloudRun
+    User --> FirebaseHosting
+    FirebaseHosting --> AppHosting
     PubSub -.-> Worker
-    MiscRunner --> GCS
-    MiscRunner --> CloudRun
+    Worker -->|PATCH status| AppHosting
+    Worker -->|POST logs| AppHosting
 ```
 
 ### GCP Components
 
 | Component | Service | Purpose |
 |-----------|---------|---------|
-| **API + Frontend** | Cloud Run | Single Next.js app serving API routes and optional frontend |
-| **Job Metadata** | Firestore | Job state, deck references, results |
+| **API** | App Hosting | Next.js app serving API routes |
+| **Frontend** | Firebase Hosting | React SPA |
+| **Job Metadata** | Firestore | Job state, deck references, simulation statuses, results |
 | **Artifacts** | Cloud Storage | Raw logs, condensed logs, analysis payloads |
-| **Job Queue** | Pub/Sub | Triggers local workers when jobs are created |
+| **Job Queue** | Pub/Sub | Triggers workers when jobs are created |
 | **Authentication** | Firebase Auth | Google sign-in with email allowlist |
-| **Secrets** | Secret Manager | Gemini API key and other secrets |
+| **Secrets** | Secret Manager | Worker config, API keys |
 
-### Local Components (GCP Mode)
+### Worker Host Components
 
-| Component | Directory | Purpose |
-|-----------|-----------|---------|
-| **Simulation Worker** | `worker/` | Pulls from Pub/Sub, orchestrates Docker containers |
-| **Forge Sim** | `worker/forge-engine/` | Runs MTG simulations (unchanged) |
-| **Misc Runner** | `misc-runner/` | Go container: condenses logs, uploads to GCS |
-
-### GCP Data Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant CloudRun as Cloud Run
-    participant Firestore
-    participant PubSub
-    participant LocalWorker as Local Worker
-    participant ForgeSim as forge-sim
-    participant MiscRunner as misc-runner
-    participant GCS
-
-    User->>CloudRun: POST /api/jobs (create job)
-    CloudRun->>Firestore: Store job (QUEUED)
-    CloudRun->>PubSub: Publish job-created message
-    CloudRun-->>User: 201 Created
-
-    PubSub->>LocalWorker: Pull message
-    LocalWorker->>CloudRun: GET job details
-    LocalWorker->>ForgeSim: Run simulations
-    ForgeSim-->>LocalWorker: Game logs
-
-    LocalWorker->>MiscRunner: Condense logs
-    MiscRunner->>GCS: Upload artifacts
-    MiscRunner->>CloudRun: PATCH job COMPLETED
-
-    User->>CloudRun: POST /api/jobs/:id/analyze
-    CloudRun->>GCS: Get analyze payload
-    CloudRun->>CloudRun: Call Gemini API
-    CloudRun->>Firestore: Store results
-    CloudRun-->>User: Analysis results
-```
+| Component | Image | Purpose |
+|-----------|-------|---------|
+| **Worker** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs |
+| **Simulation** | `ghcr.io/.../simulation` (~750MB) | Java 17 + Forge + xvfb: runs exactly 1 game, writes log, exits |
+| **Watchtower** | `nickfedor/watchtower` | Polls GHCR for new worker images, auto-restarts |
 
 ---
 
-## Local Development Architecture (Original)
+## Two-Image Architecture: Worker + Simulation
 
-## High-Level Architecture
+The worker and simulation concerns are split into two Docker images:
 
 ```mermaid
-flowchart TB
-    subgraph user[" "]
-        Browser["User / Browser"]
+flowchart LR
+    subgraph worker_img ["Worker Image (Node.js only, ~100MB)"]
+        Orchestrator[Job Orchestrator]
+        Semaphore[Semaphore<br/>Bounded Concurrency]
+        Reporter[Status Reporter]
     end
 
-    subgraph frontend["Frontend"]
-        UI["Web UI - Vite + React port 5173"]
+    subgraph sim_img ["Simulation Image (Java + Forge, ~750MB)"]
+        RunSim[run_sim.sh]
+        Xvfb[xvfb]
+        ForgeEngine[Forge CLI]
+        RunSim --> Xvfb --> ForgeEngine
     end
 
-    subgraph api["API"]
-        Api["Next.js API - decks, precons, jobs"]
-        Store[(SQLite Job Store)]
-        Worker["Worker Loop"]
-        Api --> Store
-        Worker --> Store
-    end
-
-    subgraph loganalyzer["Log Analyzer"]
-        Condenser["Condense / Structure logs"]
-        StoreLogs["Store raw logs - port 3001"]
-    end
-
-    subgraph docker["Docker"]
-        C1["Container 1"]
-        C2["Container 2"]
-        C3["Container N - forge-sim image"]
-        N1["1-8 containers per job"]
-    end
-
-    subgraph forge["Forge Engine"]
-        RunSim["run_sim.sh"]
-        Xvfb["xvfb"]
-        ForgeCLI["Forge CLI sim"]
-        RunSim --> Xvfb --> ForgeCLI
-    end
-
-    subgraph analysis["Analysis Service"]
-        Gemini["Gemini AI - port 8000"]
-    end
-
-    Browser --> UI
-    UI --> Api
-    UI --> Condenser
-    Worker --> Docker
-    Docker --> Forge
-    Worker -->|"POST logs"| LogAnalyzer
-    LogAnalyzer -->|"condensed logs"| Analysis
-    UI -->|"trigger analyze"| LogAnalyzer
+    Orchestrator -->|docker run --rm| sim_img
+    Orchestrator --> Semaphore
+    Orchestrator --> Reporter
 ```
 
----
+### Why Two Images?
 
-## Component Summary
+| Benefit | Description |
+|---------|-------------|
+| **Per-simulation progress** | Each game reports status independently via API |
+| **Failure isolation** | 1 crashed simulation does not lose the entire job |
+| **Resource-aware scaling** | Worker fills available CPU/RAM dynamically |
+| **Faster worker updates** | Worker image is ~100MB vs ~800MB monolithic |
+| **Multi-machine scaling** | Add a machine, run `setup-worker.sh`, done |
 
-| Component | Port | Role |
-|-----------|------|------|
-| **Frontend** | 5173 | Web UI (Vite + React). Calls API and log analyzer. |
-| **API** | 3000 | Next.js API (decks, precons, jobs, analysis) + background worker. Job store in SQLite. |
-| **Log Analyzer** | 3001 | Ingests logs from Worker; condenses/structures; stores; can forward to Analysis Service. |
-| **Analysis Service** | 8000 | Python + Gemini. On-demand AI analysis of condensed logs. |
-| **Forge (Docker)** | — | One image `forge-sim`; multiple containers run in parallel per job. |
+### Container Mode vs Monolithic Mode
+
+The worker supports two execution modes (auto-detected):
+
+| Mode | Detection | Behavior |
+|------|-----------|----------|
+| **Container** (default) | `FORGE_PATH` not set | Spawns Docker containers (1 per game) |
+| **Monolithic** (legacy) | `FORGE_PATH` set | Runs Forge as child processes (old behavior) |
 
 ---
 
 ## Data Flow
 
+### GCP Mode
+
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend
-    participant Api
+    participant Frontend as Firebase Hosting
+    participant API as App Hosting (API)
+    participant Firestore
+    participant PubSub
     participant Worker
-    participant Docker
-    participant LogAnalyzer
-    participant Analysis
+    participant SimContainer as Simulation Container
 
-    User->>Frontend: Create job - 4 decks, simulations, parallelism
-    Frontend->>Api: POST /api/jobs
-    Api->>Api: Store job QUEUED
+    User->>Frontend: Create job (4 decks)
+    Frontend->>API: POST /api/jobs
+    API->>Firestore: Store job (QUEUED)
+    API->>PubSub: Publish job-created
+    API-->>Frontend: 201 Created
 
-    Worker->>Api: Poll next QUEUED job
-    Worker->>Worker: Write 4 deck files to job decks dir
-    par Parallel containers
-        Worker->>Docker: docker run forge-sim run 0
-        Worker->>Docker: docker run forge-sim run 1
-        Worker->>Docker: docker run forge-sim run N
+    PubSub->>Worker: Pull message
+    Worker->>API: GET /api/jobs/:id
+    Worker->>API: POST /api/jobs/:id/simulations (initialize)
+
+    par Parallel simulation containers
+        Worker->>SimContainer: docker run simulation (game 1)
+        Worker->>API: PATCH sim_000 → RUNNING
+        SimContainer-->>Worker: Exit (log file)
+        Worker->>API: PATCH sim_000 → COMPLETED
+    and
+        Worker->>SimContainer: docker run simulation (game 2)
+        Worker->>API: PATCH sim_001 → RUNNING
+        SimContainer-->>Worker: Exit (log file)
+        Worker->>API: PATCH sim_001 → COMPLETED
+    and
+        Worker->>SimContainer: docker run simulation (game N)
     end
-    Docker-->>Worker: Logs in job logs dir
-    Worker->>LogAnalyzer: POST job logs with deck lists
-    Worker->>Api: Mark job COMPLETED
 
-    User->>Frontend: View job or trigger analysis
-    Frontend->>LogAnalyzer: GET logs, POST analyze
-    LogAnalyzer->>Analysis: Forward payload
-    Analysis-->>LogAnalyzer: Bracket results
-    LogAnalyzer-->>Frontend: Analysis result
+    Note over Worker: Aggregate all game logs
+    Worker->>API: POST /api/jobs/:id/logs
+    Worker->>API: PATCH job → COMPLETED
+
+    User->>Frontend: View results (SSE real-time)
+    Frontend->>API: GET /api/jobs/:id/stream (SSE)
+    API-->>Frontend: event: job + event: simulations
 ```
+
+### Per-Simulation Status Flow
+
+The API tracks individual simulation states via a Firestore subcollection (`jobs/{id}/simulations/{simId}`):
+
+| Simulation State | Meaning |
+|-----------------|---------|
+| `PENDING` | Initialized, waiting for worker |
+| `RUNNING` | Container started, game in progress |
+| `COMPLETED` | Game finished successfully |
+| `FAILED` | Container crashed or timed out |
+
+The frontend receives real-time updates via SSE events and renders a `SimulationGrid` component.
 
 ---
 
-## Docker and Forge Engine
-
-### One Image, Multiple Containers per Job
-
-- **Single image**: `forge-sim`, built from `worker/forge-engine/Dockerfile` (Eclipse Temurin 17, Forge release, xvfb, precons, `run_sim.sh` entrypoint).
-- **Per job**: The worker spawns **multiple** `docker run` processes **in parallel**. So you get **multiple container instances** at once, all using the same image.
-
-```mermaid
-flowchart LR
-    subgraph job["One job"]
-        W["Worker - 20 sims, parallelism 4"]
-    end
-
-    subgraph containers["Parallel containers - same image"]
-        D1["Run 0 - 5 games"]
-        D2["Run 1 - 5 games"]
-        D3["Run 2 - 5 games"]
-        D4["Run 3 - 5 games"]
-    end
-
-    W --> D1
-    W --> D2
-    W --> D3
-    W --> D4
-```
-
-- **Simulation split**: Total simulations are divided across `parallelism` runs (e.g. 20 sims, parallelism 4 → four containers with 5 games each). Each container gets the same deck mount but a distinct `--id` (e.g. `job_<id>_run0`, `job_<id>_run1`) so log filenames don’t clash.
-- **Volumes**: Each `docker run` mounts the same job dirs: `jobs/<jobId>/decks` → `/app/decks`, `jobs/<jobId>/logs` → `/app/logs`. All containers write into the same logs directory with different filename prefixes.
-
-### Forge Inside the Container
-
-Each container runs the same flow:
-
-| Step | What happens |
-|------|----------------|
-| **Entrypoint** | `/app/run_sim.sh` (`worker/forge-engine/run_sim.sh`) |
-| **Input** | `/app/decks` (mounted from worker’s `jobs/<jobId>/decks/`) with 4 `.dck` files; `--id` and `--simulations` per run |
-| **Execution** | Copies decks into Forge’s Commander deck path; runs Forge under **xvfb** (virtual display): `xvfb-run ... forge.sh sim -d ... -f Commander -n <simulations> -c 300` |
-| **Output** | Logs written under `/app/logs` (mounted from worker’s `jobs/<jobId>/logs/`) as `{runId}_game_1.txt`, etc. Worker reads these after all containers exit |
-
----
-
-## Parallelism and Limits
-
-### How Many Parallel Tasks?
-
-- **Jobs**: The worker processes **one job at a time**. It’s a single loop: pick next QUEUED job → `await processJob(job)` → repeat. So there is no parallel execution of **different** jobs.
-- **Containers (within one job)**: For the **current** job, the worker runs up to **N** containers in parallel, where **N = that job’s parallelism** (or default/env).
+## Worker Concurrency Model
 
 ```mermaid
 flowchart TB
-    subgraph limits["Concurrency limits"]
-        J["Jobs in flight = 1"]
-        C["Containers in flight = 1 to 8"]
+    subgraph resources ["Host Resources"]
+        CPU["CPU: N cores"]
+        RAM["RAM: X GB"]
     end
 
-    subgraph source["Where N comes from"]
-        Default["Default 4"]
-        Env["FORGE_PARALLELISM env"]
-        JobParam["Per-job parallelism 1-16"]
-        JobParam --> C
-        Env --> Default
-        Default --> C
+    subgraph worker ["Worker"]
+        Calc["calculateDynamicParallelism()"]
+        Sem["Semaphore(capacity)"]
     end
+
+    subgraph containers ["Simulation Containers"]
+        C1["sim_000 (1 CPU, 600MB)"]
+        C2["sim_001 (1 CPU, 600MB)"]
+        CN["sim_N (1 CPU, 600MB)"]
+    end
+
+    CPU --> Calc
+    RAM --> Calc
+    Calc -->|capacity| Sem
+    Sem --> C1
+    Sem --> C2
+    Sem --> CN
 ```
 
-### Where the Parallelism Value Comes From
+### Resource Calculation
 
-| Source | Description |
-|--------|-------------|
-| **Default** | `DEFAULT_PARALLELISM = 4` in `api/worker/worker.ts` |
-| **Environment** | `FORGE_PARALLELISM` overrides the default if set |
-| **Per job** | Request body when creating the job can send `parallelism` (frontend does this); validated to 1–16 |
+```
+cpuLimit  = max(1, totalCPUs - 2)        // Reserve 2 cores for system + worker
+memLimit  = floor((freeMB - 2048) / 600)  // Reserve 2GB, 600MB per sim
+capacity  = min(requested, cpuLimit, memLimit)
+```
 
-Effective parallelism for a job: `job.parallelism ?? FORGE_PARALLELISM ?? 4`, clamped by the 1–16 API validation.
+Each simulation container is constrained to `--memory=600m --cpus=1`.
 
-### Explicit Limits
+### Concurrency Differences
 
-| Limit | Value | Location |
-|-------|--------|----------|
-| **Per-job parallelism** | 1–16 | `PARALLELISM_MIN` / `PARALLELISM_MAX` in `api/lib/types.ts` |
-| **Max concurrent Docker containers** | Same as current job’s parallelism | 1–16 |
-| **Concurrent jobs** | 1 | Worker loop processes a single job at a time |
-
-There is **no** explicit global “max concurrent containers across all jobs” — effectively it’s “one job at a time, up to 16 containers for that job.” The next job starts only after the current one finishes. Beyond that, the real ceiling is host CPU/memory and Docker daemon limits.
-
----
-
-## Repo Layout (reference)
-
-| Directory | Purpose | Mode |
-|-----------|---------|------|
-| **frontend/** | Web UI (Vite + React) with Firebase Auth | Both |
-| **api/** | Next.js API: decks, precons, jobs, Gemini analysis | Both |
-| **worker/** | Pub/Sub pull worker, orchestrates Docker containers | GCP |
-| **misc-runner/** | Go container: condenses logs, uploads to GCS | GCP |
-| **worker/forge-engine/** | Docker-based Forge simulation runner | Both |
-| **forge-log-analyzer/** | (Legacy) Log condensing service - replaced by misc-runner | Local only |
-| **analysis-service/** | (Legacy) Python + Gemini - replaced by API route | Local only |
+| Aspect | Container Mode | Monolithic Mode (legacy) |
+|--------|---------------|-------------------------|
+| Jobs in flight | Multiple (Pub/Sub maxMessages = capacity) | 1 at a time |
+| Sims per job | 1 container per game | N games per child process |
+| Isolation | Full (separate containers) | Shared filesystem |
+| Progress | Per-simulation API updates | Batch-level only |
 
 ---
 
-## Quick Reference: Key Code
+## Simulation Container Lifecycle
 
-- **Worker parallelism and Docker spawn**: `api/worker/worker.ts` — `splitSimulations`, `processJob`, `runForgeDocker`.
-- **Job store and types**: `api/lib/job-store.ts`, `api/lib/types.ts` — `PARALLELISM_MIN` / `PARALLELISM_MAX`, `createJob(..., parallelism?)`.
-- **Forge container entrypoint**: `worker/forge-engine/run_sim.sh`.
-- **Image build**: `worker/forge-engine/Dockerfile`.
+Each simulation container:
+
+1. Receives deck files via read-only volume mount
+2. Copies decks into Forge's Commander deck directory
+3. Starts xvfb (virtual display)
+4. Runs Forge CLI: `forge.sh sim -d deck1 deck2 deck3 deck4 -f Commander -n 1 -c 300`
+5. Writes game log to output volume mount
+6. Exits (container auto-removed via `--rm`)
+
+```bash
+docker run --rm \
+  --name sim-<jobId>-sim_000 \
+  --memory=600m --cpus=1 \
+  -v /tmp/mbs-jobs/<jobId>/decks:/home/simulator/.forge/decks/commander:ro \
+  -v /tmp/mbs-jobs/<jobId>/logs:/app/logs \
+  simulation:latest \
+  --decks deck_0.dck deck_1.dck deck_2.dck deck_3.dck \
+  --simulations 1 \
+  --id <jobId>_sim_000
+```
+
+---
+
+## CI/CD Pipeline
+
+```mermaid
+flowchart LR
+    Push["Push to main"] --> CI["CI: lint + build + test"]
+    CI --> BuildWorker["Build worker image"]
+    CI --> BuildSim["Build simulation image"]
+    BuildWorker --> GHCR["Push to GHCR"]
+    BuildSim --> GHCR
+    GHCR --> Watchtower["Watchtower polls"]
+    Watchtower --> RestartWorker["Restart worker"]
+    RestartWorker --> PullSim["Worker pulls<br/>latest simulation image"]
+```
+
+### Image Update Flow
+
+1. Code pushed to `main` triggers CI + deploy workflow
+2. Both `worker` and `simulation` images are built and pushed to GHCR
+3. Watchtower detects new worker image, restarts the worker container
+4. On startup, worker calls `ensureSimulationImage()` to pull the latest simulation image
+5. New simulation containers use the updated image
+
+---
+
+## Repo Layout
+
+| Directory | Purpose |
+|-----------|---------|
+| **frontend/** | React SPA (Vite + Tailwind v4 + Firebase Auth) |
+| **api/** | Next.js 15 API: jobs, decks, simulations, Gemini analysis |
+| **worker/** | Node.js orchestrator: Pub/Sub/polling, container management |
+| **worker/forge-engine/** | Forge assets: `run_sim.sh`, precon decks |
+| **simulation/** | Simulation image Dockerfile (references `worker/forge-engine/`) |
+| **scripts/** | Setup and provisioning scripts |
+| **docs/** | Architecture and implementation docs |
+
+---
+
+## Key Code References
+
+| Concept | Location |
+|---------|----------|
+| Worker orchestration | `worker/src/worker.ts` — `processJobWithContainers`, `runSimulationContainer`, `Semaphore` |
+| Dynamic parallelism | `worker/src/worker.ts` — `calculateDynamicParallelism` |
+| Legacy monolithic mode | `worker/src/worker.ts` — `processJobMonolithic`, `runForgeSim` |
+| Simulation types | `api/lib/types.ts` — `SimulationState`, `SimulationStatus` |
+| Simulation CRUD (Firestore) | `api/lib/firestore-job-store.ts` — `initializeSimulations`, `updateSimulationStatus` |
+| Simulation CRUD (SQLite) | `api/lib/job-store.ts` — simulation table operations |
+| Simulation API endpoints | `api/app/api/jobs/[id]/simulations/` — GET, POST, PATCH |
+| SSE stream (with simulations) | `api/app/api/jobs/[id]/stream/route.ts` |
+| Frontend simulation grid | `frontend/src/components/SimulationGrid.tsx` |
+| Frontend SSE hook | `frontend/src/hooks/useJobStream.ts` |
+| Forge container entrypoint | `worker/forge-engine/run_sim.sh` |
+| Worker Dockerfile | `worker/Dockerfile` |
+| Simulation Dockerfile | `simulation/Dockerfile` |
+| CI/CD deploy | `.github/workflows/deploy-worker.yml` |
+| Worker provisioning | `scripts/setup-worker.sh`, `scripts/populate-worker-secret.js` |

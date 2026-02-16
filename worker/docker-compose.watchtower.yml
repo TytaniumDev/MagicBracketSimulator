@@ -5,6 +5,10 @@
 # Generate a GitHub PAT with read:packages scope.
 #
 # Uses nickfedor/watchtower (containrrr/watchtower is archived and incompatible with Docker 29+ API 1.44).
+#
+# Simulation image updates: Watchtower only watches the worker container (simulation
+# containers are ephemeral --rm). When the worker image is updated and restarted,
+# ensureSimulationImage() in worker.ts pulls the latest simulation image on startup.
 
 services:
   watchtower:

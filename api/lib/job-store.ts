@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { Job, JobStatus, AnalysisResult, DeckSlot } from './types';
+import { Job, JobStatus, AnalysisResult, DeckSlot, SimulationStatus, SimulationState } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Row {
@@ -231,3 +231,126 @@ export function getJobsMap(): Map<string, Job> {
   }
   return map;
 }
+
+// ─── Per-Simulation Tracking ─────────────────────────────────────────────────
+
+interface SimRow {
+  sim_id: string;
+  job_id: string;
+  idx: number;
+  state: string;
+  worker_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  error_message: string | null;
+  winner: string | null;
+  winning_turn: number | null;
+}
+
+function simRowToStatus(row: SimRow): SimulationStatus {
+  return {
+    simId: row.sim_id,
+    index: row.idx,
+    state: row.state as SimulationState,
+    ...(row.worker_id != null && { workerId: row.worker_id }),
+    ...(row.started_at != null && { startedAt: row.started_at }),
+    ...(row.completed_at != null && { completedAt: row.completed_at }),
+    ...(row.duration_ms != null && { durationMs: row.duration_ms }),
+    ...(row.error_message != null && { errorMessage: row.error_message }),
+    ...(row.winner != null && { winner: row.winner }),
+    ...(row.winning_turn != null && { winningTurn: row.winning_turn }),
+  };
+}
+
+/**
+ * Initialize simulation tracking rows for a job.
+ * Creates `count` rows with state PENDING.
+ */
+export function initializeSimulations(jobId: string, count: number): void {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO simulations (sim_id, job_id, idx, state) VALUES (?, ?, ?, 'PENDING')`
+  );
+  const tx = db.transaction(() => {
+    for (let i = 0; i < count; i++) {
+      const simId = `sim_${String(i).padStart(3, '0')}`;
+      insert.run(simId, jobId, i);
+    }
+  });
+  tx();
+}
+
+/**
+ * Update a single simulation's status fields.
+ */
+export function updateSimulationStatus(
+  jobId: string,
+  simId: string,
+  update: Partial<SimulationStatus>
+): boolean {
+  const db = getDb();
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (update.state !== undefined) {
+    sets.push('state = ?');
+    values.push(update.state);
+  }
+  if (update.workerId !== undefined) {
+    sets.push('worker_id = ?');
+    values.push(update.workerId);
+  }
+  if (update.startedAt !== undefined) {
+    sets.push('started_at = ?');
+    values.push(update.startedAt);
+  }
+  if (update.completedAt !== undefined) {
+    sets.push('completed_at = ?');
+    values.push(update.completedAt);
+  }
+  if (update.durationMs !== undefined) {
+    sets.push('duration_ms = ?');
+    values.push(update.durationMs);
+  }
+  if (update.errorMessage !== undefined) {
+    sets.push('error_message = ?');
+    values.push(update.errorMessage);
+  }
+  if (update.winner !== undefined) {
+    sets.push('winner = ?');
+    values.push(update.winner);
+  }
+  if (update.winningTurn !== undefined) {
+    sets.push('winning_turn = ?');
+    values.push(update.winningTurn);
+  }
+
+  if (sets.length === 0) return false;
+
+  values.push(jobId, simId);
+  const result = db
+    .prepare(`UPDATE simulations SET ${sets.join(', ')} WHERE job_id = ? AND sim_id = ?`)
+    .run(...values);
+  return result.changes > 0;
+}
+
+/**
+ * Get all simulation statuses for a job, ordered by index.
+ */
+export function getSimulationStatuses(jobId: string): SimulationStatus[] {
+  const db = getDb();
+  const rows = db
+    .prepare('SELECT * FROM simulations WHERE job_id = ? ORDER BY idx ASC')
+    .all(jobId) as SimRow[];
+  return rows.map(simRowToStatus);
+}
+
+/**
+ * Delete all simulation tracking rows for a job.
+ */
+export function deleteSimulations(jobId: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM simulations WHERE job_id = ?').run(jobId);
+}
+

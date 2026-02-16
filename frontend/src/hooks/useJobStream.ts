@@ -1,15 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getApiBase, getFirebaseIdToken } from '../api';
+import type { SimulationStatus } from '../types/simulation';
 
 /**
  * Hook that connects to the SSE stream for a job's status updates.
  * Falls back to polling if SSE connection fails.
  *
+ * Handles two SSE event types:
+ *  - default "message" events: job-level updates (status, progress, result)
+ *  - named "simulations" events: per-simulation status updates
+ *
  * @param jobId - The job ID to stream updates for
- * @returns { job, error, connected } - The latest job data, any error, and connection status
+ * @returns { job, simulations, error, connected }
  */
 export function useJobStream<T>(jobId: string | undefined) {
   const [job, setJob] = useState<T | null>(null);
+  const [simulations, setSimulations] = useState<SimulationStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -44,6 +50,7 @@ export function useJobStream<T>(jobId: string | undefined) {
         const es = new EventSource(url.toString());
         eventSourceRef.current = es;
 
+        // Default event: job-level updates
         es.onmessage = (event) => {
           if (closedRef.current) return;
           try {
@@ -65,6 +72,19 @@ export function useJobStream<T>(jobId: string | undefined) {
             // Ignore parse errors
           }
         };
+
+        // Named event: per-simulation status updates
+        es.addEventListener('simulations', (event) => {
+          if (closedRef.current) return;
+          try {
+            const data = JSON.parse((event as MessageEvent).data);
+            if (Array.isArray(data.simulations)) {
+              setSimulations(data.simulations);
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        });
 
         es.onerror = () => {
           if (closedRef.current) return;
@@ -95,5 +115,5 @@ export function useJobStream<T>(jobId: string | undefined) {
     };
   }, [jobId, closeConnection]);
 
-  return { job, error, connected };
+  return { job, simulations, error, connected };
 }

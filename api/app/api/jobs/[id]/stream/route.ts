@@ -102,10 +102,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const stream = new ReadableStream({
     start(controller) {
-      const send = (data: object) => {
+      /** Send a named SSE event (or default 'data' event if no eventName). */
+      const send = (data: object, eventName?: string) => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          let msg = '';
+          if (eventName) {
+            msg += `event: ${eventName}\n`;
+          }
+          msg += `data: ${JSON.stringify(data)}\n\n`;
+          controller.enqueue(encoder.encode(msg));
         } catch {
           // Stream already closed
           closed = true;
@@ -125,6 +131,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       // Send initial state immediately
       send(jobToStreamEvent(initialJob));
 
+      // Send initial simulation statuses (if any exist)
+      jobStore.getSimulationStatuses(id).then((sims) => {
+        if (sims.length > 0 && !closed) {
+          send({ simulations: sims }, 'simulations');
+        }
+      }).catch(() => { /* ignore */ });
+
       if (isTerminalStatus(initialJob.status)) {
         close();
         return;
@@ -133,11 +146,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (isGcpMode()) {
         // GCP mode: Use Firestore onSnapshot for real-time updates
         const { firestore } = require('@/lib/firestore-job-store') as { firestore: import('@google-cloud/firestore').Firestore };
-        const unsubscribe = firestore.collection('jobs').doc(id).onSnapshot(
+
+        // Listener 1: Job document changes
+        const unsubJob = firestore.collection('jobs').doc(id).onSnapshot(
           (snapshot) => {
             if (!snapshot.exists) {
               send({ error: 'Job not found' });
-              unsubscribe();
+              unsubJob();
+              unsubSims();
               close();
               return;
             }
@@ -165,7 +181,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             send(jobToStreamEvent(job));
 
             if (isTerminalStatus(job.status)) {
-              unsubscribe();
+              unsubJob();
+              unsubSims();
               close();
             }
           },
@@ -176,14 +193,46 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
         );
 
+        // Listener 2: Simulations subcollection changes
+        const unsubSims = firestore
+          .collection('jobs').doc(id).collection('simulations')
+          .orderBy('index', 'asc')
+          .onSnapshot(
+            (snapshot) => {
+              if (snapshot.empty) return;
+              const sims = snapshot.docs.map((doc) => {
+                const d = doc.data();
+                return {
+                  simId: doc.id,
+                  index: d.index ?? 0,
+                  state: d.state ?? 'PENDING',
+                  ...(d.workerId && { workerId: d.workerId }),
+                  ...(d.startedAt && { startedAt: d.startedAt }),
+                  ...(d.completedAt && { completedAt: d.completedAt }),
+                  ...(d.durationMs != null && { durationMs: d.durationMs }),
+                  ...(d.errorMessage && { errorMessage: d.errorMessage }),
+                  ...(d.winner && { winner: d.winner }),
+                  ...(d.winningTurn != null && { winningTurn: d.winningTurn }),
+                };
+              });
+              send({ simulations: sims }, 'simulations');
+            },
+            (error) => {
+              console.error(`SSE simulations onSnapshot error for job ${id}:`, error);
+              // Non-fatal: simulation updates just won't appear
+            },
+          );
+
         // Cleanup on client disconnect
         request.signal.addEventListener('abort', () => {
-          unsubscribe();
+          unsubJob();
+          unsubSims();
           close();
         });
       } else {
         // LOCAL mode: Poll SQLite every 2 seconds server-side
-        let lastJson = JSON.stringify(jobToStreamEvent(initialJob));
+        let lastJobJson = JSON.stringify(jobToStreamEvent(initialJob));
+        let lastSimsJson = '';
 
         const interval = setInterval(async () => {
           if (closed) {
@@ -199,11 +248,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               return;
             }
 
-            // Only send if data changed
-            const currentJson = JSON.stringify(jobToStreamEvent(job));
-            if (currentJson !== lastJson) {
-              lastJson = currentJson;
+            // Only send job event if data changed
+            const currentJobJson = JSON.stringify(jobToStreamEvent(job));
+            if (currentJobJson !== lastJobJson) {
+              lastJobJson = currentJobJson;
               send(jobToStreamEvent(job));
+            }
+
+            // Poll simulation statuses too
+            const sims = await jobStore.getSimulationStatuses(id);
+            if (sims.length > 0) {
+              const currentSimsJson = JSON.stringify(sims);
+              if (currentSimsJson !== lastSimsJson) {
+                lastSimsJson = currentSimsJson;
+                send({ simulations: sims }, 'simulations');
+              }
             }
 
             if (isTerminalStatus(job.status)) {
