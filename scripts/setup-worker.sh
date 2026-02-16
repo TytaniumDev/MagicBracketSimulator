@@ -199,6 +199,27 @@ echo ""
 echo "Logging into GHCR..."
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
+# ── Initialize single-node Docker Swarm (if not already in one) ──────
+SWARM_STATE=$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || echo "inactive")
+if [ "$SWARM_STATE" != "active" ]; then
+  echo ""
+  echo "Initializing single-node Docker Swarm..."
+  # Use the default route IP as the advertise address; Tailscale IP if available
+  ADVERTISE_ADDR=""
+  if command -v tailscale &>/dev/null; then
+    ADVERTISE_ADDR=$(tailscale ip -4 2>/dev/null || true)
+  fi
+  if [ -n "$ADVERTISE_ADDR" ]; then
+    docker swarm init --advertise-addr "$ADVERTISE_ADDR"
+  else
+    docker swarm init
+  fi
+  echo "Docker Swarm initialized (single-node)."
+else
+  echo ""
+  echo "Docker Swarm: already active."
+fi
+
 # ── Pull and start ────────────────────────────────────────────────────
 echo ""
 echo "Pulling latest worker image..."

@@ -1,0 +1,23 @@
+# Docker Swarm overlay — worker runs on the manager node via docker compose
+# (not as a swarm service) so it can manage swarm services for simulations.
+#
+# Usage (GCP mode):
+#   docker compose -f docker-compose.yml -f docker-compose.swarm.yml up -d
+#
+# Usage (local dev):
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.swarm.yml up -d
+#
+# The worker creates/removes swarm services via the Docker socket.
+# The simulation image must be pre-pulled on all swarm nodes.
+
+services:
+  worker:
+    # No additional config needed — the base docker-compose.yml already mounts
+    # the Docker socket which gives access to swarm management APIs.
+    # This overlay exists for clarity and as a place to add swarm-specific
+    # overrides if needed in the future.
+    environment:
+      # Shared /tmp/mbs-jobs is NOT needed in swarm mode since decks are
+      # delivered via base64 env vars and logs come from docker service logs.
+      # The JOBS_DIR volume mount in the base compose can be removed if desired.
+      - JOBS_DIR=/tmp/mbs-jobs

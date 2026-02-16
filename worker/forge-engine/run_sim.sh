@@ -70,6 +70,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Swarm mode: decode deck content from base64 env vars
+# When running as a swarm service, decks are delivered via DECK_0_B64..DECK_3_B64
+# instead of being mounted as files. This is a no-op when env vars aren't set.
+if [[ -n "${DECK_0_B64:-}" ]]; then
+  echo "Swarm mode: decoding decks from environment variables" >&2
+  mkdir -p "$DECKS_DIR"
+  for i in 0 1 2 3; do
+    var="DECK_${i}_B64"
+    echo "${!var}" | base64 -d > "${DECKS_DIR}/deck_${i}.dck"
+  done
+  DECKS=("deck_0.dck" "deck_1.dck" "deck_2.dck" "deck_3.dck")
+fi
+
 # Validate required args
 if [[ ${#DECKS[@]} -ne 4 ]] || [[ -z "$JOB_ID" ]]; then
     echo "Error: Missing required arguments (--decks x4, --id)" >&2
