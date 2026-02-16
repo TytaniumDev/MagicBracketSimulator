@@ -205,7 +205,14 @@ export async function deleteSimulations(jobId: string): Promise<void> {
  */
 export async function recoverStaleJob(jobId: string): Promise<boolean> {
   const job = await getJob(jobId);
-  if (!job || job.status !== 'RUNNING' || !job.workerId) return false;
+  if (!job) return false;
+
+  // Handle stuck QUEUED jobs: re-publish if stuck for >2 minutes
+  if (job.status === 'QUEUED') {
+    return recoverStaleQueuedJob(jobId, job);
+  }
+
+  if (job.status !== 'RUNNING' || !job.workerId) return false;
 
   // Check if the worker is still alive (2 min heartbeat threshold)
   const activeWorkers = await workerStore.getActiveWorkers(120_000);
@@ -249,6 +256,42 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
 
   await setJobFailed(jobId, 'Worker lost connection (retry exhausted)');
   return true;
+}
+
+/**
+ * Re-publish a QUEUED job that may have lost its Pub/Sub message.
+ *
+ * If the job has been QUEUED for >2 minutes, re-publish to Pub/Sub so
+ * any online worker can pick it up. Uses a per-job cooldown to avoid
+ * spamming Pub/Sub with duplicate messages.
+ */
+const requeueCooldowns = new Map<string, number>();
+
+async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> {
+  if (!USE_FIRESTORE) return false; // Polling mode picks up QUEUED jobs automatically
+
+  const queuedForMs = Date.now() - job.createdAt.getTime();
+  if (queuedForMs < 120_000) return false; // Not stuck yet
+
+  // Cooldown: don't re-publish more often than every 2 minutes per job
+  const lastRequeue = requeueCooldowns.get(jobId) ?? 0;
+  if (Date.now() - lastRequeue < 120_000) return false;
+
+  // Only re-publish if there's at least one active worker to receive it
+  const activeWorkers = await workerStore.getActiveWorkers();
+  if (activeWorkers.length === 0) return false;
+
+  console.log(`[Recovery] Job ${jobId} stuck in QUEUED for ${Math.round(queuedForMs / 1000)}s, re-publishing to Pub/Sub`);
+  requeueCooldowns.set(jobId, Date.now());
+
+  try {
+    const { publishJobCreated } = await import('./pubsub');
+    await publishJobCreated(jobId);
+    return true;
+  } catch (err) {
+    console.warn(`[Recovery] Failed to re-publish queued job ${jobId}:`, err);
+    return false;
+  }
 }
 
 /**

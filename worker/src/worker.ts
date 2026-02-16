@@ -581,7 +581,7 @@ async function processJob(jobId: string): Promise<void> {
 async function sendHeartbeat(capacity: number): Promise<void> {
   const url = `${getApiUrl()}/api/workers/heartbeat`;
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: getApiHeaders(),
       body: JSON.stringify({
@@ -594,8 +594,11 @@ async function sendHeartbeat(capacity: number): Promise<void> {
         uptimeMs: Date.now() - workerStartTime,
       }),
     });
-  } catch {
-    // Non-fatal: heartbeat failure shouldn't crash the worker
+    if (!res.ok) {
+      console.warn(`Heartbeat failed: HTTP ${res.status} ${res.statusText}`);
+    }
+  } catch (err) {
+    console.warn('Heartbeat error:', err instanceof Error ? err.message : err);
   }
 }
 

@@ -146,8 +146,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
   }
 
-  // Attempt stale job recovery on stream open
-  if (initialJob.status === 'RUNNING') {
+  // Attempt stale job recovery on stream open (RUNNING or stuck QUEUED)
+  if (initialJob.status === 'RUNNING' || initialJob.status === 'QUEUED') {
     const recovered = await jobStore.recoverStaleJob(id);
     if (recovered) {
       initialJob = (await jobStore.getJob(id)) ?? initialJob;

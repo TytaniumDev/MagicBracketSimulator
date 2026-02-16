@@ -79,8 +79,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    // Attempt stale job recovery for RUNNING jobs
-    if (job.status === 'RUNNING') {
+    // Attempt stale job recovery for RUNNING or stuck QUEUED jobs
+    if (job.status === 'RUNNING' || job.status === 'QUEUED') {
       const recovered = await jobStore.recoverStaleJob(id);
       if (recovered) {
         job = await jobStore.getJob(id);
