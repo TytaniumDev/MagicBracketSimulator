@@ -8,8 +8,8 @@
 
 FROM eclipse-temurin:17-jre-jammy
 
-# Forge version - default to latest; override with: docker build --build-arg FORGE_VERSION=2.0.09
-ARG FORGE_VERSION=""
+# Forge version - pinned default; override with: docker build --build-arg FORGE_VERSION=2.0.10
+ARG FORGE_VERSION="2.0.09"
 
 # Create non-root user with home directory
 RUN groupadd -r simulator && useradd -r -g simulator -m -d /home/simulator simulator
@@ -25,18 +25,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     fonts-dejavu-core \
     bzip2 \
-    jq \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and extract Forge
-RUN if [ -z "$FORGE_VERSION" ]; then \
-        FORGE_VERSION=$(curl -sSL https://api.github.com/repos/Card-Forge/forge/releases/latest | jq -r '.tag_name' | sed 's/forge-//'); \
-    fi \
-    && FORGE_URL="https://github.com/Card-Forge/forge/releases/download/forge-${FORGE_VERSION}/forge-installer-${FORGE_VERSION}.tar.bz2" \
+RUN FORGE_URL="https://github.com/Card-Forge/forge/releases/download/forge-${FORGE_VERSION}/forge-installer-${FORGE_VERSION}.tar.bz2" \
     && echo "Downloading Forge version: ${FORGE_VERSION}" \
-    && curl -sSL -o /tmp/forge.tar.bz2 "${FORGE_URL}" \
+    && curl -fsSL -o /tmp/forge.tar.bz2 "${FORGE_URL}" \
     && mkdir -p /tmp/forge_extract /app/forge \
     && tar -xjf /tmp/forge.tar.bz2 -C /tmp/forge_extract \
     && cp -a /tmp/forge_extract/. /app/forge/ \
