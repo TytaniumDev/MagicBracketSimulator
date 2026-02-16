@@ -169,6 +169,15 @@ if [[ -s "$FORGE_OUTPUT" ]]; then
     fi
 fi
 
+# Output game logs to stdout for Docker service log collection (swarm mode).
+# The worker reads these via `docker service logs` since there's no shared
+# filesystem in a swarm cluster.
+for logfile in "${LOGS_DIR}/${JOB_ID}_game_"*.txt; do
+    if [[ -f "$logfile" ]]; then
+        cat "$logfile"
+    fi
+done
+
 # Ensure at least one log file exists for successful run
 if [[ $FORGE_EXIT -eq 0 ]]; then
     count=$(find "$LOGS_DIR" -maxdepth 1 -name "${JOB_ID}_game_*.txt" 2>/dev/null | wc -l)
