@@ -31,8 +31,8 @@ services:
       - WORKER_ID=${WORKER_ID:-}
       - JOBS_DIR=/tmp/mbs-jobs
 
-      # Simulation image (must be pre-pulled or built on host)
-      - SIMULATION_IMAGE=${SIMULATION_IMAGE:-magic-bracket-simulation:latest}
+      # Simulation image — full GHCR path so swarm can resolve the digest
+      - SIMULATION_IMAGE=${SIMULATION_IMAGE:-ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest}
 
       # Docker CLI API version — worker image ships Docker CLI v20 (API 1.41) but
       # newer daemons (v25+) require API ≥1.44. Override to negotiate correctly.

@@ -9,9 +9,9 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/init-swarm-manager.sh
-#   ./scripts/init-swarm-manager.sh --simulation-image ghcr.io/org/magic-bracket-simulation:latest
+#   ./scripts/init-swarm-manager.sh --simulation-image ghcr.io/org/simulation:latest
 
-SIMULATION_IMAGE="magic-bracket-simulation:latest"
+SIMULATION_IMAGE="ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest"
 
 for arg in "$@"; do
   case $arg in

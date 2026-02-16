@@ -13,7 +13,7 @@ import { runProcess } from './process.js';
 // Constants
 // ============================================================================
 
-const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'magic-bracket-simulation:latest';
+const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest';
 
 // Resource limits per simulation container
 const RAM_PER_SIM_MB = 600;
@@ -161,6 +161,7 @@ export async function runSimulationSwarmService(
     '--name', serviceName,
     '--restart-condition', 'none',
     '--detach',
+    '--with-registry-auth',
     '--limit-memory', `${RAM_PER_SIM_MB}m`,
     '--limit-cpu', '1',
     ...deckEnvVars,

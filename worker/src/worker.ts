@@ -57,7 +57,7 @@ let currentWorkerId = '';
 // Configuration
 // ============================================================================
 
-const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'magic-bracket-simulation:latest';
+const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest';
 const JOBS_DIR = process.env.JOBS_DIR || '/tmp/mbs-jobs';
 
 // ============================================================================

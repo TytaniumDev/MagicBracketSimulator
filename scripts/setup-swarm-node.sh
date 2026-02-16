@@ -12,7 +12,7 @@ set -euo pipefail
 
 JOIN_TOKEN=""
 MANAGER_IP=""
-SIMULATION_IMAGE="magic-bracket-simulation:latest"
+SIMULATION_IMAGE="ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest"
 
 for arg in "$@"; do
   case $arg in
