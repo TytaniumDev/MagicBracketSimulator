@@ -65,7 +65,7 @@ export function useJobStream<T>(jobId: string | undefined) {
             setError(null);
 
             // Stream auto-closes on terminal states, but also close client-side
-            if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+            if (data.status === 'COMPLETED' || data.status === 'FAILED' || data.status === 'CANCELLED') {
               closeConnection();
             }
           } catch {

@@ -1,11 +1,11 @@
-export type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
+export type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 // -----------------------------------------------------------------------------
 // Per-Simulation Tracking Types
 // -----------------------------------------------------------------------------
 
 /** Lifecycle state for an individual simulation within a job. */
-export type SimulationState = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type SimulationState = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 /**
  * Status tracking for a single simulation within a job.

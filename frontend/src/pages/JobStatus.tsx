@@ -5,7 +5,7 @@ import { ColorIdentity } from '../components/ColorIdentity';
 import { SimulationGrid } from '../components/SimulationGrid';
 import { useJobStream } from '../hooks/useJobStream';
 
-type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
+type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 interface DeckBracketResult {
   deck_name: string;
@@ -25,7 +25,6 @@ interface Job {
   deckNames: string[];
   status: JobStatusValue;
   simulations: number;
-  parallelism?: number;
   createdAt: string;
   errorMessage?: string;
   resultJson?: AnalysisResult;
@@ -135,7 +134,8 @@ export default function JobStatusPage() {
   const [promptPreviewError, setPromptPreviewError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
-  
+  const [isCancelling, setIsCancelling] = useState(false);
+
   const apiBase = getApiBase();
   const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -172,7 +172,7 @@ export default function JobStatusPage() {
           })
           .then((data) => {
             setJob(data);
-            if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+            if (data.status === 'COMPLETED' || data.status === 'FAILED' || data.status === 'CANCELLED') {
               if (fallbackIntervalRef.current) {
                 clearInterval(fallbackIntervalRef.current);
                 fallbackIntervalRef.current = null;
@@ -200,9 +200,9 @@ export default function JobStatusPage() {
   // Fetch structured logs for Deck Actions when job is completed/failed
   useEffect(() => {
     if (!id || !job) return;
-    if (job.status !== 'COMPLETED' && job.status !== 'FAILED') return;
+    if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
     if (structuredGames !== null) return; // Already fetched
-    
+
     setStructuredError(null);
     fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/structured`)
       .then((res) => {
@@ -245,7 +245,7 @@ export default function JobStatusPage() {
   // Fetch analyze payload when job is completed (for on-demand analysis)
   useEffect(() => {
     if (!id || !job) return;
-    if (job.status !== 'COMPLETED' && job.status !== 'FAILED') return;
+    if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
     if (analyzePayload !== null) return; // Already fetched
     
     setAnalyzePayloadError(null);
@@ -405,7 +405,28 @@ export default function JobStatusPage() {
           ? 'Analyzing results...'
           : job.status === 'COMPLETED'
             ? 'Completed'
-            : 'Failed';
+            : job.status === 'CANCELLED'
+              ? 'Cancelled'
+              : 'Failed';
+
+  const handleCancel = async () => {
+    if (!id) return;
+    setIsCancelling(true);
+    try {
+      const response = await fetchWithAuth(`${apiBase}/api/jobs/${id}/cancel`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to cancel');
+      }
+      setJob((prev) => prev ? { ...prev, status: 'CANCELLED' } : null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Cancel failed');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const result = job.resultJson;
   
@@ -470,7 +491,9 @@ export default function JobStatusPage() {
                 ? 'text-green-400'
                 : job.status === 'FAILED'
                   ? 'text-red-400'
-                  : 'text-yellow-400'
+                  : job.status === 'CANCELLED'
+                    ? 'text-orange-400'
+                    : 'text-yellow-400'
             }
           >
             {statusLabel}
@@ -480,18 +503,22 @@ export default function JobStatusPage() {
               Worker: {job.workerId.slice(0, 8)}
             </span>
           )}
+          {(job.status === 'QUEUED' || job.status === 'RUNNING') && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={isCancelling}
+              className="ml-4 px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCancelling ? 'Cancelling...' : 'Cancel Job'}
+            </button>
+          )}
         </div>
         <div>
           <span className="text-gray-400">Simulations: </span>
           <span>{job.simulations}</span>
         </div>
-        {job.parallelism != null && (
-          <div>
-            <span className="text-gray-400">Parallel runs: </span>
-            <span>{job.parallelism}</span>
-          </div>
-        )}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED') && job.durationMs != null && job.durationMs >= 0 && (
+        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && job.durationMs != null && job.durationMs >= 0 && (
           <div>
             <span className="text-gray-400">Total run time: </span>
             <span>{formatDurationMs(job.durationMs)}</span>
@@ -534,7 +561,7 @@ export default function JobStatusPage() {
           </div>
         )}
         {/* Per-simulation grid — shown when simulation tracking data exists */}
-        {(job.status === 'RUNNING' || job.status === 'ANALYZING') && streamSimulations.length > 0 && (
+        {(job.status === 'RUNNING' || job.status === 'ANALYZING' || job.status === 'CANCELLED') && streamSimulations.length > 0 && (
           <SimulationGrid
             simulations={streamSimulations}
             totalSimulations={job.simulations}
@@ -557,7 +584,7 @@ export default function JobStatusPage() {
           </div>
         )}
         {/* Win summary - shown for any completed/failed job with game data */}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED') && winTally && Object.keys(winTally).length > 0 && (
+        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && winTally && Object.keys(winTally).length > 0 && (
           <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
             <h3 className="text-sm font-semibold text-gray-400 mb-3">
               Games Won ({structuredGames?.length ?? 0} games played)
@@ -756,8 +783,8 @@ export default function JobStatusPage() {
           </div>
         )}
 
-        {/* Deck Actions Section - shown by default for completed jobs */}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED') && (
+        {/* Deck Actions Section - shown by default for completed/failed/cancelled jobs */}
+        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && (
           <div className="pt-4 border-t border-gray-600">
             <h3 className="text-lg font-semibold text-gray-200 mb-4">Deck Actions</h3>
             {structuredError && (
@@ -993,7 +1020,7 @@ export default function JobStatusPage() {
         )}
 
         {/* Detailed Game Logs Panel (collapsible) */}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED') && (
+        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && (
           <div className="pt-4 border-t border-gray-600">
             <button
               type="button"

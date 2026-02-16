@@ -87,13 +87,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const par = parallelism ?? 4;
-    if (typeof par !== 'number' || par < PARALLELISM_MIN || par > PARALLELISM_MAX) {
-      return NextResponse.json(
-        { error: `parallelism must be between ${PARALLELISM_MIN} and ${PARALLELISM_MAX}` },
-        { status: 400 }
-      );
-    }
+    // parallelism is accepted but no longer required — worker auto-scales
+    const par = (typeof parallelism === 'number' && parallelism >= PARALLELISM_MIN && parallelism <= PARALLELISM_MAX)
+      ? parallelism
+      : undefined;
 
     const { decks, errors } = await resolveDeckIds(deckIds);
     if (errors.length > 0) {

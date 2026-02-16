@@ -35,7 +35,7 @@ function jobToStreamEvent(job: Job) {
 }
 
 function isTerminalStatus(status: string): boolean {
-  return status === 'COMPLETED' || status === 'FAILED';
+  return status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED';
 }
 
 /**

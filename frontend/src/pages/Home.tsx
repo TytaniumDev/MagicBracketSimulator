@@ -23,7 +23,7 @@ interface DeckOption {
   deck: Deck;
 }
 
-type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
+type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 interface JobSummary {
   id: string;
@@ -68,7 +68,6 @@ export default function Home() {
   // Deck selection state
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [simulations, setSimulations] = useState(100);
-  const [parallelism, setParallelism] = useState(10);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
@@ -296,7 +295,6 @@ export default function Home() {
       const body = {
         deckIds: selectedDeckIds,
         simulations,
-        parallelism,
         idempotencyKey: key,
       };
 
@@ -599,15 +597,6 @@ export default function Home() {
           className="mb-4"
         />
 
-        <SliderWithInput
-          label="Parallel Docker Runs"
-          value={parallelism}
-          onChange={setParallelism}
-          min={1}
-          max={16}
-          className="mb-6"
-        />
-
         {submitError && (
           <div className="mb-4 bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
             {submitError}
@@ -742,6 +731,7 @@ function StatusBadge({ status }: { status: JobStatus }) {
     ANALYZING: 'bg-purple-600 text-white',
     COMPLETED: 'bg-green-600 text-white',
     FAILED: 'bg-red-600 text-white',
+    CANCELLED: 'bg-orange-600 text-white',
   };
 
   const labels: Record<JobStatus, string> = {
@@ -750,6 +740,7 @@ function StatusBadge({ status }: { status: JobStatus }) {
     ANALYZING: 'Analyzing',
     COMPLETED: 'Completed',
     FAILED: 'Failed',
+    CANCELLED: 'Cancelled',
   };
 
   return (

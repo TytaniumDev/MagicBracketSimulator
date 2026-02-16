@@ -132,6 +132,13 @@ export async function claimNextJob(): Promise<Job | null> {
   return job ?? null;
 }
 
+export async function cancelJob(id: string): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.cancelJob(id);
+  }
+  return sqliteStore.cancelJob(id);
+}
+
 export async function deleteJob(id: string): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.deleteJob(id);
@@ -185,18 +192,20 @@ export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | nu
   if (simulations.length === 0) return null;
 
   const states = simulations.map((s) => s.state);
+  const terminal = (s: string) => s === 'COMPLETED' || s === 'FAILED' || s === 'CANCELLED';
   const allPending = states.every((s) => s === 'PENDING');
   const anyRunning = states.some((s) => s === 'RUNNING');
-  const allDone = states.every((s) => s === 'COMPLETED' || s === 'FAILED');
-  const anyFailed = states.some((s) => s === 'FAILED');
+  const allDone = states.every(terminal);
   const allFailed = states.every((s) => s === 'FAILED');
+  const allCancelled = states.every((s) => s === 'CANCELLED');
+  const anyCancelled = states.some((s) => s === 'CANCELLED');
 
   if (allPending) return 'QUEUED';
+  if (allCancelled) return 'CANCELLED';
   if (anyRunning || (!allDone && !allPending)) return 'RUNNING';
   if (allDone) {
-    // If every single simulation failed, the whole job failed
     if (allFailed) return 'FAILED';
-    // Otherwise, simulations are done — ready for log aggregation → analysis
+    if (anyCancelled && !states.some((s) => s === 'COMPLETED')) return 'CANCELLED';
     return 'COMPLETED';
   }
 

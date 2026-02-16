@@ -186,6 +186,22 @@ function getApiUrl(): string {
 }
 
 /**
+ * Fetch just the job status from API (lightweight check for cancellation).
+ */
+async function fetchJobStatus(jobId: string): Promise<string | null> {
+  const url = `${getApiUrl()}/api/jobs/${jobId}`;
+  try {
+    const response = await fetch(url, { headers: getApiHeaders() });
+    if (response.status === 404) return null;
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.status ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch job details from API
  */
 async function fetchJob(jobId: string): Promise<JobData | null> {
@@ -358,6 +374,18 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
 
   console.log(`Running ${totalSims} simulations with concurrency=${capacity}`);
 
+  // Cancellation polling: cache result for 5s to avoid hammering API
+  let cancelledCache: { value: boolean; at: number } = { value: false, at: 0 };
+  const checkCancelled = async (): Promise<boolean> => {
+    const now = Date.now();
+    if (now - cancelledCache.at < 5000) return cancelledCache.value;
+    const status = await fetchJobStatus(jobId);
+    const isCancelled = status === null || status === 'CANCELLED';
+    cancelledCache = { value: isCancelled, at: now };
+    if (isCancelled) console.log(`Job ${jobId} has been cancelled or deleted`);
+    return isCancelled;
+  };
+
   // Run simulations with bounded concurrency
   const semaphore = new Semaphore(capacity);
   const results: SwarmSimulationResult[] = [];
@@ -367,6 +395,12 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
     simIds.map(async ({ simId, index }) => {
       await semaphore.acquire();
       try {
+        // Check cancellation before starting
+        if (await checkCancelled()) {
+          await reportSimulationStatus(jobId, simId, { state: 'CANCELLED' }).catch(() => {});
+          return;
+        }
+
         // Report RUNNING
         await reportSimulationStatus(jobId, simId, {
           state: 'RUNNING',
@@ -374,7 +408,7 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
         });
 
         const result = await runSimulationSwarmService(
-          jobId, simId, index, deckContents, deckFilenames
+          jobId, simId, index, deckContents, deckFilenames, checkCancelled
         );
         results.push(result);
 
@@ -400,6 +434,12 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
       }
     })
   );
+
+  // If cancelled, skip log upload and status update
+  if (await checkCancelled()) {
+    console.log(`Job ${jobId} was cancelled — skipping log upload and status update`);
+    return;
+  }
 
   // Check for complete failure
   const succeeded = results.filter((r) => r.exitCode === 0);

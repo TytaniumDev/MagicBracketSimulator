@@ -227,6 +227,47 @@ export async function listJobs(userId?: string): Promise<Job[]> {
 }
 
 /**
+ * Cancel a job: set status to CANCELLED, mark PENDING simulations as CANCELLED.
+ * Only works for QUEUED or RUNNING jobs.
+ */
+export async function cancelJob(id: string): Promise<boolean> {
+  const jobRef = jobsCollection.doc(id);
+  const jobDoc = await jobRef.get();
+  if (!jobDoc.exists) return false;
+
+  const data = jobDoc.data()!;
+  if (data.status !== 'QUEUED' && data.status !== 'RUNNING') return false;
+
+  // Update job status
+  await jobRef.update({
+    status: 'CANCELLED',
+    completedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  // Update PENDING simulations to CANCELLED in batches
+  const simCol = simulationsCollection(id);
+  const pendingSims = await simCol.where('state', '==', 'PENDING').get();
+
+  if (!pendingSims.empty) {
+    const batchSize = 500;
+    for (let i = 0; i < pendingSims.docs.length; i += batchSize) {
+      const batch = firestore.batch();
+      const slice = pendingSims.docs.slice(i, i + batchSize);
+      for (const doc of slice) {
+        batch.update(doc.ref, {
+          state: 'CANCELLED',
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+  }
+
+  return true;
+}
+
+/**
  * Delete a job and its idempotency key
  */
 export async function deleteJob(id: string): Promise<void> {

@@ -174,6 +174,25 @@ export function setJobFailed(id: string, errorMessage: string, options?: SetJobF
 }
 
 /**
+ * Cancel a job: set status to CANCELLED, mark PENDING simulations as CANCELLED.
+ * Only works for QUEUED or RUNNING jobs. Returns true if the job was cancelled.
+ */
+export function cancelJob(id: string): boolean {
+  const db = getDb();
+  const cancelTx = db.transaction(() => {
+    const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Row | undefined;
+    if (!row) return false;
+    if (row.status !== 'QUEUED' && row.status !== 'RUNNING') return false;
+
+    const now = new Date().toISOString();
+    db.prepare("UPDATE jobs SET status = 'CANCELLED', completed_at = ? WHERE id = ?").run(now, id);
+    db.prepare("UPDATE simulations SET state = 'CANCELLED' WHERE job_id = ? AND state = 'PENDING'").run(id);
+    return true;
+  });
+  return cancelTx();
+}
+
+/**
  * Deletes a job by id. Returns true if a row was deleted.
  */
 export function deleteJob(id: string): boolean {

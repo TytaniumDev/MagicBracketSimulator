@@ -11,6 +11,7 @@ const STATE_COLORS: Record<SimulationState, string> = {
   RUNNING: 'bg-blue-500 animate-pulse',
   COMPLETED: 'bg-emerald-500',
   FAILED: 'bg-red-500',
+  CANCELLED: 'bg-orange-500',
 };
 
 const STATE_LABELS: Record<SimulationState, string> = {
@@ -18,6 +19,7 @@ const STATE_LABELS: Record<SimulationState, string> = {
   RUNNING: 'Running',
   COMPLETED: 'Completed',
   FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
 };
 
 function formatDuration(ms: number): string {
@@ -59,7 +61,7 @@ export function SimulationGrid({ simulations, totalSimulations }: SimulationGrid
     <div className="space-y-3">
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
-        {(['COMPLETED', 'RUNNING', 'PENDING', 'FAILED'] as SimulationState[]).map((state) => (
+        {(['COMPLETED', 'RUNNING', 'PENDING', 'FAILED', 'CANCELLED'] as SimulationState[]).map((state) => (
           <span key={state} className="inline-flex items-center gap-1.5">
             <span className={`inline-block w-2.5 h-2.5 rounded-sm ${STATE_COLORS[state].replace(' animate-pulse', '')}`} />
             {STATE_LABELS[state]}

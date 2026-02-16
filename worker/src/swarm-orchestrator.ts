@@ -145,6 +145,7 @@ export async function runSimulationSwarmService(
   index: number,
   deckContents: [string, string, string, string],
   deckFilenames: [string, string, string, string],
+  checkCancelled?: () => Promise<boolean>,
 ): Promise<SwarmSimulationResult> {
   const serviceName = `sim-${jobId.slice(0, 8)}-${simId}`;
   const startTime = Date.now();
@@ -186,9 +187,23 @@ export async function runSimulationSwarmService(
   let exitCode = 1;
   let error: string | undefined;
 
+  let cancelled = false;
   const deadline = Date.now() + SERVICE_TIMEOUT_MS;
   while (Date.now() < deadline) {
     await sleep(SERVICE_POLL_MS);
+
+    // Check for cancellation
+    if (checkCancelled) {
+      try {
+        if (await checkCancelled()) {
+          cancelled = true;
+          error = 'Job cancelled';
+          break;
+        }
+      } catch {
+        // Ignore cancellation check errors
+      }
+    }
 
     const { stdout: taskOut } = await runProcessCapture('docker', [
       'service', 'ps', serviceName,
@@ -213,6 +228,17 @@ export async function runSimulationSwarmService(
 
   if (Date.now() >= deadline && exitCode !== 0) {
     error = `Service timed out after ${SERVICE_TIMEOUT_MS / 1000}s`;
+  }
+
+  // If cancelled, kill the service and return early
+  if (cancelled) {
+    try {
+      await runProcess('docker', ['service', 'rm', serviceName], { timeout: 15_000 });
+    } catch {
+      console.warn(`Warning: failed to remove cancelled service ${serviceName}`);
+    }
+    const durationMs = Date.now() - startTime;
+    return { simId, index, exitCode: 1, durationMs, logText: '', error };
   }
 
   // Collect logs

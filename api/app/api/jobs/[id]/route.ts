@@ -110,6 +110,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
+    // Cancel the job first if it's still active, so the worker can detect it
+    if (job.status === 'QUEUED' || job.status === 'RUNNING') {
+      await jobStore.cancelJob(id);
+    }
+
     await jobStore.deleteJob(id);
 
     if (isGcpMode()) {
