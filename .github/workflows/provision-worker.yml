@@ -60,11 +60,10 @@ jobs:
       - name: Install API dependencies
         run: npm ci --prefix api
 
-      - name: Derive IMAGE_NAMEs
+      - name: Derive IMAGE_NAME
         run: |
           REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           echo "IMAGE_NAME=ghcr.io/${REPO_LOWER}/worker" >> "$GITHUB_ENV"
-          echo "SIMULATION_IMAGE=ghcr.io/${REPO_LOWER}/simulation" >> "$GITHUB_ENV"
 
       - name: Populate simulation-worker-config in Secret Manager
         env:
@@ -102,7 +101,6 @@ jobs:
               const config = {
                 sa_key: JSON.parse(process.env.SA_KEY),
                 IMAGE_NAME: process.env.IMAGE_NAME,
-                SIMULATION_IMAGE: process.env.SIMULATION_IMAGE,
                 GHCR_USER: process.env.GHCR_USER,
                 GHCR_TOKEN: process.env.GHCR_TOKEN,
               };

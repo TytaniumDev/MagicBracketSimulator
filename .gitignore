@@ -47,6 +47,7 @@ api/data/
 worker/jobs/
 worker/worker-id
 worker/deck-cache/
+worker/.docker-login-config/
 
 # Forge simulation (generated logs)
 worker/forge-engine/logs/

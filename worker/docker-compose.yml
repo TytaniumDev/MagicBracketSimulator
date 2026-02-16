@@ -34,6 +34,15 @@ services:
       # Simulation image (must be pre-pulled or built on host)
       - SIMULATION_IMAGE=${SIMULATION_IMAGE:-magic-bracket-simulation:latest}
 
+      # Docker CLI API version — worker image ships Docker CLI v20 (API 1.41) but
+      # newer daemons (v25+) require API ≥1.44. Override to negotiate correctly.
+      - DOCKER_API_VERSION=1.44
+
+    # Grant access to the host Docker socket (GID varies by runtime: Colima=991, Linux=999, etc.)
+    # DOCKER_SOCK_GID is set by setup-worker.sh; falls back to 0 (root) if unset.
+    group_add:
+      - "${DOCKER_SOCK_GID:-0}"
+
     volumes:
       # Mount Docker socket so worker can spawn simulation containers
       - /var/run/docker.sock:/var/run/docker.sock
