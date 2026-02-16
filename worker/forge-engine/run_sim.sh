@@ -18,7 +18,7 @@ JOB_ID=""
 
 # Paths - use env vars if set, otherwise defaults for standalone container
 # DECKS_DIR should point to where .dck files live (Forge's commander deck dir)
-DECKS_DIR="${DECKS_DIR:-/home/worker/.forge/decks/commander}"
+DECKS_DIR="${DECKS_DIR:-/home/simulator/.forge/decks/commander}"
 LOGS_DIR="${LOGS_DIR:-/app/logs}"
 
 # Forge launcher - check FORGE_PATH first, then script dir, then /app
