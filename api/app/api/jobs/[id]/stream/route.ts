@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { optionalAuth, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
+import { getDeckById } from '@/lib/deck-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
 import type { Job } from '@/lib/types';
 
@@ -14,7 +15,11 @@ interface QueueInfo {
   workers?: { online: number; idle: number; busy: number };
 }
 
-function jobToStreamEvent(job: Job, queueInfo?: QueueInfo) {
+function jobToStreamEvent(
+  job: Job,
+  queueInfo?: QueueInfo,
+  deckLinks?: Record<string, string | null>
+) {
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();
@@ -41,7 +46,24 @@ function jobToStreamEvent(job: Job, queueInfo?: QueueInfo) {
     retryCount: job.retryCount ?? 0,
     ...(queueInfo?.queuePosition != null && { queuePosition: queueInfo.queuePosition }),
     ...(queueInfo?.workers && { workers: queueInfo.workers }),
+    ...(deckLinks && { deckLinks }),
   };
+}
+
+async function resolveDeckLinks(job: Job): Promise<Record<string, string | null> | undefined> {
+  if (!job.deckIds || job.deckIds.length !== 4) return undefined;
+  const deckNames = job.decks.map((d) => d.name);
+  const entries = await Promise.all(
+    job.deckIds.map(async (id, i) => {
+      try {
+        const deck = await getDeckById(id);
+        return [deckNames[i], deck?.link ?? null] as [string, string | null];
+      } catch {
+        return [deckNames[i], null] as [string, string | null];
+      }
+    })
+  );
+  return Object.fromEntries(entries);
 }
 
 /**
@@ -154,6 +176,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
   }
 
+  // Resolve deck links once (they don't change during a job)
+  const deckLinks = await resolveDeckLinks(initialJob);
+
   const encoder = new TextEncoder();
   let closed = false;
 
@@ -190,7 +215,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const queueInfo = initialJob.status === 'QUEUED'
           ? await getQueueInfo(id, initialJob.createdAt).catch(() => ({}))
           : undefined;
-        send(jobToStreamEvent(initialJob, queueInfo));
+        send(jobToStreamEvent(initialJob, queueInfo, deckLinks));
       };
 
       // Send simulation statuses
@@ -257,7 +282,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             const queueInfo = job.status === 'QUEUED'
               ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
               : undefined;
-            send(jobToStreamEvent(job, queueInfo));
+            send(jobToStreamEvent(job, queueInfo, deckLinks));
 
             if (isTerminalStatus(job.status)) {
               unsubJob();
@@ -325,7 +350,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         });
       } else {
         // LOCAL mode: Poll SQLite every 2 seconds server-side
-        let lastJobJson = JSON.stringify(jobToStreamEvent(initialJob));
+        let lastJobJson = JSON.stringify(jobToStreamEvent(initialJob, undefined, deckLinks));
         let lastSimsJson = '';
 
         const interval = setInterval(async () => {
@@ -346,10 +371,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             const queueInfo = job.status === 'QUEUED'
               ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
               : undefined;
-            const currentJobJson = JSON.stringify(jobToStreamEvent(job, queueInfo));
+            const currentJobJson = JSON.stringify(jobToStreamEvent(job, queueInfo, deckLinks));
             if (currentJobJson !== lastJobJson) {
               lastJobJson = currentJobJson;
-              send(jobToStreamEvent(job, queueInfo));
+              send(jobToStreamEvent(job, queueInfo, deckLinks));
             }
 
             // Poll simulation statuses too

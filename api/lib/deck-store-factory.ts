@@ -156,6 +156,28 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
   };
 }
 
+export async function getDeckById(id: string): Promise<DeckListItem | null> {
+  if (USE_FIRESTORE) {
+    const deck = await firestoreDecks.getDeck(id);
+    if (!deck) return null;
+    return {
+      id: deck.id,
+      name: deck.name,
+      filename: deck.filename,
+      primaryCommander: deck.primaryCommander ?? null,
+      colorIdentity: deck.colorIdentity,
+      isPrecon: deck.isPrecon,
+      link: deck.link,
+      ownerId: deck.ownerId,
+      ownerEmail: deck.ownerEmail,
+      createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
+    };
+  }
+
+  const all = await listAllDecks();
+  return all.find((d) => d.id === id) ?? null;
+}
+
 export async function deleteDeck(id: string, userId: string): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreDecks.deleteDeck(id, userId);

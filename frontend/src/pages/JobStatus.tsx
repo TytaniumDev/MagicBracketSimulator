@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
+import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
 import { useJobStream } from '../hooks/useJobStream';
 
@@ -39,6 +40,7 @@ interface Job {
   queuePosition?: number;
   workers?: { online: number; idle: number; busy: number };
   retryCount?: number;
+  deckLinks?: Record<string, string | null>;
 }
 
 // Types for Log Analyzer responses
@@ -566,13 +568,24 @@ export default function JobStatusPage() {
           Back to home
         </Link>
       </div>
-      <h1 className="text-3xl font-bold mb-2">
-        {job.name || `${job.simulations} games - ${job.id.slice(0, 8)}`}
+      <h1 className="text-2xl font-bold mb-1">
+        {job.simulations} Game Simulation
       </h1>
-      <p className="text-gray-400 text-sm mb-2">
-        {job.deckNames?.join(', ')}
-      </p>
       <p className="text-gray-500 text-xs mb-6">ID: {job.id}</p>
+
+      {/* Deck Showcase — single authoritative deck display with integrated win data */}
+      {job.deckNames?.length > 0 && (
+        <DeckShowcase
+          deckNames={job.deckNames}
+          colorIdentityByDeckName={colorIdentityByDeckName}
+          winTally={effectiveWinTally}
+          winTurns={effectiveWinTurns}
+          gamesPlayed={effectiveGamesPlayed}
+          totalSimulations={job.simulations}
+          deckLinks={job.deckLinks}
+          jobStatus={job.status}
+        />
+      )}
 
       <div className="bg-gray-800 rounded-lg p-6 space-y-4">
         {/* Rich Queue Info Panel for QUEUED jobs */}
@@ -731,64 +744,9 @@ export default function JobStatusPage() {
             totalSimulations={job.simulations}
           />
         )}
-        {job.deckNames?.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-gray-400">Decks: </span>
-            {job.deckNames.map((name) => (
-              <span key={name} className="inline-flex items-center gap-1">
-                {name}
-                <ColorIdentity colorIdentity={colorIdentityByDeckName[name]} />
-              </span>
-            ))}
-          </div>
-        )}
         {job.status === 'FAILED' && job.errorMessage && (
           <div className="bg-red-900/30 border border-red-600 rounded p-3 text-red-200">
             {job.errorMessage}
-          </div>
-        )}
-        {/* Win summary - shown for any completed/failed job with game data */}
-        {(job.status === 'RUNNING' || job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && effectiveWinTally && Object.keys(effectiveWinTally).length > 0 && (
-          <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-            <h3 className="text-sm font-semibold text-gray-400 mb-3">
-              Games Won ({effectiveGamesPlayed} of {job.simulations})
-              {job.status === 'RUNNING' && (
-                <span className="ml-2 text-blue-400 font-normal">
-                  (live)
-                </span>
-              )}
-              {job.status === 'FAILED' && effectiveGamesPlayed < job.simulations && (
-                <span className="ml-2 text-amber-400 font-normal">
-                  (partial — {job.simulations - effectiveGamesPlayed} games did not complete)
-                </span>
-              )}
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {Object.entries(effectiveWinTally)
-                .sort(([, a], [, b]) => b - a)
-                .map(([deck, wins]) => {
-                  const deckWinTurns = effectiveWinTurns?.[deck] ?? [];
-                  return (
-                    <div
-                      key={deck}
-                      className="bg-gray-800/50 rounded p-3 text-center"
-                    >
-                      <div className="text-lg font-bold text-blue-400">{wins}</div>
-                      <div className="flex items-center justify-center gap-1 text-xs text-gray-400 truncate" title={deck}>
-                        <span className="truncate">{deck}</span>
-                        <ColorIdentity colorIdentity={colorIdentityByDeckName[deck]} />
-                      </div>
-                      {deckWinTurns.length > 0 && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {deckWinTurns.length === 1
-                            ? `Won on turn ${deckWinTurns[0]}`
-                            : `Turns: ${deckWinTurns.join(', ')}`}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
           </div>
         )}
 

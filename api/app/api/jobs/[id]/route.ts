@@ -2,14 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
-import { isGcpMode } from '@/lib/job-store-factory';
+import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
 import type { JobStatus } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-function jobToApiResponse(
+async function resolveDeckLinks(
+  deckIds: string[],
+  deckNames: string[]
+): Promise<Record<string, string | null>> {
+  const entries = await Promise.all(
+    deckIds.map(async (id, i) => {
+      try {
+        const deck = await getDeckById(id);
+        return [deckNames[i], deck?.link ?? null] as [string, string | null];
+      } catch {
+        return [deckNames[i], null] as [string, string | null];
+      }
+    })
+  );
+  return Object.fromEntries(entries);
+}
+
+async function jobToApiResponse(
   job: Awaited<ReturnType<typeof jobStore.getJob>>,
   isWorker: boolean
 ) {
@@ -47,7 +64,14 @@ function jobToApiResponse(
       ...(job.deckIds && job.deckIds.length === 4 && { deckIds: job.deckIds }),
     };
   }
-  return base;
+
+  // Resolve deck links for frontend consumers
+  let deckLinks: Record<string, string | null> | undefined;
+  if (job.deckIds && job.deckIds.length === 4) {
+    deckLinks = await resolveDeckLinks(job.deckIds, deckNames);
+  }
+
+  return { ...base, ...(deckLinks && { deckLinks }) };
 }
 
 /**
@@ -91,7 +115,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const isWorker = isWorkerRequest(request);
-    const response = jobToApiResponse(job, isWorker);
+    const response = await jobToApiResponse(job, isWorker);
     return NextResponse.json(response);
   } catch (error) {
     console.error('GET /api/jobs/[id] error:', error);
@@ -188,7 +212,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const updated = await jobStore.getJob(id);
     const isWorker = isWorkerRequest(request);
-    const response = jobToApiResponse(updated, isWorker);
+    const response = await jobToApiResponse(updated, isWorker);
     return NextResponse.json(response);
   } catch (error) {
     console.error('PATCH /api/jobs/[id] error:', error);
