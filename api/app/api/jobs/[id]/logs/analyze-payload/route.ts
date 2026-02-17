@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { getAnalyzePayloadData } from '@/lib/log-store';
+import * as jobStore from '@/lib/job-store-factory';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -17,7 +18,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { id } = await params;
-    const payload = await getAnalyzePayloadData(id);
+
+    // Try without hints first; if null, fetch job for deck info and retry
+    let payload = await getAnalyzePayloadData(id);
+    if (!payload) {
+      const job = await jobStore.getJob(id);
+      const deckNames = job?.decks?.map((d) => d.name);
+      const deckLists = job?.decks?.map((d) => d.dck ?? '');
+      if (deckNames && deckNames.length > 0) {
+        payload = await getAnalyzePayloadData(id, deckNames, deckLists);
+      }
+    }
+
     if (!payload) {
       return NextResponse.json({ error: 'Analyze payload not found for this job' }, { status: 404 });
     }

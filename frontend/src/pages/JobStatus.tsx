@@ -143,8 +143,14 @@ export default function JobStatusPage() {
   const apiBase = getApiBase();
   const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Fallback simulation statuses (REST fetch for terminal jobs)
+  const [fallbackSimulations, setFallbackSimulations] = useState<import('../types/simulation').SimulationStatus[]>([]);
+
   // Primary: SSE stream for real-time job updates
-  const { job: streamJob, simulations: streamSimulations, error: streamError, connected: sseConnected } = useJobStream<Job>(id);
+  const { job: streamJob, simulations: rawStreamSimulations, error: streamError, connected: sseConnected } = useJobStream<Job>(id);
+
+  // Merge SSE simulations with REST fallback
+  const streamSimulations = rawStreamSimulations.length > 0 ? rawStreamSimulations : fallbackSimulations;
 
   // Sync SSE data into component state
   useEffect(() => {
@@ -200,6 +206,29 @@ export default function JobStatusPage() {
       controller.abort();
     };
   }, [id, apiBase, sseConnected]);
+
+  // Fetch simulation statuses via REST for terminal jobs (fallback when SSE doesn't deliver them)
+  useEffect(() => {
+    if (!id || !job) return;
+    if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
+    if (streamSimulations.length > 0) return; // SSE already delivered them
+
+    fetchWithAuth(`${apiBase}/api/jobs/${id}/simulations`)
+      .then((res) => {
+        if (!res.ok) return { simulations: [] };
+        return res.json();
+      })
+      .then((data) => {
+        // useJobStream doesn't expose a setter, but we can use the streamSimulations
+        // via the hook. Since we can't set it from outside, we'll store in local state.
+        // Actually streamSimulations is from the hook, we need a separate state.
+        if (Array.isArray(data.simulations) && data.simulations.length > 0) {
+          setFallbackSimulations(data.simulations);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, apiBase, job?.status]);
 
   // Fetch structured logs for Deck Actions when job is completed/failed
   useEffect(() => {
@@ -330,15 +359,60 @@ export default function JobStatusPage() {
     }
   }, [id, apiBase, showLogPanel, rawLogs, condensedLogs]);
 
+  // Compute win tally from simulation statuses (fallback when structured games unavailable)
+  const { simWinTally, simWinTurns, simGamesCompleted } = useMemo(() => {
+    if (streamSimulations.length === 0) {
+      return { simWinTally: null, simWinTurns: null, simGamesCompleted: 0 };
+    }
+
+    const completed = streamSimulations.filter((s) => s.state === 'COMPLETED' && s.winner);
+    if (completed.length === 0) {
+      return { simWinTally: null, simWinTurns: null, simGamesCompleted: streamSimulations.filter((s) => s.state === 'COMPLETED').length };
+    }
+
+    const allNames = job?.deckNames ?? [];
+    const tally: Record<string, number> = {};
+    const turns: Record<string, number[]> = {};
+
+    for (const name of allNames) {
+      tally[name] = 0;
+      turns[name] = [];
+    }
+
+    for (const sim of completed) {
+      let matchedDeck = sim.winner!;
+      const found = allNames.find(
+        (name) => sim.winner === name || sim.winner?.endsWith(`-${name}`)
+      );
+      if (found) matchedDeck = found;
+
+      tally[matchedDeck] = (tally[matchedDeck] || 0) + 1;
+      if (sim.winningTurn !== undefined) {
+        if (!turns[matchedDeck]) turns[matchedDeck] = [];
+        turns[matchedDeck].push(sim.winningTurn);
+      }
+    }
+
+    for (const deck of Object.keys(turns)) {
+      turns[deck].sort((a, b) => a - b);
+    }
+
+    return {
+      simWinTally: tally,
+      simWinTurns: turns,
+      simGamesCompleted: streamSimulations.filter((s) => s.state === 'COMPLETED').length,
+    };
+  }, [streamSimulations, job?.deckNames]);
+
   // Compute win tally and winning turns from structured games (must be before early returns)
   const { winTally, winTurns } = useMemo(() => {
     if (!structuredGames || structuredGames.length === 0) {
       return { winTally: null, winTurns: null };
     }
-    
+
     const tally: Record<string, number> = {};
     const turns: Record<string, number[]> = {};
-    
+
     // Initialize tally and turns for all known decks
     if (deckNames) {
       for (const name of deckNames) {
@@ -346,7 +420,7 @@ export default function JobStatusPage() {
         turns[name] = [];
       }
     }
-    
+
     // Count wins and track winning turns
     for (const game of structuredGames) {
       if (game.winner) {
@@ -362,7 +436,7 @@ export default function JobStatusPage() {
           }
         }
         tally[matchedDeck] = (tally[matchedDeck] || 0) + 1;
-        
+
         // Track the turn this deck won on
         if (game.winningTurn !== undefined) {
           if (!turns[matchedDeck]) {
@@ -372,14 +446,21 @@ export default function JobStatusPage() {
         }
       }
     }
-    
+
     // Sort winning turns for each deck
     for (const deck of Object.keys(turns)) {
       turns[deck].sort((a, b) => a - b);
     }
-    
+
     return { winTally: tally, winTurns: turns };
   }, [structuredGames, deckNames]);
+
+  // Effective win data: prefer structured game data, fall back to simulation statuses
+  const effectiveWinTally = winTally && Object.keys(winTally).length > 0 ? winTally : simWinTally;
+  const effectiveWinTurns = winTally && Object.keys(winTally).length > 0 ? winTurns : simWinTurns;
+  const effectiveGamesPlayed = structuredGames && structuredGames.length > 0
+    ? structuredGames.length
+    : simGamesCompleted;
 
   if (error) {
     return (
@@ -644,7 +725,7 @@ export default function JobStatusPage() {
           </div>
         )}
         {/* Per-simulation grid — shown when simulation tracking data exists */}
-        {(job.status === 'RUNNING' || job.status === 'ANALYZING' || job.status === 'CANCELLED') && streamSimulations.length > 0 && (
+        {(job.status === 'RUNNING' || job.status === 'ANALYZING' || job.status === 'CANCELLED' || job.status === 'FAILED') && streamSimulations.length > 0 && (
           <SimulationGrid
             simulations={streamSimulations}
             totalSimulations={job.simulations}
@@ -667,16 +748,21 @@ export default function JobStatusPage() {
           </div>
         )}
         {/* Win summary - shown for any completed/failed job with game data */}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && winTally && Object.keys(winTally).length > 0 && (
+        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && effectiveWinTally && Object.keys(effectiveWinTally).length > 0 && (
           <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
             <h3 className="text-sm font-semibold text-gray-400 mb-3">
-              Games Won ({structuredGames?.length ?? 0} games played)
+              Games Won ({effectiveGamesPlayed} games played)
+              {job.status === 'FAILED' && effectiveGamesPlayed < job.simulations && (
+                <span className="ml-2 text-amber-400 font-normal">
+                  (partial — {job.simulations - effectiveGamesPlayed} games did not complete)
+                </span>
+              )}
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {Object.entries(winTally)
+              {Object.entries(effectiveWinTally)
                 .sort(([, a], [, b]) => b - a)
                 .map(([deck, wins]) => {
-                  const deckWinTurns = winTurns?.[deck] ?? [];
+                  const deckWinTurns = effectiveWinTurns?.[deck] ?? [];
                   return (
                     <div
                       key={deck}
@@ -701,17 +787,23 @@ export default function JobStatusPage() {
           </div>
         )}
 
-        {/* AI Analysis Section - shown for completed jobs */}
-        {job.status === 'COMPLETED' && (
+        {/* AI Analysis Section - shown for completed jobs and failed jobs with partial data */}
+        {(job.status === 'COMPLETED' || (job.status === 'FAILED' && effectiveGamesPlayed > 0)) && (
           <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
             <h3 className="text-lg font-semibold text-gray-200 mb-3">AI Analysis</h3>
-            
+
             {/* No analysis yet - show analyze button */}
             {!result && (
               <div className="space-y-4">
-                <p className="text-sm text-gray-400">
-                  Simulations complete. Review the data below and click to analyze with Gemini.
-                </p>
+                {job.status === 'FAILED' ? (
+                  <p className="text-sm text-amber-400">
+                    Job failed but {effectiveGamesPlayed} game{effectiveGamesPlayed !== 1 ? 's' : ''} completed. You can analyze the partial results.
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-400">
+                    Simulations complete. Review the data below and click to analyze with Gemini.
+                  </p>
+                )}
                 {/* Analyze Error */}
                 {analyzeError && (
                   <div className="bg-red-900/30 border border-red-600 rounded p-3 text-red-200 text-sm">

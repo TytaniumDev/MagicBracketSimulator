@@ -192,19 +192,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           : undefined;
         send(jobToStreamEvent(initialJob, queueInfo));
       };
-      sendInitial();
 
-      // Send initial simulation statuses (if any exist)
-      jobStore.getSimulationStatuses(id).then((sims) => {
-        if (sims.length > 0 && !closed) {
-          send({ simulations: sims }, 'simulations');
-        }
-      }).catch(() => { /* ignore */ });
+      // Send simulation statuses
+      const sendSimulations = async () => {
+        try {
+          const sims = await jobStore.getSimulationStatuses(id);
+          if (sims.length > 0 && !closed) {
+            send({ simulations: sims }, 'simulations');
+          }
+        } catch { /* ignore */ }
+      };
 
       if (isTerminalStatus(initialJob.status)) {
-        close();
+        // For terminal jobs, await both sends before closing to avoid race condition
+        (async () => {
+          await sendInitial();
+          await sendSimulations();
+          close();
+        })();
         return;
       }
+
+      // For non-terminal jobs, fire-and-forget initial sends
+      sendInitial();
+      sendSimulations();
 
       if (isGcpMode()) {
         // GCP mode: Use Firestore onSnapshot for real-time updates

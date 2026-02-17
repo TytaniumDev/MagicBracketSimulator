@@ -152,6 +152,17 @@ class Semaphore {
 }
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.floor(ms / 1000) % 60;
+  const minutes = Math.floor(ms / 60000);
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
+// ============================================================================
 // Worker ID Management
 // ============================================================================
 
@@ -367,6 +378,51 @@ async function reportSimulationStatus(
 // ============================================================================
 
 /**
+ * Extract winner and winning turn from a single game's log text.
+ * Uses the same pattern as the API condenser (patterns.ts EXTRACT_WINNER).
+ */
+function extractWinnerFromLog(logText: string): { winner?: string; winningTurn?: number } {
+  const winnerMatch = logText.match(/(.+?)\s+(?:wins\s+the\s+game|has\s+won!?)(?:\s|$|!|\.)/i);
+  if (!winnerMatch) return {};
+
+  const winner = winnerMatch[1].trim();
+
+  // Find the last "Turn: Turn N" line before the win to determine winning turn
+  const turnMatches = [...logText.matchAll(/^Turn:?\s*Turn\s+(\d+)/gim)];
+  const winningTurn = turnMatches.length > 0
+    ? parseInt(turnMatches[turnMatches.length - 1][1], 10)
+    : undefined;
+
+  return { winner, winningTurn };
+}
+
+/**
+ * Upload a single simulation's raw log to the API (incremental, non-fatal).
+ */
+async function uploadSingleSimulationLog(
+  jobId: string,
+  simIndex: number,
+  logText: string
+): Promise<void> {
+  const filename = `raw/game_${String(simIndex + 1).padStart(3, '0')}.txt`;
+  const url = `${getApiUrl()}/api/jobs/${jobId}/logs/simulation`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ filename, logText }),
+    });
+    if (!res.ok) {
+      console.warn(`[sim_${String(simIndex).padStart(3, '0')}] Log upload failed: HTTP ${res.status}`);
+    } else {
+      console.log(`[sim_${String(simIndex).padStart(3, '0')}] Log uploaded (${(logText.length / 1024).toFixed(1)}KB)`);
+    }
+  } catch (err) {
+    console.warn(`[sim_${String(simIndex).padStart(3, '0')}] Log upload error:`, err instanceof Error ? err.message : err);
+  }
+}
+
+/**
  * Extract individual game logs from collected service log text.
  * Each simulation service produces one game's worth of log output.
  * We use splitConcatenatedGames to handle any multi-game output.
@@ -478,13 +534,35 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
         );
         results.push(result);
 
+        const simLabel = `[${simId}]`;
+
         // Report final state
         if (result.exitCode === 0) {
+          // Extract winner info from log text
+          const { winner, winningTurn } = extractWinnerFromLog(result.logText);
+          if (winner) {
+            console.log(`${simLabel} COMPLETED in ${(result.durationMs / 1000).toFixed(1)}s, winner=${winner}${winningTurn ? ` turn=${winningTurn}` : ''}, logSize=${(result.logText.length / 1024).toFixed(1)}KB`);
+          } else {
+            console.log(`${simLabel} COMPLETED in ${(result.durationMs / 1000).toFixed(1)}s, no winner found, logSize=${(result.logText.length / 1024).toFixed(1)}KB`);
+          }
+
           await reportSimulationStatus(jobId, simId, {
             state: 'COMPLETED',
             durationMs: result.durationMs,
+            ...(winner && { winner }),
+            ...(winningTurn !== undefined && { winningTurn }),
           });
+
+          // Incrementally upload log (non-fatal)
+          if (result.logText.trim()) {
+            uploadSingleSimulationLog(jobId, index, result.logText).catch(() => {});
+          }
         } else {
+          console.log(`${simLabel} FAILED in ${(result.durationMs / 1000).toFixed(1)}s: ${result.error || `Exit code ${result.exitCode}`}`);
+          if (result.logText) {
+            console.log(`${simLabel} Log preview (first 500 chars): ${result.logText.slice(0, 500)}`);
+          }
+
           await reportSimulationStatus(jobId, simId, {
             state: 'FAILED',
             durationMs: result.durationMs,
@@ -513,8 +591,13 @@ async function processJobWithSwarm(jobId: string, job: JobData): Promise<void> {
   const failed = results.filter((r) => r.exitCode !== 0);
 
   const durations = results.map((r) => r.durationMs);
-  console.log(`Simulations completed: ${succeeded.length} succeeded, ${failed.length} failed`);
-  console.log(`Durations: ${durations.map((d) => `${d}ms`).join(', ')}`);
+  const totalDurationMs = durations.length > 0 ? Math.max(...durations) : 0;
+  const failedSummary = failed.map((r) => `${r.simId}: ${r.error || 'unknown'}`).join(', ');
+  console.log(
+    `Job ${jobId}: ${succeeded.length}/${totalSims} succeeded, ${failed.length} failed` +
+    (failed.length > 0 ? ` [${failedSummary}]` : '') +
+    `, total duration: ${formatDuration(totalDurationMs)}`
+  );
 
   if (succeeded.length === 0) {
     throw new Error(`All ${totalSims} simulations failed`);

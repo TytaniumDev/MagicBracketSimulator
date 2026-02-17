@@ -174,18 +174,22 @@ export async function runSimulationSwarmService(
     '--id', `${jobId}_${simId}`,
   ];
 
+  console.log(`[${simId}] Creating service ${serviceName} (image=${SIMULATION_IMAGE}, memory=${RAM_PER_SIM_MB}m)`);
+
   // Create the service
   try {
     await runProcess('docker', args, { timeout: 30_000 });
   } catch (err) {
     const durationMs = Date.now() - startTime;
     const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[${simId}] Service create failed: ${errorMsg}`);
     return { simId, index, exitCode: 1, durationMs, logText: '', error: `Service create failed: ${errorMsg}` };
   }
 
   // Poll until the service's task reaches a terminal state
   let exitCode = 1;
   let error: string | undefined;
+  let lastState = '';
 
   let cancelled = false;
   const deadline = Date.now() + SERVICE_TIMEOUT_MS;
@@ -214,6 +218,12 @@ export async function runSimulationSwarmService(
     const line = taskOut.trim().split('\n')[0] || '';
     const lowerLine = line.toLowerCase();
 
+    // Log state transitions (not every poll)
+    if (line !== lastState) {
+      console.log(`[${simId}] State: ${line}`);
+      lastState = line;
+    }
+
     if (lowerLine.includes('complete')) {
       exitCode = 0;
       break;
@@ -221,6 +231,7 @@ export async function runSimulationSwarmService(
     if (lowerLine.includes('failed') || lowerLine.includes('rejected') || lowerLine.includes('shutdown')) {
       exitCode = 1;
       error = `Task ended: ${line}`;
+      console.error(`[${simId}] Failed — full task state: ${line}`);
       break;
     }
     // Otherwise still running/pending — keep polling
@@ -228,6 +239,7 @@ export async function runSimulationSwarmService(
 
   if (Date.now() >= deadline && exitCode !== 0) {
     error = `Service timed out after ${SERVICE_TIMEOUT_MS / 1000}s`;
+    console.error(`[${simId}] Timed out after ${SERVICE_TIMEOUT_MS / 1000}s`);
   }
 
   // If cancelled, kill the service and return early
@@ -248,15 +260,22 @@ export async function runSimulationSwarmService(
       'service', 'logs', '--raw', serviceName,
     ]);
     logText = logs;
+    console.log(`[${simId}] Logs collected: ${(logText.length / 1024).toFixed(1)}KB`);
+    if (exitCode === 0 && !logText.trim()) {
+      console.warn(`[${simId}] WARNING: exit code 0 but log text is empty — suspicious`);
+    }
+    if (exitCode !== 0 && logText.trim()) {
+      console.log(`[${simId}] Failed sim log preview (first 500 chars): ${logText.slice(0, 500)}`);
+    }
   } catch {
-    // Logs may be unavailable if the task never started
+    console.warn(`[${simId}] Failed to collect logs (task may never have started)`);
   }
 
   // Remove the service
   try {
     await runProcess('docker', ['service', 'rm', serviceName], { timeout: 15_000 });
   } catch {
-    console.warn(`Warning: failed to remove service ${serviceName}`);
+    console.warn(`[${simId}] Failed to remove service ${serviceName}`);
   }
 
   const durationMs = Date.now() - startTime;

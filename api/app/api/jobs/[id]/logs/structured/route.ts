@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { getStructuredLogs } from '@/lib/log-store';
+import * as jobStore from '@/lib/job-store-factory';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -17,7 +18,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { id } = await params;
-    const result = await getStructuredLogs(id);
+
+    // Try without hints first; if null, fetch job for deck names and retry
+    let result = await getStructuredLogs(id);
+    if (!result) {
+      const job = await jobStore.getJob(id);
+      const deckNames = job?.decks?.map((d) => d.name);
+      if (deckNames && deckNames.length > 0) {
+        result = await getStructuredLogs(id, deckNames);
+      }
+    }
+
     if (!result) {
       return NextResponse.json({ error: 'Logs not found for this job' }, { status: 404 });
     }

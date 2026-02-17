@@ -168,6 +168,30 @@ export async function ingestLogs(
   return { gameCount: expandedLogs.length };
 }
 
+// ─── Single simulation log upload (incremental) ──────────────────────────────
+
+/**
+ * Upload a single simulation's raw log. Called incrementally by the worker
+ * after each simulation completes, so logs are preserved even if the job fails.
+ */
+export async function uploadSingleSimulationLog(
+  jobId: string,
+  filename: string,
+  logText: string
+): Promise<void> {
+  if (isGcpMode()) {
+    await gcs.uploadJobArtifact(jobId, filename, logText);
+  } else {
+    const jobDir = getJobDir(jobId);
+    if (!fs.existsSync(jobDir)) {
+      fs.mkdirSync(jobDir, { recursive: true });
+    }
+    // filename is like "raw/game_001.txt" — strip the "raw/" prefix for local storage
+    const localFilename = filename.replace(/^raw\//, '');
+    fs.writeFileSync(path.join(jobDir, localFilename), logText, 'utf-8');
+  }
+}
+
 // ─── Read helpers (GET) ──────────────────────────────────────────────────────
 
 function readLocalMeta(jobId: string): StoredMeta | null {
@@ -200,7 +224,12 @@ export async function getRawLogs(jobId: string): Promise<string[] | null> {
 
 export async function getCondensedLogs(jobId: string): Promise<CondensedGame[] | null> {
   if (isGcpMode()) {
-    return gcs.getJobArtifactJson<CondensedGame[]>(jobId, 'condensed.json');
+    const precomputed = await gcs.getJobArtifactJson<CondensedGame[]>(jobId, 'condensed.json');
+    if (precomputed) return precomputed;
+    // Fallback: compute from raw logs (e.g. FAILED jobs where bulk upload never happened)
+    const raw = await gcs.getRawLogs(jobId);
+    if (raw.length === 0) return null;
+    return condenseGames(raw);
   }
   const meta = readLocalMeta(jobId);
   if (meta?.condensed) return meta.condensed;
@@ -211,27 +240,48 @@ export async function getCondensedLogs(jobId: string): Promise<CondensedGame[] |
 }
 
 export async function getStructuredLogs(
-  jobId: string
+  jobId: string,
+  deckNamesHint?: string[]
 ): Promise<{ games: StructuredGame[]; deckNames?: string[] } | null> {
   if (isGcpMode()) {
-    return gcs.getJobArtifactJson<{ games: StructuredGame[]; deckNames?: string[] }>(
+    const precomputed = await gcs.getJobArtifactJson<{ games: StructuredGame[]; deckNames?: string[] }>(
       jobId,
       'structured.json'
     );
+    if (precomputed) return precomputed;
+    // Fallback: compute from raw logs (e.g. FAILED jobs where bulk upload never happened)
+    const raw = await gcs.getRawLogs(jobId);
+    if (raw.length === 0) return null;
+    const games = structureGames(raw, deckNamesHint);
+    return { games, deckNames: deckNamesHint };
   }
   const meta = readLocalMeta(jobId);
   if (meta?.structured) return { games: meta.structured, deckNames: meta.deckNames };
   // Fallback: compute from raw logs
   const raw = readLocalRawLogs(jobId);
   if (!raw) return null;
-  const games = structureGames(raw, meta?.deckNames);
-  return { games, deckNames: meta?.deckNames };
+  const names = deckNamesHint ?? meta?.deckNames;
+  const games = structureGames(raw, names);
+  return { games, deckNames: names };
 }
 
-export async function getAnalyzePayloadData(jobId: string): Promise<AnalyzePayload | null> {
+export async function getAnalyzePayloadData(
+  jobId: string,
+  deckNamesHint?: string[],
+  deckListsHint?: string[]
+): Promise<AnalyzePayload | null> {
   if (isGcpMode()) {
-    return gcs.getJobArtifactJson<AnalyzePayload>(jobId, 'analyze-payload.json');
+    const precomputed = await gcs.getJobArtifactJson<AnalyzePayload>(jobId, 'analyze-payload.json');
+    if (precomputed) return precomputed;
+    // Fallback: compute from raw logs via condensed data
+    const condensed = await getCondensedLogs(jobId);
+    if (!condensed || condensed.length === 0) return null;
+    return buildAnalyzePayload(condensed, deckNamesHint, deckListsHint);
   }
   const meta = readLocalMeta(jobId);
-  return meta?.analyzePayload ?? null;
+  if (meta?.analyzePayload) return meta.analyzePayload;
+  // Fallback: compute from condensed data
+  const condensed = await getCondensedLogs(jobId);
+  if (!condensed || condensed.length === 0) return null;
+  return buildAnalyzePayload(condensed, deckNamesHint ?? meta?.deckNames, deckListsHint ?? meta?.deckLists);
 }
