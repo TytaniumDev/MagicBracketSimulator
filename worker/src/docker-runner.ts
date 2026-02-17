@@ -30,6 +30,8 @@ const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/ma
 const RAM_PER_SIM_MB = 900;  // Increased from 600 to fix OOM kills
 const SYSTEM_RESERVE_MB = 2048;
 const CONTAINER_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes
+const MAX_CONCURRENT_SIMS = parseInt(process.env.MAX_CONCURRENT_SIMS || '6', 10);
+const CPUS_PER_SIM = 2;  // Forge + Java JIT + xvfb needs ~2 CPUs per sim
 
 // ============================================================================
 // Container execution
@@ -60,7 +62,7 @@ export async function runSimulationContainer(
     'run', '--rm',
     '--name', containerName,
     '--memory', `${RAM_PER_SIM_MB}m`,
-    '--cpus', '1',
+    '--cpus', String(CPUS_PER_SIM),
     ...deckEnvVars,
     '-e', 'FORGE_PATH=/app/forge',
     '-e', 'LOGS_DIR=/app/logs',
@@ -138,13 +140,13 @@ export function calculateLocalCapacity(): number {
 
   const availableMem = Math.max(0, totalMemMB - SYSTEM_RESERVE_MB);
   const memSlots = Math.floor(availableMem / RAM_PER_SIM_MB);
-  const cpuSlots = Math.max(1, cpuCount - 2);
+  const cpuSlots = Math.max(1, Math.floor((cpuCount - 2) / CPUS_PER_SIM));
 
-  const capacity = Math.max(1, Math.min(memSlots, cpuSlots));
+  const capacity = Math.max(1, Math.min(memSlots, cpuSlots, MAX_CONCURRENT_SIMS));
 
   console.log(
     `Local capacity: ${totalMemMB}MB RAM, ${cpuCount} CPUs → ` +
-    `memSlots=${memSlots}, cpuSlots=${cpuSlots}, using=${capacity}`,
+    `memSlots=${memSlots}, cpuSlots=${cpuSlots}, cap=${MAX_CONCURRENT_SIMS}, using=${capacity}`,
   );
 
   return capacity;

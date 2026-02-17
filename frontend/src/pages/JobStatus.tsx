@@ -725,7 +725,7 @@ export default function JobStatusPage() {
           </div>
         )}
         {/* Per-simulation grid — shown when simulation tracking data exists */}
-        {(job.status === 'RUNNING' || job.status === 'ANALYZING' || job.status === 'CANCELLED' || job.status === 'FAILED') && streamSimulations.length > 0 && (
+        {(job.status === 'RUNNING' || job.status === 'ANALYZING' || job.status === 'COMPLETED' || job.status === 'CANCELLED' || job.status === 'FAILED') && streamSimulations.length > 0 && (
           <SimulationGrid
             simulations={streamSimulations}
             totalSimulations={job.simulations}
@@ -748,10 +748,15 @@ export default function JobStatusPage() {
           </div>
         )}
         {/* Win summary - shown for any completed/failed job with game data */}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && effectiveWinTally && Object.keys(effectiveWinTally).length > 0 && (
+        {(job.status === 'RUNNING' || job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && effectiveWinTally && Object.keys(effectiveWinTally).length > 0 && (
           <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
             <h3 className="text-sm font-semibold text-gray-400 mb-3">
-              Games Won ({effectiveGamesPlayed} games played)
+              Games Won ({effectiveGamesPlayed} of {job.simulations})
+              {job.status === 'RUNNING' && (
+                <span className="ml-2 text-blue-400 font-normal">
+                  (live)
+                </span>
+              )}
               {job.status === 'FAILED' && effectiveGamesPlayed < job.simulations && (
                 <span className="ml-2 text-amber-400 font-normal">
                   (partial — {job.simulations - effectiveGamesPlayed} games did not complete)
