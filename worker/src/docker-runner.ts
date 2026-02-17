@@ -46,6 +46,7 @@ export async function runSimulationContainer(
   simId: string,
   index: number,
   deckContents: [string, string, string, string],
+  signal?: AbortSignal,
 ): Promise<SimulationResult> {
   const startTime = Date.now();
   const containerName = `sim-${jobId.slice(0, 8)}-${simId}`;
@@ -96,8 +97,26 @@ export async function runSimulationContainer(
       spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
     }, CONTAINER_TIMEOUT_MS);
 
+    // AbortSignal: kill the container if the job is cancelled
+    let cancelled = false;
+    const onAbort = () => {
+      cancelled = true;
+      console.log(`[${simId}] Cancellation signal received, killing container ${containerName}...`);
+      proc.kill('SIGTERM');
+      spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
+    };
+    if (signal) {
+      if (signal.aborted) {
+        // Already aborted before we started
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
     proc.on('error', (err) => {
       clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
       const durationMs = Date.now() - startTime;
       resolve({
         simId, index, exitCode: 1, durationMs,
@@ -107,6 +126,7 @@ export async function runSimulationContainer(
 
     proc.on('close', (code) => {
       clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
       const durationMs = Date.now() - startTime;
       const logText = Buffer.concat(stdoutChunks).toString('utf-8');
       const stderr = Buffer.concat(stderrChunks).toString('utf-8');
@@ -114,7 +134,10 @@ export async function runSimulationContainer(
       let exitCode = code ?? 1;
       let error: string | undefined;
 
-      if (timedOut) {
+      if (cancelled) {
+        exitCode = 137;
+        error = 'Cancelled';
+      } else if (timedOut) {
         exitCode = 124;
         error = `Container timed out after ${CONTAINER_TIMEOUT_MS / 1000}s`;
       } else if (exitCode !== 0) {

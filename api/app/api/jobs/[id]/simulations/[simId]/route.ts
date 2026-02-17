@@ -7,7 +7,7 @@ interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
 }
 
-const VALID_STATES: SimulationState[] = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'];
+const VALID_STATES: SimulationState[] = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'];
 
 /**
  * PATCH /api/jobs/[id]/simulations/[simId] — Update a single simulation's status.
@@ -49,7 +49,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Add timestamps based on state transition
     if (state === 'RUNNING') {
       update.startedAt = new Date().toISOString();
-    } else if (state === 'COMPLETED' || state === 'FAILED') {
+    } else if (state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED') {
       update.completedAt = new Date().toISOString();
     }
 

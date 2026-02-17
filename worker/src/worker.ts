@@ -334,11 +334,32 @@ async function processSimulation(
     workerName: currentWorkerName,
   });
 
-  try {
-    // Run the simulation container
-    const result = await runSimulationContainer(jobId, simId, simIndex, deckContents);
+  // Set up cancellation polling: check job status every 5s
+  const abortController = new AbortController();
+  const cancellationPollInterval = setInterval(async () => {
+    try {
+      const pollJob = await fetchJob(jobId);
+      if (pollJob?.status === 'CANCELLED') {
+        console.log(`${simLabel} Job ${jobId} cancelled, aborting container...`);
+        abortController.abort();
+        clearInterval(cancellationPollInterval);
+      }
+    } catch {
+      // Non-fatal: polling failure shouldn't affect the simulation
+    }
+  }, 5000);
 
-    if (result.exitCode === 0) {
+  try {
+    // Run the simulation container with cancellation signal
+    const result = await runSimulationContainer(jobId, simId, simIndex, deckContents, abortController.signal);
+
+    if (result.error === 'Cancelled') {
+      console.log(`${simLabel} CANCELLED in ${formatDuration(result.durationMs)}`);
+      await reportSimulationStatus(jobId, simId, {
+        state: 'CANCELLED',
+        durationMs: result.durationMs,
+      });
+    } else if (result.exitCode === 0) {
       const { winner, winningTurn } = extractWinnerFromLog(result.logText);
       if (winner) {
         console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, winner=${winner}${winningTurn ? ` turn=${winningTurn}` : ''}, logSize=${(result.logText.length / 1024).toFixed(1)}KB`);
@@ -370,6 +391,7 @@ async function processSimulation(
       });
     }
   } finally {
+    clearInterval(cancellationPollInterval);
     activeSimCount = Math.max(0, activeSimCount - 1);
   }
 }

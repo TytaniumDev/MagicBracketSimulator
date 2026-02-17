@@ -261,15 +261,19 @@ export async function cancelJob(id: string): Promise<boolean> {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  // Update PENDING simulations to CANCELLED in batches
+  // Update PENDING and RUNNING simulations to CANCELLED in batches
   const simCol = simulationsCollection(id);
-  const pendingSims = await simCol.where('state', '==', 'PENDING').get();
+  const [pendingSims, runningSims] = await Promise.all([
+    simCol.where('state', '==', 'PENDING').get(),
+    simCol.where('state', '==', 'RUNNING').get(),
+  ]);
 
-  if (!pendingSims.empty) {
+  const simsToCancel = [...pendingSims.docs, ...runningSims.docs];
+  if (simsToCancel.length > 0) {
     const batchSize = 500;
-    for (let i = 0; i < pendingSims.docs.length; i += batchSize) {
+    for (let i = 0; i < simsToCancel.length; i += batchSize) {
       const batch = firestore.batch();
-      const slice = pendingSims.docs.slice(i, i + batchSize);
+      const slice = simsToCancel.slice(i, i + batchSize);
       for (const doc of slice) {
         batch.update(doc.ref, {
           state: 'CANCELLED',

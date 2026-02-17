@@ -199,7 +199,7 @@ export function cancelJob(id: string): boolean {
 
     const now = new Date().toISOString();
     db.prepare("UPDATE jobs SET status = 'CANCELLED', completed_at = ? WHERE id = ?").run(now, id);
-    db.prepare("UPDATE simulations SET state = 'CANCELLED' WHERE job_id = ? AND state = 'PENDING'").run(id);
+    db.prepare("UPDATE simulations SET state = 'CANCELLED' WHERE job_id = ? AND state IN ('PENDING', 'RUNNING')").run(id);
     return true;
   });
   return cancelTx();
