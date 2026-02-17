@@ -93,6 +93,14 @@ export async function updateJobProgress(id: string, gamesCompleted: number): Pro
   sqliteStore.updateJobProgress(id, gamesCompleted);
 }
 
+export async function incrementGamesCompleted(id: string): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.incrementGamesCompleted(id);
+    return;
+  }
+  sqliteStore.incrementGamesCompleted(id);
+}
+
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.setJobCompleted(id, dockerRunDurationsMs);
@@ -227,11 +235,12 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
     await deleteSimulations(jobId);
     await resetJobForRetry(jobId);
 
-    // Re-publish to Pub/Sub in GCP mode so a worker picks it up
+    // Re-initialize simulations and re-publish per-sim Pub/Sub messages
     if (USE_FIRESTORE) {
       try {
-        const { publishJobCreated } = await import('./pubsub');
-        await publishJobCreated(jobId);
+        await initializeSimulations(jobId, job.simulations);
+        const { publishSimulationTasks } = await import('./pubsub');
+        await publishSimulationTasks(jobId, job.simulations);
       } catch (err) {
         console.warn(`[Recovery] Failed to publish retry for job ${jobId}:`, err);
       }
@@ -285,8 +294,33 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
   requeueCooldowns.set(jobId, Date.now());
 
   try {
-    const { publishJobCreated } = await import('./pubsub');
-    await publishJobCreated(jobId);
+    // Re-publish per-simulation messages for any PENDING simulations
+    const sims = await getSimulationStatuses(jobId);
+    if (sims.length === 0) {
+      // Sims not yet initialized — initialize and publish all
+      await initializeSimulations(jobId, job.simulations);
+      const { publishSimulationTasks } = await import('./pubsub');
+      await publishSimulationTasks(jobId, job.simulations);
+    } else {
+      // Re-publish only for PENDING sims
+      const pendingSims = sims.filter(s => s.state === 'PENDING');
+      if (pendingSims.length > 0) {
+        const { publishSimulationTasks: publish } = await import('./pubsub');
+        const topic = (await import('./pubsub')).pubsub.topic((await import('./pubsub')).TOPIC_NAME);
+        const promises = pendingSims.map(s => {
+          const msg = {
+            type: 'simulation' as const,
+            jobId,
+            simId: s.simId,
+            simIndex: s.index,
+            totalSims: job.simulations,
+          };
+          return topic.publishMessage({ json: msg });
+        });
+        await Promise.all(promises);
+        console.log(`[Recovery] Re-published ${pendingSims.length} pending simulation messages for job ${jobId}`);
+      }
+    }
     return true;
   } catch (err) {
     console.warn(`[Recovery] Failed to re-publish queued job ${jobId}:`, err);
@@ -320,5 +354,36 @@ export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | nu
   }
 
   return 'RUNNING';
+}
+
+/**
+ * Aggregate results when all simulations have reached a terminal state.
+ * Reads incrementally uploaded raw logs, runs ingestion (condense + structure),
+ * and sets the job to COMPLETED or FAILED.
+ */
+export async function aggregateJobResults(jobId: string): Promise<void> {
+  const sims = await getSimulationStatuses(jobId);
+  const status = deriveJobStatus(sims);
+  if (!status || status === 'RUNNING' || status === 'QUEUED') return;
+
+  const job = await getJob(jobId);
+  if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') return; // Already aggregated
+
+  // Read raw logs uploaded incrementally by workers
+  const { getRawLogs, ingestLogs } = await import('./log-store');
+  const rawLogs = await getRawLogs(jobId);
+
+  if (rawLogs && rawLogs.length > 0) {
+    const deckNames = job.decks.map(d => d.name);
+    const deckLists = job.decks.map(d => d.dck ?? '');
+    await ingestLogs(jobId, rawLogs, deckNames, deckLists);
+  }
+
+  if (status === 'COMPLETED') {
+    await setJobCompleted(jobId);
+  } else {
+    const failedCount = sims.filter(s => s.state === 'FAILED').length;
+    await setJobFailed(jobId, `${failedCount}/${sims.length} simulations failed`);
+  }
 }
 

@@ -73,10 +73,19 @@ export interface DeckSlot {
   dck: string;
 }
 
-// Pub/Sub message for job creation
+// Pub/Sub message for job creation (legacy, kept for backward compat)
 export interface JobCreatedMessage {
   jobId: string;
   createdAt: string;
+}
+
+// Pub/Sub message for individual simulation tasks
+export interface SimulationTaskMessage {
+  type: 'simulation';
+  jobId: string;
+  simId: string;       // e.g. "sim_007"
+  simIndex: number;    // 0-based
+  totalSims: number;
 }
 
 // Result of running a process

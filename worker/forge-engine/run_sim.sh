@@ -122,7 +122,7 @@ xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
     -d "${DECKS[0]}" "${DECKS[1]}" "${DECKS[2]}" "${DECKS[3]}" \
     -f Commander \
     -n "$SIMULATIONS" \
-    -c 300 \
+    -c ${FORGE_TIMEOUT:-1200} \
     >> "$FORGE_OUTPUT" 2>&1
 FORGE_EXIT=$?
 set -e

@@ -54,6 +54,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     await jobStore.updateSimulationStatus(id, simId, update);
+
+    // Auto-detect job lifecycle transitions
+    if (state === 'RUNNING') {
+      const job = await jobStore.getJob(id);
+      if (job?.status === 'QUEUED') {
+        await jobStore.setJobStartedAt(id, workerId, workerName);
+        await jobStore.updateJobStatus(id, 'RUNNING');
+      }
+    }
+
+    if (state === 'COMPLETED' || state === 'FAILED') {
+      await jobStore.incrementGamesCompleted(id);
+
+      // Check if all sims are terminal → trigger aggregation
+      const allSims = await jobStore.getSimulationStatuses(id);
+      const allTerminal = allSims.every(s =>
+        s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'CANCELLED'
+      );
+      if (allTerminal) {
+        // Run aggregation in background — don't block the response
+        jobStore.aggregateJobResults(id).catch(err => {
+          console.error(`[Aggregation] Failed for job ${id}:`, err);
+        });
+      }
+    }
+
     return NextResponse.json({ updated: true });
   } catch (error) {
     console.error('PATCH /api/jobs/[id]/simulations/[simId] error:', error);

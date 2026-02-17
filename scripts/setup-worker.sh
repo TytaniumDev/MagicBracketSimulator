@@ -18,11 +18,11 @@ SECRET_NAME="worker-host-config"
 
 # Simulation image is derived from the worker image name (public, not in secret):
 # e.g. ghcr.io/org/repo/worker -> ghcr.io/org/repo/simulation, or magic-bracket-worker -> magic-bracket-simulation
-# ── Unix-only ────────────────────────────────────────────────────────
+# ── Platform check ────────────────────────────────────────────────────
 case "$(uname -s)" in
-  Linux|Darwin) ;;
+  Linux|Darwin|MINGW*|MSYS*) ;;
   *)
-    echo "This script must be run on a Unix system (macOS, Linux, or WSL)."
+    echo "This script must be run on a Unix system (macOS, Linux, WSL, or Git Bash on Windows)."
     exit 1
     ;;
 esac
@@ -63,6 +63,13 @@ ensure_jq() {
         exit 1
       fi
       ;;
+    MINGW*|MSYS*)
+      echo "ERROR: jq is required. Install it via one of:"
+      echo "  winget install jqlang.jq"
+      echo "  choco install jq"
+      echo "Then re-run this script."
+      exit 1
+      ;;
   esac
 }
 
@@ -92,6 +99,13 @@ ensure_gcloud() {
         echo "ERROR: gcloud is required. Install from https://cloud.google.com/sdk/docs/install then re-run."
         exit 1
       fi
+      ;;
+    MINGW*|MSYS*)
+      echo "ERROR: gcloud is required. Install it via one of:"
+      echo "  winget install Google.CloudSDK"
+      echo "  Or download from https://cloud.google.com/sdk/docs/install"
+      echo "Then re-run this script."
+      exit 1
       ;;
   esac
   if ! command -v gcloud &>/dev/null; then
@@ -224,6 +238,9 @@ GHCR_USER=$GHCR_USER
 GHCR_TOKEN=$GHCR_TOKEN
 EOF
 
+WORKER_NAME=$(hostname)
+echo "WORKER_NAME=$WORKER_NAME" >> "$WORKER_DIR/.env"
+
 if [ -n "$WORKER_ID" ]; then
   echo "WORKER_ID=$WORKER_ID" >> "$WORKER_DIR/.env"
 fi
@@ -266,27 +283,6 @@ docker rm -f magic-bracket-worker watchtower 2>/dev/null || true
 echo ""
 echo "Logging into GHCR..."
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-
-# ── Initialize single-node Docker Swarm (if not already in one) ──────
-SWARM_STATE=$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || echo "inactive")
-if [ "$SWARM_STATE" != "active" ]; then
-  echo ""
-  echo "Initializing single-node Docker Swarm..."
-  # Use the default route IP as the advertise address; Tailscale IP if available
-  ADVERTISE_ADDR=""
-  if command -v tailscale &>/dev/null; then
-    ADVERTISE_ADDR=$(tailscale ip -4 2>/dev/null || true)
-  fi
-  if [ -n "$ADVERTISE_ADDR" ]; then
-    docker swarm init --advertise-addr "$ADVERTISE_ADDR"
-  else
-    docker swarm init
-  fi
-  echo "Docker Swarm initialized (single-node)."
-else
-  echo ""
-  echo "Docker Swarm: already active."
-fi
 
 # ── Pull and start ────────────────────────────────────────────────────
 echo ""

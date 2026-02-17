@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { optionalAuth, verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
-import { publishJobCreated } from '@/lib/pubsub';
+import { publishSimulationTasks } from '@/lib/pubsub';
 import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, type CreateJobRequest } from '@/lib/types';
 import { isGcpMode } from '@/lib/job-store-factory';
 
@@ -107,13 +107,16 @@ export async function POST(request: NextRequest) {
       deckIds,
     });
 
+    // Initialize per-simulation tracking and publish messages
+    await jobStore.initializeSimulations(job.id, simulations);
+
     if (isGcpMode()) {
       try {
-        await publishJobCreated(job.id);
+        await publishSimulationTasks(job.id, simulations);
       } catch (pubsubError) {
         // Log but don't fail — the job is already persisted in Firestore.
-        // The worker can still discover it via polling or a future Pub/Sub retry.
-        console.error(`Failed to publish Pub/Sub notification for job ${job.id}:`, pubsubError);
+        // Stale job recovery will re-publish messages if needed.
+        console.error(`Failed to publish simulation tasks for job ${job.id}:`, pubsubError);
       }
     }
 

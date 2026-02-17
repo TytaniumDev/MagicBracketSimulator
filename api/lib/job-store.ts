@@ -121,6 +121,15 @@ export function updateJobProgress(id: string, gamesCompleted: number): boolean {
   return result.changes > 0;
 }
 
+/**
+ * Atomically increment gamesCompleted counter by 1.
+ */
+export function incrementGamesCompleted(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare('UPDATE jobs SET games_completed = COALESCE(games_completed, 0) + 1 WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
 export function setJobResult(id: string, result: AnalysisResult): boolean {
   const db = getDb();
   const resultJson = JSON.stringify(result);
