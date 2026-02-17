@@ -57,6 +57,9 @@ let localCapacity = 0;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 const workerStartTime = Date.now();
 
+// Shared simulation concurrency semaphore, initialized in main()
+let simSemaphore: Semaphore | null = null;
+
 // ============================================================================
 // Worker Naming
 // ============================================================================
@@ -472,6 +475,49 @@ async function verifyDockerAvailable(): Promise<void> {
 }
 
 // ============================================================================
+// Concurrency Control
+// ============================================================================
+
+/**
+ * Semaphore for bounding simulation concurrency.
+ * Used by both Pub/Sub and polling modes.
+ */
+class Semaphore {
+  private count: number;
+  private waiting: (() => void)[] = [];
+
+  constructor(max: number) {
+    this.count = max;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.count > 0) {
+      this.count--;
+      return;
+    }
+    return new Promise<void>((resolve) => this.waiting.push(resolve));
+  }
+
+  /** Non-blocking acquire. Returns true if a slot was available, false otherwise. */
+  tryAcquire(): boolean {
+    if (this.count > 0) {
+      this.count--;
+      return true;
+    }
+    return false;
+  }
+
+  release(): void {
+    if (this.waiting.length > 0) {
+      const next = this.waiting.shift()!;
+      next();
+    } else {
+      this.count++;
+    }
+  }
+}
+
+// ============================================================================
 // Pub/Sub Message Handler
 // ============================================================================
 
@@ -494,6 +540,14 @@ async function handleMessage(message: any): Promise<void> {
   // Handle per-simulation messages
   if ('type' in messageData && messageData.type === 'simulation') {
     const { jobId, simId, simIndex } = messageData;
+
+    // Enforce concurrency cap: if all slots are busy, nack immediately
+    if (!simSemaphore || !simSemaphore.tryAcquire()) {
+      console.log(`At capacity, nacking simulation task: job=${jobId} sim=${simId}`);
+      message.nack();
+      return;
+    }
+
     console.log(`Received simulation task: job=${jobId} sim=${simId}`);
 
     try {
@@ -506,6 +560,8 @@ async function handleMessage(message: any): Promise<void> {
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       message.nack(); // Nack to trigger retry with backoff
+    } finally {
+      simSemaphore.release();
     }
     return;
   }
@@ -525,41 +581,10 @@ async function handleMessage(message: any): Promise<void> {
 // Polling Mode (local, no Pub/Sub)
 // ============================================================================
 
-/**
- * Semaphore for local polling mode concurrency control.
- */
-class Semaphore {
-  private count: number;
-  private waiting: (() => void)[] = [];
-
-  constructor(max: number) {
-    this.count = max;
-  }
-
-  async acquire(): Promise<void> {
-    if (this.count > 0) {
-      this.count--;
-      return;
-    }
-    return new Promise<void>((resolve) => this.waiting.push(resolve));
-  }
-
-  release(): void {
-    if (this.waiting.length > 0) {
-      const next = this.waiting.shift()!;
-      next();
-    } else {
-      this.count++;
-    }
-  }
-}
-
 async function pollForJobs(): Promise<void> {
   const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
-  const capacity = calculateLocalCapacity();
-  const semaphore = new Semaphore(capacity);
 
-  console.log(`Polling for jobs at ${getApiUrl()}/api/jobs/next every ${POLL_INTERVAL_MS}ms (capacity=${capacity})...`);
+  console.log(`Polling for jobs at ${getApiUrl()}/api/jobs/next every ${POLL_INTERVAL_MS}ms (capacity=${localCapacity})...`);
 
   while (!isShuttingDown) {
     try {
@@ -577,11 +602,11 @@ async function pollForJobs(): Promise<void> {
           index: i,
         }));
 
-        console.log(`Claimed job ${job.id}: running ${totalSims} simulations with capacity=${capacity}`);
+        console.log(`Claimed job ${job.id}: running ${totalSims} simulations with capacity=${localCapacity}`);
 
         await Promise.all(
           simIds.map(async ({ simId, index }) => {
-            await semaphore.acquire();
+            await simSemaphore!.acquire();
             try {
               await processSimulation(job.id, simId, index);
             } catch (error) {
@@ -591,7 +616,7 @@ async function pollForJobs(): Promise<void> {
                 errorMessage: error instanceof Error ? error.message : 'Unknown error',
               });
             } finally {
-              semaphore.release();
+              simSemaphore!.release();
             }
           })
         );
@@ -683,6 +708,7 @@ async function main(): Promise<void> {
 
   // Calculate capacity for heartbeat and flow control
   localCapacity = calculateLocalCapacity();
+  simSemaphore = new Semaphore(localCapacity);
 
   // Start heartbeat interval (every 15 seconds)
   sendHeartbeat(); // Initial heartbeat
@@ -695,9 +721,10 @@ async function main(): Promise<void> {
     const { PubSub } = await import('@google-cloud/pubsub');
     const pubsub = new PubSub({ projectId: PROJECT_ID });
 
-    // Pub/Sub flow control: at most localCapacity unacked messages at a time
+    // Pub/Sub flow control: limit message delivery rate (defense-in-depth,
+    // the semaphore in handleMessage is the authoritative concurrency gate)
     subscription = pubsub.subscription(SUBSCRIPTION_NAME, {
-      flowControl: { maxMessages: localCapacity },
+      flowControl: { maxMessages: localCapacity, allowExcessMessages: false },
     });
 
     console.log('Project:', PROJECT_ID);
