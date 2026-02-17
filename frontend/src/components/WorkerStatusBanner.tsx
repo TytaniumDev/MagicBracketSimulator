@@ -24,7 +24,17 @@ export function WorkerStatusBanner({ workers, queueDepth, isLoading }: WorkerSta
 
   const online = workers.length;
   const idle = workers.filter((w) => w.status === 'idle').length;
-  const hasWorkers = online > 0;
+  const updating = workers.filter((w) => w.status === 'updating').length;
+  const active = online - updating; // Workers not in 'updating' state
+  const hasActiveWorkers = active > 0;
+  const hasOnlyUpdating = online > 0 && active === 0;
+
+  // Dot color: green if any active workers, amber if all updating, red if none
+  const dotColor = hasActiveWorkers
+    ? 'bg-green-500'
+    : hasOnlyUpdating
+      ? 'bg-amber-500'
+      : 'bg-red-500';
 
   return (
     <div className="bg-gray-800 rounded-lg px-4 py-3 mb-6 border border-gray-700">
@@ -35,14 +45,14 @@ export function WorkerStatusBanner({ workers, queueDepth, isLoading }: WorkerSta
       >
         <div className="flex items-center gap-2">
           <span
-            className={`inline-block w-2.5 h-2.5 rounded-full ${
-              hasWorkers ? 'bg-green-500' : 'bg-red-500'
-            }`}
+            className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`}
           />
           <span className="text-gray-300">
-            {hasWorkers
-              ? `${online} worker${online !== 1 ? 's' : ''} online${idle > 0 ? ` (${idle} idle)` : ''}`
-              : 'No workers online'}
+            {hasActiveWorkers
+              ? `${online} worker${online !== 1 ? 's' : ''} online${idle > 0 ? ` (${idle} idle)` : ''}${updating > 0 ? ` (${updating} updating)` : ''}`
+              : hasOnlyUpdating
+                ? `${updating} worker${updating !== 1 ? 's' : ''} updating`
+                : 'No workers online'}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -65,20 +75,26 @@ export function WorkerStatusBanner({ workers, queueDepth, isLoading }: WorkerSta
               <div className="flex items-center gap-2">
                 <span
                   className={`inline-block w-2 h-2 rounded-full ${
-                    w.status === 'idle' ? 'bg-green-500' : 'bg-blue-500'
+                    w.status === 'updating'
+                      ? 'bg-amber-500'
+                      : w.status === 'idle'
+                        ? 'bg-green-500'
+                        : 'bg-blue-500'
                   }`}
                 />
                 <span className="text-gray-300 font-medium">{w.workerName}</span>
                 <span className="text-gray-500">({w.status})</span>
               </div>
-              <div className="flex items-center gap-3">
-                {w.status === 'busy' && (
-                  <span>
-                    {w.activeSimulations}/{w.capacity} sims
-                  </span>
-                )}
-                <span>up {formatUptime(w.uptimeMs)}</span>
-              </div>
+              {w.status !== 'updating' && (
+                <div className="flex items-center gap-3">
+                  {w.status === 'busy' && (
+                    <span>
+                      {w.activeSimulations}/{w.capacity} sims
+                    </span>
+                  )}
+                  <span>up {formatUptime(w.uptimeMs)}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>

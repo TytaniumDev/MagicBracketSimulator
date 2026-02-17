@@ -214,7 +214,7 @@ export interface Job {
 export interface WorkerInfo {
   workerId: string;
   workerName: string;
-  status: 'idle' | 'busy';
+  status: 'idle' | 'busy' | 'updating';
   currentJobId?: string;
   capacity: number;
   activeSimulations: number;

@@ -33,10 +33,14 @@ export function upsertHeartbeat(info: WorkerInfo): void {
 
 /**
  * Get workers whose last heartbeat is within the stale threshold.
+ * Workers with status 'updating' get a longer threshold (5 min) to remain
+ * visible during Watchtower image pulls and container restarts.
  */
 export function getActiveWorkers(staleThresholdMs = 60_000): WorkerInfo[] {
   const db = getDb();
-  const cutoff = new Date(Date.now() - staleThresholdMs).toISOString();
+  const UPDATING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes for updating workers
+  const maxThreshold = Math.max(staleThresholdMs, UPDATING_THRESHOLD_MS);
+  const cutoff = new Date(Date.now() - maxThreshold).toISOString();
   const rows = db.prepare(
     'SELECT * FROM worker_heartbeats WHERE last_heartbeat > ? ORDER BY worker_name ASC'
   ).all(cutoff) as Array<{
@@ -51,17 +55,23 @@ export function getActiveWorkers(staleThresholdMs = 60_000): WorkerInfo[] {
     version: string | null;
   }>;
 
-  return rows.map((r) => ({
-    workerId: r.worker_id,
-    workerName: r.worker_name,
-    status: r.status as 'idle' | 'busy',
-    ...(r.current_job_id && { currentJobId: r.current_job_id }),
-    capacity: r.capacity,
-    activeSimulations: r.active_simulations,
-    uptimeMs: r.uptime_ms,
-    lastHeartbeat: r.last_heartbeat,
-    ...(r.version && { version: r.version }),
-  }));
+  const now = Date.now();
+  return rows
+    .filter((r) => {
+      const age = now - new Date(r.last_heartbeat).getTime();
+      return r.status === 'updating' ? age <= UPDATING_THRESHOLD_MS : age <= staleThresholdMs;
+    })
+    .map((r) => ({
+      workerId: r.worker_id,
+      workerName: r.worker_name,
+      status: r.status as 'idle' | 'busy' | 'updating',
+      ...(r.current_job_id && { currentJobId: r.current_job_id }),
+      capacity: r.capacity,
+      activeSimulations: r.active_simulations,
+      uptimeMs: r.uptime_ms,
+      lastHeartbeat: r.last_heartbeat,
+      ...(r.version && { version: r.version }),
+    }));
 }
 
 /**

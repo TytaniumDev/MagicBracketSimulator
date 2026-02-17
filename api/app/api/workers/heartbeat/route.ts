@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const info: WorkerInfo = {
       workerId,
       workerName,
-      status: status === 'busy' ? 'busy' : 'idle',
+      status: status === 'busy' ? 'busy' : status === 'updating' ? 'updating' : 'idle',
       ...(currentJobId && { currentJobId }),
       capacity: typeof capacity === 'number' ? capacity : 0,
       activeSimulations: typeof activeSimulations === 'number' ? activeSimulations : 0,

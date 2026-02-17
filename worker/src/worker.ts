@@ -53,6 +53,7 @@ let currentWorkerName = '';
 
 // Heartbeat tracking
 let activeSimCount = 0;
+let localCapacity = 0;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 const workerStartTime = Date.now();
 
@@ -403,8 +404,9 @@ async function processSimulation(
 /**
  * Send a heartbeat to the API so the frontend knows this worker is online.
  */
-async function sendHeartbeat(capacity: number): Promise<void> {
+async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: number): Promise<void> {
   const url = `${getApiUrl()}/api/workers/heartbeat`;
+  const resolvedStatus = status ?? (activeSimCount > 0 ? 'busy' : 'idle');
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -412,12 +414,12 @@ async function sendHeartbeat(capacity: number): Promise<void> {
       body: JSON.stringify({
         workerId: currentWorkerId,
         workerName: currentWorkerName,
-        status: activeSimCount > 0 ? 'busy' : 'idle',
-        capacity,
+        status: resolvedStatus,
+        capacity: localCapacity,
         activeSimulations: activeSimCount,
         uptimeMs: Date.now() - workerStartTime,
       }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs ?? API_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.warn(`Heartbeat failed: HTTP ${res.status} ${res.statusText}`);
@@ -618,23 +620,30 @@ function handleShutdown(signal: string): void {
 
   console.log(`Received ${signal}, shutting down gracefully...`);
 
-  // Stop heartbeat
+  // Stop periodic heartbeat
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
   }
 
-  // Close Pub/Sub subscription (stops message delivery)
-  const closeSub = subscription ? subscription.close() : Promise.resolve();
-  closeSub
-    .then(() => {
-      console.log('Shutdown complete');
-      process.exit(0);
-    })
-    .catch((error: unknown) => {
-      console.error('Error during shutdown:', error);
-      process.exit(1);
-    });
+  // Send a final 'updating' heartbeat so the frontend knows we're restarting
+  const updatingHeartbeat = sendHeartbeat('updating', 5_000)
+    .then(() => console.log('Sent updating heartbeat'))
+    .catch((err) => console.warn('Failed to send updating heartbeat:', err instanceof Error ? err.message : err));
+
+  // After the heartbeat (or timeout), close Pub/Sub and exit
+  updatingHeartbeat.finally(() => {
+    const closeSub = subscription ? subscription.close() : Promise.resolve();
+    closeSub
+      .then(() => {
+        console.log('Shutdown complete');
+        process.exit(0);
+      })
+      .catch((error: unknown) => {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+      });
+  });
 
   // Force exit after 30 seconds
   setTimeout(() => {
@@ -673,11 +682,11 @@ async function main(): Promise<void> {
   await ensureSimulationImage();
 
   // Calculate capacity for heartbeat and flow control
-  const localCapacity = calculateLocalCapacity();
+  localCapacity = calculateLocalCapacity();
 
   // Start heartbeat interval (every 15 seconds)
-  sendHeartbeat(localCapacity); // Initial heartbeat
-  heartbeatInterval = setInterval(() => sendHeartbeat(localCapacity), 15_000);
+  sendHeartbeat(); // Initial heartbeat
+  heartbeatInterval = setInterval(() => sendHeartbeat(), 15_000);
 
   if (usePubSub) {
     const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';

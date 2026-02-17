@@ -12,7 +12,7 @@ interface RouteParams {
 
 interface QueueInfo {
   queuePosition?: number;
-  workers?: { online: number; idle: number; busy: number };
+  workers?: { online: number; idle: number; busy: number; updating: number };
 }
 
 function jobToStreamEvent(
@@ -70,7 +70,7 @@ async function resolveDeckLinks(job: Job): Promise<Record<string, string | null>
  * Compute queue position for a QUEUED job and worker availability.
  * Cached to avoid excessive queries.
  */
-let cachedQueueInfo: { data: { allQueued: Job[]; workerStats: { online: number; idle: number; busy: number } }; at: number } | null = null;
+let cachedQueueInfo: { data: { allQueued: Job[]; workerStats: { online: number; idle: number; busy: number; updating: number } }; at: number } | null = null;
 
 async function getQueueInfo(jobId: string, jobCreatedAt: Date): Promise<QueueInfo> {
   const now = Date.now();
@@ -83,11 +83,12 @@ async function getQueueInfo(jobId: string, jobCreatedAt: Date): Promise<QueueInf
       ]);
       const allQueued = allJobs.filter((j) => j.status === 'QUEUED');
       const idle = activeWorkers.filter((w) => w.status === 'idle').length;
-      const busy = activeWorkers.length - idle;
+      const updating = activeWorkers.filter((w) => w.status === 'updating').length;
+      const busy = activeWorkers.length - idle - updating;
       cachedQueueInfo = {
         data: {
           allQueued,
-          workerStats: { online: activeWorkers.length, idle, busy },
+          workerStats: { online: activeWorkers.length, idle, busy, updating },
         },
         at: now,
       };
@@ -96,7 +97,7 @@ async function getQueueInfo(jobId: string, jobCreatedAt: Date): Promise<QueueInf
     }
   }
 
-  const { allQueued, workerStats } = cachedQueueInfo.data;
+  const { allQueued, workerStats } = cachedQueueInfo!.data;
   // Queue position: count of QUEUED jobs created before this one
   const position = allQueued.filter(
     (j) => j.id !== jobId && j.createdAt.getTime() <= jobCreatedAt.getTime()

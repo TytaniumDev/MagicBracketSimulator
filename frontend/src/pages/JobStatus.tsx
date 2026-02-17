@@ -38,7 +38,7 @@ interface Job {
   workerName?: string;
   claimedAt?: string | null;
   queuePosition?: number;
-  workers?: { online: number; idle: number; busy: number };
+  workers?: { online: number; idle: number; busy: number; updating?: number };
   retryCount?: number;
   deckLinks?: Record<string, string | null>;
 }
@@ -624,20 +624,34 @@ export default function JobStatusPage() {
               <div className="bg-gray-800/50 rounded p-3">
                 <div className="text-gray-400 text-xs mb-1">Workers</div>
                 {job.workers ? (
-                  job.workers.online > 0 ? (
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-white font-medium">
-                        {job.workers.online} online
-                        {job.workers.idle > 0 && ` (${job.workers.idle} idle)`}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-                      <span className="text-red-400 font-medium">No workers online</span>
-                    </div>
-                  )
+                  (() => {
+                    const updating = job.workers.updating ?? 0;
+                    const active = job.workers.online - updating;
+                    const hasActive = active > 0;
+                    const hasOnlyUpdating = job.workers.online > 0 && !hasActive;
+                    return hasActive ? (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                        <span className="text-white font-medium">
+                          {job.workers.online} online
+                          {job.workers.idle > 0 && ` (${job.workers.idle} idle)`}
+                          {updating > 0 && ` (${updating} updating)`}
+                        </span>
+                      </div>
+                    ) : hasOnlyUpdating ? (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+                        <span className="text-amber-400 font-medium">
+                          {updating} worker{updating !== 1 ? 's' : ''} updating
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                        <span className="text-red-400 font-medium">No workers online</span>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <span className="text-gray-500">Checking...</span>
                 )}
