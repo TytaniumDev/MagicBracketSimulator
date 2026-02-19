@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-Magic Bracket Simulator: a tool for evaluating Magic: The Gathering Commander deck power levels (brackets 1-5) through automated Forge simulations and Gemini AI analysis.
+Magic Bracket Simulator: a tool for evaluating Magic: The Gathering Commander deck performance through automated Forge simulations, tracking win rates and game statistics.
 
 ## Build & Dev Commands
 
@@ -64,12 +64,12 @@ CI runs on PRs to `main` (.github/workflows/ci.yml): frontend lint+build, api li
 
 Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 - **LOCAL mode** (unset): SQLite, local filesystem, polling worker, no Firebase auth
-- **GCP mode** (set): Firestore, Cloud Storage, Pub/Sub queue, Gemini API via api, unified Docker worker
+- **GCP mode** (set): Firestore, Cloud Storage, Pub/Sub queue, unified Docker worker
 
 ### Service Boundaries
 
 - **frontend/** — Vite + React + Tailwind v4 + Firebase Auth (Google sign-in). Calls the API over HTTP. Config in `frontend/public/config.json` (committed, not secret).
-- **api/** — Next.js 15 app: API routes under `app/api/`. Handles deck ingestion (Moxfield URLs, precon names, raw deck text), job lifecycle, simulation tracking, and Gemini analysis. Uses factory pattern (`job-store-factory.ts`, `deck-store-factory.ts`) to swap SQLite/Firestore backends.
+- **api/** — Next.js 15 app: API routes under `app/api/`. Handles deck ingestion (Moxfield URLs, precon names, raw deck text), job lifecycle, and simulation tracking. Uses factory pattern (`job-store-factory.ts`, `deck-store-factory.ts`) to swap SQLite/Firestore backends.
 - **worker/** — Slim Node.js Docker image (~100MB). Pulls jobs via Pub/Sub (GCP) or HTTP polling (local). Orchestrates simulation containers via Docker socket, reports per-simulation progress, aggregates logs, POSTs results to API. Runs an HTTP server (port 9090) for push-based control: config updates, cancellation, job notification, and drain.
   - **worker/forge-engine/** — Headless Forge simulator assets: `run_sim.sh` entrypoint, precon decks in `precons/`.
 - **simulation/** — Standalone Docker image (~750MB, Java 17 + Forge + xvfb). Runs exactly 1 game, writes log file, exits. Spawned by the worker via `docker run --rm`.
@@ -101,14 +101,13 @@ Routes live under `api/app/api/`. Key endpoints:
 - `GET /api/jobs/:id/simulations` — Per-simulation statuses
 - `POST /api/jobs/:id/simulations` — Initialize simulation tracking (worker)
 - `PATCH /api/jobs/:id/simulations/:simId` — Update simulation status (worker)
-- `POST /api/jobs/:id/analyze` — Trigger Gemini analysis
 - Deck and precon CRUD endpoints
 
 ## Environment & Secrets
 
 - `.env` files are gitignored; see `docs/MODE_SETUP.md` for required variables per mode
 - `frontend/.env` needs Firebase config vars (see `frontend/.env.example`)
-- `api/.env` needs `GEMINI_API_KEY`, and for GCP mode: `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `PUBSUB_TOPIC`, `WORKER_SECRET`
+- `api/.env` needs for GCP mode: `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `PUBSUB_TOPIC`, `WORKER_SECRET`
 - Worker env: `WORKER_API_PORT` (default 9090) and `WORKER_API_URL` (externally reachable URL for push-based API control)
 - Firebase deploy requires `FIREBASE_TOKEN` in GitHub Actions secrets
 - `npm run populate-worker-secret` and `npm run populate-frontend-secret` manage GCP Secret Manager entries

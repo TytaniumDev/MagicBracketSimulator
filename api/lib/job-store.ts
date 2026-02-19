@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { Job, JobStatus, AnalysisResult, DeckSlot, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Row {
@@ -36,7 +36,6 @@ function rowToJob(row: Row): Job {
     status: row.status as JobStatus,
     simulations: row.simulations,
     createdAt: new Date(row.created_at),
-    ...(row.result_json && { resultJson: JSON.parse(row.result_json) as AnalysisResult }),
     ...(row.error_message && { errorMessage: row.error_message }),
     ...(row.parallelism != null && { parallelism: row.parallelism }),
     ...(row.games_completed != null && { gamesCompleted: row.games_completed }),
@@ -131,15 +130,6 @@ export function incrementGamesCompleted(id: string, count: number = 1): boolean 
   return result.changes > 0;
 }
 
-export function setJobResult(id: string, result: AnalysisResult): boolean {
-  const db = getDb();
-  const resultJson = JSON.stringify(result);
-  const result_ = db
-    .prepare('UPDATE jobs SET status = ?, result_json = ? WHERE id = ?')
-    .run('COMPLETED', resultJson, id);
-  return result_.changes > 0;
-}
-
 export interface SetJobCompletedOptions {
   completedAt?: Date;
   dockerRunDurationsMs?: number[];
@@ -157,19 +147,6 @@ export function setJobCompleted(id: string, options?: SetJobCompletedOptions): b
     .prepare('UPDATE jobs SET status = ?, completed_at = ?, docker_run_durations_ms = ? WHERE id = ?')
     .run('COMPLETED', completedAt.toISOString(), dockerRunDurationsJson, id);
   return result.changes > 0;
-}
-
-/**
- * Updates result_json for an already COMPLETED job.
- * Used for on-demand analysis after simulations are done.
- */
-export function updateJobResult(id: string, result: AnalysisResult): boolean {
-  const db = getDb();
-  const resultJson = JSON.stringify(result);
-  const result_ = db
-    .prepare('UPDATE jobs SET result_json = ? WHERE id = ?')
-    .run(resultJson, id);
-  return result_.changes > 0;
 }
 
 export interface SetJobFailedOptions {

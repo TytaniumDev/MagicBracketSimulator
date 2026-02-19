@@ -37,26 +37,6 @@ export interface CondensedGame {
   winningTurn?: number;
 }
 
-// Deck information for analysis
-export interface DeckInfo {
-  name: string;
-  decklist?: string;
-}
-
-// Per-deck game outcome statistics
-export interface DeckOutcome {
-  wins: number;
-  winning_turns: number[];
-  turns_lost_on: number[];
-}
-
-// Payload sent to Gemini for analysis
-export interface AnalyzePayload {
-  decks: DeckInfo[];
-  total_games: number;
-  outcomes: Record<string, DeckOutcome>;
-}
-
 // Job data from API
 export interface JobData {
   id: string;

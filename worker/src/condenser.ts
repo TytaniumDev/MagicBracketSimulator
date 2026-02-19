@@ -8,9 +8,6 @@ import {
   GameEvent,
   TurnManaInfo,
   CondensedGame,
-  DeckInfo,
-  DeckOutcome,
-  AnalyzePayload,
 } from './types.js';
 
 // ============================================================================
@@ -462,47 +459,3 @@ export function condenseGames(rawLogs: string[]): CondensedGame[] {
   return rawLogs.map(condenseGame);
 }
 
-/**
- * Build the payload for Gemini analysis
- */
-export function buildAnalyzePayload(
-  condensed: CondensedGame[],
-  deckNames: string[],
-  deckLists: string[]
-): AnalyzePayload {
-  // Build deck info
-  const decks: DeckInfo[] = deckNames.map((name, i) => ({
-    name,
-    decklist: deckLists[i] || undefined,
-  }));
-
-  // Build outcomes from condensed games
-  const outcomes: Record<string, DeckOutcome> = {};
-  for (const name of deckNames) {
-    outcomes[name] = {
-      wins: 0,
-      winning_turns: [],
-      turns_lost_on: [],
-    };
-  }
-
-  for (const game of condensed) {
-    const winningTurn = game.winningTurn || game.turnCount;
-
-    for (const name of deckNames) {
-      const outcome = outcomes[name];
-      if (game.winner && game.winner.includes(name)) {
-        outcome.wins++;
-        outcome.winning_turns.push(winningTurn);
-      } else if (game.winner) {
-        outcome.turns_lost_on.push(winningTurn);
-      }
-    }
-  }
-
-  return {
-    decks,
-    total_games: condensed.length,
-    outcomes,
-  };
-}

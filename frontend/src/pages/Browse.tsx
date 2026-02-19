@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 
-type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+type JobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 interface JobSummary {
   id: string;
@@ -47,7 +47,6 @@ function StatusBadge({ status }: { status: JobStatus }) {
   const styles: Record<JobStatus, string> = {
     QUEUED: 'bg-gray-600 text-gray-200',
     RUNNING: 'bg-blue-600 text-white',
-    ANALYZING: 'bg-purple-600 text-white',
     COMPLETED: 'bg-green-600 text-white',
     FAILED: 'bg-red-600 text-white',
     CANCELLED: 'bg-orange-600 text-white',
@@ -56,7 +55,6 @@ function StatusBadge({ status }: { status: JobStatus }) {
   const labels: Record<JobStatus, string> = {
     QUEUED: 'Queued',
     RUNNING: 'Running',
-    ANALYZING: 'Analyzing',
     COMPLETED: 'Completed',
     FAILED: 'Failed',
     CANCELLED: 'Cancelled',
@@ -98,13 +96,13 @@ export default function Browse() {
   useEffect(() => {
     fetchJobs().then((jobList) => {
       const hasInProgress = jobList.some(
-        (job) => job.status === 'QUEUED' || job.status === 'RUNNING' || job.status === 'ANALYZING'
+        (job) => job.status === 'QUEUED' || job.status === 'RUNNING'
       );
       if (hasInProgress && !pollIntervalRef.current) {
         pollIntervalRef.current = setInterval(async () => {
           const updated = await fetchJobs();
           const stillInProgress = updated.some(
-            (job) => job.status === 'QUEUED' || job.status === 'RUNNING' || job.status === 'ANALYZING'
+            (job) => job.status === 'QUEUED' || job.status === 'RUNNING'
           );
           if (!stillInProgress && pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
@@ -212,7 +210,7 @@ export default function Browse() {
                   </div>
                 </div>
               </div>
-              {(run.status === 'RUNNING' || run.status === 'ANALYZING') && (
+              {run.status === 'RUNNING' && (
                 <div className="mt-2">
                   <div
                     className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden"

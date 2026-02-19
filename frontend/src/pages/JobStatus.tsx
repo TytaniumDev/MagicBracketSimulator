@@ -8,19 +8,7 @@ import { useJobStream } from '../hooks/useJobStream';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
 
-type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-interface DeckBracketResult {
-  deck_name: string;
-  bracket: number;
-  confidence: string;
-  reasoning: string;
-  weaknesses?: string;
-}
-
-interface AnalysisResult {
-  results: DeckBracketResult[];
-}
+type JobStatusValue = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 interface Job {
   id: string;
@@ -30,7 +18,6 @@ interface Job {
   simulations: number;
   createdAt: string;
   errorMessage?: string;
-  resultJson?: AnalysisResult;
   gamesCompleted?: number;
   startedAt?: string | null;
   completedAt?: string | null;
@@ -113,7 +100,6 @@ export default function JobStatusPage() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showRawJson, setShowRawJson] = useState(false);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [logViewTab, setLogViewTab] = useState<LogViewTab>('condensed');
   
@@ -134,14 +120,6 @@ export default function JobStatusPage() {
   // Event type filter state - empty set means show all
   const [eventFilters, setEventFilters] = useState<Set<string>>(new Set());
   
-  // Analyze payload and trigger state
-  const [analyzePayload, setAnalyzePayload] = useState<object | null>(null);
-  const [analyzePayloadError, setAnalyzePayloadError] = useState<string | null>(null);
-  const [showPayload, setShowPayload] = useState(false);
-  const [promptPreview, setPromptPreview] = useState<{ system_prompt: string; user_prompt: string } | null>(null);
-  const [promptPreviewError, setPromptPreviewError] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
   const { user } = useAuth();
@@ -261,16 +239,13 @@ export default function JobStatusPage() {
   // Stable keys for color identity dependencies (avoid re-fetching on every poll cycle)
   const deckNamesKey = job?.deckNames?.join(',') ?? '';
   const logDeckNamesKey = deckNames?.join(',') ?? '';
-  const resultDeckNamesKey = job?.resultJson?.results?.map(r => r.deck_name).join(',') ?? '';
 
-  // Fetch color identity for deck names (job.deckNames, deckNames from logs, result.results)
+  // Fetch color identity for deck names (job.deckNames, deckNames from logs)
   useEffect(() => {
     if (!job) return;
     const names = new Set<string>();
     job.deckNames?.forEach((n) => names.add(n));
     deckNames?.forEach((n) => names.add(n));
-    const result = job.resultJson;
-    result?.results?.forEach((r) => r.deck_name && names.add(r.deck_name));
     const list = Array.from(names);
     if (list.length === 0) return;
     const params = new URLSearchParams({ names: list.join(',') });
@@ -279,56 +254,7 @@ export default function JobStatusPage() {
       .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps -- using serialized keys to avoid refetching when object references change but values don't
-  }, [apiBase, job?.id, deckNamesKey, logDeckNamesKey, resultDeckNamesKey]);
-
-  // Fetch analyze payload when job is completed (for on-demand analysis)
-  useEffect(() => {
-    if (!id || !job) return;
-    if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
-    if (analyzePayload !== null) return; // Already fetched
-    
-    setAnalyzePayloadError(null);
-    fetchPublic(`${apiBase}/api/jobs/${id}/logs/analyze-payload`)
-      .then((res) => {
-        if (!res.ok) {
-          if (res.status === 404) return null;
-          throw new Error('Failed to load analyze payload');
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          setAnalyzePayload(data);
-        }
-      })
-      .catch((err) => setAnalyzePayloadError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [id, apiBase, job, analyzePayload]);
-
-  // Fetch exact prompt preview when user expands "data sent to Gemini"
-  useEffect(() => {
-    if (!id || !showPayload || !analyzePayload) return;
-    setPromptPreviewError(null);
-    setPromptPreview(null);
-    fetchPublic(`${apiBase}/api/jobs/${id}/logs/analyze-prompt-preview`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text();
-          let msg: string;
-          try {
-            const d = JSON.parse(text) as { error?: string; details?: string };
-            msg = d.details || d.error || text || `Preview failed: ${res.status}`;
-          } catch {
-            msg = text || `Preview failed: ${res.status}`;
-          }
-          throw new Error(msg);
-        }
-        return res.json() as Promise<{ system_prompt: string; user_prompt: string }>;
-      })
-      .then((data) => {
-        setPromptPreview(data);
-      })
-      .catch((err) => setPromptPreviewError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [id, apiBase, showPayload, analyzePayload]);
+  }, [apiBase, job?.id, deckNamesKey, logDeckNamesKey]);
 
   // Fetch raw and condensed logs when log panel is opened
   useEffect(() => {
@@ -508,13 +434,11 @@ export default function JobStatusPage() {
         : 'Queued'
       : job.status === 'RUNNING'
         ? 'Running'
-        : job.status === 'ANALYZING'
-          ? 'Analyzing results...'
-          : job.status === 'COMPLETED'
-            ? 'Completed'
-            : job.status === 'CANCELLED'
-              ? 'Cancelled'
-              : 'Failed';
+        : job.status === 'COMPLETED'
+          ? 'Completed'
+          : job.status === 'CANCELLED'
+            ? 'Cancelled'
+            : 'Failed';
 
   // Compute time in queue for QUEUED jobs
   const queuedAgo = job.status === 'QUEUED' && job.createdAt
@@ -540,36 +464,6 @@ export default function JobStatusPage() {
     }
   };
 
-  const result = job.resultJson;
-  
-  // Handler to trigger on-demand AI analysis
-  const handleAnalyze = async () => {
-    if (!id) return;
-    setIsAnalyzing(true);
-    setAnalyzeError(null);
-    
-    try {
-      const response = await fetchWithAuth(`${apiBase}/api/jobs/${id}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Analysis failed');
-      }
-      
-      const analysisResult = await response.json();
-      // Update job state with the new result
-      setJob((prev) => prev ? { ...prev, resultJson: analysisResult } : null);
-    } catch (err) {
-      setAnalyzeError(err instanceof Error ? err.message : 'Analysis failed');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-  
   // Get current structured game
   const currentGame = structuredGames?.[selectedGame];
   // Ensure maxTurns is at least 1 for display (prevents "1/0" if backend returns 0)
@@ -740,7 +634,7 @@ export default function JobStatusPage() {
             </div>
           </div>
         )}
-        {(job.status === 'RUNNING' || job.status === 'ANALYZING') && job.gamesCompleted != null && (
+        {job.status === 'RUNNING' && job.gamesCompleted != null && (
           <div className="space-y-2">
             <div>
               <span className="text-gray-400">Progress: </span>
@@ -765,7 +659,7 @@ export default function JobStatusPage() {
           </div>
         )}
         {/* Per-simulation grid — shown when simulation tracking data exists */}
-        {(job.status === 'RUNNING' || job.status === 'ANALYZING' || job.status === 'COMPLETED' || job.status === 'CANCELLED' || job.status === 'FAILED') && streamSimulations.length > 0 && (
+        {(job.status === 'RUNNING' || job.status === 'COMPLETED' || job.status === 'CANCELLED' || job.status === 'FAILED') && streamSimulations.length > 0 && (
           <SimulationGrid
             simulations={streamSimulations}
             totalSimulations={job.simulations}
@@ -777,181 +671,6 @@ export default function JobStatusPage() {
         {job.status === 'FAILED' && job.errorMessage && (
           <div className="bg-red-900/30 border border-red-600 rounded p-3 text-red-200">
             {job.errorMessage}
-          </div>
-        )}
-
-        {/* AI Analysis Section - shown for completed jobs and failed/cancelled jobs with partial data */}
-        {(job.status === 'COMPLETED' || ((job.status === 'FAILED' || job.status === 'CANCELLED') && effectiveGamesPlayed > 0)) && (
-          <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-            <h3 className="text-lg font-semibold text-gray-200 mb-3">AI Analysis</h3>
-
-            {/* No analysis yet - show analyze button */}
-            {!result && (
-              <div className="space-y-4">
-                {(job.status === 'FAILED' || job.status === 'CANCELLED') ? (
-                  <p className="text-sm text-amber-400">
-                    Job {job.status === 'CANCELLED' ? 'cancelled' : 'failed'} but {effectiveGamesPlayed} game{effectiveGamesPlayed !== 1 ? 's' : ''} completed. You can analyze the partial results.
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-400">
-                    Simulations complete. Review the data below and click to analyze with Gemini.
-                  </p>
-                )}
-                {/* Analyze Error */}
-                {analyzeError && (
-                  <div className="bg-red-900/30 border border-red-600 rounded p-3 text-red-200 text-sm">
-                    {analyzeError}
-                  </div>
-                )}
-                {/* Analyze Button */}
-                <button
-                  type="button"
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing || analyzePayload === null}
-                  className={`w-full py-3 rounded-md font-semibold ${
-                    isAnalyzing || analyzePayload === null
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      : 'bg-green-600 text-white hover:bg-green-700'
-                  }`}
-                >
-                  {isAnalyzing ? 'Analyzing with Gemini...' : 'Send to Gemini to Analyze'}
-                </button>
-              </div>
-            )}
-            
-            {/* Exact data and prompt sent to Gemini - always visible for completed jobs */}
-            <div className={result ? 'mt-4 pt-4 border-t border-gray-600' : ''}>
-              <button
-                type="button"
-                onClick={() => setShowPayload((v) => !v)}
-                className="text-sm text-blue-400 hover:text-blue-300 mb-2"
-                aria-expanded={showPayload}
-                aria-controls="payload-section"
-              >
-                {showPayload ? 'Hide' : 'Show'} exact data and prompt sent to Gemini
-              </button>
-              {showPayload && (
-                <div id="payload-section" className="mt-2 space-y-4">
-                  {analyzePayloadError && (
-                    <p className="text-sm text-red-400">{analyzePayloadError}</p>
-                  )}
-                  {analyzePayload === null && !analyzePayloadError && (
-                    <p className="text-sm text-gray-500">Loading...</p>
-                  )}
-                  {analyzePayload && (
-                    <>
-                      {Array.isArray((analyzePayload as { decks?: { decklist?: string }[] }).decks) &&
-                        (analyzePayload as { decks: { decklist?: string }[] }).decks.some(
-                          (d) => !d.decklist || d.decklist.trim() === ''
-                        ) && (
-                        <p className="text-xs text-amber-400/90">
-                          This job was run before decklists were stored. Decklists below may be missing. Re-run the simulation to include full decklists in the payload.
-                        </p>
-                      )}
-                      <div>
-                        <h4 className="text-xs font-semibold text-gray-400 mb-1">
-                          1. Request body sent to Analysis Service (then used to build the prompt)
-                        </h4>
-                        <pre className="text-xs overflow-auto max-h-80 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-400 font-mono border border-gray-700">
-                          {JSON.stringify(analyzePayload, null, 2)}
-                        </pre>
-                      </div>
-                      {promptPreviewError && (
-                        <div className="text-sm text-red-400 space-y-1">
-                          <p>{promptPreviewError}</p>
-                          <p className="text-xs text-gray-400">
-                            If the prompt preview fails, ensure the Analysis Service is running (default port 8000).
-                          </p>
-                        </div>
-                      )}
-                      {promptPreview === null && !promptPreviewError && (
-                        <p className="text-sm text-gray-500">Loading prompt preview...</p>
-                      )}
-                      {promptPreview && (
-                        <>
-                          <div>
-                            <h4 className="text-xs font-semibold text-gray-400 mb-1">
-                              2. System instruction (sent to Gemini)
-                            </h4>
-                            <pre className="text-xs overflow-auto max-h-80 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-300 font-mono border border-gray-700">
-                              {promptPreview.system_prompt}
-                            </pre>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-semibold text-gray-400 mb-1">
-                              3. User message (sent to Gemini — includes rubric, decklists, outcomes)
-                            </h4>
-                            <pre className="text-xs overflow-auto max-h-96 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-300 font-mono border border-gray-700">
-                              {promptPreview.user_prompt}
-                            </pre>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            {/* Analysis result exists - show bracket for each deck */}
-            {result && result.results && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {result.results.map((deckResult, idx) => (
-                    <div
-                      key={deckResult.deck_name || idx}
-                      className="bg-gray-800/50 rounded-lg p-4 border border-gray-600"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-gray-200 truncate flex items-center gap-1" title={deckResult.deck_name}>
-                          {deckResult.deck_name}
-                          <ColorIdentity colorIdentity={colorIdentityByDeckName[deckResult.deck_name]} />
-                        </h4>
-                        <span className="text-xl font-bold text-green-400 shrink-0">
-                          B{deckResult.bracket}
-                        </span>
-                      </div>
-                      {deckResult.confidence && (
-                        <p className="text-xs text-gray-400 mb-2">
-                          Confidence: {deckResult.confidence}
-                        </p>
-                      )}
-                      {deckResult.reasoning && (
-                        <div className="mb-2">
-                          <p className="text-xs text-gray-300 line-clamp-3">
-                            {deckResult.reasoning}
-                          </p>
-                        </div>
-                      )}
-                      {deckResult.weaknesses && (
-                        <div>
-                          <p className="text-xs text-gray-500">
-                            <span className="text-gray-400">Weaknesses: </span>
-                            {deckResult.weaknesses}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setShowRawJson((v) => !v)}
-                    className="text-sm text-gray-500 hover:text-gray-400"
-                    aria-expanded={showRawJson}
-                    aria-controls="raw-json-section"
-                  >
-                    {showRawJson ? 'Hide' : 'Show'} raw JSON
-                  </button>
-                  {showRawJson && (
-                    <pre id="raw-json-section" className="mt-2 text-xs overflow-auto max-h-64 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-400">
-                      {JSON.stringify(result, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         )}
 

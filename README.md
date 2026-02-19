@@ -4,7 +4,7 @@
 
 ![Status](https://img.shields.io/badge/Status-Active-success) ![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Docker-blue)
 
-Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge, Docker, and Gemini AI.
+Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.
 
 ![Magic Bracket Simulator UI](docs/images/hero-screenshot.png)
 
@@ -33,9 +33,8 @@ Visit **http://localhost:5173** to start simulating.
 
 ## Key Features
 
-*   **🤖 AI-Powered Analysis:** Uses Gemini to analyze game logs and determine power levels.
 *   **⚡ Parallel Simulation:** Runs multiple Forge instances concurrently via Docker.
-*   **📊 Bracket Prediction:** Automatically simulates brackets to predict tournament outcomes.
+*   **📊 Win Rate Analysis:** Tracks per-deck win rates and game statistics across simulations.
 *   **☁️ Hybrid Architecture:** Runs fully locally or on Google Cloud Platform.
 
 ## Documentation Map

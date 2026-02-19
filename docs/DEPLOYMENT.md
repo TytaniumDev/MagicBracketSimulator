@@ -5,7 +5,7 @@
 *   **Node.js:** 18+
 *   **Docker:** Required for the worker container.
 
-See [api/README.md](../api/README.md) for detailed API setup (e.g., `.env` files, `GEMINI_API_KEY`).
+See [api/README.md](../api/README.md) for detailed API setup (e.g., `.env` files).
 
 ### Windows Setup (WSL)
 

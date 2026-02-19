@@ -1,6 +1,6 @@
 import { ColorIdentity } from './ColorIdentity';
 
-type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+type JobStatusValue = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 interface DeckShowcaseProps {
   deckNames: string[];
@@ -51,7 +51,7 @@ export function DeckShowcase({
   deckLinks,
   jobStatus,
 }: DeckShowcaseProps) {
-  const isLive = jobStatus === 'RUNNING' || jobStatus === 'ANALYZING';
+  const isLive = jobStatus === 'RUNNING';
   const isTerminal = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
   const isPartial = (jobStatus === 'FAILED' || jobStatus === 'CANCELLED') && gamesPlayed < totalSimulations;
 

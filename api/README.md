@@ -2,7 +2,7 @@
 
 Next.js 15 API server for Magic Bracket Simulator. Deployed via Firebase App Hosting (Cloud Run).
 
-Handles deck ingestion, job lifecycle, Gemini AI analysis, and serves the REST API consumed by the frontend. The web UI lives in `frontend/`, not here.
+Handles deck ingestion, job lifecycle, simulation tracking, and serves the REST API consumed by the frontend. The web UI lives in `frontend/`, not here.
 
 ## Setup
 
@@ -20,8 +20,7 @@ api/
 ├── lib/               # Business logic, storage factories, deck resolution
 ├── scripts/           # One-off utilities (seed-decks, backfill, recompute)
 ├── Dockerfile         # Production image for Cloud Run
-├── apphosting.yaml    # Firebase App Hosting config
-└── rubric.md          # Gemini analysis rubric
+└── apphosting.yaml    # Firebase App Hosting config
 ```
 
 ## API Routes
@@ -31,7 +30,6 @@ api/
 | `/api/precons` | GET | List preconstructed decks |
 | `/api/jobs` | GET/POST | List jobs / Create simulation job |
 | `/api/jobs/[id]` | GET/PATCH/DELETE | Job status, update, delete |
-| `/api/jobs/[id]/analyze` | POST | Trigger Gemini AI analysis |
 | `/api/jobs/[id]/logs` | POST/GET | Submit/retrieve game logs |
 | `/api/jobs/next` | GET | Claim next queued job (polling workers) |
 | `/api/decks` | GET/POST | List/save decks |
