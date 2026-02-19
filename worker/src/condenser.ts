@@ -378,7 +378,7 @@ function calculateCardsDrawnPerTurn(
   return result;
 }
 
-function extractWinner(rawLog: string): string {
+export function extractWinner(rawLog: string): string {
   const matches = ExtractWinnerRegex.exec(rawLog);
   if (matches && matches.length > 1) {
     return matches[1].trim();

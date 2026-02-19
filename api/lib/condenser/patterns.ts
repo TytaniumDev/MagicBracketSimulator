@@ -343,3 +343,48 @@ export const EXTRACT_WINNER = /(.+?)\s+(?:wins\s+the\s+game|has\s+won!?)(?:\s|$|
  * The caller should check both capture groups and use the first non-undefined.
  */
 export const EXTRACT_ACTIVE_PLAYER = /^Turn\s+\d+:\s*(.+?)\s*$|^Turn:\s*Turn\s+\d+\s*\((.+)\)\s*$/im;
+
+// -----------------------------------------------------------------------------
+// SECTION 4: GAME SPLITTING
+// -----------------------------------------------------------------------------
+
+/**
+ * Pattern: Game Result marker that separates concatenated games.
+ *
+ * When running multiple games per container, Forge outputs all games
+ * back-to-back with a "Game Result: Game N ended..." line between them.
+ *
+ * Forge example: "Game Result: Game 1 ended in 38105 ms. Ai(3)-Explorers of the Deep has won!"
+ */
+export const GAME_RESULT_PATTERN = /^Game Result: Game \d+ ended/im;
+
+/**
+ * Split a concatenated multi-game log into individual game logs.
+ *
+ * When running 4 games per container, the stdout is a single concatenated
+ * blob. This function splits it by "Game Result: Game N ended..." markers.
+ *
+ * @param rawLog - The concatenated raw log text
+ * @returns Array of individual game log strings (1 per game)
+ */
+export function splitConcatenatedGames(rawLog: string): string[] {
+  const trimmed = rawLog.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!trimmed) return [];
+
+  const gameEndPattern = /(Game Result: Game \d+ ended[^\n]*\n?)/;
+  const parts = trimmed.split(gameEndPattern);
+  if (parts.length < 2) return [trimmed];
+
+  const games: string[] = [];
+  for (let i = 0; i + 1 < parts.length; i += 2) {
+    const content = (parts[i] + parts[i + 1]).trim();
+    if (content.length === 0) continue;
+    const firstTurn = content.indexOf('Turn: Turn 1 (Ai(');
+    if (firstTurn >= 0) {
+      games.push(content.slice(firstTurn).trim());
+    } else {
+      games.push(content);
+    }
+  }
+  return games.length > 0 ? games : [trimmed];
+}

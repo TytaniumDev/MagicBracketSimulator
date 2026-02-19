@@ -26,7 +26,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { state, workerId, workerName, durationMs, errorMessage, winner, winningTurn } = body;
+    const { state, workerId, workerName, durationMs, errorMessage, winner, winningTurn, winners, winningTurns } = body;
 
     // Validate state if provided
     if (state !== undefined && !VALID_STATES.includes(state)) {
@@ -45,6 +45,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (errorMessage !== undefined) update.errorMessage = errorMessage;
     if (winner !== undefined) update.winner = winner;
     if (winningTurn !== undefined) update.winningTurn = winningTurn;
+    if (winners !== undefined) update.winners = winners;
+    if (winningTurns !== undefined) update.winningTurns = winningTurns;
 
     // Add timestamps based on state transition
     if (state === 'RUNNING') {
@@ -64,7 +66,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (state === 'COMPLETED' || state === 'FAILED') {
+    if (state === 'COMPLETED') {
       await jobStore.incrementGamesCompleted(id, GAMES_PER_CONTAINER);
     }
 

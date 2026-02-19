@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { isGcpMode } from './job-store-factory';
 import * as gcs from './gcs-storage';
-import { condenseGames, structureGames } from './condenser/index';
+import { condenseGames, structureGames, splitConcatenatedGames } from './condenser/index';
 import type { CondensedGame, StructuredGame } from './types';
 import type { AnalyzePayload } from './gemini';
 
@@ -42,28 +42,6 @@ interface StoredMeta {
 }
 
 // ─── Ingest (POST) ──────────────────────────────────────────────────────────
-
-function splitConcatenatedGames(rawLog: string): string[] {
-  const trimmed = rawLog.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-  if (!trimmed) return [];
-
-  const gameEndPattern = /(Game Result: Game \d+ ended[^\n]*\n?)/;
-  const parts = trimmed.split(gameEndPattern);
-  if (parts.length < 2) return [trimmed];
-
-  const games: string[] = [];
-  for (let i = 0; i + 1 < parts.length; i += 2) {
-    const content = (parts[i] + parts[i + 1]).trim();
-    if (content.length === 0) continue;
-    const firstTurn = content.indexOf('Turn: Turn 1 (Ai(');
-    if (firstTurn >= 0) {
-      games.push(content.slice(firstTurn).trim());
-    } else {
-      games.push(content);
-    }
-  }
-  return games.length > 0 ? games : [trimmed];
-}
 
 function buildAnalyzePayload(
   condensed: CondensedGame[],
