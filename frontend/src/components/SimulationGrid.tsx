@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import type { SimulationStatus, SimulationState } from '../types/simulation';
 
 interface SimulationGridProps {
@@ -41,8 +41,11 @@ interface SimGroup {
  * Visual grid of per-simulation statuses, grouped by worker.
  * Each square represents one simulation, color-coded by state.
  * Hover shows details; looks like a GitHub contribution graph.
+ *
+ * Memoized to prevent re-renders when parent state changes (e.g. log navigation)
+ * but simulation data remains stable.
  */
-export function SimulationGrid({ simulations, totalSimulations }: SimulationGridProps) {
+export const SimulationGrid = memo(function SimulationGrid({ simulations, totalSimulations }: SimulationGridProps) {
   const [hoveredSim, setHoveredSim] = useState<SimulationStatus | null>(null);
 
   // Count by state
@@ -193,4 +196,4 @@ export function SimulationGrid({ simulations, totalSimulations }: SimulationGrid
       )}
     </div>
   );
-}
+});
