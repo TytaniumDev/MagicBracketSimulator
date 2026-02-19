@@ -282,6 +282,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   ...(d.errorMessage && { errorMessage: d.errorMessage }),
                   ...(d.winner && { winner: d.winner }),
                   ...(d.winningTurn != null && { winningTurn: d.winningTurn }),
+                  ...(d.winners?.length > 0 && { winners: d.winners }),
+                  ...(d.winningTurns?.length > 0 && { winningTurns: d.winningTurns }),
                 };
               });
               send({ simulations: sims }, 'simulations');

@@ -446,6 +446,8 @@ export async function updateSimulationStatus(
   if (update.errorMessage !== undefined) updateData.errorMessage = update.errorMessage;
   if (update.winner !== undefined) updateData.winner = update.winner;
   if (update.winningTurn !== undefined) updateData.winningTurn = update.winningTurn;
+  if (update.winners !== undefined) updateData.winners = update.winners;
+  if (update.winningTurns !== undefined) updateData.winningTurns = update.winningTurns;
 
   await simulationsCollection(jobId).doc(simId).update(updateData);
 }
@@ -474,6 +476,8 @@ export async function getSimulationStatuses(
       ...(data.errorMessage && { errorMessage: data.errorMessage }),
       ...(data.winner && { winner: data.winner }),
       ...(data.winningTurn != null && { winningTurn: data.winningTurn }),
+      ...(data.winners?.length > 0 && { winners: data.winners }),
+      ...(data.winningTurns?.length > 0 && { winningTurns: data.winningTurns }),
     } as SimulationStatus;
   });
 }

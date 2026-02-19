@@ -265,6 +265,8 @@ interface SimRow {
   error_message: string | null;
   winner: string | null;
   winning_turn: number | null;
+  winners_json: string | null;
+  winning_turns_json: string | null;
 }
 
 function simRowToStatus(row: SimRow): SimulationStatus {
@@ -280,6 +282,8 @@ function simRowToStatus(row: SimRow): SimulationStatus {
     ...(row.error_message != null && { errorMessage: row.error_message }),
     ...(row.winner != null && { winner: row.winner }),
     ...(row.winning_turn != null && { winningTurn: row.winning_turn }),
+    ...(row.winners_json != null && { winners: JSON.parse(row.winners_json) as string[] }),
+    ...(row.winning_turns_json != null && { winningTurns: JSON.parse(row.winning_turns_json) as number[] }),
   };
 }
 
@@ -348,6 +352,14 @@ export function updateSimulationStatus(
   if (update.winningTurn !== undefined) {
     sets.push('winning_turn = ?');
     values.push(update.winningTurn);
+  }
+  if (update.winners !== undefined) {
+    sets.push('winners_json = ?');
+    values.push(JSON.stringify(update.winners));
+  }
+  if (update.winningTurns !== undefined) {
+    sets.push('winning_turns_json = ?');
+    values.push(JSON.stringify(update.winningTurns));
   }
 
   if (sets.length === 0) return false;

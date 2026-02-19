@@ -11,6 +11,7 @@
     "test:unit": "tsx test/game-logs.test.ts",
     "test:ingestion": "tsx test/ingestion.test.ts",
     "test:condenser": "tsx lib/condenser/condenser.test.ts",
+    "test:sim-wins": "tsx test/simulation-wins.test.ts",
     "recompute-logs": "tsx scripts/recompute-job-logs.ts",
     "backfill-color-identity": "tsx scripts/backfill-deck-color-identity.ts"
   },

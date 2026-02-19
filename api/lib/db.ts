@@ -225,6 +225,16 @@ export function getDb(): Database.Database {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec(`ALTER TABLE simulations ADD COLUMN winners_json TEXT`);
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE simulations ADD COLUMN winning_turns_json TEXT`);
+  } catch {
+    // Column already exists
+  }
 
   // Worker heartbeat tracking table
   db.exec(`
