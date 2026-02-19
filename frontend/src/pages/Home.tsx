@@ -529,8 +529,9 @@ function SimulationForm() {
           label="Number of Simulations"
           value={simulations}
           onChange={setSimulations}
-          min={1}
+          min={4}
           max={100}
+          step={4}
           className="mb-4"
         />
 

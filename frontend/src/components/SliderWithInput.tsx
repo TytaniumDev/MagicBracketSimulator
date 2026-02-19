@@ -14,6 +14,7 @@ interface SliderWithInputProps {
   onChange: (value: number) => void;
   min: number;
   max: number;
+  step?: number;
   className?: string;
 }
 
@@ -23,12 +24,15 @@ export const SliderWithInput = memo(function SliderWithInput({
   onChange,
   min,
   max,
+  step = 1,
   className = '',
 }: SliderWithInputProps) {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseInt(e.target.value, 10);
     if (!isNaN(v)) {
-      const clamped = Math.min(max, Math.max(min, v));
+      // Snap to nearest step and clamp to [min, max]
+      const snapped = step > 1 ? Math.round(v / step) * step : v;
+      const clamped = Math.min(max, Math.max(min, snapped));
       onChange(clamped);
     }
   };
@@ -43,6 +47,7 @@ export const SliderWithInput = memo(function SliderWithInput({
           type="number"
           min={min}
           max={max}
+          step={step}
           value={value}
           onChange={handleInputChange}
           className="w-16 px-2 py-0.5 ml-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -52,6 +57,7 @@ export const SliderWithInput = memo(function SliderWithInput({
         type="range"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
         className="w-full accent-blue-500"

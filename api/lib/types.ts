@@ -230,8 +230,9 @@ export interface CreateJobRequest {
   idempotencyKey?: string;
 }
 
-export const SIMULATIONS_MIN = 1;
+export const SIMULATIONS_MIN = 4;
 export const SIMULATIONS_MAX = 100;
+export const GAMES_PER_CONTAINER = 4;
 export const PARALLELISM_MIN = 1;
 export const PARALLELISM_MAX = 16;
 

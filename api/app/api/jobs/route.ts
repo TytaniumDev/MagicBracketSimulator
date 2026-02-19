@@ -3,7 +3,7 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { publishSimulationTasks } from '@/lib/pubsub';
-import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, type CreateJobRequest } from '@/lib/types';
+import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, GAMES_PER_CONTAINER, type CreateJobRequest } from '@/lib/types';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { checkRateLimit } from '@/lib/rate-limiter';
 
@@ -114,12 +114,15 @@ export async function POST(request: NextRequest) {
       deckIds,
     });
 
-    // Initialize per-simulation tracking and publish messages
-    await jobStore.initializeSimulations(job.id, simulations);
+    // Each container runs GAMES_PER_CONTAINER games, so we need fewer containers
+    const containerCount = Math.ceil(simulations / GAMES_PER_CONTAINER);
+
+    // Initialize per-simulation tracking and publish messages (1 sim record = 1 container)
+    await jobStore.initializeSimulations(job.id, containerCount);
 
     if (isGcpMode()) {
       try {
-        await publishSimulationTasks(job.id, simulations);
+        await publishSimulationTasks(job.id, containerCount);
       } catch (pubsubError) {
         // Log but don't fail — the job is already persisted in Firestore.
         // Stale job recovery will re-publish messages if needed.

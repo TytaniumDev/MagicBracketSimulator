@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import type { SimulationState } from '@/lib/types';
+import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
@@ -65,9 +65,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     if (state === 'COMPLETED' || state === 'FAILED') {
-      await jobStore.incrementGamesCompleted(id);
+      await jobStore.incrementGamesCompleted(id, GAMES_PER_CONTAINER);
+    }
 
-      // Check if all sims are terminal → trigger aggregation
+    // Check if all sims are terminal → trigger aggregation (includes CANCELLED)
+    if (state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED') {
       const allSims = await jobStore.getSimulationStatuses(id);
       const allTerminal = allSims.every(s =>
         s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'CANCELLED'

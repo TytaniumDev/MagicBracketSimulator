@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, DeckSlot, AnalysisResult, SimulationStatus } from './types';
+import { Job, JobStatus, DeckSlot, AnalysisResult, SimulationStatus, GAMES_PER_CONTAINER } from './types';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -100,12 +100,12 @@ export async function updateJobProgress(id: string, gamesCompleted: number): Pro
   sqliteStore.updateJobProgress(id, gamesCompleted);
 }
 
-export async function incrementGamesCompleted(id: string): Promise<void> {
+export async function incrementGamesCompleted(id: string, count: number = 1): Promise<void> {
   if (USE_FIRESTORE) {
-    await firestoreStore.incrementGamesCompleted(id);
+    await firestoreStore.incrementGamesCompleted(id, count);
     return;
   }
-  sqliteStore.incrementGamesCompleted(id);
+  sqliteStore.incrementGamesCompleted(id, count);
 }
 
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
@@ -245,9 +245,10 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
     // Re-initialize simulations and re-publish per-sim Pub/Sub messages
     if (USE_FIRESTORE) {
       try {
-        await initializeSimulations(jobId, job.simulations);
+        const containerCount = Math.ceil(job.simulations / GAMES_PER_CONTAINER);
+        await initializeSimulations(jobId, containerCount);
         const { publishSimulationTasks } = await import('./pubsub');
-        await publishSimulationTasks(jobId, job.simulations);
+        await publishSimulationTasks(jobId, containerCount);
       } catch (err) {
         console.warn(`[Recovery] Failed to publish retry for job ${jobId}:`, err);
       }
@@ -305,9 +306,10 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
     const sims = await getSimulationStatuses(jobId);
     if (sims.length === 0) {
       // Sims not yet initialized — initialize and publish all
-      await initializeSimulations(jobId, job.simulations);
+      const containerCount = Math.ceil(job.simulations / GAMES_PER_CONTAINER);
+      await initializeSimulations(jobId, containerCount);
       const { publishSimulationTasks } = await import('./pubsub');
-      await publishSimulationTasks(jobId, job.simulations);
+      await publishSimulationTasks(jobId, containerCount);
     } else {
       // Re-publish only for PENDING sims
       const pendingSims = sims.filter(s => s.state === 'PENDING');

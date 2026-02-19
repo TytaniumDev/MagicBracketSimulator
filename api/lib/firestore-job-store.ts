@@ -193,12 +193,13 @@ export async function updateJobProgress(id: string, gamesCompleted: number): Pro
 }
 
 /**
- * Atomically increment gamesCompleted counter by 1.
- * Used in per-simulation architecture where each sim reports independently.
+ * Atomically increment gamesCompleted counter.
+ * Used in per-simulation architecture where each container reports independently.
+ * @param count Number of games to increment by (default 1, typically GAMES_PER_CONTAINER).
  */
-export async function incrementGamesCompleted(id: string): Promise<void> {
+export async function incrementGamesCompleted(id: string, count: number = 1): Promise<void> {
   await jobsCollection.doc(id).update({
-    gamesCompleted: FieldValue.increment(1),
+    gamesCompleted: FieldValue.increment(count),
     updatedAt: FieldValue.serverTimestamp(),
   });
 }

@@ -122,11 +122,12 @@ export function updateJobProgress(id: string, gamesCompleted: number): boolean {
 }
 
 /**
- * Atomically increment gamesCompleted counter by 1.
+ * Atomically increment gamesCompleted counter.
+ * @param count Number of games to increment by (default 1, typically GAMES_PER_CONTAINER).
  */
-export function incrementGamesCompleted(id: string): boolean {
+export function incrementGamesCompleted(id: string, count: number = 1): boolean {
   const db = getDb();
-  const result = db.prepare('UPDATE jobs SET games_completed = COALESCE(games_completed, 0) + 1 WHERE id = ?').run(id);
+  const result = db.prepare('UPDATE jobs SET games_completed = COALESCE(games_completed, 0) + ? WHERE id = ?').run(count, id);
   return result.changes > 0;
 }
 

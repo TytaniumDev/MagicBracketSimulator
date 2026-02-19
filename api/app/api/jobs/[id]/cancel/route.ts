@@ -36,6 +36,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     await jobStore.cancelJob(id);
 
+    // Trigger log aggregation so structured.json gets created from completed sims
+    jobStore.aggregateJobResults(id).catch(err => {
+      console.error(`[Aggregation] Failed for cancelled job ${id}:`, err);
+    });
+
     return NextResponse.json({ id, status: 'CANCELLED' });
   } catch (error) {
     console.error('POST /api/jobs/[id]/cancel error:', error);

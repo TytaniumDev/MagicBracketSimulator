@@ -759,17 +759,17 @@ export default function JobStatusPage() {
           </div>
         )}
 
-        {/* AI Analysis Section - shown for completed jobs and failed jobs with partial data */}
-        {(job.status === 'COMPLETED' || (job.status === 'FAILED' && effectiveGamesPlayed > 0)) && (
+        {/* AI Analysis Section - shown for completed jobs and failed/cancelled jobs with partial data */}
+        {(job.status === 'COMPLETED' || ((job.status === 'FAILED' || job.status === 'CANCELLED') && effectiveGamesPlayed > 0)) && (
           <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
             <h3 className="text-lg font-semibold text-gray-200 mb-3">AI Analysis</h3>
 
             {/* No analysis yet - show analyze button */}
             {!result && (
               <div className="space-y-4">
-                {job.status === 'FAILED' ? (
+                {(job.status === 'FAILED' || job.status === 'CANCELLED') ? (
                   <p className="text-sm text-amber-400">
-                    Job failed but {effectiveGamesPlayed} game{effectiveGamesPlayed !== 1 ? 's' : ''} completed. You can analyze the partial results.
+                    Job {job.status === 'CANCELLED' ? 'cancelled' : 'failed'} but {effectiveGamesPlayed} game{effectiveGamesPlayed !== 1 ? 's' : ''} completed. You can analyze the partial results.
                   </p>
                 ) : (
                   <p className="text-sm text-gray-400">

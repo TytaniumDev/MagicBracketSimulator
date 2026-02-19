@@ -29,7 +29,7 @@ export interface SimulationResult {
 const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest';
 const RAM_PER_SIM_MB = 900;  // Increased from 600 to fix OOM kills
 const SYSTEM_RESERVE_MB = 2048;
-const CONTAINER_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes
+const CONTAINER_TIMEOUT_MS = 2 * 60 * 60 * 1000;  // 2 hours (4 sequential games per container)
 const MAX_CONCURRENT_SIMS = parseInt(process.env.MAX_CONCURRENT_SIMS || '6', 10);
 const CPUS_PER_SIM = 2;  // Forge + Java JIT + xvfb needs ~2 CPUs per sim
 
@@ -69,7 +69,7 @@ export async function runSimulationContainer(
     '-e', 'LOGS_DIR=/app/logs',
     SIMULATION_IMAGE,
     '--decks', ...deckFilenames,
-    '--simulations', '1',
+    '--simulations', '4',
     '--id', `${jobId}_${simId}`,
   ];
 

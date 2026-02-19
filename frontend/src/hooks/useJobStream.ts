@@ -62,8 +62,9 @@ export function useJobStream<T>(jobId: string | undefined) {
             setError(null);
 
             // Stream auto-closes on terminal states, but also close client-side
+            // Delay close to allow the simulations event to be processed first
             if (data.status === 'COMPLETED' || data.status === 'FAILED' || data.status === 'CANCELLED') {
-              closeConnection();
+              setTimeout(() => closeConnection(), 500);
             }
           } catch {
             // Ignore parse errors

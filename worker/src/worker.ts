@@ -42,7 +42,7 @@ import {
   runSimulationContainer,
   calculateLocalCapacity,
 } from './docker-runner.js';
-import { extractWinningTurn } from './condenser.js';
+
 
 const SECRET_NAME = 'simulation-worker-config';
 const WORKER_ID_FILE = 'worker-id';
@@ -236,20 +236,6 @@ async function reportSimulationStatus(
 // ============================================================================
 
 /**
- * Extract winner and winning turn from a single game's log text.
- * Uses the same pattern as the API condenser (patterns.ts EXTRACT_WINNER).
- */
-function extractWinnerFromLog(logText: string): { winner?: string; winningTurn?: number } {
-  const winnerMatch = logText.match(/(.+?)\s+(?:wins\s+the\s+game|has\s+won!?)(?:\s|$|!|\.)/i);
-  if (!winnerMatch) return {};
-
-  const winner = winnerMatch[1].trim();
-  const winningTurn = extractWinningTurn(logText);
-
-  return { winner, winningTurn: winningTurn > 0 ? winningTurn : undefined };
-}
-
-/**
  * Upload a single simulation's raw log to the API (incremental, non-fatal).
  */
 async function uploadSingleSimulationLog(
@@ -360,18 +346,14 @@ async function processSimulation(
         durationMs: result.durationMs,
       });
     } else if (result.exitCode === 0) {
-      const { winner, winningTurn } = extractWinnerFromLog(result.logText);
-      if (winner) {
-        console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, winner=${winner}${winningTurn ? ` turn=${winningTurn}` : ''}, logSize=${(result.logText.length / 1024).toFixed(1)}KB`);
-      } else {
-        console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, no winner found, logSize=${(result.logText.length / 1024).toFixed(1)}KB`);
-      }
+      // With 4 games per container, skip per-container winner extraction
+      // (extractWinnerFromLog would only find game 1's winner from concatenated output).
+      // Accurate per-game win data comes from aggregateJobResults → splitConcatenatedGames.
+      console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB`);
 
       await reportSimulationStatus(jobId, simId, {
         state: 'COMPLETED',
         durationMs: result.durationMs,
-        ...(winner && { winner }),
-        ...(winningTurn !== undefined && { winningTurn }),
       });
 
       // Upload log incrementally (non-fatal)
@@ -591,8 +573,9 @@ async function pollForJobs(): Promise<void> {
       if (res.status === 200) {
         const job = await res.json() as JobData;
 
-        // Process all simulations for this job with bounded concurrency
-        const totalSims = job.simulations;
+        // Each container runs 4 games; derive container count from requested simulations
+        const GAMES_PER_CONTAINER = 4;
+        const totalSims = Math.ceil(job.simulations / GAMES_PER_CONTAINER);
         const simIds = Array.from({ length: totalSims }, (_, i) => ({
           simId: `sim_${String(i).padStart(3, '0')}`,
           index: i,
