@@ -40,3 +40,12 @@ jobs:
           allowed_bots: 'google-labs-jules[bot]'
           use_sticky_comment: true
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          settings: |
+            {
+              "permissions": {
+                "allow": [
+                  "Bash(gh *)",
+                  "WebFetch"
+                ]
+              }
+            }
