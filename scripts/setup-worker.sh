@@ -245,6 +245,12 @@ if [ -n "$WORKER_ID" ]; then
   echo "WORKER_ID=$WORKER_ID" >> "$WORKER_DIR/.env"
 fi
 
+# Owner email (for controlling this worker from the frontend UI)
+read -r -p "Enter your Google account email (for worker ownership, or leave blank): " OWNER_EMAIL
+if [ -n "$OWNER_EMAIL" ]; then
+  echo "WORKER_OWNER_EMAIL=$OWNER_EMAIL" >> "$WORKER_DIR/.env"
+fi
+
 chmod 600 "$WORKER_DIR/.env"
 echo "  worker/.env"
 

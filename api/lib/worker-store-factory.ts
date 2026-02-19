@@ -23,6 +23,27 @@ export async function getActiveWorkers(staleThresholdMs = 60_000): Promise<Worke
   return sqliteStore.getActiveWorkers(staleThresholdMs);
 }
 
+export async function getMaxConcurrentOverride(workerId: string): Promise<number | null> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.getMaxConcurrentOverride(workerId);
+  }
+  return sqliteStore.getMaxConcurrentOverride(workerId);
+}
+
+export async function setMaxConcurrentOverride(workerId: string, override: number | null): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.setMaxConcurrentOverride(workerId, override);
+  }
+  return sqliteStore.setMaxConcurrentOverride(workerId, override);
+}
+
+export async function getOwnerEmail(workerId: string): Promise<string | null> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.getOwnerEmail(workerId);
+  }
+  return sqliteStore.getOwnerEmail(workerId);
+}
+
 export async function getQueueDepth(): Promise<number> {
   if (USE_FIRESTORE) {
     return firestoreStore.getQueueDepth();

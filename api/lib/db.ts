@@ -241,6 +241,18 @@ export function getDb(): Database.Database {
     )
   `);
 
+  // Add per-worker concurrency override and owner email columns
+  try {
+    db.exec(`ALTER TABLE worker_heartbeats ADD COLUMN max_concurrent_override INTEGER`);
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE worker_heartbeats ADD COLUMN owner_email TEXT`);
+  } catch {
+    // Column already exists
+  }
+
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);
 

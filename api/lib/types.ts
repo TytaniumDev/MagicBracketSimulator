@@ -221,6 +221,8 @@ export interface WorkerInfo {
   uptimeMs: number;
   lastHeartbeat: string; // ISO timestamp
   version?: string;
+  maxConcurrentOverride?: number | null; // admin-set override (null = use auto)
+  ownerEmail?: string | null;            // email of the worker's operator
 }
 
 export interface CreateJobRequest {

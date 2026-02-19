@@ -382,8 +382,12 @@ async function processSimulation(
 // Heartbeat
 // ============================================================================
 
+// Track whether we're currently operating under an override
+let currentOverride: number | null = null;
+
 /**
  * Send a heartbeat to the API so the frontend knows this worker is online.
+ * Parses the response for dynamic concurrency overrides.
  */
 async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: number): Promise<void> {
   const url = `${getApiUrl()}/api/workers/heartbeat`;
@@ -399,11 +403,38 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
         capacity: localCapacity,
         activeSimulations: activeSimCount,
         uptimeMs: Date.now() - workerStartTime,
+        ownerEmail: process.env.WORKER_OWNER_EMAIL || undefined,
       }),
       signal: AbortSignal.timeout(timeoutMs ?? API_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.warn(`Heartbeat failed: HTTP ${res.status} ${res.statusText}`);
+      return;
+    }
+
+    // Parse response for concurrency override
+    const data = await res.json() as { ok: boolean; maxConcurrentOverride?: number };
+    if (simSemaphore && status !== 'updating') {
+      if (typeof data.maxConcurrentOverride === 'number') {
+        const override = Math.max(1, data.maxConcurrentOverride);
+        if (override !== simSemaphore.maxSlots) {
+          const oldMax = simSemaphore.maxSlots;
+          simSemaphore.resize(override);
+          console.log(`Capacity override: ${oldMax} -> ${override} (hardware: ${localCapacity})`);
+          if (override > localCapacity) {
+            console.log(`WARNING: Override (${override}) exceeds hardware capacity (${localCapacity}). CPU/memory contention possible.`);
+          }
+        }
+        currentOverride = override;
+      } else if (currentOverride !== null) {
+        // Override was cleared — revert to hardware capacity
+        const oldMax = simSemaphore.maxSlots;
+        if (oldMax !== localCapacity) {
+          simSemaphore.resize(localCapacity);
+          console.log(`Capacity override cleared: ${oldMax} -> ${localCapacity} (hardware)`);
+        }
+        currentOverride = null;
+      }
     }
   } catch (err) {
     console.warn('Heartbeat error:', err instanceof Error ? err.message : err);
@@ -462,10 +493,16 @@ async function verifyDockerAvailable(): Promise<void> {
  */
 class Semaphore {
   private count: number;
+  private max: number;
   private waiting: (() => void)[] = [];
 
   constructor(max: number) {
     this.count = max;
+    this.max = max;
+  }
+
+  get maxSlots(): number {
+    return this.max;
   }
 
   async acquire(): Promise<void> {
@@ -491,6 +528,27 @@ class Semaphore {
       next();
     } else {
       this.count++;
+    }
+  }
+
+  /**
+   * Dynamically resize the semaphore.
+   * If increasing: release delta slots (wakes waiting tasks).
+   * If decreasing: reduce available count (no preemption, drains naturally).
+   */
+  resize(newMax: number): void {
+    const oldMax = this.max;
+    if (newMax === oldMax) return;
+    const delta = newMax - oldMax;
+    this.max = newMax;
+    if (delta > 0) {
+      // Increasing: release extra slots
+      for (let i = 0; i < delta; i++) {
+        this.release();
+      }
+    } else {
+      // Decreasing: reduce available count (but don't go below 0)
+      this.count = Math.max(0, this.count + delta);
     }
   }
 }

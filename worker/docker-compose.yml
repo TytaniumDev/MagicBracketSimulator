@@ -34,6 +34,9 @@ services:
       # Simulation image — full GHCR path so swarm can resolve the digest
       - SIMULATION_IMAGE=${SIMULATION_IMAGE:-ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest}
 
+      # Worker owner email (for frontend UI ownership)
+      - WORKER_OWNER_EMAIL=${WORKER_OWNER_EMAIL:-}
+
       # Docker CLI API version — worker image ships Docker CLI v20 (API 1.41) but
       # newer daemons (v25+) require API ≥1.44. Override to negotiate correctly.
       - DOCKER_API_VERSION=1.44

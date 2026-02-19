@@ -77,7 +77,7 @@ export default function Browse() {
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const apiBase = getApiBase();
-  const { workers, queueDepth, isLoading: workersLoading } = useWorkerStatus();
+  const { workers, queueDepth, isLoading: workersLoading, refresh: refreshWorkers } = useWorkerStatus();
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -155,7 +155,7 @@ export default function Browse() {
       )}
 
       {/* Worker Status Banner */}
-      <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} />
+      <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} onRefresh={refreshWorkers} userEmail={user?.email} />
 
       {/* Jobs List */}
       {isLoading && (

@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { workerId, workerName, status, currentJobId, capacity, activeSimulations, uptimeMs, version } = body;
+    const { workerId, workerName, status, currentJobId, capacity, activeSimulations, uptimeMs, version, ownerEmail } = body;
 
     if (!workerId || !workerName) {
       return NextResponse.json({ error: 'workerId and workerName are required' }, { status: 400 });
@@ -30,10 +30,17 @@ export async function POST(request: NextRequest) {
       uptimeMs: typeof uptimeMs === 'number' ? uptimeMs : 0,
       lastHeartbeat: new Date().toISOString(),
       ...(version && { version }),
+      ...(ownerEmail && { ownerEmail }),
     };
 
     await workerStore.upsertHeartbeat(info);
-    return NextResponse.json({ ok: true });
+
+    // Return any stored override so the worker can apply it dynamically
+    const override = await workerStore.getMaxConcurrentOverride(workerId);
+    return NextResponse.json({
+      ok: true,
+      ...(override !== null && override !== undefined && { maxConcurrentOverride: override }),
+    });
   } catch (error) {
     console.error('POST /api/workers/heartbeat error:', error);
     return NextResponse.json(

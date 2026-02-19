@@ -8,4 +8,6 @@ export interface WorkerInfo {
   uptimeMs: number;
   lastHeartbeat: string;
   version?: string;
+  maxConcurrentOverride?: number | null;
+  ownerEmail?: string | null;
 }

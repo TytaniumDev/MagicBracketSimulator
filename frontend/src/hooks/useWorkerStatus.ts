@@ -6,6 +6,7 @@ interface WorkerStatusResult {
   workers: WorkerInfo[];
   queueDepth: number;
   isLoading: boolean;
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -43,5 +44,5 @@ export function useWorkerStatus(): WorkerStatusResult {
     };
   }, [fetchStatus]);
 
-  return { workers, queueDepth, isLoading };
+  return { workers, queueDepth, isLoading, refresh: fetchStatus };
 }
