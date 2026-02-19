@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { SimulationStatus, SimulationState } from '../types/simulation';
 
 interface SimulationGridProps {
@@ -30,8 +30,15 @@ function formatDuration(ms: number): string {
   return `${m}m ${s}s`;
 }
 
+interface SimGroup {
+  label: string;
+  workerId: string | null; // null = pending/unassigned
+  workerName?: string;
+  cells: (SimulationStatus | null)[];
+}
+
 /**
- * Visual grid of per-simulation statuses.
+ * Visual grid of per-simulation statuses, grouped by worker.
  * Each square represents one simulation, color-coded by state.
  * Hover shows details; looks like a GitHub contribution graph.
  */
@@ -47,13 +54,64 @@ export function SimulationGrid({ simulations, totalSimulations }: SimulationGrid
     {} as Record<string, number>
   );
 
-  // If no simulations to show, render placeholder squares
-  const cells: (SimulationStatus | null)[] = [];
-  for (let i = 0; i < totalSimulations; i++) {
-    cells.push(simulations.find((s) => s.index === i) ?? null);
-  }
+  // Group simulations by worker
+  const groups = useMemo(() => {
+    const simByIndex = new Map<number, SimulationStatus>();
+    for (const s of simulations) {
+      simByIndex.set(s.index, s);
+    }
 
-  // Adaptive cell size based on total count
+    // Separate into pending (no workerId) and assigned (has workerId)
+    const pendingCells: (SimulationStatus | null)[] = [];
+    const workerMap = new Map<string, { sims: SimulationStatus[]; earliestIndex: number }>();
+
+    for (let i = 0; i < totalSimulations; i++) {
+      const sim = simByIndex.get(i) ?? null;
+      if (!sim || !sim.workerId) {
+        // Unassigned or missing — goes to pending group
+        pendingCells.push(sim);
+      } else {
+        const existing = workerMap.get(sim.workerId);
+        if (existing) {
+          existing.sims.push(sim);
+        } else {
+          workerMap.set(sim.workerId, { sims: [sim], earliestIndex: i });
+        }
+      }
+    }
+
+    const result: SimGroup[] = [];
+
+    // Pending group always first
+    if (pendingCells.length > 0) {
+      result.push({
+        label: 'Pending',
+        workerId: null,
+        cells: pendingCells,
+      });
+    }
+
+    // Worker groups sorted by earliest simulation index
+    const sortedWorkers = [...workerMap.entries()].sort(
+      ([, a], [, b]) => a.earliestIndex - b.earliestIndex
+    );
+
+    for (const [workerId, { sims }] of sortedWorkers) {
+      // Sort sims by index within the group
+      sims.sort((a, b) => a.index - b.index);
+      const workerName = sims.find((s) => s.workerName)?.workerName;
+      result.push({
+        label: workerName || workerId.slice(0, 8),
+        workerId,
+        workerName,
+        cells: sims,
+      });
+    }
+
+    return result;
+  }, [simulations, totalSimulations]);
+
+  // Adaptive cell size based on total count (global for consistency)
   const cellSize = totalSimulations <= 20 ? 'w-5 h-5' : totalSimulations <= 50 ? 'w-4 h-4' : 'w-3 h-3';
   const gapSize = totalSimulations <= 50 ? 'gap-1' : 'gap-0.5';
 
@@ -70,20 +128,39 @@ export function SimulationGrid({ simulations, totalSimulations }: SimulationGrid
         ))}
       </div>
 
-      {/* Grid */}
-      <div className={`flex flex-wrap ${gapSize}`}>
-        {cells.map((sim, i) => {
-          const state: SimulationState = sim?.state ?? 'PENDING';
-          return (
-            <div
-              key={i}
-              className={`${cellSize} rounded-sm cursor-default transition-transform hover:scale-125 ${STATE_COLORS[state]}`}
-              onMouseEnter={() => sim && setHoveredSim(sim)}
-              onMouseLeave={() => setHoveredSim(null)}
-              title={sim ? `${sim.simId}: ${STATE_LABELS[state]}` : `sim_${String(i).padStart(3, '0')}: Pending`}
-            />
-          );
-        })}
+      {/* Grouped grids */}
+      <div className="space-y-3">
+        {groups.map((group) => (
+          <div key={group.workerId ?? '__pending__'}>
+            {/* Group header */}
+            <div className="flex items-center gap-1.5 mb-1 text-xs">
+              {group.workerId ? (
+                <>
+                  <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                  <span className="text-gray-400 font-mono">{group.label}</span>
+                </>
+              ) : (
+                <span className="text-gray-500">{group.label}</span>
+              )}
+              <span className="text-gray-600">({group.cells.length})</span>
+            </div>
+            {/* Grid */}
+            <div className={`flex flex-wrap ${gapSize}`}>
+              {group.cells.map((sim, i) => {
+                const state: SimulationState = sim?.state ?? 'PENDING';
+                return (
+                  <div
+                    key={sim?.index ?? `pending-${i}`}
+                    className={`${cellSize} rounded-sm cursor-default transition-transform hover:scale-125 ${STATE_COLORS[state]}`}
+                    onMouseEnter={() => sim && setHoveredSim(sim)}
+                    onMouseLeave={() => setHoveredSim(null)}
+                    title={sim ? `${sim.simId}: ${STATE_LABELS[state]}` : `Pending`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Tooltip details */}
@@ -110,11 +187,6 @@ export function SimulationGrid({ simulations, totalSimulations }: SimulationGrid
           {hoveredSim.errorMessage && (
             <div className="text-red-400 text-xs">
               {hoveredSim.errorMessage}
-            </div>
-          )}
-          {(hoveredSim.workerName || hoveredSim.workerId) && (
-            <div className="text-gray-500 text-xs">
-              Worker: {hoveredSim.workerName || hoveredSim.workerId}
             </div>
           )}
         </div>

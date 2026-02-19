@@ -688,11 +688,6 @@ export default function JobStatusPage() {
           >
             {statusLabel}
           </span>
-          {(job.workerName || job.workerId) && (
-            <span className="ml-3 text-gray-500 text-xs font-mono">
-              Worker: {job.workerName || job.workerId?.slice(0, 8)}
-            </span>
-          )}
           {job.status === 'RUNNING' && (
             <button
               type="button"
