@@ -5,6 +5,8 @@ import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
 import { useJobStream } from '../hooks/useJobStream';
+import { useWorkerStatus } from '../hooks/useWorkerStatus';
+import { useAuth } from '../contexts/AuthContext';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
@@ -142,6 +144,8 @@ export default function JobStatusPage() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  const { user } = useAuth();
+  const { workers, refresh: refreshWorkers } = useWorkerStatus();
   const apiBase = getApiBase();
   const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -751,6 +755,9 @@ export default function JobStatusPage() {
           <SimulationGrid
             simulations={streamSimulations}
             totalSimulations={job.simulations}
+            workers={workers}
+            userEmail={user?.email}
+            onWorkerRefresh={refreshWorkers}
           />
         )}
         {job.status === 'FAILED' && job.errorMessage && (
@@ -804,11 +811,13 @@ export default function JobStatusPage() {
                 type="button"
                 onClick={() => setShowPayload((v) => !v)}
                 className="text-sm text-blue-400 hover:text-blue-300 mb-2"
+                aria-expanded={showPayload}
+                aria-controls="payload-section"
               >
                 {showPayload ? 'Hide' : 'Show'} exact data and prompt sent to Gemini
               </button>
               {showPayload && (
-                <div className="mt-2 space-y-4">
+                <div id="payload-section" className="mt-2 space-y-4">
                   {analyzePayloadError && (
                     <p className="text-sm text-red-400">{analyzePayloadError}</p>
                   )}
@@ -916,11 +925,13 @@ export default function JobStatusPage() {
                     type="button"
                     onClick={() => setShowRawJson((v) => !v)}
                     className="text-sm text-gray-500 hover:text-gray-400"
+                    aria-expanded={showRawJson}
+                    aria-controls="raw-json-section"
                   >
                     {showRawJson ? 'Hide' : 'Show'} raw JSON
                   </button>
                   {showRawJson && (
-                    <pre className="mt-2 text-xs overflow-auto max-h-64 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-400">
+                    <pre id="raw-json-section" className="mt-2 text-xs overflow-auto max-h-64 p-3 bg-gray-900 rounded whitespace-pre-wrap text-gray-400">
                       {JSON.stringify(result, null, 2)}
                     </pre>
                   )}
@@ -951,8 +962,9 @@ export default function JobStatusPage() {
                 <div className="flex flex-wrap gap-4 mb-4 items-center">
                   {structuredGames.length > 1 && (
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-400">Game:</label>
+                      <label htmlFor="game-select" className="text-sm text-gray-400">Game:</label>
                       <select
+                        id="game-select"
                         value={selectedGame}
                         onChange={(e) => {
                           setSelectedGame(Number(e.target.value));
@@ -967,17 +979,19 @@ export default function JobStatusPage() {
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-400">Turn:</label>
+                    <label htmlFor="turn-slider" className="text-sm text-gray-400">Turn:</label>
                     <button
                       type="button"
                       onClick={() => setSelectedTurn((t) => Math.max(1, t - 1))}
                       disabled={selectedTurn <= 1}
                       className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Previous turn"
+                      aria-label="Previous turn"
                     >
                       Prev
                     </button>
                     <input
+                      id="turn-slider"
                       type="range"
                       min={1}
                       max={maxTurns}
@@ -994,6 +1008,7 @@ export default function JobStatusPage() {
                       disabled={selectedTurn >= maxTurns}
                       className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Next turn"
+                      aria-label="Next turn"
                     >
                       Next
                     </button>
@@ -1006,6 +1021,7 @@ export default function JobStatusPage() {
                   <button
                     type="button"
                     onClick={() => setEventFilters(new Set())}
+                    aria-pressed={eventFilters.size === 0}
                     className={`px-2 py-1 text-xs rounded ${
                       eventFilters.size === 0
                         ? 'bg-blue-600 text-white'
@@ -1018,6 +1034,7 @@ export default function JobStatusPage() {
                     <button
                       key={opt.value}
                       type="button"
+                      aria-pressed={eventFilters.has(opt.value)}
                       onClick={() => {
                         setEventFilters((prev) => {
                           const next = new Set(prev);
@@ -1036,6 +1053,7 @@ export default function JobStatusPage() {
                       }`}
                     >
                       <span
+                        aria-hidden="true"
                         className="w-2 h-2 rounded"
                         style={{ backgroundColor: getEventColor(opt.value) }}
                       ></span>
@@ -1173,12 +1191,14 @@ export default function JobStatusPage() {
               type="button"
               onClick={() => setShowLogPanel((v) => !v)}
               className="text-sm text-gray-500 hover:text-gray-400"
+              aria-expanded={showLogPanel}
+              aria-controls="log-panel-section"
             >
               {showLogPanel ? 'Hide' : 'Show'} detailed game logs
             </button>
             
             {showLogPanel && (
-              <div className="mt-4">
+              <div id="log-panel-section" className="mt-4">
                 {/* Tab buttons */}
                 <div className="flex gap-2 mb-4">
                   <button

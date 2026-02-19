@@ -41,6 +41,8 @@ import { runProcess } from './process.js';
 import {
   runSimulationContainer,
   calculateLocalCapacity,
+  cleanupOrphanedContainers,
+  pruneDockerResources,
 } from './docker-runner.js';
 
 
@@ -56,6 +58,7 @@ let currentWorkerName = '';
 let activeSimCount = 0;
 let localCapacity = 0;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+let dockerCleanupInterval: ReturnType<typeof setInterval> | null = null;
 const workerStartTime = Date.now();
 
 // Shared simulation concurrency semaphore, initialized in main()
@@ -289,7 +292,11 @@ async function processSimulation(
     return;
   }
 
-  // Check if job has been cancelled
+  // Skip if job is already in a terminal state (stale Pub/Sub redelivery, etc.)
+  if (job.status === 'COMPLETED' || job.status === 'FAILED') {
+    console.log(`${simLabel} Job ${jobId} is already ${job.status}, skipping`);
+    return;  // Don't report status — stale scanner may have deleted sim records
+  }
   if (job.status === 'CANCELLED') {
     console.log(`${simLabel} Job ${jobId} is cancelled, skipping`);
     await reportSimulationStatus(jobId, simId, { state: 'CANCELLED' });
@@ -682,10 +689,14 @@ function handleShutdown(signal: string): void {
 
   console.log(`Received ${signal}, shutting down gracefully...`);
 
-  // Stop periodic heartbeat
+  // Stop periodic heartbeat and Docker cleanup
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
+  }
+  if (dockerCleanupInterval) {
+    clearInterval(dockerCleanupInterval);
+    dockerCleanupInterval = null;
   }
 
   // Send a final 'updating' heartbeat so the frontend knows we're restarting
@@ -740,7 +751,11 @@ async function main(): Promise<void> {
   // Verify Docker is accessible
   await verifyDockerAvailable();
 
-  // Pre-pull simulation image
+  // Startup cleanup: remove orphaned containers and prune unused resources
+  await cleanupOrphanedContainers();
+  await pruneDockerResources();
+
+  // Pre-pull simulation image (after prune so it's not removed)
   await ensureSimulationImage();
 
   // Calculate capacity for heartbeat and flow control
@@ -750,6 +765,14 @@ async function main(): Promise<void> {
   // Start heartbeat interval (every 15 seconds)
   sendHeartbeat(); // Initial heartbeat
   heartbeatInterval = setInterval(() => sendHeartbeat(), 15_000);
+
+  // Periodic Docker cleanup (every hour) to free disk space
+  dockerCleanupInterval = setInterval(() => {
+    console.log('Periodic Docker cleanup...');
+    pruneDockerResources().catch((err) =>
+      console.warn('Periodic Docker cleanup error:', err instanceof Error ? err.message : err),
+    );
+  }, 60 * 60 * 1000);
 
   if (usePubSub) {
     const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';

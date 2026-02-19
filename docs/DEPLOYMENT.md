@@ -126,3 +126,21 @@ docker compose -f worker/docker-compose.yml logs -f worker
 # Watchtower logs (see when updates happen)
 docker compose -f worker/docker-compose.yml -f worker/docker-compose.watchtower.yml logs -f watchtower
 ```
+
+## Worker Configuration
+
+The worker can be configured via environment variables (in `.env` or Secret Manager).
+
+| Variable | Description | Default / Example |
+|----------|-------------|-------------------|
+| `GOOGLE_CLOUD_PROJECT` | GCP Project ID (triggers GCP mode if set) | `magic-bracket-simulator` |
+| `API_URL` | Base URL of the API | `http://localhost:3000` or Cloud Run URL |
+| `WORKER_SECRET` | Shared secret for worker authentication | `some-secret-string` |
+| `PUBSUB_SUBSCRIPTION` | Pub/Sub subscription name (GCP mode only) | `job-created-worker` |
+| `SIMULATION_IMAGE` | Docker image for the simulation container | `ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest` |
+| `WORKER_NAME` | Display name for the worker (visible in UI) | Hostname |
+| `WORKER_ID` | Unique ID for the worker (auto-generated if unset) | `worker-uuid-1234` |
+| `WORKER_OWNER_EMAIL` | Contact email for the worker operator | `admin@example.com` |
+| `POLL_INTERVAL_MS` | Polling interval in ms (Local mode only) | `3000` |
+| `JOBS_DIR` | Local directory for temporary job files | `/tmp/mbs-jobs` |
+| `AUTH_TOKEN` | Bearer token if API requires standard auth (rare) | - |

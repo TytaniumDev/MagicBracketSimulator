@@ -7,9 +7,8 @@
 
 ## Tooling
 - **Node.js**: 20+ (managed by `npm`)
-- **Python**: 3.11+ (managed by `uv`)
 - **Docker**: Required for simulation engine
-- **Package Manager**: `npm` (Node), `uv` (Python)
+- **Package Manager**: `npm` (Node)
 
 ## Setup
 - **Install Node Dependencies**: `npm run install:all`
@@ -35,4 +34,4 @@
 ## Project Structure
 - `frontend/`: React app
 - `api/`: Next.js API, ingestion, and analysis
-- `worker/`: Docker simulation runner
+- `worker/`: Node.js + Docker simulation runner
