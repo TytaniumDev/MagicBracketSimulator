@@ -42,6 +42,7 @@ import {
   runSimulationContainer,
   calculateLocalCapacity,
 } from './docker-runner.js';
+import { extractWinningTurn } from './condenser.js';
 
 const SECRET_NAME = 'simulation-worker-config';
 const WORKER_ID_FILE = 'worker-id';
@@ -243,14 +244,9 @@ function extractWinnerFromLog(logText: string): { winner?: string; winningTurn?:
   if (!winnerMatch) return {};
 
   const winner = winnerMatch[1].trim();
+  const winningTurn = extractWinningTurn(logText);
 
-  // Find the last "Turn: Turn N" line before the win to determine winning turn
-  const turnMatches = [...logText.matchAll(/^Turn:?\s*Turn\s+(\d+)/gim)];
-  const winningTurn = turnMatches.length > 0
-    ? parseInt(turnMatches[turnMatches.length - 1][1], 10)
-    : undefined;
-
-  return { winner, winningTurn };
+  return { winner, winningTurn: winningTurn > 0 ? winningTurn : undefined };
 }
 
 /**

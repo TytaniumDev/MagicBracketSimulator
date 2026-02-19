@@ -386,7 +386,7 @@ function extractWinner(rawLog: string): string {
   return '';
 }
 
-function extractWinningTurn(rawLog: string): number {
+export function extractWinningTurn(rawLog: string): number {
   const lines = rawLog.replace(/\r\n/g, '\n').split('\n');
   const turnRanges = extractTurnRanges(rawLog);
   const numPlayers = getNumPlayers(turnRanges);
