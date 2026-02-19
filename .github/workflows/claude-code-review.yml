@@ -45,7 +45,7 @@ jobs:
             {
               "permissions": {
                 "allow": [
-                  "Bash(gh *)",
+                  "Bash",
                   "WebFetch"
                 ]
               }
