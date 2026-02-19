@@ -10,4 +10,5 @@ export interface WorkerInfo {
   version?: string;
   maxConcurrentOverride?: number | null;
   ownerEmail?: string | null;
+  workerApiUrl?: string | null;
 }

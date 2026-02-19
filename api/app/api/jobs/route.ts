@@ -6,6 +6,7 @@ import { publishSimulationTasks } from '@/lib/pubsub';
 import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, GAMES_PER_CONTAINER, type CreateJobRequest } from '@/lib/types';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { checkRateLimit } from '@/lib/rate-limiter';
+import { pushToAllWorkers } from '@/lib/worker-push';
 
 /**
  * Convert Job to API summary format
@@ -128,6 +129,9 @@ export async function POST(request: NextRequest) {
         // Stale job recovery will re-publish messages if needed.
         console.error(`Failed to publish simulation tasks for job ${job.id}:`, pubsubError);
       }
+    } else {
+      // Local mode: notify workers that a new job is available (best-effort)
+      pushToAllWorkers('/notify', {}).catch(() => {});
     }
 
     return NextResponse.json(

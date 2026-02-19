@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
+import { pushToAllWorkers } from '@/lib/worker-push';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -35,6 +36,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     await jobStore.cancelJob(id);
+
+    // Push cancel to all active workers (best-effort)
+    pushToAllWorkers('/cancel', { jobId: id }).catch(() => {});
 
     // Trigger log aggregation so structured.json gets created from completed sims
     jobStore.aggregateJobResults(id).catch(err => {

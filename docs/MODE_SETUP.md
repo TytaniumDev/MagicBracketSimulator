@@ -60,6 +60,8 @@ PUBSUB_SUBSCRIPTION="job-created-worker"
 GCS_BUCKET="magic-bracket-simulator-artifacts"
 API_URL="http://localhost:3000"  # or Cloud Run URL
 WORKER_SECRET="shared-secret-for-worker-auth"
+WORKER_API_PORT=9090
+WORKER_API_URL="http://<vm-internal-ip>:9090"  # VPC-internal IP for API→worker push
 ```
 
 ### Running GCP Mode
@@ -111,7 +113,7 @@ npm run dev
 |---------|---------|
 | api | API backend with SQLite, Gemini integration |
 | frontend | React UI |
-| worker (polling) | Node.js orchestrator, polls API for jobs, spawns simulation containers |
+| worker (polling) | Node.js orchestrator, polls API for jobs (with push-based job notification for instant wake), spawns simulation containers |
 
 ---
 

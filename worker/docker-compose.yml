@@ -37,6 +37,10 @@ services:
       # Worker owner email (for frontend UI ownership)
       - WORKER_OWNER_EMAIL=${WORKER_OWNER_EMAIL:-}
 
+      # Worker API for push-based control (config, cancel, notify, drain)
+      - WORKER_API_PORT=${WORKER_API_PORT:-9090}
+      - WORKER_API_URL=${WORKER_API_URL:-}
+
       # Docker CLI API version — worker image ships Docker CLI v20 (API 1.41) but
       # newer daemons (v25+) require API ≥1.44. Override to negotiate correctly.
       - DOCKER_API_VERSION=1.44

@@ -2,6 +2,9 @@
 # Usage: docker compose -f worker/docker-compose.yml -f worker/docker-compose.local.yml up
 services:
   worker:
+    ports:
+      - "127.0.0.1:9090:9090"
     environment:
       - API_URL=http://host.docker.internal:3000
+      - WORKER_API_URL=http://host.docker.internal:9090
       # No PUBSUB_SUBSCRIPTION → triggers polling mode

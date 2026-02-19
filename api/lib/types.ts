@@ -35,6 +35,10 @@ export interface SimulationStatus {
   winner?: string;
   /** Turn the game ended on */
   winningTurn?: number;
+  /** Winners of each game in this container batch (e.g. 4 games per container) */
+  winners?: string[];
+  /** Winning turns for each game in this container batch */
+  winningTurns?: number[];
 }
 
 // -----------------------------------------------------------------------------
@@ -223,6 +227,7 @@ export interface WorkerInfo {
   version?: string;
   maxConcurrentOverride?: number | null; // admin-set override (null = use auto)
   ownerEmail?: string | null;            // email of the worker's operator
+  workerApiUrl?: string | null;          // URL for push-based control (e.g., http://host:9090)
 }
 
 export interface CreateJobRequest {

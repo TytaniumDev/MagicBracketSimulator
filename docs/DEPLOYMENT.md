@@ -74,6 +74,7 @@ The script installs `jq` and `gcloud` if needed, runs GCP auth (browser), reads 
 - Loads runtime config from Secret Manager (API_URL, GCS_BUCKET, PUBSUB_SUBSCRIPTION, WORKER_SECRET)
 - Subscribes to Pub/Sub for job messages
 - Runs Forge simulations and POSTs results back to the API
+- Receives push commands from the API (config overrides, cancellation, job notifications, drain control) via port 9090
 
 ### Credentials
 
@@ -91,9 +92,10 @@ The `setup-worker.sh` script places a service account key at `worker/sa.json` an
   settings. The worker auto-scales parallelism based on available RAM (~600MB per
   Forge instance). With 16GB RAM, expect 4-6 parallel simulations.
 
-- **SSH/Tailscale access:** No special configuration needed. The worker only makes
-  outbound connections (to GCP Pub/Sub, API, and Secret Manager). No inbound ports
-  required.
+- **SSH/Tailscale access:** The worker accepts inbound push commands from the API on
+  port 9090 (config updates, cancellation, job notifications). In local mode this is
+  localhost-only; in GCP mode it uses VPC-internal networking. The worker also makes
+  outbound connections to Pub/Sub, API, and Secret Manager.
 
 ### Auto-Deploy with Watchtower
 
@@ -143,4 +145,6 @@ The worker can be configured via environment variables (in `.env` or Secret Mana
 | `WORKER_OWNER_EMAIL` | Contact email for the worker operator | `admin@example.com` |
 | `POLL_INTERVAL_MS` | Polling interval in ms (Local mode only) | `3000` |
 | `JOBS_DIR` | Local directory for temporary job files | `/tmp/mbs-jobs` |
+| `WORKER_API_PORT` | Port for the worker's push-based HTTP API | `9090` |
+| `WORKER_API_URL` | Externally reachable URL for the worker API (reported via heartbeat) | `http://<vm-internal-ip>:9090` |
 | `AUTH_TOKEN` | Bearer token if API requires standard auth (rare) | - |

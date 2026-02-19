@@ -48,11 +48,14 @@ RUN mkdir -p /tmp/mbs-jobs \
 ENV NODE_ENV=production
 ENV JOBS_DIR=/tmp/mbs-jobs
 
+# Worker API port for push-based control
+EXPOSE 9090
+
 USER worker
 WORKDIR /app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node -e "console.log('healthy')" || exit 1
+# Health check via worker HTTP API
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:9090/health || exit 1
 
 ENTRYPOINT ["node", "dist/worker.js"]

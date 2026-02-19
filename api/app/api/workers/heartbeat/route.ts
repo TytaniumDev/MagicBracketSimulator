@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { workerId, workerName, status, currentJobId, capacity, activeSimulations, uptimeMs, version, ownerEmail } = body;
+    const { workerId, workerName, status, currentJobId, capacity, activeSimulations, uptimeMs, version, ownerEmail, workerApiUrl } = body;
 
     if (!workerId || !workerName) {
       return NextResponse.json({ error: 'workerId and workerName are required' }, { status: 400 });
@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       lastHeartbeat: new Date().toISOString(),
       ...(version && { version }),
       ...(ownerEmail && { ownerEmail }),
+      ...(workerApiUrl && { workerApiUrl }),
     };
 
     await workerStore.upsertHeartbeat(info);

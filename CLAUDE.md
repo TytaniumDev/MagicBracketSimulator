@@ -70,7 +70,7 @@ Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 
 - **frontend/** — Vite + React + Tailwind v4 + Firebase Auth (Google sign-in). Calls the API over HTTP. Config in `frontend/public/config.json` (committed, not secret).
 - **api/** — Next.js 15 app: API routes under `app/api/`. Handles deck ingestion (Moxfield URLs, precon names, raw deck text), job lifecycle, simulation tracking, and Gemini analysis. Uses factory pattern (`job-store-factory.ts`, `deck-store-factory.ts`) to swap SQLite/Firestore backends.
-- **worker/** — Slim Node.js Docker image (~100MB). Pulls jobs via Pub/Sub (GCP) or HTTP polling (local). Orchestrates simulation containers via Docker socket, reports per-simulation progress, aggregates logs, POSTs results to API.
+- **worker/** — Slim Node.js Docker image (~100MB). Pulls jobs via Pub/Sub (GCP) or HTTP polling (local). Orchestrates simulation containers via Docker socket, reports per-simulation progress, aggregates logs, POSTs results to API. Runs an HTTP server (port 9090) for push-based control: config updates, cancellation, job notification, and drain.
   - **worker/forge-engine/** — Headless Forge simulator assets: `run_sim.sh` entrypoint, precon decks in `precons/`.
 - **simulation/** — Standalone Docker image (~750MB, Java 17 + Forge + xvfb). Runs exactly 1 game, writes log file, exits. Spawned by the worker via `docker run --rm`.
 
@@ -81,6 +81,7 @@ Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 - **Per-simulation tracking**: Individual simulation states (PENDING/RUNNING/COMPLETED/FAILED) tracked via Firestore subcollection or SQLite table, streamed to frontend via SSE.
 - **Backward compatibility**: Worker auto-detects mode — container orchestration (default) or monolithic child processes (legacy, when `FORGE_PATH` is set).
 - **Deck resolution**: Supports Moxfield URLs, precon names, and raw deck text. Resolution happens in `api/lib/deck-resolver.ts` + `api/lib/moxfield-service.ts`.
+- **Push-based worker communication**: API pushes config overrides, cancellation commands, and job notifications to the worker's HTTP API (`worker/src/worker-api.ts`). Push helper lives in `api/lib/worker-push.ts`. Heartbeat remains for health monitoring and startup sync.
 
 ### Frontend Structure
 
@@ -108,6 +109,7 @@ Routes live under `api/app/api/`. Key endpoints:
 - `.env` files are gitignored; see `docs/MODE_SETUP.md` for required variables per mode
 - `frontend/.env` needs Firebase config vars (see `frontend/.env.example`)
 - `api/.env` needs `GEMINI_API_KEY`, and for GCP mode: `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `PUBSUB_TOPIC`, `WORKER_SECRET`
+- Worker env: `WORKER_API_PORT` (default 9090) and `WORKER_API_URL` (externally reachable URL for push-based API control)
 - Firebase deploy requires `FIREBASE_TOKEN` in GitHub Actions secrets
 - `npm run populate-worker-secret` and `npm run populate-frontend-secret` manage GCP Secret Manager entries
 

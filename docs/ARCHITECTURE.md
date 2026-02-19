@@ -52,6 +52,7 @@ flowchart TB
     User --> FirebaseHosting
     FirebaseHosting --> AppHosting
     PubSub -.-> Worker
+    AppHosting -->|push config/cancel/notify| Worker
     Worker -->|PATCH status| AppHosting
     Worker -->|POST logs| AppHosting
 ```
@@ -72,7 +73,7 @@ flowchart TB
 
 | Component | Image | Purpose |
 |-----------|-------|---------|
-| **Worker** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs |
+| **Worker** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs. Exposes port 9090 for push-based API control (config, cancel, notify, drain) |
 | **Simulation** | `ghcr.io/.../simulation` (~750MB) | Java 17 + Forge + xvfb: runs exactly 1 game, writes log, exits |
 | **Watchtower** | `nickfedor/watchtower` | Polls GHCR for new worker images, auto-restarts |
 
@@ -168,6 +169,13 @@ sequenceDiagram
     User->>Frontend: View results (SSE real-time)
     Frontend->>API: GET /api/jobs/:id/stream (SSE)
     API-->>Frontend: event: job + event: simulations
+
+    Note over User,Worker: Cancellation (push-based)
+    User->>Frontend: Cancel job
+    Frontend->>API: POST /api/jobs/:id/cancel
+    API->>Firestore: Update job → CANCELLED
+    API->>Worker: POST /cancel {jobId} (push)
+    Worker->>SimContainer: docker kill (abort)
 ```
 
 ### Per-Simulation Status Flow
@@ -222,6 +230,8 @@ capacity  = min(requested, cpuLimit, memLimit)
 ```
 
 Each simulation container is constrained to `--memory=600m --cpus=1`.
+
+The semaphore capacity can be dynamically overridden via the worker's push API (`POST /config`). When a user changes the override in the frontend, the API pushes the new value directly to the worker — no need to wait for the next heartbeat poll.
 
 ### Concurrency Differences
 
@@ -315,4 +325,6 @@ flowchart LR
 | Worker Dockerfile | `worker/Dockerfile` |
 | Simulation Dockerfile | `simulation/Dockerfile` |
 | CI/CD deploy | `.github/workflows/deploy-worker.yml` |
+| Worker HTTP API | `worker/src/worker-api.ts` — push-based control endpoints (config, cancel, notify, drain, health) |
+| Worker push helper | `api/lib/worker-push.ts` — `pushToWorker`, `pushToAllWorkers` |
 | Worker provisioning | `scripts/setup-worker.sh`, `scripts/populate-worker-secret.js` |

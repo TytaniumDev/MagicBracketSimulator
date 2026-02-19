@@ -9,8 +9,8 @@ import type { WorkerInfo } from './types';
 export function upsertHeartbeat(info: WorkerInfo): void {
   const db = getDb();
   db.prepare(`
-    INSERT INTO worker_heartbeats (worker_id, worker_name, status, current_job_id, capacity, active_simulations, uptime_ms, last_heartbeat, version, owner_email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO worker_heartbeats (worker_id, worker_name, status, current_job_id, capacity, active_simulations, uptime_ms, last_heartbeat, version, owner_email, worker_api_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(worker_id) DO UPDATE SET
       worker_name = excluded.worker_name,
       status = excluded.status,
@@ -20,7 +20,8 @@ export function upsertHeartbeat(info: WorkerInfo): void {
       uptime_ms = excluded.uptime_ms,
       last_heartbeat = excluded.last_heartbeat,
       version = excluded.version,
-      owner_email = excluded.owner_email
+      owner_email = excluded.owner_email,
+      worker_api_url = excluded.worker_api_url
   `).run(
     info.workerId,
     info.workerName,
@@ -32,6 +33,7 @@ export function upsertHeartbeat(info: WorkerInfo): void {
     info.lastHeartbeat,
     info.version ?? null,
     info.ownerEmail ?? null,
+    info.workerApiUrl ?? null,
   );
 }
 
@@ -59,6 +61,7 @@ export function getActiveWorkers(staleThresholdMs = 60_000): WorkerInfo[] {
     version: string | null;
     max_concurrent_override: number | null;
     owner_email: string | null;
+    worker_api_url: string | null;
   }>;
 
   const now = Date.now();
@@ -79,6 +82,7 @@ export function getActiveWorkers(staleThresholdMs = 60_000): WorkerInfo[] {
       ...(r.version && { version: r.version }),
       maxConcurrentOverride: r.max_concurrent_override ?? null,
       ownerEmail: r.owner_email ?? null,
+      workerApiUrl: r.worker_api_url ?? null,
     }));
 }
 
@@ -114,6 +118,17 @@ export function getOwnerEmail(workerId: string): string | null {
     'SELECT owner_email FROM worker_heartbeats WHERE worker_id = ?'
   ).get(workerId) as { owner_email: string | null } | undefined;
   return row?.owner_email ?? null;
+}
+
+/**
+ * Get the worker API URL for a specific worker. Returns null if not set or worker not found.
+ */
+export function getWorkerApiUrl(workerId: string): string | null {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT worker_api_url FROM worker_heartbeats WHERE worker_id = ?'
+  ).get(workerId) as { worker_api_url: string | null } | undefined;
+  return row?.worker_api_url ?? null;
 }
 
 /**

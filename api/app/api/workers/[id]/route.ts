@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth';
 import * as workerStore from '@/lib/worker-store-factory';
+import { pushToWorker } from '@/lib/worker-push';
 
 /**
  * PATCH /api/workers/:id — Update per-worker config (owner-gated).
@@ -46,7 +47,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Worker not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, maxConcurrentOverride });
+    // Push config to worker (best-effort)
+    let pushResult: 'success' | 'failed' | 'no_url' = 'no_url';
+    const workerApiUrl = await workerStore.getWorkerApiUrl(workerId);
+    if (workerApiUrl) {
+      const ok = await pushToWorker(workerApiUrl, '/config', { maxConcurrentOverride });
+      pushResult = ok ? 'success' : 'failed';
+    }
+
+    return NextResponse.json({ ok: true, maxConcurrentOverride, pushResult });
   } catch (error) {
     if (error instanceof Error && (error.message.includes('token') || error.message.includes('Unauthorized') || error.message.includes('allowlist'))) {
       return NextResponse.json({ error: error.message }, { status: 401 });

@@ -19,6 +19,7 @@ export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
     lastHeartbeat: info.lastHeartbeat,
     version: info.version ?? null,
     ownerEmail: info.ownerEmail ?? null,
+    workerApiUrl: info.workerApiUrl ?? null,
   }, { merge: true });
 }
 
@@ -57,6 +58,7 @@ export async function getActiveWorkers(staleThresholdMs = 60_000): Promise<Worke
         ...(d.version && { version: d.version }),
         maxConcurrentOverride: d.maxConcurrentOverride ?? null,
         ownerEmail: d.ownerEmail ?? null,
+        workerApiUrl: d.workerApiUrl ?? null,
       };
     });
 }
@@ -79,6 +81,15 @@ export async function setMaxConcurrentOverride(workerId: string, override: numbe
   if (!doc.exists) return false;
   await workersCollection.doc(workerId).update({ maxConcurrentOverride: override });
   return true;
+}
+
+/**
+ * Get the worker API URL for a specific worker. Returns null if not set or worker not found.
+ */
+export async function getWorkerApiUrl(workerId: string): Promise<string | null> {
+  const doc = await workersCollection.doc(workerId).get();
+  if (!doc.exists) return null;
+  return doc.data()?.workerApiUrl ?? null;
 }
 
 /**

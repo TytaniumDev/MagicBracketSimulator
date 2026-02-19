@@ -252,6 +252,11 @@ export function getDb(): Database.Database {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec(`ALTER TABLE worker_heartbeats ADD COLUMN worker_api_url TEXT`);
+  } catch {
+    // Column already exists
+  }
 
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);

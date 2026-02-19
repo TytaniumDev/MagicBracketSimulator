@@ -37,6 +37,13 @@ export async function setMaxConcurrentOverride(workerId: string, override: numbe
   return sqliteStore.setMaxConcurrentOverride(workerId, override);
 }
 
+export async function getWorkerApiUrl(workerId: string): Promise<string | null> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.getWorkerApiUrl(workerId);
+  }
+  return sqliteStore.getWorkerApiUrl(workerId);
+}
+
 export async function getOwnerEmail(workerId: string): Promise<string | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getOwnerEmail(workerId);
