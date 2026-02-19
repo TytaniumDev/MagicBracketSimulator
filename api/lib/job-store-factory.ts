@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, DeckSlot, SimulationStatus, WorkerInfo, GAMES_PER_CONTAINER } from './types';
+import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER } from './types';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -193,14 +193,26 @@ export async function deleteSimulations(jobId: string): Promise<void> {
 
 // ─── Stale Job Recovery ──────────────────────────────────────────────────────
 
+export async function conditionalUpdateSimulationStatus(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+  update: Partial<SimulationStatus>
+): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
+  }
+  return sqliteStore.conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
+}
+
 /**
- * Detect and recover a stale RUNNING job whose worker has died.
+ * Detect and recover a stale RUNNING/QUEUED job.
  *
- * If the job's worker is no longer sending heartbeats (2 min threshold):
- *   - retryCount === 0 → reset job to QUEUED for automatic retry
- *   - retryCount >= 1  → fail the job permanently
+ * Uses per-simulation recovery: individually retries stuck or failed sims
+ * rather than resetting the entire job. Sims are retried indefinitely until
+ * they succeed (or the job is cancelled).
  *
- * Returns true if the job was recovered (retried or failed).
+ * Returns true if any recovery action was taken.
  */
 export async function recoverStaleJob(jobId: string): Promise<boolean> {
   const job = await getJob(jobId);
@@ -211,73 +223,30 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
     return recoverStaleQueuedJob(jobId, job);
   }
 
-  if (job.status !== 'RUNNING' || !job.workerId) return false;
+  if (job.status !== 'RUNNING') return false;
 
-  // Check if the worker is still alive (2 min heartbeat threshold)
+  // Always use per-simulation recovery, regardless of primary worker health.
+  // Multiple workers can process sims for the same job via Pub/Sub.
   const activeWorkers = await workerStore.getActiveWorkers(120_000);
-  const workerAlive = activeWorkers.some((w) => w.workerId === job.workerId);
-
-  // Even if the primary worker is alive, check for stuck individual simulations
-  if (workerAlive) {
-    const recovered = await recoverStaleSimulations(jobId, job, activeWorkers);
-    return recovered;
-  }
-
-  const retryCount = job.retryCount ?? 0;
-
-  if (retryCount === 0) {
-    // First failure — retry the job
-    console.log(`[Recovery] Job ${jobId} worker ${job.workerId} is stale, retrying (attempt 1)`);
-    await deleteSimulations(jobId);
-    await resetJobForRetry(jobId);
-
-    // Re-initialize simulations and re-publish per-sim Pub/Sub messages
-    if (USE_FIRESTORE) {
-      try {
-        const containerCount = Math.ceil(job.simulations / GAMES_PER_CONTAINER);
-        await initializeSimulations(jobId, containerCount);
-        const { publishSimulationTasks } = await import('./pubsub');
-        await publishSimulationTasks(jobId, containerCount);
-      } catch (err) {
-        console.warn(`[Recovery] Failed to publish retry for job ${jobId}:`, err);
-      }
-    }
-    return true;
-  }
-
-  // Already retried — fail permanently
-  console.log(`[Recovery] Job ${jobId} worker stale after retry, failing permanently`);
-
-  // Mark remaining PENDING/RUNNING sims as FAILED
-  const sims = await getSimulationStatuses(jobId);
-  for (const sim of sims) {
-    if (sim.state === 'PENDING' || sim.state === 'RUNNING') {
-      await updateSimulationStatus(jobId, sim.simId, {
-        state: 'FAILED',
-        errorMessage: 'Worker lost connection',
-        completedAt: new Date().toISOString(),
-      });
-    }
-  }
-
-  await setJobFailed(jobId, 'Worker lost connection (retry exhausted)');
-  return true;
+  return recoverStaleSimulations(jobId, job, activeWorkers);
 }
 
 // ─── Per-Simulation Stale Detection ──────────────────────────────────────────
 
 const STALE_PENDING_THRESHOLD_MS = 5 * 60 * 1000;       // 5 minutes
 const STALE_RUNNING_THRESHOLD_MS = 2.5 * 60 * 60 * 1000; // 2.5 hours (container timeout + buffer)
-const STALE_WORKER_THRESHOLD_MS = 2 * 60 * 1000;         // 2 minutes (heartbeat threshold)
 
 /**
- * Detect and recover individual stuck simulations within a RUNNING job
- * where the primary worker is still alive.
+ * Detect and recover individual stuck simulations within a RUNNING job.
  *
- * Handles three cases:
+ * Handles four cases:
  * 1. PENDING sims stuck >5 min: Pub/Sub message was lost → republish
- * 2. RUNNING sims stuck >2.5 hrs: container hung → mark FAILED
- * 3. RUNNING sims whose worker is dead: worker crashed → mark FAILED + republish
+ * 2. RUNNING sims stuck >2.5 hrs: container hung → mark FAILED (will be retried next scan)
+ * 3. RUNNING sims whose worker is dead: worker crashed → mark FAILED (will be retried next scan)
+ * 4. FAILED sims: reset to PENDING + republish for automatic retry
+ *
+ * Uses conditional writes (Firestore transactions) to prevent race conditions
+ * where a worker completes a sim between the read and the recovery write.
  */
 async function recoverStaleSimulations(
   jobId: string,
@@ -298,7 +267,6 @@ async function recoverStaleSimulations(
   for (const sim of sims) {
     // Case 1: PENDING sim stuck for >5 minutes — republish its Pub/Sub message
     if (sim.state === 'PENDING') {
-      // Use the job's startedAt as a proxy (PENDING sims don't have their own startedAt)
       const jobStartedMs = job.startedAt ? job.startedAt.getTime() : job.createdAt.getTime();
       const pendingForMs = now - jobStartedMs;
       if (pendingForMs > STALE_PENDING_THRESHOLD_MS) {
@@ -312,25 +280,36 @@ async function recoverStaleSimulations(
     if (sim.state === 'RUNNING' && sim.startedAt) {
       const runningForMs = now - new Date(sim.startedAt).getTime();
       if (runningForMs > STALE_RUNNING_THRESHOLD_MS) {
-        console.log(`[Recovery] Job ${jobId} sim ${sim.simId} stuck RUNNING for ${Math.round(runningForMs / 60000)}min, marking FAILED`);
-        await updateSimulationStatus(jobId, sim.simId, {
+        console.log(`[Recovery] Job ${jobId} sim ${sim.simId} stuck RUNNING for ${Math.round(runningForMs / 60000)}min, marking FAILED for retry`);
+        const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
           state: 'FAILED',
           errorMessage: `Simulation timed out after ${Math.round(runningForMs / 60000)} minutes`,
           completedAt: new Date().toISOString(),
         });
-        simsToRepublish.push(sim);
-        recovered = true;
+        if (updated) {
+          simsToRepublish.push(sim);
+          recovered = true;
+        }
       }
     }
 
     // Case 3: RUNNING sim whose specific worker is dead
     if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
-      console.log(`[Recovery] Job ${jobId} sim ${sim.simId} worker ${sim.workerId} is dead, marking FAILED and republishing`);
-      await updateSimulationStatus(jobId, sim.simId, {
+      console.log(`[Recovery] Job ${jobId} sim ${sim.simId} worker ${sim.workerId} is dead, marking FAILED for retry`);
+      const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
         state: 'FAILED',
         errorMessage: 'Worker lost connection',
         completedAt: new Date().toISOString(),
       });
+      if (updated) {
+        simsToRepublish.push(sim);
+        recovered = true;
+      }
+    }
+
+    // Case 4: FAILED sim — retry by resetting to PENDING + republish
+    if (sim.state === 'FAILED' && activeWorkers.length > 0) {
+      console.log(`[Recovery] Job ${jobId} sim ${sim.simId} is FAILED, retrying`);
       simsToRepublish.push(sim);
       recovered = true;
     }
@@ -349,9 +328,11 @@ async function recoverStaleSimulations(
           simIndex: sim.index,
           totalSims: job.simulations,
         };
-        // Reset to PENDING so workers can pick them up
-        return updateSimulationStatus(jobId, sim.simId, { state: 'PENDING' })
-          .then(() => topic.publishMessage({ json: msg }));
+        // Reset to PENDING so workers can pick them up (conditional to prevent races)
+        return conditionalUpdateSimulationStatus(jobId, sim.simId, ['FAILED', 'PENDING'], { state: 'PENDING' })
+          .then((updated) => {
+            if (updated) return topic.publishMessage({ json: msg });
+          });
       });
       await Promise.all(promises);
       console.log(`[Recovery] Republished ${simsToRepublish.length} simulation messages for job ${jobId}`);
@@ -360,13 +341,12 @@ async function recoverStaleSimulations(
     }
   }
 
-  // Check if all sims are now terminal → trigger aggregation
-  if (recovered) {
-    const updatedSims = await getSimulationStatuses(jobId);
-    const allTerminal = updatedSims.every(
-      (s) => s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'CANCELLED'
+  // Only aggregate when all sims are COMPLETED or CANCELLED (not FAILED — those will be retried)
+  if (!recovered) {
+    const allDone = sims.every(
+      (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
     );
-    if (allTerminal) {
+    if (allDone) {
       aggregateJobResults(jobId).catch((err) => {
         console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
       });
@@ -467,14 +447,19 @@ export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | nu
 }
 
 /**
- * Aggregate results when all simulations have reached a terminal state.
+ * Aggregate results when all simulations are COMPLETED or CANCELLED.
+ * FAILED sims are NOT considered terminal — they will be retried by the scanner.
  * Reads incrementally uploaded raw logs, runs ingestion (condense + structure),
- * and sets the job to COMPLETED or FAILED.
+ * and sets the job to COMPLETED or CANCELLED.
  */
 export async function aggregateJobResults(jobId: string): Promise<void> {
   const sims = await getSimulationStatuses(jobId);
-  const status = deriveJobStatus(sims);
-  if (!status || status === 'RUNNING' || status === 'QUEUED') return;
+  if (sims.length === 0) return;
+
+  // Only aggregate when all sims are COMPLETED or CANCELLED.
+  // FAILED sims will be retried by the stale job scanner.
+  const allDone = sims.every(s => s.state === 'COMPLETED' || s.state === 'CANCELLED');
+  if (!allDone) return;
 
   const job = await getJob(jobId);
   if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') return; // Already aggregated
@@ -492,11 +477,9 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') return;
 
-  if (status === 'COMPLETED') {
-    await setJobCompleted(jobId);
-  } else {
-    const failedCount = sims.filter(s => s.state === 'FAILED').length;
-    await setJobFailed(jobId, `${failedCount}/${sims.length} simulations failed`);
-  }
+  const allCancelled = sims.every(s => s.state === 'CANCELLED');
+  if (allCancelled) return; // Already handled by cancel flow
+
+  await setJobCompleted(jobId);
 }
 

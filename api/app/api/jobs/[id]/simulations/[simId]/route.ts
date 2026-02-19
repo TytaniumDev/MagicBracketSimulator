@@ -70,13 +70,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await jobStore.incrementGamesCompleted(id, GAMES_PER_CONTAINER);
     }
 
-    // Check if all sims are terminal → trigger aggregation (includes CANCELLED)
-    if (state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED') {
+    // Check if all sims are done → trigger aggregation.
+    // Only COMPLETED/CANCELLED count as done — FAILED sims will be retried by the scanner.
+    if (state === 'COMPLETED' || state === 'CANCELLED') {
       const allSims = await jobStore.getSimulationStatuses(id);
-      const allTerminal = allSims.every(s =>
-        s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'CANCELLED'
+      const allDone = allSims.every(s =>
+        s.state === 'COMPLETED' || s.state === 'CANCELLED'
       );
-      if (allTerminal) {
+      if (allDone) {
         // Run aggregation in background — don't block the response
         jobStore.aggregateJobResults(id).catch(err => {
           console.error(`[Aggregation] Failed for job ${id}:`, err);

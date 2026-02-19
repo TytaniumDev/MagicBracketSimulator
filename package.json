@@ -13,7 +13,9 @@
     "populate-worker-secret": "node scripts/populate-worker-secret.js",
     "populate-frontend-secret": "node scripts/populate-frontend-secret.js",
     "fetch-frontend-config": "node scripts/fetch-frontend-config.js",
-    "get-cloud-run-url": "node scripts/get-cloud-run-url.js"
+    "get-cloud-run-url": "node scripts/get-cloud-run-url.js",
+    "mode:local": "cp api/.env.local.example api/.env.local && cp frontend/.env.local.example frontend/.env.local && echo 'Switched to LOCAL mode. Restart dev servers to apply.'",
+    "mode:hosted": "rm -f api/.env.local frontend/.env.local && echo 'Switched to HOSTED/GCP mode. Restart dev servers to apply.'"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

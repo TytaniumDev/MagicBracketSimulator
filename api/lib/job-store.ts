@@ -372,6 +372,43 @@ export function updateSimulationStatus(
 }
 
 /**
+ * Conditionally update a simulation's status.
+ * Only applies the update if the sim is currently in one of the expectedStates.
+ * Returns true if the update was applied.
+ */
+export function conditionalUpdateSimulationStatus(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+  update: Partial<SimulationStatus>
+): boolean {
+  const db = getDb();
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (update.state !== undefined) { sets.push('state = ?'); values.push(update.state); }
+  if (update.workerId !== undefined) { sets.push('worker_id = ?'); values.push(update.workerId); }
+  if (update.workerName !== undefined) { sets.push('worker_name = ?'); values.push(update.workerName); }
+  if (update.startedAt !== undefined) { sets.push('started_at = ?'); values.push(update.startedAt); }
+  if (update.completedAt !== undefined) { sets.push('completed_at = ?'); values.push(update.completedAt); }
+  if (update.durationMs !== undefined) { sets.push('duration_ms = ?'); values.push(update.durationMs); }
+  if (update.errorMessage !== undefined) { sets.push('error_message = ?'); values.push(update.errorMessage); }
+  if (update.winner !== undefined) { sets.push('winner = ?'); values.push(update.winner); }
+  if (update.winningTurn !== undefined) { sets.push('winning_turn = ?'); values.push(update.winningTurn); }
+  if (update.winners !== undefined) { sets.push('winners_json = ?'); values.push(JSON.stringify(update.winners)); }
+  if (update.winningTurns !== undefined) { sets.push('winning_turns_json = ?'); values.push(JSON.stringify(update.winningTurns)); }
+
+  if (sets.length === 0) return false;
+
+  const placeholders = expectedStates.map(() => '?').join(', ');
+  values.push(jobId, simId, ...expectedStates);
+  const result = db
+    .prepare(`UPDATE simulations SET ${sets.join(', ')} WHERE job_id = ? AND sim_id = ? AND state IN (${placeholders})`)
+    .run(...values);
+  return result.changes > 0;
+}
+
+/**
  * Get all simulation statuses for a job, ordered by index.
  */
 export function getSimulationStatuses(jobId: string): SimulationStatus[] {

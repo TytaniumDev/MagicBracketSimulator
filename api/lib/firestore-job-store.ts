@@ -453,6 +453,47 @@ export async function updateSimulationStatus(
 }
 
 /**
+ * Conditionally update a simulation's status using a Firestore transaction.
+ * Only applies the update if the sim is currently in one of the expectedStates.
+ * Returns true if the update was applied, false if the state had already changed.
+ */
+export async function conditionalUpdateSimulationStatus(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+  update: Partial<SimulationStatus>
+): Promise<boolean> {
+  const simRef = simulationsCollection(jobId).doc(simId);
+
+  return firestore.runTransaction(async (transaction) => {
+    const doc = await transaction.get(simRef);
+    if (!doc.exists) return false;
+
+    const currentState = doc.data()!.state as SimulationState;
+    if (!expectedStates.includes(currentState)) return false;
+
+    const updateData: Record<string, unknown> = {
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (update.state !== undefined) updateData.state = update.state;
+    if (update.workerId !== undefined) updateData.workerId = update.workerId;
+    if (update.workerName !== undefined) updateData.workerName = update.workerName;
+    if (update.startedAt !== undefined) updateData.startedAt = update.startedAt;
+    if (update.completedAt !== undefined) updateData.completedAt = update.completedAt;
+    if (update.durationMs !== undefined) updateData.durationMs = update.durationMs;
+    if (update.errorMessage !== undefined) updateData.errorMessage = update.errorMessage;
+    if (update.winner !== undefined) updateData.winner = update.winner;
+    if (update.winningTurn !== undefined) updateData.winningTurn = update.winningTurn;
+    if (update.winners !== undefined) updateData.winners = update.winners;
+    if (update.winningTurns !== undefined) updateData.winningTurns = update.winningTurns;
+
+    transaction.update(simRef, updateData);
+    return true;
+  });
+}
+
+/**
  * Get all simulation statuses for a job, ordered by index.
  */
 export async function getSimulationStatuses(

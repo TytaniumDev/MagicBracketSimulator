@@ -25,6 +25,20 @@ At startup, you'll see log messages like:
 [Job Store] Using: Firestore + Cloud Storage + Pub/Sub
 ```
 
+## Quick Mode Toggle
+
+Switch between LOCAL and GCP/hosted mode with a single command:
+
+```bash
+# Switch to LOCAL mode (SQLite, no Firebase Auth, local API)
+npm run mode:local
+
+# Switch back to HOSTED/GCP mode (Firestore, Firebase Auth)
+npm run mode:hosted
+```
+
+These commands copy or remove `.env.local` override files in `api/` and `frontend/`. The `.env.local` files take precedence over `.env` (built-in behavior for both Next.js and Vite), so your `.env` files stay unchanged. **Restart dev servers after switching.**
+
 ---
 
 ## GCP Mode Setup
@@ -66,7 +80,7 @@ WORKER_API_URL="http://<vm-internal-ip>:9090"  # VPC-internal IP for API→worke
 
 **Terminal 1: API + Frontend**
 ```bash
-npm run dev:gcp
+npm run dev
 ```
 
 **Terminal 2: Local Worker (processes jobs via Pub/Sub)**
@@ -100,9 +114,8 @@ Simply ensure `GOOGLE_CLOUD_PROJECT` is **not set** in `api/.env`, or delete the
 
 ### Running LOCAL Mode
 ```bash
-npm run dev:local
-# or just
-npm run dev
+npm run mode:local   # one-time: sets up .env.local overrides
+npm run dev          # start API + frontend
 ```
 
 ### Services in LOCAL Mode

@@ -14,6 +14,12 @@ npm run install:all
 
 # Start locally (api:3000, frontend:5173; run worker separately via Docker)
 npm run dev
+
+# Switch to LOCAL mode (.env.local overrides, restart dev servers after)
+npm run mode:local
+
+# Switch back to HOSTED/GCP mode (removes .env.local overrides)
+npm run mode:hosted
 ```
 
 ### Per-service commands
