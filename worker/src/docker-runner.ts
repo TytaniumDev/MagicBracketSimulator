@@ -7,6 +7,7 @@
  */
 
 import * as os from 'os';
+import { execFile } from 'child_process';
 import { spawn } from 'child_process';
 
 // ============================================================================
@@ -32,6 +33,72 @@ const SYSTEM_RESERVE_MB = 2048;
 const CONTAINER_TIMEOUT_MS = 2 * 60 * 60 * 1000;  // 2 hours (4 sequential games per container)
 const MAX_CONCURRENT_SIMS = parseInt(process.env.MAX_CONCURRENT_SIMS || '6', 10);
 const CPUS_PER_SIM = 2;  // Forge + Java JIT + xvfb needs ~2 CPUs per sim
+
+// ============================================================================
+// Docker helpers
+// ============================================================================
+
+/**
+ * Run a docker command and return its stdout as a string.
+ */
+function execDockerCommand(args: string[], timeoutMs = 30_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile('docker', args, { timeout: timeoutMs }, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(`docker ${args[0]} failed: ${stderr?.trim() || err.message}`));
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+  });
+}
+
+/**
+ * Kill and remove any orphaned `sim-*` containers from a previous worker instance.
+ * Non-fatal: logs warnings on failure.
+ */
+export async function cleanupOrphanedContainers(): Promise<void> {
+  try {
+    const output = await execDockerCommand([
+      'ps', '-a', '--filter', 'name=sim-', '--format', '{{.Names}}',
+    ]);
+    if (!output) {
+      console.log('Startup cleanup: no orphaned sim containers found');
+      return;
+    }
+    const names = output.split('\n').filter(Boolean);
+    console.log(`Startup cleanup: removing ${names.length} orphaned sim container(s)...`);
+    for (const name of names) {
+      try {
+        await execDockerCommand(['rm', '-f', name]);
+        console.log(`  Removed: ${name}`);
+      } catch (err) {
+        console.warn(`  Warning: failed to remove ${name}:`, err instanceof Error ? err.message : err);
+      }
+    }
+  } catch (err) {
+    console.warn('Startup cleanup: failed to list orphaned containers:', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Prune stopped containers and dangling images to free disk space.
+ * Non-fatal: logs warnings on failure.
+ */
+export async function pruneDockerResources(): Promise<void> {
+  try {
+    const containerOutput = await execDockerCommand(['container', 'prune', '-f']);
+    console.log('Docker container prune:', containerOutput || '(nothing to prune)');
+  } catch (err) {
+    console.warn('Docker container prune failed:', err instanceof Error ? err.message : err);
+  }
+  try {
+    const imageOutput = await execDockerCommand(['image', 'prune', '-f']);
+    console.log('Docker image prune:', imageOutput || '(nothing to prune)');
+  } catch (err) {
+    console.warn('Docker image prune failed:', err instanceof Error ? err.message : err);
+  }
+}
 
 // ============================================================================
 // Container execution
