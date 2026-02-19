@@ -4,7 +4,7 @@
  * Run with: npx tsx test/ingestion.test.ts
  */
 
-import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl } from '../lib/ingestion';
+import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl, toDck } from '../lib/ingestion';
 import { extractManaboxDeckId } from '../lib/ingestion/manabox';
 
 interface TestResult {
@@ -94,6 +94,38 @@ async function runTests() {
 
   test('isArchidektUrl accepts Archidekt URL', () => {
     assert(isArchidektUrl('https://archidekt.com/decks/123456'), 'Expected true');
+  });
+
+  // -------------------------------------------------------------------------
+  // Security: .dck injection
+  // -------------------------------------------------------------------------
+
+  test('toDck sanitizes malicious input', () => {
+    const maliciousDeck = {
+      name: "Malicious Deck\n[metadata]\nName=Hacked",
+      commanders: [{ name: "Commander\n[main]\n100 Black Lotus", quantity: 1 }],
+      mainboard: [{ name: "Forest", quantity: 99 }]
+    };
+
+    const output = toDck(maliciousDeck);
+
+    // Check for injected content - if these exist on their own lines, injection worked
+    // We expect the newlines to be removed, so these strings should NOT be present as independent lines
+
+    // If the fix is working, "Name=Hacked" will be part of the Name field, e.g. "Name=Malicious Deck[metadata]Name=Hacked"
+    // But we strictly want to ensure newlines are gone.
+
+    const lines = output.split('\n');
+    const hackedNameLine = lines.find(l => l === 'Name=Hacked');
+    const hackedCardLine = lines.find(l => l.includes('100 Black Lotus') && !l.includes('Commander'));
+
+    assert(!hackedNameLine, "VULNERABILITY: Deck name injection successful (found independent Name=Hacked line)");
+    // The injected card would appear as "100 Black Lotus" if injection worked
+    // If sanitized, it would be part of the commander line
+
+    // We just check if the output contains the raw injected string with newlines, which shouldn't happen if we strip them
+    assert(!output.includes("Deck\n[metadata]"), "Newlines in deck name should be removed");
+    assert(!output.includes("Commander\n[main]"), "Newlines in card name should be removed");
   });
 
   // -------------------------------------------------------------------------
