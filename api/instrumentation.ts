@@ -1,3 +1,6 @@
 export async function register() {
-  // Worker runs as a separate process (npm run worker). No worker startup here.
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { startStaleJobScanner } = await import('./lib/stale-job-scanner');
+    startStaleJobScanner();
+  }
 }

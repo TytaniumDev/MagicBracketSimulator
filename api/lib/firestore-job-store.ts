@@ -242,6 +242,14 @@ export async function listJobs(userId?: string): Promise<Job[]> {
   return snapshot.docs.map(doc => docToJob(doc)).filter((job): job is Job => job !== null);
 }
 
+export async function listActiveJobs(): Promise<Job[]> {
+  const snapshot = await jobsCollection
+    .where('status', 'in', ['QUEUED', 'RUNNING'])
+    .orderBy('createdAt', 'asc')
+    .get();
+  return snapshot.docs.map(doc => docToJob(doc)).filter((job): job is Job => job !== null);
+}
+
 /**
  * Cancel a job: set status to CANCELLED, mark PENDING simulations as CANCELLED.
  * Only works for QUEUED or RUNNING jobs.

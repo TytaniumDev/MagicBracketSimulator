@@ -250,6 +250,14 @@ export function listJobs(): Job[] {
   return rows.map(rowToJob);
 }
 
+export function listActiveJobs(): Job[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM jobs WHERE status IN ('QUEUED', 'RUNNING') ORDER BY created_at ASC")
+    .all() as Row[];
+  return rows.map(rowToJob);
+}
+
 export function clearJobs(): void {
   const db = getDb();
   db.prepare('DELETE FROM jobs').run();

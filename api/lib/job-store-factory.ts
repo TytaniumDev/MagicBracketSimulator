@@ -69,6 +69,13 @@ export async function listJobs(userId?: string): Promise<Job[]> {
   return sqliteStore.listJobs();
 }
 
+export async function listActiveJobs(): Promise<Job[]> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.listActiveJobs();
+  }
+  return sqliteStore.listActiveJobs();
+}
+
 export async function updateJobStatus(id: string, status: JobStatus): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.updateJobStatus(id, status);
@@ -378,6 +385,9 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     const deckLists = job.decks.map(d => d.dck ?? '');
     await ingestLogs(jobId, rawLogs, deckNames, deckLists);
   }
+
+  // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
+  if (job.status === 'CANCELLED') return;
 
   if (status === 'COMPLETED') {
     await setJobCompleted(jobId);
