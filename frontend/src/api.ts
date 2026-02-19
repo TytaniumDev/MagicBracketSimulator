@@ -2,10 +2,13 @@ import { auth } from './firebase';
 import { getRuntimeConfig } from './config';
 
 function resolveApiBase(): string {
-  const runtime = getRuntimeConfig();
-  if (runtime.apiUrl) return runtime.apiUrl;
+  // Build-time env vars take precedence (local dev overrides)
   if (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL.length > 0)
     return (import.meta.env.VITE_API_URL as string).replace(/\/$/, '');
+  // Runtime config.json (production default)
+  const runtime = getRuntimeConfig();
+  if (runtime.apiUrl) return runtime.apiUrl;
+  // Legacy env var
   if (typeof import.meta.env.VITE_ORCHESTRATOR_URL === 'string' && import.meta.env.VITE_ORCHESTRATOR_URL.length > 0)
     return (import.meta.env.VITE_ORCHESTRATOR_URL as string).replace(/\/$/, '');
   return 'http://localhost:3000';

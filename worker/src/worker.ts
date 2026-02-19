@@ -74,6 +74,9 @@ let simSemaphore: Semaphore | null = null;
 // Abort controllers per job for push-based cancellation
 const activeAbortControllers = new Map<string, Set<AbortController>>();
 
+// Ordered list of all active abort controllers for capacity preemption (most recent at end)
+const allActiveAbortControllers: AbortController[] = [];
+
 // Notify mechanism for push-based job notification (local polling mode)
 let jobNotifyResolve: (() => void) | null = null;
 
@@ -343,12 +346,13 @@ async function processSimulation(
     workerName: currentWorkerName,
   });
 
-  // Register abort controller for push-based cancellation
+  // Register abort controller for push-based cancellation and capacity preemption
   const abortController = new AbortController();
   if (!activeAbortControllers.has(jobId)) {
     activeAbortControllers.set(jobId, new Set());
   }
   activeAbortControllers.get(jobId)!.add(abortController);
+  allActiveAbortControllers.push(abortController);
 
   try {
     // Run the simulation container with cancellation signal
@@ -397,12 +401,14 @@ async function processSimulation(
       });
     }
   } finally {
-    // Unregister abort controller
+    // Unregister abort controller from both per-job and global lists
     const controllers = activeAbortControllers.get(jobId);
     if (controllers) {
       controllers.delete(abortController);
       if (controllers.size === 0) activeAbortControllers.delete(jobId);
     }
+    const globalIdx = allActiveAbortControllers.indexOf(abortController);
+    if (globalIdx !== -1) allActiveAbortControllers.splice(globalIdx, 1);
     activeSimCount = Math.max(0, activeSimCount - 1);
   }
 }
@@ -415,8 +421,24 @@ async function processSimulation(
 let currentOverride: number | null = null;
 
 /**
+ * Kill excess running simulations to enforce a reduced capacity limit.
+ * Picks the most recently started simulations (LIFO) since they've done the least work.
+ */
+function killExcessSimulations(excessCount: number): void {
+  if (excessCount <= 0 || allActiveAbortControllers.length === 0) return;
+  const toKill = Math.min(excessCount, allActiveAbortControllers.length);
+  console.log(`Preempting ${toKill} simulation(s) to enforce capacity limit...`);
+  // Kill from end (most recently started = least work done)
+  const toAbort = allActiveAbortControllers.slice(-toKill);
+  for (const controller of toAbort) {
+    controller.abort();
+  }
+}
+
+/**
  * Apply a concurrency override (or clear it).
  * Consolidates semaphore resize logic for use by both heartbeat and push API.
+ * When reducing capacity, excess running simulations are killed immediately.
  */
 function applyOverride(newOverride: number | null): void {
   if (!simSemaphore) return;
@@ -425,10 +447,13 @@ function applyOverride(newOverride: number | null): void {
     const override = Math.max(1, newOverride);
     if (override !== simSemaphore.maxSlots) {
       const oldMax = simSemaphore.maxSlots;
-      simSemaphore.resize(override);
+      const excess = simSemaphore.resize(override);
       console.log(`Capacity override: ${oldMax} -> ${override} (hardware: ${localCapacity})`);
       if (override > localCapacity) {
         console.log(`WARNING: Override (${override}) exceeds hardware capacity (${localCapacity}). CPU/memory contention possible.`);
+      }
+      if (excess > 0) {
+        killExcessSimulations(excess);
       }
     }
     currentOverride = override;
@@ -436,8 +461,11 @@ function applyOverride(newOverride: number | null): void {
     // Override was cleared — revert to hardware capacity
     const oldMax = simSemaphore.maxSlots;
     if (oldMax !== localCapacity) {
-      simSemaphore.resize(localCapacity);
+      const excess = simSemaphore.resize(localCapacity);
       console.log(`Capacity override cleared: ${oldMax} -> ${localCapacity} (hardware)`);
+      if (excess > 0) {
+        killExcessSimulations(excess);
+      }
     }
     currentOverride = null;
   }
@@ -562,66 +590,88 @@ async function verifyDockerAvailable(): Promise<void> {
 
 /**
  * Semaphore for bounding simulation concurrency.
- * Used by both Pub/Sub and polling modes.
+ * Tracks in-flight count so release() respects the current max after resize.
  */
 class Semaphore {
-  private count: number;
-  private max: number;
-  private waiting: (() => void)[] = [];
+  private _available: number;
+  private _max: number;
+  private _inFlight: number = 0;
+  private _waiting: (() => void)[] = [];
 
   constructor(max: number) {
-    this.count = max;
-    this.max = max;
+    this._available = max;
+    this._max = max;
   }
 
   get maxSlots(): number {
-    return this.max;
+    return this._max;
+  }
+
+  get inFlight(): number {
+    return this._inFlight;
   }
 
   async acquire(): Promise<void> {
-    if (this.count > 0) {
-      this.count--;
+    if (this._available > 0) {
+      this._available--;
+      this._inFlight++;
       return;
     }
-    return new Promise<void>((resolve) => this.waiting.push(resolve));
+    return new Promise<void>((resolve) => this._waiting.push(resolve));
   }
 
   /** Non-blocking acquire. Returns true if a slot was available, false otherwise. */
   tryAcquire(): boolean {
-    if (this.count > 0) {
-      this.count--;
+    if (this._available > 0) {
+      this._available--;
+      this._inFlight++;
       return true;
     }
     return false;
   }
 
   release(): void {
-    if (this.waiting.length > 0) {
-      const next = this.waiting.shift()!;
-      next();
-    } else {
-      this.count++;
+    this._inFlight--;
+    if (this._inFlight < this._max) {
+      // Under capacity: wake a waiter or return slot to pool
+      if (this._waiting.length > 0) {
+        this._inFlight++;
+        const next = this._waiting.shift()!;
+        next();
+      } else {
+        this._available = Math.min(this._max - this._inFlight, this._available + 1);
+      }
     }
+    // At or above capacity after resize: slot is absorbed, running count drains naturally
   }
 
   /**
    * Dynamically resize the semaphore.
-   * If increasing: release delta slots (wakes waiting tasks).
-   * If decreasing: reduce available count (no preemption, drains naturally).
+   * If increasing: wake waiting tasks or add available slots.
+   * If decreasing: cap available slots and return excess in-flight count
+   *   for the caller to preempt.
    */
-  resize(newMax: number): void {
-    const oldMax = this.max;
-    if (newMax === oldMax) return;
-    const delta = newMax - oldMax;
-    this.max = newMax;
-    if (delta > 0) {
-      // Increasing: release extra slots
+  resize(newMax: number): number {
+    const oldMax = this._max;
+    if (newMax === oldMax) return 0;
+    this._max = newMax;
+    if (newMax > oldMax) {
+      // Increasing: wake waiters or add available slots
+      const delta = newMax - oldMax;
       for (let i = 0; i < delta; i++) {
-        this.release();
+        if (this._waiting.length > 0 && this._inFlight < newMax) {
+          this._inFlight++;
+          const next = this._waiting.shift()!;
+          next();
+        } else if (this._inFlight + this._available < newMax) {
+          this._available++;
+        }
       }
+      return 0;
     } else {
-      // Decreasing: reduce available count (but don't go below 0)
-      this.count = Math.max(0, this.count + delta);
+      // Decreasing: cap available slots, return excess for preemption
+      this._available = Math.max(0, Math.min(this._available, newMax - this._inFlight));
+      return Math.max(0, this._inFlight - newMax);
     }
   }
 }

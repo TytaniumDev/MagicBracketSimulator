@@ -7,4 +7,9 @@ services:
     environment:
       - API_URL=http://host.docker.internal:3000
       - WORKER_API_URL=http://host.docker.internal:9090
-      # No PUBSUB_SUBSCRIPTION → triggers polling mode
+      # Override GCP defaults from base compose to force local/polling mode
+      - GOOGLE_CLOUD_PROJECT=
+      - PUBSUB_SUBSCRIPTION=
+      - PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION=
+      # Worker auth — must match WORKER_SECRET in api/.env
+      - WORKER_SECRET=${WORKER_SECRET:-local-dev-secret}
