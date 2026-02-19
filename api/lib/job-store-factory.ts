@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, DeckSlot, AnalysisResult, SimulationStatus, WorkerInfo, GAMES_PER_CONTAINER } from './types';
+import { Job, JobStatus, DeckSlot, SimulationStatus, WorkerInfo, GAMES_PER_CONTAINER } from './types';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -122,22 +122,6 @@ export async function setJobFailed(id: string, errorMessage: string, dockerRunDu
     return;
   }
   sqliteStore.setJobFailed(id, errorMessage, { dockerRunDurationsMs });
-}
-
-export async function setJobResult(id: string, result: AnalysisResult): Promise<void> {
-  if (USE_FIRESTORE) {
-    await firestoreStore.setJobResult(id, result);
-    return;
-  }
-  sqliteStore.setJobResult(id, result);
-}
-
-export async function updateJobResult(id: string, result: AnalysisResult): Promise<void> {
-  if (USE_FIRESTORE) {
-    await firestoreStore.setJobResult(id, result);
-    return;
-  }
-  sqliteStore.updateJobResult(id, result);
 }
 
 export async function claimNextJob(): Promise<Job | null> {

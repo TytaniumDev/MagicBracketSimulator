@@ -46,7 +46,6 @@ async function jobToApiResponse(
     parallelism: job.parallelism ?? 4,
     createdAt: job.createdAt.toISOString(),
     errorMessage: job.errorMessage,
-    resultJson: job.resultJson,
     startedAt: job.startedAt?.toISOString(),
     completedAt: job.completedAt?.toISOString(),
     durationMs,

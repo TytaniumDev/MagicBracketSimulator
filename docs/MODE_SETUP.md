@@ -9,7 +9,7 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 | Database | SQLite | Firestore |
 | File Storage | Local filesystem | Cloud Storage (GCS) |
 | Job Queue | Polling-based worker | Pub/Sub |
-| Analysis | api (Gemini integration) | api (Gemini integration) |
+| Analysis | Win rate / game stats | Win rate / game stats |
 | Worker | worker/ (polling) | worker/ (Pub/Sub subscriber) |
 
 ## Mode Detection
@@ -35,8 +35,7 @@ At startup, you'll see log messages like:
    - Cloud Storage bucket
    - Pub/Sub topic and subscription
 2. Service account key with permissions for Firestore, GCS, and Pub/Sub
-3. Gemini API key (for AI analysis)
-4. Docker installed (for worker)
+3. Docker installed (for worker)
 
 ### Configuration Files
 
@@ -45,7 +44,6 @@ At startup, you'll see log messages like:
 GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
 GCS_BUCKET="magic-bracket-simulator-artifacts"
 PUBSUB_TOPIC="job-created"
-GEMINI_API_KEY="your-gemini-api-key"
 GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 WORKER_SECRET="shared-secret-for-worker-auth"
 NODE_ENV="development"
@@ -80,7 +78,7 @@ npm run worker:gcp
 
 | Service | Purpose | Where it runs |
 |---------|---------|---------------|
-| api | API backend, Firestore/Pub/Sub integration | Local or Cloud Run |
+| api | API backend (Firestore/Pub/Sub) | Local or Cloud Run |
 | frontend | React UI | Local or Firebase Hosting |
 | worker | Node.js orchestrator that spawns simulation containers (Docker) | Docker on your machine |
 | simulation | Java + Forge engine container (ephemeral) | Spawns via `docker run` inside worker |
@@ -111,7 +109,7 @@ npm run dev
 
 | Service | Purpose |
 |---------|---------|
-| api | API backend with SQLite, Gemini integration |
+| api | API backend with SQLite |
 | frontend | React UI |
 | worker (polling) | Node.js orchestrator, polls API for jobs (with push-based job notification for instant wake), spawns simulation containers |
 

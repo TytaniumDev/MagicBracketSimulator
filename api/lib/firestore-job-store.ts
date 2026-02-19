@@ -1,5 +1,5 @@
 import { Firestore, Timestamp, FieldValue } from '@google-cloud/firestore';
-import { Job, JobStatus, DeckSlot, AnalysisResult, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState } from './types';
 
 // Initialize Firestore client
 const firestore = new Firestore({
@@ -28,7 +28,6 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     completedAt: data.completedAt?.toDate(),
     gamesCompleted: data.gamesCompleted,
     errorMessage: data.errorMessage,
-    resultJson: data.resultJson,
     dockerRunDurationsMs: data.dockerRunDurationsMs,
     ...(data.workerId && { workerId: data.workerId }),
     ...(data.workerName && { workerName: data.workerName }),
@@ -200,16 +199,6 @@ export async function updateJobProgress(id: string, gamesCompleted: number): Pro
 export async function incrementGamesCompleted(id: string, count: number = 1): Promise<void> {
   await jobsCollection.doc(id).update({
     gamesCompleted: FieldValue.increment(count),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-}
-
-/**
- * Set job result (analysis result)
- */
-export async function setJobResult(id: string, result: AnalysisResult): Promise<void> {
-  await jobsCollection.doc(id).update({
-    resultJson: result,
     updatedAt: FieldValue.serverTimestamp(),
   });
 }

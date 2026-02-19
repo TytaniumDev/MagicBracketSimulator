@@ -64,10 +64,10 @@ flowchart TB
 | **API** | App Hosting | Next.js app serving API routes |
 | **Frontend** | Firebase Hosting | React SPA |
 | **Job Metadata** | Firestore | Job state, deck references, simulation statuses, results |
-| **Artifacts** | Cloud Storage | Raw logs, condensed logs, analysis payloads |
+| **Artifacts** | Cloud Storage | Raw logs, condensed logs, structured logs |
 | **Job Queue** | Pub/Sub | Triggers workers when jobs are created |
 | **Authentication** | Firebase Auth | Google sign-in with email allowlist |
-| **Secrets** | Secret Manager | Worker config, API keys |
+| **Secrets** | Secret Manager | Worker config |
 
 ### Worker Host Components
 
@@ -298,7 +298,7 @@ flowchart LR
 | Directory | Purpose |
 |-----------|---------|
 | **frontend/** | React SPA (Vite + Tailwind v4 + Firebase Auth) |
-| **api/** | Next.js 15 API: jobs, decks, simulations, Gemini analysis |
+| **api/** | Next.js 15 API: jobs, decks, simulations |
 | **worker/** | Node.js orchestrator: Pub/Sub/polling, container management |
 | **worker/forge-engine/** | Forge assets: `run_sim.sh`, precon decks |
 | **simulation/** | Simulation image Dockerfile (references `worker/forge-engine/`) |

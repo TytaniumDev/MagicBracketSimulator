@@ -6,7 +6,7 @@
  * This file defines all TypeScript types used throughout the Log Analyzer service.
  * These types represent:
  *   - Raw game logs from Forge simulations
- *   - Condensed summaries for AI analysis
+ *   - Condensed game summaries
  *   - Structured per-deck/turn data for frontend visualization
  *
  * =============================================================================
@@ -47,7 +47,7 @@ export interface GameEvent {
 }
 
 // -----------------------------------------------------------------------------
-// Condensed Game Summary (for AI Analysis)
+// Condensed Game Summary
 // -----------------------------------------------------------------------------
 
 /**
@@ -61,10 +61,8 @@ export interface TurnManaInfo {
 
 /**
  * A condensed summary of a single game.
- * This is what gets sent to the AI for bracket analysis.
  *
- * The goal is to reduce a multi-KB raw log down to the essential
- * information needed to judge power level:
+ * Reduces a multi-KB raw log down to essential information:
  *   - Significant events (life changes, big spells, wins)
  *   - Pacing metrics (mana per turn, cards drawn per turn)
  *   - Game length (turn count)
@@ -206,78 +204,6 @@ export interface StructuredLogsResponse {
   deckNames?: string[];
 }
 
-/**
- * Request body for analyze endpoint (deprecated - now uses pre-computed payload).
- */
-export interface AnalyzeRequest {
-  /** Name of the deck being judged (legacy) */
-  heroDeckName?: string;
-  /** Names of opponent decks (legacy) */
-  opponentDecks?: string[];
-}
-
-/**
- * Single deck's bracket result from AI analysis.
- */
-export interface DeckBracketResult {
-  /** Name of the deck */
-  deck_name: string;
-  /** Power bracket 1-5 */
-  bracket: number;
-  /** Confidence level: High, Medium, or Low */
-  confidence: string;
-  /** Explanation of why this bracket was assigned */
-  reasoning: string;
-  /** Identified weaknesses of the deck */
-  weaknesses?: string;
-}
-
-/**
- * Response from analyze endpoint - bracket results for all 4 decks.
- */
-export interface AnalyzeResponse {
-  /** Bracket results for each deck (length 4) */
-  results: DeckBracketResult[];
-}
-
-/**
- * Per-deck game outcome statistics.
- */
-export interface DeckOutcome {
-  /** Number of games this deck won */
-  wins: number;
-  /** Turn numbers when this deck won */
-  winning_turns: number[];
-  /** Turn numbers when this deck lost (game ended but deck didn't win) */
-  turns_lost_on: number[];
-}
-
-/**
- * Deck info for the analysis payload.
- */
-export interface DeckInfo {
-  /** Deck name */
-  name: string;
-  /** Deck list content (.dck format) */
-  decklist?: string;
-}
-
-/**
- * Pre-computed payload for the Analysis Service (Gemini).
- * This is stored in meta.json and sent exactly as-is to the Analysis Service.
- * Uses snake_case to match Python conventions.
- * 
- * New slim format: all 4 decks treated equally with decklists and outcomes.
- */
-export interface AnalyzePayload {
-  /** All 4 decks with their names and decklists */
-  decks: DeckInfo[];
-  /** Total number of games played */
-  total_games: number;
-  /** Per-deck outcome statistics */
-  outcomes: Record<string, DeckOutcome>;
-}
-
 // -----------------------------------------------------------------------------
 // Internal Storage Types
 // -----------------------------------------------------------------------------
@@ -298,6 +224,4 @@ export interface StoredJobLogs {
   condensed?: CondensedGame[];
   /** Pre-computed structured logs */
   structured?: StructuredGame[];
-  /** Pre-computed payload for Analysis Service (computed on ingest) */
-  analyzePayload?: AnalyzePayload;
 }

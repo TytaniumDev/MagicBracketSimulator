@@ -1,4 +1,4 @@
-export type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type JobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 // -----------------------------------------------------------------------------
 // Per-Simulation Tracking Types
@@ -168,24 +168,6 @@ export interface StructuredGame {
   winningTurn?: number;
 }
 
-/**
- * Single deck's bracket result from AI analysis.
- */
-export interface DeckBracketResult {
-  deck_name: string;
-  bracket: number;
-  confidence: string;
-  reasoning: string;
-  weaknesses?: string;
-}
-
-/**
- * Analysis results for all 4 decks.
- */
-export interface AnalysisResult {
-  results: DeckBracketResult[];
-}
-
 export interface DeckSlot {
   name: string;
   dck: string;
@@ -196,7 +178,6 @@ export interface Job {
   decks: DeckSlot[]; // Always length 4 (for backward compat; may be empty when deckIds used)
   deckIds?: string[]; // Length 4 when set; worker uses cache + deck API when present
   status: JobStatus;
-  resultJson?: AnalysisResult;
   simulations: number;
   parallelism?: number;
   createdAt: Date;

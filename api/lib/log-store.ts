@@ -11,7 +11,6 @@ import { isGcpMode } from './job-store-factory';
 import * as gcs from './gcs-storage';
 import { condenseGames, structureGames, splitConcatenatedGames } from './condenser/index';
 import type { CondensedGame, StructuredGame } from './types';
-import type { AnalyzePayload } from './gemini';
 
 // Local filesystem storage directory
 const LOGS_DATA_DIR = process.env.LOGS_DATA_DIR ?? path.join(process.cwd(), 'logs-data');
@@ -30,70 +29,18 @@ function getMetaPath(jobId: string): string {
   return path.join(getJobDir(jobId), 'meta.json');
 }
 
-export type { AnalyzePayload };
-
 interface StoredMeta {
   deckNames?: string[];
   deckLists?: string[];
   ingestedAt: string;
   condensed?: CondensedGame[];
   structured?: StructuredGame[];
-  analyzePayload?: AnalyzePayload;
 }
 
 // ─── Ingest (POST) ──────────────────────────────────────────────────────────
 
-function buildAnalyzePayload(
-  condensed: CondensedGame[],
-  deckNames?: string[],
-  deckLists?: string[]
-): AnalyzePayload {
-  const decks = (deckNames ?? []).map((name, i) => ({
-    name,
-    decklist: deckLists?.[i] ?? '',
-  }));
-
-  const outcomes: AnalyzePayload['outcomes'] = {};
-  for (const name of deckNames ?? []) {
-    outcomes[name] = { wins: 0, winning_turns: [], turns_lost_on: [] };
-  }
-
-  for (const game of condensed) {
-    if (!game.winner) continue;
-    let matchedWinner = game.winner;
-    if (deckNames) {
-      const found = deckNames.find(
-        (name) => game.winner === name || game.winner?.endsWith(`-${name}`)
-      );
-      if (found) matchedWinner = found;
-    }
-    if (!outcomes[matchedWinner]) {
-      outcomes[matchedWinner] = { wins: 0, winning_turns: [], turns_lost_on: [] };
-    }
-    outcomes[matchedWinner].wins += 1;
-    if (game.winningTurn !== undefined) {
-      outcomes[matchedWinner].winning_turns.push(game.winningTurn);
-    }
-    if (game.winningTurn !== undefined) {
-      for (const name of deckNames ?? []) {
-        if (name !== matchedWinner) {
-          if (!outcomes[name]) outcomes[name] = { wins: 0, winning_turns: [], turns_lost_on: [] };
-          outcomes[name].turns_lost_on.push(game.winningTurn);
-        }
-      }
-    }
-  }
-
-  for (const outcome of Object.values(outcomes)) {
-    outcome.winning_turns.sort((a, b) => a - b);
-    outcome.turns_lost_on.sort((a, b) => a - b);
-  }
-
-  return { decks, total_games: condensed.length, outcomes };
-}
-
 /**
- * Ingest raw game logs for a job. Pre-computes condensed, structured, and analyze payload.
+ * Ingest raw game logs for a job. Pre-computes condensed and structured data.
  */
 export async function ingestLogs(
   jobId: string,
@@ -104,7 +51,6 @@ export async function ingestLogs(
   const expandedLogs = gameLogs.flatMap(splitConcatenatedGames);
   const condensed = condenseGames(expandedLogs);
   const structured = structureGames(expandedLogs, deckNames);
-  const analyzePayload = buildAnalyzePayload(condensed, deckNames, deckLists);
 
   if (isGcpMode()) {
     // Upload raw logs
@@ -112,7 +58,6 @@ export async function ingestLogs(
     // Upload pre-computed JSON
     await gcs.uploadJobArtifact(jobId, 'condensed.json', JSON.stringify(condensed));
     await gcs.uploadJobArtifact(jobId, 'structured.json', JSON.stringify({ games: structured, deckNames }));
-    await gcs.uploadJobArtifact(jobId, 'analyze-payload.json', JSON.stringify(analyzePayload));
   } else {
     // Local filesystem
     const jobDir = getJobDir(jobId);
@@ -138,7 +83,6 @@ export async function ingestLogs(
       ingestedAt: new Date().toISOString(),
       condensed,
       structured,
-      analyzePayload,
     };
     fs.writeFileSync(getMetaPath(jobId), JSON.stringify(meta, null, 2), 'utf-8');
   }
@@ -243,23 +187,3 @@ export async function getStructuredLogs(
   return { games, deckNames: names };
 }
 
-export async function getAnalyzePayloadData(
-  jobId: string,
-  deckNamesHint?: string[],
-  deckListsHint?: string[]
-): Promise<AnalyzePayload | null> {
-  if (isGcpMode()) {
-    const precomputed = await gcs.getJobArtifactJson<AnalyzePayload>(jobId, 'analyze-payload.json');
-    if (precomputed) return precomputed;
-    // Fallback: compute from raw logs via condensed data
-    const condensed = await getCondensedLogs(jobId);
-    if (!condensed || condensed.length === 0) return null;
-    return buildAnalyzePayload(condensed, deckNamesHint, deckListsHint);
-  }
-  const meta = readLocalMeta(jobId);
-  if (meta?.analyzePayload) return meta.analyzePayload;
-  // Fallback: compute from condensed data
-  const condensed = await getCondensedLogs(jobId);
-  if (!condensed || condensed.length === 0) return null;
-  return buildAnalyzePayload(condensed, deckNamesHint ?? meta?.deckNames, deckListsHint ?? meta?.deckLists);
-}
