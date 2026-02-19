@@ -1,4 +1,5 @@
 # Magic Bracket Simulator — Architecture Overview
+Last Updated: 2026-02-19
 
 This document describes the system architecture, including the Worker + Simulation split design for parallel, resource-aware simulation execution.
 

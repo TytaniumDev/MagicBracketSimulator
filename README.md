@@ -10,16 +10,24 @@ Simulate thousands of Magic: The Gathering Commander games to predict tournament
 
 ## Quick Start
 
-Run the full stack locally with just two commands.
+Run the full stack locally.
 See [Deployment Guide](docs/DEPLOYMENT.md) for detailed setup.
 
-```bash
-# 1. Install dependencies
-npm run install:all
+1. **Install dependencies:**
+   ```bash
+   npm run install:all
+   ```
 
-# 2. Start the app (Frontend, API, Worker, Analysis)
-npm run dev
-```
+2. **Start the App (Frontend & API):**
+   ```bash
+   npm run dev
+   ```
+
+3. **Start the Worker (in a new terminal):**
+   *Note: Requires Docker to be running.*
+   ```bash
+   cd worker && npm run dev
+   ```
 
 Visit **http://localhost:5173** to start simulating.
 
