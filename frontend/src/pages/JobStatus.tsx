@@ -5,6 +5,8 @@ import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
 import { useJobStream } from '../hooks/useJobStream';
+import { useWorkerStatus } from '../hooks/useWorkerStatus';
+import { useAuth } from '../contexts/AuthContext';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
@@ -142,6 +144,8 @@ export default function JobStatusPage() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  const { user } = useAuth();
+  const { workers, refresh: refreshWorkers } = useWorkerStatus();
   const apiBase = getApiBase();
   const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -751,6 +755,9 @@ export default function JobStatusPage() {
           <SimulationGrid
             simulations={streamSimulations}
             totalSimulations={job.simulations}
+            workers={workers}
+            userEmail={user?.email}
+            onWorkerRefresh={refreshWorkers}
           />
         )}
         {job.status === 'FAILED' && job.errorMessage && (
