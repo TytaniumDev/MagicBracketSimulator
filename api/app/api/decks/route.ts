@@ -6,15 +6,9 @@ import { getColorIdentity } from '@/lib/scryfall';
 import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
 
 /**
- * GET /api/decks - List all decks (precons + every user's submissions)
+ * GET /api/decks - List all decks (precons + every user's submissions, public)
  */
-export async function GET(request: NextRequest) {
-  try {
-    await verifyAuth(request);
-  } catch {
-    return unauthorizedResponse();
-  }
-
+export async function GET() {
   try {
     const decks = await listAllDecks();
     return NextResponse.json({ decks });

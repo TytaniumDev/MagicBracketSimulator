@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { optionalAuth, verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { publishSimulationTasks } from '@/lib/pubsub';
 import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, type CreateJobRequest } from '@/lib/types';
 import { isGcpMode } from '@/lib/job-store-factory';
+import { checkRateLimit } from '@/lib/rate-limiter';
 
 /**
  * Convert Job to API summary format
@@ -38,12 +39,9 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>) {
 /**
  * GET /api/jobs - List jobs
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const user = await optionalAuth(request);
-    const userId = user?.uid;
-
-    const jobs = await jobStore.listJobs(userId ?? undefined);
+    const jobs = await jobStore.listJobs();
     const summaries = jobs
       .map((j) => jobToSummary(j))
       .filter((s): s is NonNullable<typeof s> => s !== null);
@@ -72,6 +70,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateJobRequest;
     const { deckIds, simulations, parallelism, idempotencyKey } = body;
+
+    // Rate limiting
+    const rateCheck = await checkRateLimit(user.uid, typeof simulations === 'number' ? simulations : 0);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: rateCheck.reason },
+        { status: 429 }
+      );
+    }
 
     if (!Array.isArray(deckIds) || deckIds.length !== 4) {
       return NextResponse.json(

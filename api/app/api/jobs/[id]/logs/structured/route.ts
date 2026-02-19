@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { getStructuredLogs } from '@/lib/log-store';
 import * as jobStore from '@/lib/job-store-factory';
 
@@ -10,12 +9,7 @@ interface RouteParams {
 /**
  * GET /api/jobs/[id]/logs/structured — Return structured games for UI visualization.
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
-    const user = await optionalAuth(request);
-    if (!user) return unauthorizedResponse();
-  }
-
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
 

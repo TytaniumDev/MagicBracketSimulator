@@ -1,17 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { optionalAuth } from '@/lib/auth';
+import { NextResponse } from 'next/server';
 import * as workerStore from '@/lib/worker-store-factory';
 
 /**
- * GET /api/workers — List active workers and queue depth.
- * Available to authenticated users.
+ * GET /api/workers — List active workers and queue depth (public).
  */
-export async function GET(request: NextRequest) {
-  const user = await optionalAuth(request);
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function GET() {
   try {
     const [workers, queueDepth] = await Promise.all([
       workerStore.getActiveWorkers(),

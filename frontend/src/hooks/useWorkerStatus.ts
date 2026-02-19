@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getApiBase, fetchWithAuth } from '../api';
+import { getApiBase, fetchPublic } from '../api';
 import type { WorkerInfo } from '../types/worker';
 
 interface WorkerStatusResult {
@@ -20,7 +20,7 @@ export function useWorkerStatus(): WorkerStatusResult {
   const fetchStatus = useCallback(async () => {
     try {
       const apiBase = getApiBase();
-      const res = await fetchWithAuth(`${apiBase}/api/workers`);
+      const res = await fetchPublic(`${apiBase}/api/workers`);
       if (res.ok) {
         const data = await res.json();
         setWorkers(data.workers ?? []);

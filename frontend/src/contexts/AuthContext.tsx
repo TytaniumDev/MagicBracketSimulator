@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, googleProvider, isFirebaseConfigured } from '../firebase';
+import { getApiBase, fetchWithAuth } from '../api';
 
 const ALLOWED_USERS_COLLECTION = 'allowedUsers';
 
@@ -17,6 +18,10 @@ interface AuthContextType {
   /** True only when user is signed in AND listed in Firestore allowedUsers. */
   isAllowed: boolean | null;
   loading: boolean;
+  /** Whether the user has a pending access request */
+  hasRequestedAccess: boolean;
+  /** Refresh access request status */
+  refreshAccessRequestStatus: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -68,6 +73,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasRequestedAccess, setHasRequestedAccess] = useState(false);
+
+  const checkAccessRequestStatus = async () => {
+    try {
+      const apiBase = getApiBase();
+      const res = await fetchWithAuth(`${apiBase}/api/access-requests`);
+      if (res.ok) {
+        const data = await res.json();
+        setHasRequestedAccess(data.hasRequest && data.status === 'pending');
+      }
+    } catch {
+      // Non-fatal
+    }
+  };
 
   useEffect(() => {
     // Local mode: Firebase is not configured, provide a mock user immediately
@@ -83,13 +102,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(firebaseUser);
       if (!firebaseUser) {
         setIsAllowed(null);
+        setHasRequestedAccess(false);
         setLoading(false);
         return;
       }
       try {
         const allowedRef = doc(db!, ALLOWED_USERS_COLLECTION, firebaseUser.uid);
         const snap = await getDoc(allowedRef);
-        setIsAllowed(snap.exists());
+        const allowed = snap.exists();
+        setIsAllowed(allowed);
+
+        // If not allowed, check for pending access request
+        if (!allowed) {
+          // Defer to avoid blocking auth state resolution
+          checkAccessRequestStatus();
+        }
       } catch (err) {
         console.error('Error checking allowlist:', err);
         setIsAllowed(false);
@@ -146,6 +173,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     isAllowed,
     loading,
+    hasRequestedAccess,
+    refreshAccessRequestStatus: checkAccessRequestStatus,
     signInWithGoogle,
     signInWithEmail,
     signOut,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getApiBase, fetchWithAuth } from '../api';
+import { getApiBase, fetchWithAuth, fetchPublic } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
@@ -174,7 +174,7 @@ export default function JobStatusPage() {
       // SSE didn't connect in time, start polling as fallback
       fallbackActive = true;
       const fetchJob = () => {
-        fetchWithAuth(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
+        fetchPublic(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
           .then((res) => {
             if (!res.ok) {
               if (res.status === 404) throw new Error('Job not found');
@@ -215,7 +215,7 @@ export default function JobStatusPage() {
     if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
     if (streamSimulations.length > 0) return; // SSE already delivered them
 
-    fetchWithAuth(`${apiBase}/api/jobs/${id}/simulations`)
+    fetchPublic(`${apiBase}/api/jobs/${id}/simulations`)
       .then((res) => {
         if (!res.ok) return { simulations: [] };
         return res.json();
@@ -239,7 +239,7 @@ export default function JobStatusPage() {
     if (structuredGames !== null) return; // Already fetched
 
     setStructuredError(null);
-    fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/structured`)
+    fetchPublic(`${apiBase}/api/jobs/${id}/logs/structured`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) return { games: [], deckNames: [] };
@@ -270,7 +270,7 @@ export default function JobStatusPage() {
     const list = Array.from(names);
     if (list.length === 0) return;
     const params = new URLSearchParams({ names: list.join(',') });
-    fetchWithAuth(`${apiBase}/api/deck-color-identity?${params}`)
+    fetchPublic(`${apiBase}/api/deck-color-identity?${params}`)
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
       .catch(() => {});
@@ -284,7 +284,7 @@ export default function JobStatusPage() {
     if (analyzePayload !== null) return; // Already fetched
     
     setAnalyzePayloadError(null);
-    fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/analyze-payload`)
+    fetchPublic(`${apiBase}/api/jobs/${id}/logs/analyze-payload`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) return null;
@@ -305,7 +305,7 @@ export default function JobStatusPage() {
     if (!id || !showPayload || !analyzePayload) return;
     setPromptPreviewError(null);
     setPromptPreview(null);
-    fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/analyze-prompt-preview`)
+    fetchPublic(`${apiBase}/api/jobs/${id}/logs/analyze-prompt-preview`)
       .then(async (res) => {
         if (!res.ok) {
           const text = await res.text();
@@ -333,7 +333,7 @@ export default function JobStatusPage() {
     // Fetch raw logs
     if (rawLogs === null) {
       setRawLogsError(null);
-      fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/raw`)
+      fetchPublic(`${apiBase}/api/jobs/${id}/logs/raw`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { gameLogs: [] };
@@ -348,7 +348,7 @@ export default function JobStatusPage() {
     // Fetch condensed logs
     if (condensedLogs === null) {
       setCondensedError(null);
-      fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/condensed`)
+      fetchPublic(`${apiBase}/api/jobs/${id}/logs/condensed`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { condensed: [] };
@@ -469,7 +469,7 @@ export default function JobStatusPage() {
       <div className="max-w-2xl mx-auto text-center">
         <p className="text-red-400 mb-4">{error}</p>
         <Link to="/" className="text-blue-400 hover:underline">
-          Back to home
+          Back to browse
         </Link>
       </div>
     );
@@ -565,7 +565,7 @@ export default function JobStatusPage() {
           className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors"
         >
           <span aria-hidden>←</span>
-          Back to home
+          Back to browse
         </Link>
       </div>
       <h1 className="text-2xl font-bold mb-1">
@@ -1293,9 +1293,12 @@ export default function JobStatusPage() {
         )}
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 flex gap-4">
         <Link to="/" className="text-blue-400 hover:underline">
-          Submit another deck
+          Browse all simulations
+        </Link>
+        <Link to="/submit" className="text-blue-400 hover:underline">
+          Submit another simulation
         </Link>
       </div>
     </div>

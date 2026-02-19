@@ -119,6 +119,47 @@ export async function optionalAuth(req: NextRequest): Promise<AuthUser | null> {
 }
 
 /**
+ * Verify Firebase ID token without checking the allowlist.
+ * Used for endpoints that any authenticated user can access (e.g., access requests).
+ */
+export async function verifyAuthOnly(req: NextRequest): Promise<AuthUser> {
+  if (IS_LOCAL_MODE) {
+    return LOCAL_MOCK_USER;
+  }
+
+  const authHeader = req.headers.get('Authorization');
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new Error('No authorization token provided');
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+
+  if (!token) {
+    throw new Error('Empty authorization token');
+  }
+
+  try {
+    getFirebaseApp();
+    const decoded: DecodedIdToken = await getAuth().verifyIdToken(token);
+
+    if (!decoded.email) {
+      throw new Error('Token does not contain email');
+    }
+
+    return {
+      uid: decoded.uid,
+      email: decoded.email,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('email')) {
+      throw error;
+    }
+    throw new Error(`Invalid token: ${error instanceof Error ? error.message : 'unknown'}`);
+  }
+}
+
+/**
  * Create a 401 Unauthorized response
  */
 export function unauthorizedResponse(message: string = 'Unauthorized'): Response {

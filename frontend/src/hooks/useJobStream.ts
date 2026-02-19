@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getApiBase, getFirebaseIdToken } from '../api';
+import { getApiBase } from '../api';
 import type { SimulationStatus } from '../types/simulation';
 
 /**
@@ -36,18 +36,15 @@ export function useJobStream<T>(jobId: string | undefined) {
     closedRef.current = false;
     let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const connect = async () => {
+    const connect = () => {
       if (closedRef.current) return;
 
       try {
         const apiBase = getApiBase();
-        const token = await getFirebaseIdToken();
-        const url = new URL(`${apiBase}/api/jobs/${jobId}/stream`);
-        if (token) {
-          url.searchParams.set('token', token);
-        }
+        // No auth token needed — stream is public
+        const url = `${apiBase}/api/jobs/${jobId}/stream`;
 
-        const es = new EventSource(url.toString());
+        const es = new EventSource(url);
         eventSourceRef.current = es;
 
         // Default event: job-level updates
@@ -96,7 +93,7 @@ export function useJobStream<T>(jobId: string | undefined) {
           }
         };
       } catch {
-        // Token fetch or URL construction failed; retry after delay
+        // URL construction failed; retry after delay
         if (!closedRef.current) {
           retryTimeout = setTimeout(connect, 5000);
         }

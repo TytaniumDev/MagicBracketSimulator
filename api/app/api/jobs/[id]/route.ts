@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
@@ -75,24 +75,10 @@ async function jobToApiResponse(
 }
 
 /**
- * Allow request if user is authenticated OR worker secret is valid
- */
-async function allowJobReadOrUpdate(request: NextRequest): Promise<boolean> {
-  if (isWorkerRequest(request)) return true;
-  const user = await optionalAuth(request);
-  return user !== null;
-}
-
-/**
- * GET /api/jobs/[id] - Get job details
+ * GET /api/jobs/[id] - Get job details (public, no auth required)
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const allowed = await allowJobReadOrUpdate(request);
-    if (!allowed) {
-      return unauthorizedResponse();
-    }
-
     const { id } = await params;
     if (!id) {
       return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
@@ -177,9 +163,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
  * Used by worker and misc-runner
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const allowed = await allowJobReadOrUpdate(request);
-  if (!allowed) {
-    return unauthorizedResponse();
+  if (!isWorkerRequest(request)) {
+    return unauthorizedResponse('Worker authentication required');
   }
 
   try {

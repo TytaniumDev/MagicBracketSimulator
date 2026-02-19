@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { getCondensedLogs } from '@/lib/log-store';
 
 interface RouteParams {
@@ -9,12 +8,7 @@ interface RouteParams {
 /**
  * GET /api/jobs/[id]/logs/condensed — Return condensed game data.
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
-    const user = await optionalAuth(request);
-    if (!user) return unauthorizedResponse();
-  }
-
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const condensed = await getCondensedLogs(id);

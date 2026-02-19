@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
-import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
-import { useWorkerStatus } from '../hooks/useWorkerStatus';
+import { LoginButton } from '../components/LoginButton';
+import { RequestAccessCard } from '../components/RequestAccessCard';
 
 interface Deck {
   id: string;
@@ -25,32 +25,49 @@ interface DeckOption {
   deck: Deck;
 }
 
-type JobStatus = 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-interface JobSummary {
-  id: string;
-  name: string;
-  deckNames: string[];
-  status: JobStatus;
-  simulations: number;
-  gamesCompleted: number;
-  createdAt: string;
-  hasResult: boolean;
-  durationMs?: number | null;
-}
-
-function formatDurationMs(ms: number): string {
-  if (ms < 1000) return `${ms} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
-  const minutes = Math.floor(ms / 60_000);
-  const seconds = ((ms % 60_000) / 1000).toFixed(1);
-  return `${minutes}m ${seconds}s`;
-}
-
 export default function Home() {
+  const { user, isAllowed, loading } = useAuth();
+
+  // Show loading state while auth resolves
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  // Not signed in: prompt to sign in
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
+        <h2 className="text-2xl font-bold text-gray-300">Sign in to submit simulations</h2>
+        <p className="text-gray-400 text-center max-w-md">
+          Sign in with your Google account to submit Commander bracket simulations.
+          You can <Link to="/" className="text-blue-400 hover:underline">browse past results</Link> without signing in.
+        </p>
+        <LoginButton />
+      </div>
+    );
+  }
+
+  // Signed in but not on allowlist: show access request card
+  if (isAllowed === false) {
+    return (
+      <div className="max-w-4xl mx-auto py-8">
+        <RequestAccessCard />
+      </div>
+    );
+  }
+
+  // Signed in and allowed: show the simulation form
+  return <SimulationForm />;
+}
+
+function SimulationForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+
   // Add deck state
   const [deckUrl, setDeckUrl] = useState('');
   const [deckText, setDeckText] = useState('');
@@ -66,27 +83,19 @@ export default function Home() {
   const isMoxfieldUrl = /^https?:\/\/(?:www\.)?moxfield\.com\/decks\//i.test(deckUrl.trim());
   // Only show manual paste UI if Moxfield API is NOT enabled
   const showManualPaste = isMoxfieldUrl && moxfieldEnabled === false;
-  
+
   // Deck selection state
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [simulations, setSimulations] = useState(100);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
-  
+
   // Data state - unified deck list
   const [decks, setDecks] = useState<Deck[]>([]);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  // Past runs state
-  const [pastRuns, setPastRuns] = useState<JobSummary[]>([]);
-  const [pastRunsLoading, setPastRunsLoading] = useState(true);
-  const [pastRunsError, setPastRunsError] = useState<string | null>(null);
-  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const apiBase = getApiBase();
-  const { workers, queueDepth, isLoading: workersLoading } = useWorkerStatus();
 
   const precons = useMemo(() => decks.filter((d) => d.isPrecon), [decks]);
   const communityDecks = useMemo(() => decks.filter((d) => !d.isPrecon), [decks]);
@@ -126,54 +135,6 @@ export default function Home() {
       .catch(() => setMoxfieldEnabled(false));
   }, [apiBase]);
 
-  // Fetch past runs and poll when jobs are in progress
-  const fetchPastRuns = useCallback(async () => {
-    try {
-      const res = await fetchWithAuth(`${apiBase}/api/jobs`);
-      if (!res.ok) {
-        throw new Error('Failed to fetch past runs');
-      }
-      const data = await res.json();
-      setPastRuns(data.jobs || []);
-      setPastRunsError(null);
-      return data.jobs as JobSummary[];
-    } catch (err) {
-      setPastRunsError(err instanceof Error ? err.message : 'Failed to load past runs');
-      return [];
-    } finally {
-      setPastRunsLoading(false);
-    }
-  }, [apiBase]);
-
-  useEffect(() => {
-    // Initial fetch
-    fetchPastRuns().then((jobs) => {
-      // Start polling if any job is in progress
-      const hasInProgress = jobs.some(
-        (job) => job.status === 'QUEUED' || job.status === 'RUNNING' || job.status === 'ANALYZING'
-      );
-      if (hasInProgress && !pollIntervalRef.current) {
-        pollIntervalRef.current = setInterval(async () => {
-          const updated = await fetchPastRuns();
-          const stillInProgress = updated.some(
-            (job) => job.status === 'QUEUED' || job.status === 'RUNNING' || job.status === 'ANALYZING'
-          );
-          if (!stillInProgress && pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
-        }, 10000);
-      }
-    });
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    };
-  }, [fetchPastRuns]);
-
   const handleDeckToggle = (id: string) => {
     setSelectedDeckIds((prev) => {
       if (prev.includes(id)) {
@@ -196,8 +157,6 @@ export default function Home() {
       let body: Record<string, string>;
       const tryingMoxfieldUrl = isMoxfieldUrl && !!deckUrl.trim();
 
-      // Always try full Moxfield URL first when we have one (API uses custom User-Agent).
-      // Only use manual paste when user has pasted text and no URL to try.
       if (isMoxfieldUrl && deckUrl.trim()) {
         body = { deckUrl: deckUrl.trim() };
       } else if (isMoxfieldUrl && deckText.trim()) {
@@ -223,7 +182,6 @@ export default function Home() {
 
       let result = await doPost();
 
-      // If we tried Moxfield URL and it failed, retry once then switch to manual paste
       if (tryingMoxfieldUrl && !result.response.ok) {
         result = await doPost();
         if (!result.response.ok) {
@@ -268,7 +226,6 @@ export default function Home() {
         throw new Error(data.error || 'Failed to delete deck');
       }
 
-      // Clear selection if we deleted a selected deck
       if (selectedDeckIds.includes(deck.id)) {
         setSelectedDeckIds((prev) => prev.filter((id) => id !== deck.id));
       }
@@ -284,7 +241,7 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
-    
+
     if (selectedDeckIds.length !== 4) {
       setSubmitError('Please select exactly 4 decks');
       return;
@@ -322,33 +279,10 @@ export default function Home() {
     }
   };
 
-  const handleDeleteJob = async (e: React.MouseEvent, jobId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm('Delete this run? This cannot be undone.')) {
-      return;
-    }
-    setDeletingJobId(jobId);
-    try {
-      const response = await fetchWithAuth(`${apiBase}/api/jobs/${encodeURIComponent(jobId)}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok && response.status !== 204) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete run');
-      }
-      await fetchPastRuns();
-    } catch (err) {
-      setPastRunsError(err instanceof Error ? err.message : 'Failed to delete run');
-    } finally {
-      setDeletingJobId(null);
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-4xl font-bold text-center mb-4">
-        Magic Bracket Simulator
+        New Simulation
       </h1>
       <p className="text-gray-400 text-center mb-8">
         Simulate Commander games between any 4 decks to analyze performance.
@@ -466,7 +400,7 @@ export default function Home() {
               </button>
             )}
           </div>
-          
+
           <div className="max-h-80 overflow-y-auto bg-gray-700 rounded-md p-3">
             {/* Community Decks Group */}
             {communityDecks.length > 0 && (
@@ -618,156 +552,6 @@ export default function Home() {
           {isSubmitting ? 'Submitting...' : 'Run Simulations'}
         </button>
       </form>
-
-      {/* Worker Status Banner */}
-      <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} />
-
-      {/* Past Runs Section */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-4">Past Runs</h2>
-        
-        {pastRunsLoading && (
-          <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
-            Loading past runs...
-          </div>
-        )}
-
-        {pastRunsError && (
-          <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
-            {pastRunsError}
-          </div>
-        )}
-
-        {!pastRunsLoading && !pastRunsError && pastRuns.length === 0 && (
-          <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
-            No past runs yet. Select 4 decks above to start your first simulation.
-          </div>
-        )}
-
-        {!pastRunsLoading && !pastRunsError && pastRuns.length > 0 && (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {pastRuns.map((run) => (
-              <div
-                key={run.id}
-                className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors flex items-start gap-3"
-              >
-                <Link
-                  to={`/jobs/${run.id}`}
-                  className="flex-1 min-w-0 block"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-white truncate">
-                          {run.name}
-                        </h3>
-                        <StatusBadge status={run.status} />
-                      </div>
-                      <p className="text-sm text-gray-400 truncate">
-                        {run.deckNames.join(', ')}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="text-sm font-medium text-gray-300">
-                        {run.status === 'COMPLETED'
-                          ? `${run.simulations} / ${run.simulations} games`
-                          : `${run.gamesCompleted ?? 0} / ${run.simulations} games`}
-                      </div>
-                      {run.durationMs != null && run.durationMs >= 0 && (
-                        <div className="text-xs text-gray-400">
-                          Run time: {formatDurationMs(run.durationMs)}
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-500">
-                        {formatDate(run.createdAt)}
-                      </div>
-                    </div>
-                  </div>
-                {(run.status === 'RUNNING' || run.status === 'ANALYZING') && (
-                  <div className="mt-2">
-                    <div
-                      className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden"
-                      role="progressbar"
-                      aria-valuenow={run.gamesCompleted}
-                      aria-valuemin={0}
-                      aria-valuemax={run.simulations}
-                    >
-                      <div
-                        className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                        style={{
-                          width: `${Math.min(100, (run.gamesCompleted / run.simulations) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-                </Link>
-                <button
-                  type="button"
-                  onClick={(e) => handleDeleteJob(e, run.id)}
-                  disabled={deletingJobId === run.id}
-                  title="Delete run"
-                  aria-label={`Delete run ${run.name}`}
-                  className={`flex-shrink-0 p-2 rounded text-gray-400 hover:text-red-200 hover:bg-red-900/30 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 ${
-                    deletingJobId === run.id ? 'cursor-not-allowed' : ''
-                  }`}
-                >
-                  {deletingJobId === run.id ? (
-                    <span className="text-xs">…</span>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: JobStatus }) {
-  const styles: Record<JobStatus, string> = {
-    QUEUED: 'bg-gray-600 text-gray-200',
-    RUNNING: 'bg-blue-600 text-white',
-    ANALYZING: 'bg-purple-600 text-white',
-    COMPLETED: 'bg-green-600 text-white',
-    FAILED: 'bg-red-600 text-white',
-    CANCELLED: 'bg-orange-600 text-white',
-  };
-
-  const labels: Record<JobStatus, string> = {
-    QUEUED: 'Queued',
-    RUNNING: 'Running',
-    ANALYZING: 'Analyzing',
-    COMPLETED: 'Completed',
-    FAILED: 'Failed',
-    CANCELLED: 'Cancelled',
-  };
-
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
-  );
-}
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString();
 }

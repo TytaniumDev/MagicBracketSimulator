@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { getAnalyzePayloadData } from '@/lib/log-store';
 import { buildPromptPreview } from '@/lib/gemini';
 
@@ -10,12 +9,7 @@ interface RouteParams {
 /**
  * GET /api/jobs/[id]/logs/analyze-prompt-preview — Return the exact prompts that would be sent to Gemini.
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
-    const user = await optionalAuth(request);
-    if (!user) return unauthorizedResponse();
-  }
-
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const payload = await getAnalyzePayloadData(id);

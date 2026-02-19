@@ -10,25 +10,51 @@ service cloud.firestore {
 
     // Allowlist: each doc id is a Firebase Auth UID. Users can only read their
     // own doc (so the app can check "am I allowed?"). Add/remove allowed users
-    // via Firebase Console or Admin SDK only.
+    // via Firebase Console, Admin SDK, or the approve endpoint.
     match /allowedUsers/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
     }
 
-    // Unified decks collection: precons + user decks
-    // All allowed users can read all decks (precons + everyone's submissions)
+    // Jobs: public reads, writes require allowlist
+    match /jobs/{jobId} {
+      allow read: if true;
+      allow create: if isAllowedUser();
+      allow update: if isAllowedUser();
+      allow delete: if isAllowedUser();
+
+      // Per-simulation tracking subcollection: public reads
+      match /simulations/{simId} {
+        allow read: if true;
+        allow write: if isAllowedUser();
+      }
+    }
+
+    // Unified decks collection: public reads
     // Only deck owner can delete; precons (ownerId == null) cannot be deleted by any user
     match /decks/{deckId} {
-      allow read: if isAllowedUser();
+      allow read: if true;
       allow create: if isAllowedUser() && request.resource.data.ownerId == request.auth.uid;
       allow delete: if isAllowedUser() && resource.data.ownerId == request.auth.uid;
       allow update: if false;
     }
 
-    // All other data: only allowed users can read/write.
+    // Access requests: any authenticated user can create, users can read their own
+    match /accessRequests/{requestId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Workers collection: public reads (worker status), writes via Admin SDK only
+    match /workers/{workerId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Catch-all: deny everything else not explicitly matched
     match /{document=**} {
-      allow read, write: if isAllowedUser();
+      allow read, write: if false;
     }
   }
 }

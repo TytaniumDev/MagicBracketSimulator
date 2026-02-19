@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { optionalAuth, isWorkerRequest } from '@/lib/auth';
+import { isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
@@ -111,47 +111,12 @@ function isTerminalStatus(status: string): boolean {
 }
 
 /**
- * Authenticate via Authorization header OR ?token= query param.
- * EventSource doesn't support custom headers, so the token query param
- * is needed for SSE connections from the browser.
- */
-async function authenticateStream(request: NextRequest): Promise<boolean> {
-  if (isWorkerRequest(request)) return true;
-
-  // Try standard Authorization header first
-  const user = await optionalAuth(request);
-  if (user) return true;
-
-  // Fall back to query param token (for EventSource)
-  const tokenParam = request.nextUrl.searchParams.get('token');
-  if (tokenParam) {
-    // Create a synthetic request with the token as a Bearer header
-    const headers = new Headers(request.headers);
-    headers.set('Authorization', `Bearer ${tokenParam}`);
-    const syntheticReq = new NextRequest(request.url, { headers });
-    const tokenUser = await optionalAuth(syntheticReq);
-    return tokenUser !== null;
-  }
-
-  // In local mode, optionalAuth returns local mock user even without a token
-  return false;
-}
-
-/**
- * GET /api/jobs/[id]/stream - Server-Sent Events stream for job updates
+ * GET /api/jobs/[id]/stream - Server-Sent Events stream for job updates (public, no auth required)
  *
  * GCP mode: Uses Firestore onSnapshot for real-time push
  * LOCAL mode: Polls SQLite every 2 seconds server-side
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const allowed = await authenticateStream(request);
-  if (!allowed) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
   const { id } = await params;
   if (!id) {
     return new Response(JSON.stringify({ error: 'Job ID is required' }), {

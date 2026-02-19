@@ -26,3 +26,7 @@ env:
     secret: worker-secret
   - variable: MOXFIELD_USER_AGENT
     secret: moxfield-user-agent
+  - variable: RESEND_API_KEY
+    secret: resend-api-key
+  - variable: ADMIN_EMAIL
+    secret: admin-email

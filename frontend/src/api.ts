@@ -39,7 +39,7 @@ export async function fetchWithAuth(
   options: RequestInit = {}
 ): Promise<Response> {
   const token = await getFirebaseIdToken();
-  
+
   const headers: HeadersInit = {
     ...options.headers,
     'Content-Type': 'application/json',
@@ -52,5 +52,21 @@ export async function fetchWithAuth(
   return fetch(url, {
     ...options,
     headers,
+  });
+}
+
+/**
+ * Fetch without authentication — for public read-only endpoints
+ */
+export function fetchPublic(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 }
