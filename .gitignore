@@ -40,8 +40,9 @@ venv/
 *.egg-info/
 .eggs/
 
-# Job store (SQLite DB - shared across processes)
+# Job store (SQLite DB - shared across processes) and ingestion logs
 api/data/
+api/logs-data/
 
 # Worker jobs directory and stable worker ID file
 worker/jobs/
@@ -49,8 +50,9 @@ worker/worker-id
 worker/deck-cache/
 worker/.docker-login-config/
 
-# Forge simulation (generated logs)
+# Forge simulation (generated logs) and custom decks
 worker/forge-engine/logs/
+worker/forge-engine/decks/
 
 # Forge installer (too large for GitHub; Dockerfile downloads at build time)
 worker/forge-engine/forge-installer*.jar
