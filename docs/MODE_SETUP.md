@@ -80,7 +80,8 @@ npm run worker:gcp
 |---------|---------|---------------|
 | api | API backend, Firestore/Pub/Sub integration | Local or Cloud Run |
 | frontend | React UI | Local or Firebase Hosting |
-| worker | Unified container: Forge simulation + log processing + Pub/Sub subscriber | Docker on your machine |
+| worker | Node.js orchestrator that spawns simulation containers (Docker) | Docker on your machine |
+| simulation | Java + Forge engine container (ephemeral) | Spawns via `docker run` inside worker |
 
 ### Deployed API (Firebase App Hosting / Cloud Run)
 
@@ -110,7 +111,7 @@ npm run dev
 |---------|---------|
 | api | API backend with SQLite, Gemini integration |
 | frontend | React UI |
-| worker (polling) | Unified container: Forge simulation + log processing, polls API for jobs |
+| worker (polling) | Node.js orchestrator, polls API for jobs, spawns simulation containers |
 
 ---
 
@@ -136,96 +137,7 @@ Build the unified worker container:
 docker compose -f worker/docker-compose.yml build
 ```
 
----
-
-## Docker Swarm Setup
-
-The worker distributes simulations across multiple machines using Docker Swarm. Each simulation runs as a one-shot swarm service. Deck content is delivered via base64-encoded environment variables, and logs are collected via `docker service logs` — no shared filesystem is needed between nodes.
-
-A single-node swarm works fine (the manager runs simulations itself). Add more nodes to increase throughput.
-
-### Prerequisites
-
-- Docker installed on all machines
-- Tailscale installed on all machines (for cross-network connectivity), or all machines on the same LAN
-- The simulation image (`magic-bracket-simulation:latest` or from GHCR) available on all nodes
-
-### Manager Initialization
-
-On the machine that will run the worker:
-
-```bash
-./scripts/init-swarm-manager.sh
-# Or with a custom simulation image:
-./scripts/init-swarm-manager.sh --simulation-image=ghcr.io/org/magic-bracket-simulation:latest
-```
-
-This will:
-1. Detect your Tailscale IP (or prompt for a LAN IP)
-2. Run `docker swarm init --advertise-addr <ip>`
-3. Pull the simulation image
-4. Print the worker join token and instructions
-
-### Adding Worker Nodes
-
-On each additional machine:
-
-```bash
-./scripts/setup-swarm-node.sh \
-  --join-token=SWMTKN-1-... \
-  --manager-ip=100.64.0.1
-```
-
-The join token and manager IP are printed by `init-swarm-manager.sh`.
-
-### Starting the Worker
-
-The worker runs on the manager node via `docker compose` (not as a swarm service) because it needs Docker socket access to create/manage swarm services.
-
-**GCP mode (Pub/Sub):**
-```bash
-cd worker
-docker compose -f docker-compose.yml up -d
-```
-
-**Local dev (polling):**
-```bash
-cd worker
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
-```
-
-### Single-Node Swarm
-
-Even with only one machine, the worker requires swarm mode. The `setup-worker.sh` script automatically initializes a single-node swarm during bootstrap.
-
-### Monitoring
-
-```bash
-# List swarm nodes
-docker node ls
-
-# List running simulation services
-docker service ls
-
-# See which node is running a simulation
-docker service ps sim-<jobId>-<simId>
-
-# View simulation logs
-docker service logs sim-<jobId>-<simId>
-```
-
-### Removing Nodes
-
-```bash
-# On the worker node:
-docker swarm leave
-
-# On the manager (to remove a drained node):
-docker node rm <node-id>
-
-# To tear down the entire swarm (manager):
-docker swarm leave --force
-```
+The worker image contains the Node.js orchestrator. The simulation image (`magic-bracket-simulation`) is either pulled from GHCR or built locally and must be available to the Docker daemon so the worker can spawn it using `docker run`.
 
 ---
 
