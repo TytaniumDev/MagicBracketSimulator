@@ -1,3 +1,6 @@
+/** Number of games each simulation container runs sequentially. Must match api/lib/types.ts. */
+export const GAMES_PER_CONTAINER = 4;
+
 /** Lifecycle state for an individual simulation within a job. */
 export type SimulationState = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
@@ -14,4 +17,6 @@ export interface SimulationStatus {
   errorMessage?: string;
   winner?: string;
   winningTurn?: number;
+  winners?: string[];
+  winningTurns?: number[];
 }

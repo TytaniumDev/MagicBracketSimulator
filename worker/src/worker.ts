@@ -44,6 +44,13 @@ import {
   cleanupOrphanedContainers,
   pruneDockerResources,
 } from './docker-runner.js';
+import {
+  splitConcatenatedGames,
+  extractWinner,
+  extractWinningTurn,
+} from './condenser.js';
+import { startWorkerApi, stopWorkerApi } from './worker-api.js';
+import { GAMES_PER_CONTAINER } from './constants.js';
 
 
 const SECRET_NAME = 'simulation-worker-config';
@@ -63,6 +70,15 @@ const workerStartTime = Date.now();
 
 // Shared simulation concurrency semaphore, initialized in main()
 let simSemaphore: Semaphore | null = null;
+
+// Abort controllers per job for push-based cancellation
+const activeAbortControllers = new Map<string, Set<AbortController>>();
+
+// Notify mechanism for push-based job notification (local polling mode)
+let jobNotifyResolve: (() => void) | null = null;
+
+// Drain flag — when true, worker stops accepting new work
+let isDraining = false;
 
 // ============================================================================
 // Worker Naming
@@ -327,20 +343,12 @@ async function processSimulation(
     workerName: currentWorkerName,
   });
 
-  // Set up cancellation polling: check job status every 5s
+  // Register abort controller for push-based cancellation
   const abortController = new AbortController();
-  const cancellationPollInterval = setInterval(async () => {
-    try {
-      const pollJob = await fetchJob(jobId);
-      if (pollJob?.status === 'CANCELLED') {
-        console.log(`${simLabel} Job ${jobId} cancelled, aborting container...`);
-        abortController.abort();
-        clearInterval(cancellationPollInterval);
-      }
-    } catch {
-      // Non-fatal: polling failure shouldn't affect the simulation
-    }
-  }, 5000);
+  if (!activeAbortControllers.has(jobId)) {
+    activeAbortControllers.set(jobId, new Set());
+  }
+  activeAbortControllers.get(jobId)!.add(abortController);
 
   try {
     // Run the simulation container with cancellation signal
@@ -353,14 +361,23 @@ async function processSimulation(
         durationMs: result.durationMs,
       });
     } else if (result.exitCode === 0) {
-      // With 4 games per container, skip per-container winner extraction
-      // (extractWinnerFromLog would only find game 1's winner from concatenated output).
-      // Accurate per-game win data comes from aggregateJobResults → splitConcatenatedGames.
-      console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB`);
+      // Split concatenated 4-game log and extract per-game winners/turns
+      const games = splitConcatenatedGames(result.logText);
+      const winners: string[] = [];
+      const winningTurns: number[] = [];
+      for (const game of games) {
+        const w = extractWinner(game);
+        if (w) winners.push(w);
+        const t = extractWinningTurn(game);
+        if (t > 0) winningTurns.push(t);
+      }
+      console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB, games=${games.length}, winners=${winners.length}`);
 
       await reportSimulationStatus(jobId, simId, {
         state: 'COMPLETED',
         durationMs: result.durationMs,
+        winners,
+        winningTurns,
       });
 
       // Upload log incrementally (non-fatal)
@@ -380,7 +397,12 @@ async function processSimulation(
       });
     }
   } finally {
-    clearInterval(cancellationPollInterval);
+    // Unregister abort controller
+    const controllers = activeAbortControllers.get(jobId);
+    if (controllers) {
+      controllers.delete(abortController);
+      if (controllers.size === 0) activeAbortControllers.delete(jobId);
+    }
     activeSimCount = Math.max(0, activeSimCount - 1);
   }
 }
@@ -391,6 +413,68 @@ async function processSimulation(
 
 // Track whether we're currently operating under an override
 let currentOverride: number | null = null;
+
+/**
+ * Apply a concurrency override (or clear it).
+ * Consolidates semaphore resize logic for use by both heartbeat and push API.
+ */
+function applyOverride(newOverride: number | null): void {
+  if (!simSemaphore) return;
+
+  if (typeof newOverride === 'number') {
+    const override = Math.max(1, newOverride);
+    if (override !== simSemaphore.maxSlots) {
+      const oldMax = simSemaphore.maxSlots;
+      simSemaphore.resize(override);
+      console.log(`Capacity override: ${oldMax} -> ${override} (hardware: ${localCapacity})`);
+      if (override > localCapacity) {
+        console.log(`WARNING: Override (${override}) exceeds hardware capacity (${localCapacity}). CPU/memory contention possible.`);
+      }
+    }
+    currentOverride = override;
+  } else if (currentOverride !== null) {
+    // Override was cleared — revert to hardware capacity
+    const oldMax = simSemaphore.maxSlots;
+    if (oldMax !== localCapacity) {
+      simSemaphore.resize(localCapacity);
+      console.log(`Capacity override cleared: ${oldMax} -> ${localCapacity} (hardware)`);
+    }
+    currentOverride = null;
+  }
+}
+
+/**
+ * Cancel all active simulations for a job by aborting their controllers.
+ */
+function cancelJob(jobId: string): void {
+  const controllers = activeAbortControllers.get(jobId);
+  if (!controllers || controllers.size === 0) {
+    console.log(`Cancel push received for job ${jobId}: no active simulations`);
+    return;
+  }
+  console.log(`Cancel push received for job ${jobId}: aborting ${controllers.size} simulation(s)`);
+  for (const controller of controllers) {
+    controller.abort();
+  }
+}
+
+/**
+ * Wake the polling loop immediately (used by push notification).
+ */
+function notifyJobAvailable(): void {
+  if (jobNotifyResolve) {
+    jobNotifyResolve();
+    jobNotifyResolve = null;
+  }
+}
+
+/**
+ * Set or clear the drain flag.
+ */
+function setDraining(drain: boolean): void {
+  isDraining = drain;
+  console.log(drain ? 'Drain mode enabled: no new work will be accepted' : 'Drain mode disabled: accepting work');
+}
 
 /**
  * Send a heartbeat to the API so the frontend knows this worker is online.
@@ -411,6 +495,7 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
         activeSimulations: activeSimCount,
         uptimeMs: Date.now() - workerStartTime,
         ownerEmail: process.env.WORKER_OWNER_EMAIL || undefined,
+        workerApiUrl: process.env.WORKER_API_URL || undefined,
       }),
       signal: AbortSignal.timeout(timeoutMs ?? API_TIMEOUT_MS),
     });
@@ -421,27 +506,8 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
 
     // Parse response for concurrency override
     const data = await res.json() as { ok: boolean; maxConcurrentOverride?: number };
-    if (simSemaphore && status !== 'updating') {
-      if (typeof data.maxConcurrentOverride === 'number') {
-        const override = Math.max(1, data.maxConcurrentOverride);
-        if (override !== simSemaphore.maxSlots) {
-          const oldMax = simSemaphore.maxSlots;
-          simSemaphore.resize(override);
-          console.log(`Capacity override: ${oldMax} -> ${override} (hardware: ${localCapacity})`);
-          if (override > localCapacity) {
-            console.log(`WARNING: Override (${override}) exceeds hardware capacity (${localCapacity}). CPU/memory contention possible.`);
-          }
-        }
-        currentOverride = override;
-      } else if (currentOverride !== null) {
-        // Override was cleared — revert to hardware capacity
-        const oldMax = simSemaphore.maxSlots;
-        if (oldMax !== localCapacity) {
-          simSemaphore.resize(localCapacity);
-          console.log(`Capacity override cleared: ${oldMax} -> ${localCapacity} (hardware)`);
-        }
-        currentOverride = null;
-      }
+    if (status !== 'updating') {
+      applyOverride(data.maxConcurrentOverride ?? null);
     }
   } catch (err) {
     console.warn('Heartbeat error:', err instanceof Error ? err.message : err);
@@ -584,6 +650,13 @@ async function handleMessage(message: any): Promise<void> {
   if ('type' in messageData && messageData.type === 'simulation') {
     const { jobId, simId, simIndex } = messageData;
 
+    // Reject work when draining
+    if (isDraining) {
+      console.log(`Draining, nacking simulation task: job=${jobId} sim=${simId}`);
+      message.nack();
+      return;
+    }
+
     // Enforce concurrency cap: if all slots are busy, nack immediately
     if (!simSemaphore || !simSemaphore.tryAcquire()) {
       console.log(`At capacity, nacking simulation task: job=${jobId} sim=${simId}`);
@@ -624,12 +697,34 @@ async function handleMessage(message: any): Promise<void> {
 // Polling Mode (local, no Pub/Sub)
 // ============================================================================
 
+/**
+ * Wait for either a timeout or a push notification to wake us.
+ */
+function waitForNotifyOrTimeout(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      jobNotifyResolve = null;
+      resolve();
+    }, ms);
+    jobNotifyResolve = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+  });
+}
+
 async function pollForJobs(): Promise<void> {
   const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
 
   console.log(`Polling for jobs at ${getApiUrl()}/api/jobs/next every ${POLL_INTERVAL_MS}ms (capacity=${localCapacity})...`);
 
   while (!isShuttingDown) {
+    // Skip claiming when draining
+    if (isDraining) {
+      await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
+      continue;
+    }
+
     try {
       const res = await fetch(`${getApiUrl()}/api/jobs/next`, {
         headers: getApiHeaders(),
@@ -638,8 +733,7 @@ async function pollForJobs(): Promise<void> {
       if (res.status === 200) {
         const job = await res.json() as JobData;
 
-        // Each container runs 4 games; derive container count from requested simulations
-        const GAMES_PER_CONTAINER = 4;
+        // Each container runs GAMES_PER_CONTAINER games; derive container count
         const totalSims = Math.ceil(job.simulations / GAMES_PER_CONTAINER);
         const simIds = Array.from({ length: totalSims }, (_, i) => ({
           simId: `sim_${String(i).padStart(3, '0')}`,
@@ -673,7 +767,7 @@ async function pollForJobs(): Promise<void> {
         console.error('Polling error:', error);
       }
     }
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
   }
 }
 
@@ -704,10 +798,11 @@ function handleShutdown(signal: string): void {
     .then(() => console.log('Sent updating heartbeat'))
     .catch((err) => console.warn('Failed to send updating heartbeat:', err instanceof Error ? err.message : err));
 
-  // After the heartbeat (or timeout), close Pub/Sub and exit
+  // After the heartbeat (or timeout), close Pub/Sub + worker API and exit
   updatingHeartbeat.finally(() => {
     const closeSub = subscription ? subscription.close() : Promise.resolve();
-    closeSub
+    const closeApi = stopWorkerApi().catch(() => {});
+    Promise.all([closeSub, closeApi])
       .then(() => {
         console.log('Shutdown complete');
         process.exit(0);
@@ -762,8 +857,16 @@ async function main(): Promise<void> {
   localCapacity = calculateLocalCapacity();
   simSemaphore = new Semaphore(localCapacity);
 
-  // Start heartbeat interval (every 15 seconds)
-  sendHeartbeat(); // Initial heartbeat
+  // Start worker HTTP API for push-based control
+  await startWorkerApi({
+    onConfig: applyOverride,
+    onCancel: cancelJob,
+    onNotify: notifyJobAvailable,
+    onDrain: setDraining,
+  });
+
+  // Initial heartbeat (await to apply override before Pub/Sub starts)
+  await sendHeartbeat();
   heartbeatInterval = setInterval(() => sendHeartbeat(), 15_000);
 
   // Periodic Docker cleanup (every hour) to free disk space
@@ -782,14 +885,15 @@ async function main(): Promise<void> {
     const pubsub = new PubSub({ projectId: PROJECT_ID });
 
     // Pub/Sub flow control: limit message delivery rate (defense-in-depth,
-    // the semaphore in handleMessage is the authoritative concurrency gate)
+    // the semaphore in handleMessage is the authoritative concurrency gate).
+    // Uses simSemaphore.maxSlots so override from initial heartbeat is respected.
     subscription = pubsub.subscription(SUBSCRIPTION_NAME, {
-      flowControl: { maxMessages: localCapacity, allowExcessMessages: false },
+      flowControl: { maxMessages: simSemaphore.maxSlots, allowExcessMessages: false },
     });
 
     console.log('Project:', PROJECT_ID);
     console.log('Subscription:', SUBSCRIPTION_NAME);
-    console.log(`Subscribing to Pub/Sub messages (maxMessages=${localCapacity})...`);
+    console.log(`Subscribing to Pub/Sub messages (maxMessages=${simSemaphore.maxSlots})...`);
 
     subscription.on('message', handleMessage);
     subscription.on('error', (error: unknown) => {

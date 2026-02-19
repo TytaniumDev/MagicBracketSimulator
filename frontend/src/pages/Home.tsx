@@ -6,6 +6,7 @@ import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
 import { RequestAccessCard } from '../components/RequestAccessCard';
+import { GAMES_PER_CONTAINER } from '../types/simulation';
 
 interface Deck {
   id: string;
@@ -526,12 +527,12 @@ function SimulationForm() {
         </div>
 
         <SliderWithInput
-          label="Number of Simulations"
+          label="Number of Games"
           value={simulations}
           onChange={setSimulations}
-          min={4}
+          min={GAMES_PER_CONTAINER}
           max={100}
-          step={4}
+          step={GAMES_PER_CONTAINER}
           className="mb-4"
         />
 

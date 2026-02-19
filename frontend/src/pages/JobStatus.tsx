@@ -371,9 +371,14 @@ export default function JobStatusPage() {
       return { simWinTally: null, simWinTurns: null, simGamesCompleted: 0 };
     }
 
-    const completed = streamSimulations.filter((s) => s.state === 'COMPLETED' && s.winner);
-    if (completed.length === 0) {
-      return { simWinTally: null, simWinTurns: null, simGamesCompleted: streamSimulations.filter((s) => s.state === 'COMPLETED').length };
+    const completedSims = streamSimulations.filter((s) => s.state === 'COMPLETED');
+
+    // Use winners[] array (multi-game containers) or fall back to single winner
+    const hasAnyWinData = completedSims.some((s) => (s.winners && s.winners.length > 0) || s.winner);
+    if (!hasAnyWinData) {
+      // Count games from winners arrays if available, otherwise count sims
+      const gamesCompleted = completedSims.reduce((sum, s) => sum + (s.winners?.length ?? 0), 0) || completedSims.length;
+      return { simWinTally: null, simWinTurns: null, simGamesCompleted: gamesCompleted };
     }
 
     const allNames = job?.deckNames ?? [];
@@ -385,17 +390,23 @@ export default function JobStatusPage() {
       turns[name] = [];
     }
 
-    for (const sim of completed) {
-      let matchedDeck = sim.winner!;
-      const found = allNames.find(
-        (name) => sim.winner === name || sim.winner?.endsWith(`-${name}`)
-      );
-      if (found) matchedDeck = found;
+    for (const sim of completedSims) {
+      // Prefer winners[] array (multi-game containers), fall back to single winner
+      const simWinners = sim.winners && sim.winners.length > 0 ? sim.winners : (sim.winner ? [sim.winner] : []);
+      const simTurns = sim.winningTurns && sim.winningTurns.length > 0 ? sim.winningTurns : (sim.winningTurn !== undefined ? [sim.winningTurn] : []);
 
-      tally[matchedDeck] = (tally[matchedDeck] || 0) + 1;
-      if (sim.winningTurn !== undefined) {
-        if (!turns[matchedDeck]) turns[matchedDeck] = [];
-        turns[matchedDeck].push(sim.winningTurn);
+      for (let i = 0; i < simWinners.length; i++) {
+        let matchedDeck = simWinners[i];
+        const found = allNames.find(
+          (name) => simWinners[i] === name || simWinners[i]?.endsWith(`-${name}`)
+        );
+        if (found) matchedDeck = found;
+
+        tally[matchedDeck] = (tally[matchedDeck] || 0) + 1;
+        if (i < simTurns.length && simTurns[i] !== undefined) {
+          if (!turns[matchedDeck]) turns[matchedDeck] = [];
+          turns[matchedDeck].push(simTurns[i]);
+        }
       }
     }
 
@@ -403,10 +414,13 @@ export default function JobStatusPage() {
       turns[deck].sort((a, b) => a - b);
     }
 
+    // Count actual games from winners arrays, fall back to sim count
+    const gamesCompleted = completedSims.reduce((sum, s) => sum + (s.winners?.length ?? 0), 0) || completedSims.length;
+
     return {
       simWinTally: tally,
       simWinTurns: turns,
-      simGamesCompleted: streamSimulations.filter((s) => s.state === 'COMPLETED').length,
+      simGamesCompleted: gamesCompleted,
     };
   }, [streamSimulations, job?.deckNames]);
 
@@ -705,7 +719,7 @@ export default function JobStatusPage() {
         </div>
         )}
         <div>
-          <span className="text-gray-400">Simulations: </span>
+          <span className="text-gray-400">Games: </span>
           <span>{job.simulations}</span>
         </div>
         {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && job.durationMs != null && job.durationMs >= 0 && (

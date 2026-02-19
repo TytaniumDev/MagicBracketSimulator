@@ -9,6 +9,7 @@
 import * as os from 'os';
 import { execFile } from 'child_process';
 import { spawn } from 'child_process';
+import { GAMES_PER_CONTAINER } from './constants.js';
 
 // ============================================================================
 // Types
@@ -28,7 +29,7 @@ export interface SimulationResult {
 // ============================================================================
 
 const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest';
-const RAM_PER_SIM_MB = 900;  // Increased from 600 to fix OOM kills
+const RAM_PER_SIM_MB = parseInt(process.env.RAM_PER_SIM_MB || '1200', 10);
 const SYSTEM_RESERVE_MB = 2048;
 const CONTAINER_TIMEOUT_MS = 2 * 60 * 60 * 1000;  // 2 hours (4 sequential games per container)
 const MAX_CONCURRENT_SIMS = parseInt(process.env.MAX_CONCURRENT_SIMS || '6', 10);
@@ -136,7 +137,7 @@ export async function runSimulationContainer(
     '-e', 'LOGS_DIR=/app/logs',
     SIMULATION_IMAGE,
     '--decks', ...deckFilenames,
-    '--simulations', '4',
+    '--simulations', String(GAMES_PER_CONTAINER),
     '--id', `${jobId}_${simId}`,
   ];
 
