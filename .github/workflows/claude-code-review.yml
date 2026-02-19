@@ -1,8 +1,7 @@
 name: Claude Code Review
 
 on:
-  # Use pull_request_target so the workflow triggers for bot PRs (e.g. Jules)
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
   # Allow interactive follow-ups via @claude in comments
   issue_comment:
@@ -14,7 +13,7 @@ jobs:
   claude-review:
     # Skip draft PRs; for comment events, only run when @claude is mentioned
     if: |
-      (github.event_name == 'pull_request_target' && !github.event.pull_request.draft) ||
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
 
@@ -29,7 +28,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
       - name: Run Claude Code Review
