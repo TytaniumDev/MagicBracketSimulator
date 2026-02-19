@@ -20,12 +20,45 @@ SECRET_NAME="worker-host-config"
 # e.g. ghcr.io/org/repo/worker -> ghcr.io/org/repo/simulation, or magic-bracket-worker -> magic-bracket-simulation
 # ── Platform check ────────────────────────────────────────────────────
 case "$(uname -s)" in
-  Linux|Darwin|MINGW*|MSYS*) ;;
+  Linux|Darwin) ;;
+  MINGW*|MSYS*)
+    echo "ERROR: On Windows, this script must be run inside WSL (not Git Bash or MSYS)."
+    echo ""
+    echo "Docker Desktop uses WSL paths for bind mounts. Running from Git Bash"
+    echo "produces Windows paths (C:\\...) that Docker cannot mount correctly."
+    echo ""
+    echo "Open a WSL terminal and run:"
+    echo "  cd ~/Dev/MagicBracketSimulator  # or wherever you cloned the repo in WSL"
+    echo "  ./scripts/setup-worker.sh"
+    exit 1
+    ;;
   *)
-    echo "This script must be run on a Unix system (macOS, Linux, WSL, or Git Bash on Windows)."
+    echo "This script must be run on a Unix system (macOS, Linux, or WSL)."
     exit 1
     ;;
 esac
+
+# ── WSL filesystem check ─────────────────────────────────────────────
+# On WSL, the repo must live on the Linux filesystem (e.g. ~/Dev/...), not
+# on the Windows mount (/mnt/c/...). Docker Desktop resolves WSL Linux paths
+# correctly but Windows-mounted paths produce C:\... sources that fail silently
+# (Docker creates an empty directory instead of mounting the file).
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  case "$REPO_ROOT" in
+    /mnt/[a-zA-Z]/*)
+      echo "ERROR: This repo is on the Windows filesystem ($REPO_ROOT)."
+      echo ""
+      echo "Docker Desktop cannot reliably bind-mount files from /mnt/c/... into"
+      echo "containers when running via WSL. Clone the repo onto the WSL filesystem:"
+      echo ""
+      echo "  git clone <repo-url> ~/Dev/MagicBracketSimulator"
+      echo "  cd ~/Dev/MagicBracketSimulator"
+      echo "  ./scripts/setup-worker.sh"
+      exit 1
+      ;;
+  esac
+  echo "WSL detected: repo is on Linux filesystem — OK"
+fi
 
 # ── Parse arguments ──────────────────────────────────────────────────
 WORKER_ID=""
@@ -212,8 +245,10 @@ HOST_CONFIG=$(gcloud secrets versions access latest --secret="$SECRET_NAME" --pr
 echo "Writing config files..."
 
 # Extract SA key → worker/sa.json
+# chmod 644: the container runs as the 'node' user, so the file must be
+# world-readable for the bind mount to work. The file is gitignored.
 echo "$HOST_CONFIG" | jq -r '.sa_key' > "$WORKER_DIR/sa.json"
-chmod 600 "$WORKER_DIR/sa.json"
+chmod 644 "$WORKER_DIR/sa.json"
 echo "  worker/sa.json"
 
 # Extract host-level env vars → worker/.env (default when secret has null/missing)
@@ -303,6 +338,22 @@ docker pull "${SIMULATION_IMAGE}:latest" || echo "Warning: Failed to pull simula
 echo ""
 echo "Starting worker + Watchtower..."
 $COMPOSE_CMD -f docker-compose.yml -f docker-compose.watchtower.yml up -d
+
+# ── Post-start verification ────────────────────────────────────────────
+echo ""
+echo "Verifying container mounts..."
+sleep 3
+SA_CHECK=$(docker exec magic-bracket-worker test -f /secrets/sa.json && echo "ok" || echo "fail")
+if [ "$SA_CHECK" != "ok" ]; then
+  echo "ERROR: /secrets/sa.json is not mounted correctly inside the container."
+  echo "This usually means Docker resolved the bind-mount path to a location"
+  echo "that doesn't exist, and created an empty directory instead."
+  echo ""
+  echo "Run 'docker inspect magic-bracket-worker --format={{json .Mounts}}'"
+  echo "and check the Source path for /secrets/sa.json."
+  exit 1
+fi
+echo "  /secrets/sa.json: OK"
 
 echo ""
 echo "=== Setup complete! ==="
