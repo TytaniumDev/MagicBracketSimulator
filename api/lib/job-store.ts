@@ -114,22 +114,6 @@ export function setJobStartedAt(id: string, workerId?: string, workerName?: stri
   return result.changes > 0;
 }
 
-export function updateJobProgress(id: string, gamesCompleted: number): boolean {
-  const db = getDb();
-  const result = db.prepare('UPDATE jobs SET games_completed = ? WHERE id = ?').run(gamesCompleted, id);
-  return result.changes > 0;
-}
-
-/**
- * Atomically increment gamesCompleted counter.
- * @param count Number of games to increment by (default 1, typically GAMES_PER_CONTAINER).
- */
-export function incrementGamesCompleted(id: string, count: number = 1): boolean {
-  const db = getDb();
-  const result = db.prepare('UPDATE jobs SET games_completed = COALESCE(games_completed, 0) + ? WHERE id = ?').run(count, id);
-  return result.changes > 0;
-}
-
 export interface SetJobCompletedOptions {
   completedAt?: Date;
   dockerRunDurationsMs?: number[];

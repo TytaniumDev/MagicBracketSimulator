@@ -17,7 +17,7 @@
  */
 
 import * as path from 'path';
-import { getJob, updateJobProgress } from '../lib/job-store';
+import { getJob } from '../lib/job-store';
 import { readGameLogs } from '../lib/game-logs';
 
 const JOBS_DIR = path.resolve(process.cwd(), 'jobs');
@@ -80,8 +80,7 @@ async function main() {
     ? ((await structuredRes.json()) as { games?: unknown[] }).games?.length ?? gameLogs.length
     : gameLogs.length;
 
-  updateJobProgress(jobId, gamesCount);
-  console.log(`Done. Job ${jobId} now has ${gamesCount} games. Refresh the job page.`);
+  console.log(`Done. Job ${jobId} now has ${gamesCount} games (gamesCompleted is derived from simulation statuses). Refresh the job page.`);
 }
 
 main().catch((err) => {

@@ -3,7 +3,7 @@ import { verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest }
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
-import type { JobStatus } from '@/lib/types';
+import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,13 +36,19 @@ async function jobToApiResponse(
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
 
+  // Derive gamesCompleted from simulation statuses (source of truth)
+  const sims = await jobStore.getSimulationStatuses(job.id);
+  const gamesCompleted = sims.length > 0
+    ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+    : (job.gamesCompleted ?? 0);
+
   const base = {
     id: job.id,
     name: deckNames.join(' vs '),
     deckNames,
     status: job.status,
     simulations: job.simulations,
-    gamesCompleted: job.gamesCompleted ?? 0,
+    gamesCompleted,
     parallelism: job.parallelism ?? 4,
     createdAt: job.createdAt.toISOString(),
     errorMessage: job.errorMessage,
@@ -179,7 +185,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { status, gamesCompleted, errorMessage, dockerRunDurationsMs, workerId, workerName } = body;
+    const { status, errorMessage, dockerRunDurationsMs, workerId, workerName } = body;
 
     const job = await jobStore.getJob(id);
     if (!job) {
@@ -194,10 +200,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await jobStore.setJobFailed(id, errorMessage ?? 'Unknown error', dockerRunDurationsMs);
     } else if (typeof status === 'string') {
       await jobStore.updateJobStatus(id, status as JobStatus);
-    }
-
-    if (gamesCompleted !== undefined && typeof gamesCompleted === 'number') {
-      await jobStore.updateJobProgress(id, gamesCompleted);
     }
 
     const updated = await jobStore.getJob(id);

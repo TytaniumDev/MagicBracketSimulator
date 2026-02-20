@@ -9,9 +9,10 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { pushToAllWorkers } from '@/lib/worker-push';
 
 /**
- * Convert Job to API summary format
+ * Convert Job to API summary format.
+ * Accepts pre-computed gamesCompleted derived from simulation statuses.
  */
-function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>) {
+function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCompleted: number) {
   if (!job) return null;
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
@@ -24,7 +25,7 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>) {
     deckNames,
     status: job.status,
     simulations: job.simulations,
-    gamesCompleted: job.gamesCompleted ?? 0,
+    gamesCompleted,
     createdAt: job.createdAt.toISOString(),
     durationMs,
     parallelism: job.parallelism,
@@ -41,11 +42,20 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>) {
 export async function GET() {
   try {
     const jobs = await jobStore.listJobs();
-    const summaries = jobs
-      .map((j) => jobToSummary(j))
-      .filter((s): s is NonNullable<typeof s> => s !== null);
+    const summaries = await Promise.all(
+      jobs.map(async (j) => {
+        if (!j) return null;
+        // Derive gamesCompleted from simulation statuses (source of truth)
+        const sims = await jobStore.getSimulationStatuses(j.id);
+        const gamesCompleted = sims.length > 0
+          ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+          : (j.gamesCompleted ?? 0);
+        return jobToSummary(j, gamesCompleted);
+      })
+    );
+    const filtered = summaries.filter((s): s is NonNullable<typeof s> => s !== null);
 
-    return NextResponse.json({ jobs: summaries });
+    return NextResponse.json({ jobs: filtered });
   } catch (error) {
     console.error('GET /api/jobs error:', error);
     return NextResponse.json(

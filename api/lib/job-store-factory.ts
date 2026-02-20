@@ -92,22 +92,6 @@ export async function setJobStartedAt(id: string, workerId?: string, workerName?
   sqliteStore.setJobStartedAt(id, workerId, workerName);
 }
 
-export async function updateJobProgress(id: string, gamesCompleted: number): Promise<void> {
-  if (USE_FIRESTORE) {
-    await firestoreStore.updateJobProgress(id, gamesCompleted);
-    return;
-  }
-  sqliteStore.updateJobProgress(id, gamesCompleted);
-}
-
-export async function incrementGamesCompleted(id: string, count: number = 1): Promise<void> {
-  if (USE_FIRESTORE) {
-    await firestoreStore.incrementGamesCompleted(id, count);
-    return;
-  }
-  sqliteStore.incrementGamesCompleted(id, count);
-}
-
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.setJobCompleted(id, dockerRunDurationsMs);

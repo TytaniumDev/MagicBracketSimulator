@@ -650,30 +650,36 @@ export default function JobStatusPage() {
             </div>
           </div>
         )}
-        {job.status === 'RUNNING' && job.gamesCompleted != null && (
+        {job.status === 'RUNNING' && (() => {
+          // Derive progress from simulation statuses (source of truth), fall back to server value
+          const progressGames = streamSimulations.length > 0
+            ? simGamesCompleted
+            : (job.gamesCompleted ?? 0);
+          return progressGames > 0 ? (
           <div className="space-y-2">
             <div>
               <span className="text-gray-400">Progress: </span>
               <span className="text-white font-medium">
-                {job.gamesCompleted} / {job.simulations} games
+                {progressGames} / {job.simulations} games
               </span>
             </div>
             <div
               className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden"
               role="progressbar"
-              aria-valuenow={job.gamesCompleted}
+              aria-valuenow={progressGames}
               aria-valuemin={0}
               aria-valuemax={job.simulations}
             >
               <div
                 className="bg-blue-500 h-2.5 rounded-full transition-all duration-300"
                 style={{
-                  width: `${Math.min(100, (job.gamesCompleted / job.simulations) * 100)}%`,
+                  width: `${Math.min(100, (progressGames / job.simulations) * 100)}%`,
                 }}
               />
             </div>
           </div>
-        )}
+          ) : null;
+        })()}
         {/* Per-simulation grid — shown when simulation tracking data exists */}
         {(job.status === 'RUNNING' || job.status === 'COMPLETED' || job.status === 'CANCELLED' || job.status === 'FAILED') && streamSimulations.length > 0 && (
           <SimulationGrid

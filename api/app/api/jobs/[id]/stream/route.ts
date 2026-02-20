@@ -4,7 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
-import type { Job } from '@/lib/types';
+import { GAMES_PER_CONTAINER, type Job } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -18,7 +18,8 @@ interface QueueInfo {
 function jobToStreamEvent(
   job: Job,
   queueInfo?: QueueInfo,
-  deckLinks?: Record<string, string | null>
+  deckLinks?: Record<string, string | null>,
+  computedGamesCompleted?: number
 ) {
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
@@ -31,7 +32,7 @@ function jobToStreamEvent(
     deckNames,
     status: job.status,
     simulations: job.simulations,
-    gamesCompleted: job.gamesCompleted ?? 0,
+    gamesCompleted: computedGamesCompleted ?? (job.gamesCompleted ?? 0),
     parallelism: job.parallelism ?? 4,
     createdAt: job.createdAt.toISOString(),
     errorMessage: job.errorMessage,
@@ -180,7 +181,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const queueInfo = initialJob.status === 'QUEUED'
           ? await getQueueInfo(id, initialJob.createdAt).catch(() => ({}))
           : undefined;
-        send(jobToStreamEvent(initialJob, queueInfo, deckLinks));
+        // Derive gamesCompleted from simulation statuses
+        const sims = await jobStore.getSimulationStatuses(id);
+        const computedGames = sims.length > 0
+          ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+          : undefined;
+        send(jobToStreamEvent(initialJob, queueInfo, deckLinks, computedGames));
       };
 
       // Send simulation statuses
@@ -246,7 +252,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             const queueInfo = job.status === 'QUEUED'
               ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
               : undefined;
-            send(jobToStreamEvent(job, queueInfo, deckLinks));
+            // Derive gamesCompleted from simulation statuses
+            const sims = await jobStore.getSimulationStatuses(id);
+            const computedGames = sims.length > 0
+              ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+              : undefined;
+            send(jobToStreamEvent(job, queueInfo, deckLinks, computedGames));
 
             if (isTerminalStatus(job.status)) {
               unsubJob();
@@ -333,18 +344,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               return;
             }
 
+            // Poll simulation statuses (also used to derive gamesCompleted)
+            const sims = await jobStore.getSimulationStatuses(id);
+            const computedGames = sims.length > 0
+              ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+              : undefined;
+
             // Only send job event if data changed
             const queueInfo = job.status === 'QUEUED'
               ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
               : undefined;
-            const currentJobJson = JSON.stringify(jobToStreamEvent(job, queueInfo, deckLinks));
+            const currentJobJson = JSON.stringify(jobToStreamEvent(job, queueInfo, deckLinks, computedGames));
             if (currentJobJson !== lastJobJson) {
               lastJobJson = currentJobJson;
-              send(jobToStreamEvent(job, queueInfo, deckLinks));
+              send(jobToStreamEvent(job, queueInfo, deckLinks, computedGames));
             }
-
-            // Poll simulation statuses too
-            const sims = await jobStore.getSimulationStatuses(id);
             if (sims.length > 0) {
               const currentSimsJson = JSON.stringify(sims);
               if (currentSimsJson !== lastSimsJson) {

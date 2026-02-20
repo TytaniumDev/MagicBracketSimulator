@@ -259,7 +259,7 @@ export async function syncPrecons(): Promise<SyncResult> {
 
   // 4. Remove orphaned precons (legacy hand-imported or wrongly synced)
   const orphanIds = [...allExistingPreconIds].filter((id) => !keepPreconIds.has(id));
-  if (orphanIds.length > 0) {
+  if (orphanIds.length > 0 && archidektDecks.length >= allExistingPreconIds.size * 0.5) {
     console.log(`[PreconSync] Removing ${orphanIds.length} orphaned precons...`);
     for (const id of orphanIds) {
       try {
@@ -279,6 +279,8 @@ export async function syncPrecons(): Promise<SyncResult> {
         result.errors.push(msg);
       }
     }
+  } else if (orphanIds.length > 0) {
+    console.warn(`[PreconSync] Skipping orphan deletion: got ${archidektDecks.length} decks but have ${allExistingPreconIds.size} existing — sync may be incomplete`);
   }
 
   console.log(`[PreconSync] Sync complete: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.removed} removed, ${result.errors.length} errors`);

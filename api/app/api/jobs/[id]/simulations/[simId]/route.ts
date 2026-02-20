@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
+import type { SimulationState } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
@@ -55,16 +55,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       update.completedAt = new Date().toISOString();
     }
 
-    // For COMPLETED transitions, use conditional update to prevent double-counting
+    // For COMPLETED transitions, use conditional update to prevent races
     // when retried simulations report completion again.
     let transitioned = true;
     if (state === 'COMPLETED') {
       transitioned = await jobStore.conditionalUpdateSimulationStatus(
         id, simId, ['PENDING', 'RUNNING', 'FAILED'], update
       );
-      if (transitioned) {
-        await jobStore.incrementGamesCompleted(id, GAMES_PER_CONTAINER);
-      }
     } else {
       await jobStore.updateSimulationStatus(id, simId, update);
     }
