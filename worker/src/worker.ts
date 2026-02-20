@@ -28,9 +28,7 @@ if (!process.env.GOOGLE_CLOUD_PROJECT) {
  * 7. API auto-aggregates when all simulations complete
  */
 
-import * as fs from 'fs/promises';
 import * as os from 'os';
-import * as path from 'path';
 
 import {
   JobData,
@@ -54,7 +52,6 @@ import { GAMES_PER_CONTAINER } from './constants.js';
 
 
 const SECRET_NAME = 'simulation-worker-config';
-const WORKER_ID_FILE = 'worker-id';
 const API_TIMEOUT_MS = 10_000;
 
 // Module-scoped worker ID and name, set in main() after initialization
@@ -120,26 +117,18 @@ function formatDuration(ms: number): string {
 // ============================================================================
 
 /**
- * Get or create a stable worker ID (survives restarts).
- * Priority: (1) WORKER_ID env, (2) persisted file, (3) generate UUID and persist.
+ * Get the worker ID.
+ * Uses the worker name (hostname) so that overrides and other per-worker
+ * config persist across container rebuilds. Previously used a random UUID
+ * persisted to a file, which was lost on container recreation.
+ * Priority: (1) WORKER_ID env, (2) worker name (hostname).
  */
-async function getOrCreateWorkerId(jobsDir: string): Promise<string> {
+function getWorkerId(): string {
   const fromEnv = process.env.WORKER_ID?.trim();
   if (fromEnv && fromEnv.length > 0) {
     return fromEnv;
   }
-  const workerIdPath = path.resolve(jobsDir, '..', WORKER_ID_FILE);
-  try {
-    const existing = await fs.readFile(workerIdPath, 'utf-8');
-    const id = existing.trim();
-    if (id.length > 0) return id;
-  } catch {
-    // File missing or unreadable
-  }
-  const newId = crypto.randomUUID();
-  await fs.mkdir(path.dirname(workerIdPath), { recursive: true }).catch(() => {});
-  await fs.writeFile(workerIdPath, newId, 'utf-8');
-  return newId;
+  return getWorkerName();
 }
 
 // ============================================================================
@@ -882,9 +871,9 @@ async function main(): Promise<void> {
 
   const usePubSub = !!process.env.PUBSUB_SUBSCRIPTION;
 
-  currentWorkerId = await getOrCreateWorkerId(JOBS_DIR);
   currentWorkerName = getWorkerName();
-  console.log('Worker ID:', currentWorkerId.slice(0, 8) + '...');
+  currentWorkerId = getWorkerId();
+  console.log('Worker ID:', currentWorkerId);
   console.log('Worker Name:', currentWorkerName);
 
   console.log('Worker starting...');

@@ -282,13 +282,6 @@ function SimulationForm() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-4xl font-bold text-center mb-4">
-        New Simulation
-      </h1>
-      <p className="text-gray-400 text-center mb-8">
-        Simulate Commander games between any 4 decks to analyze performance.
-      </p>
-
       {/* Add Deck Section */}
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Add a Deck</h2>
