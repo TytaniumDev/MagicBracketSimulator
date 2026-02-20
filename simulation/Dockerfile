@@ -41,9 +41,8 @@ RUN FORGE_URL="https://github.com/Card-Forge/forge/releases/download/forge-${FOR
     && echo "Forge ${FORGE_VERSION} extracted successfully" \
     && rm -rf /tmp/forge_extract /tmp/forge.tar.bz2
 
-# Copy precon decks and run script from shared forge-engine directory
+# Copy run script from shared forge-engine directory
 # (build context is repo root)
-COPY worker/forge-engine/precons/ /app/forge/res/precons/
 COPY worker/forge-engine/run_sim.sh /app/forge/
 RUN sed -i 's/\r$//' /app/forge/run_sim.sh && chmod +x /app/forge/run_sim.sh
 
