@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { condenseGame, condenseGames } from './index';
-import { extractWinner, extractWinningTurn } from './turns';
+import { extractWinner, extractWinningTurn, getNumPlayers, extractTurnRanges } from './turns';
 import { splitConcatenatedGames } from './patterns';
 
 // ---------------------------------------------------------------------------
@@ -217,6 +217,48 @@ async function runTests() {
     assertEqual(winCounts['Explorers of the Deep'], 1, 'Explorers wins');
     assertEqual(winCounts['Doran Big Butts'], 1, 'Doran wins');
     assertEqual(winCounts['Enduring Enchantments'], 2, 'Enduring wins');
+  });
+
+  // =========================================================================
+  // Regression: getNumPlayers returns 4 for Commander
+  // =========================================================================
+
+  await test('getNumPlayers: returns 4 for a 4-player Commander game', () => {
+    const games = splitConcatenatedGames(rawLog);
+    for (let i = 0; i < games.length; i++) {
+      const ranges = extractTurnRanges(games[i]);
+      const numPlayers = getNumPlayers(ranges);
+      assertEqual(numPlayers, 4, `Game ${i + 1} should have 4 players`);
+    }
+  });
+
+  // =========================================================================
+  // Regression: extractWinningTurn returns round numbers, not raw segments
+  // =========================================================================
+
+  await test('extractWinningTurn: returns round numbers <= 20, not raw segments', () => {
+    const games = splitConcatenatedGames(rawLog);
+    for (let i = 0; i < games.length; i++) {
+      const turn = extractWinningTurn(games[i]);
+      assert(turn !== undefined, `Game ${i + 1} should have a winning turn`);
+      assert(turn! <= 20, `Game ${i + 1} winning turn should be <= 20 (a round number), got ${turn}`);
+    }
+  });
+
+  // =========================================================================
+  // Regression: extractWinner does NOT contain "Game outcome:" prefix
+  // =========================================================================
+
+  await test('extractWinner: does not contain "Game outcome:" prefix', () => {
+    const games = splitConcatenatedGames(rawLog);
+    for (let i = 0; i < games.length; i++) {
+      const winner = extractWinner(games[i]);
+      assert(winner !== undefined, `Game ${i + 1} should have a winner`);
+      assert(
+        !winner!.toLowerCase().includes('game outcome'),
+        `Game ${i + 1} winner should not contain "Game outcome:" prefix, got "${winner}"`
+      );
+    }
   });
 
   // =========================================================================

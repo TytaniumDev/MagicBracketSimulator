@@ -59,6 +59,9 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Run condenser tests
+        run: npm run test:condenser
+
   worker:
     name: Worker
     runs-on: ubuntu-latest

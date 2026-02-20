@@ -412,7 +412,7 @@ export function calculateCardsDrawnPerTurn(
  */
 export function extractWinner(rawLog: string): string | undefined {
   const match = EXTRACT_WINNER.exec(rawLog);
-  return match?.[1]?.trim();
+  return match?.[1]?.trim().replace(/^Game outcome:\s*/i, '');
 }
 
 /**

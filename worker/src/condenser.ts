@@ -108,10 +108,10 @@ function getNumPlayers(turnRanges: TurnRange[]): number {
     return 4; // Default for Commander
   }
 
-  // Count unique players in turn 1
+  // Count ALL unique players across ALL turns
   const players = new Set<string>();
   for (const tr of turnRanges) {
-    if (tr.turnNumber === 1 && tr.player) {
+    if (tr.player) {
       players.add(tr.player);
     }
   }
@@ -378,7 +378,7 @@ function calculateCardsDrawnPerTurn(
 export function extractWinner(rawLog: string): string {
   const matches = ExtractWinnerRegex.exec(rawLog);
   if (matches && matches.length > 1) {
-    return matches[1].trim();
+    return matches[1].trim().replace(/^Game outcome:\s*/i, '');
   }
   return '';
 }
