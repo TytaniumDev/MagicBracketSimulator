@@ -27,17 +27,20 @@ At startup, you'll see log messages like:
 
 ## Quick Mode Toggle
 
-Switch between LOCAL and GCP/hosted mode with a single command:
+The easiest way to run locally is `dev:local` — it switches to local mode, starts the dev servers, and **automatically restores GCP mode + worker when you Ctrl+C**:
 
 ```bash
-# Switch to LOCAL mode (SQLite, no Firebase Auth, local API)
-npm run mode:local
-
-# Switch back to HOSTED/GCP mode (Firestore, Firebase Auth)
-npm run mode:hosted
+npm run dev:local
 ```
 
-These commands copy or remove `.env.local` override files in `api/` and `frontend/`. The `.env.local` files take precedence over `.env` (built-in behavior for both Next.js and Vite), so your `.env` files stay unchanged. **Restart dev servers after switching.**
+You can also toggle manually (each command also cycles the worker Docker container):
+
+```bash
+npm run mode:local    # switch to LOCAL mode
+npm run mode:hosted   # switch back to HOSTED/GCP mode
+```
+
+These commands copy or remove `.env.local` override files in `api/` and `frontend/`, and restart the worker Docker container in the matching mode. The `.env.local` files take precedence over `.env` (built-in behavior for both Next.js and Vite), so your `.env` files stay unchanged.
 
 ---
 
@@ -114,8 +117,7 @@ Simply ensure `GOOGLE_CLOUD_PROJECT` is **not set** in `api/.env`, or delete the
 
 ### Running LOCAL Mode
 ```bash
-npm run mode:local   # one-time: sets up .env.local overrides
-npm run dev          # start API + frontend
+npm run dev:local    # starts local mode, restores GCP worker on exit
 ```
 
 ### Services in LOCAL Mode

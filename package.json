@@ -14,8 +14,9 @@
     "populate-frontend-secret": "node scripts/populate-frontend-secret.js",
     "fetch-frontend-config": "node scripts/fetch-frontend-config.js",
     "get-cloud-run-url": "node scripts/get-cloud-run-url.js",
-    "mode:local": "cp api/.env.local.example api/.env.local && cp frontend/.env.local.example frontend/.env.local && echo 'Switched to LOCAL mode. Restart dev servers to apply.'",
-    "mode:hosted": "rm -f api/.env.local frontend/.env.local && echo 'Switched to HOSTED/GCP mode. Restart dev servers to apply.'"
+    "dev:local": "npm run mode:local && npm run dev; npm run mode:hosted",
+    "mode:local": "cp api/.env.local.example api/.env.local && cp frontend/.env.local.example frontend/.env.local && docker rm -f magic-bracket-worker 2>/dev/null; docker compose -f worker/docker-compose.yml -f worker/docker-compose.local.yml up -d && echo 'Switched to LOCAL mode. Worker restarted in local mode.'",
+    "mode:hosted": "rm -f api/.env.local frontend/.env.local && docker rm -f magic-bracket-worker 2>/dev/null; docker compose -f worker/docker-compose.yml up -d && echo 'Switched to HOSTED/GCP mode. Worker restarted in GCP mode.'"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
