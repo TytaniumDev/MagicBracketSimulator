@@ -90,6 +90,17 @@ Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 - **Deck resolution**: Supports Moxfield URLs, precon names, and raw deck text. Resolution happens in `api/lib/deck-resolver.ts` + `api/lib/moxfield-service.ts`.
 - **Push-based worker communication**: API pushes config overrides, cancellation commands, and job notifications to the worker's HTTP API (`worker/src/worker-api.ts`). Push helper lives in `api/lib/worker-push.ts`. Heartbeat remains for health monitoring and startup sync.
 
+### Data Flow Documentation
+
+`DATA_FLOW.md` is the source of truth for the end-to-end data flow from simulation completion through worker reporting, API aggregation, and frontend consumption.
+
+**When modifying any of these areas, you MUST:**
+1. Read DATA_FLOW.md first to understand the current flow
+2. Update DATA_FLOW.md if your changes alter the data flow (new fields, changed endpoints, modified aggregation logic, new SSE events, etc.)
+3. Ensure test coverage exists for the part of the flow you changed — see the test files listed in DATA_FLOW.md
+
+Areas covered: worker result reporting, API status updates, log upload/storage, aggregation pipeline (condense + structure), SSE streaming, frontend log retrieval, race condition guards.
+
 ### Frontend Structure
 
 - `src/App.tsx` — Router setup (react-router-dom v7)
