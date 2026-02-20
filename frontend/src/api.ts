@@ -79,6 +79,38 @@ export async function updateWorkerOverride(
 }
 
 /**
+ * Delete a single job (admin only)
+ */
+export async function deleteJob(jobId: string): Promise<void> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/jobs/${encodeURIComponent(jobId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+}
+
+/**
+ * Bulk delete jobs (admin only, max 50 per request)
+ */
+export async function deleteJobs(
+  jobIds: string[]
+): Promise<{ deletedCount: number; results: { id: string; deleted: boolean; error?: string }[] }> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/jobs/bulk-delete`, {
+    method: 'POST',
+    body: JSON.stringify({ jobIds }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * Fetch without authentication — for public read-only endpoints
  */
 export function fetchPublic(

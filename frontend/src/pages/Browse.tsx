@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getApiBase, fetchPublic } from '../api';
+import { getApiBase, fetchPublic, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
@@ -68,11 +68,51 @@ function StatusBadge({ status }: { status: JobStatus }) {
 }
 
 export default function Browse() {
-  const { user, isAllowed, loading: authLoading } = useAuth();
+  const { user, isAllowed, isAdmin, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Admin bulk-delete state
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const toggleSelectJob = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedJobs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedJobs(new Set(jobs.map((j) => j.id)));
+  const deselectAll = () => setSelectedJobs(new Set());
+
+  const handleBulkDelete = async () => {
+    if (selectedJobs.size === 0) return;
+    if (!window.confirm(`Delete ${selectedJobs.size} job(s)? This cannot be undone.`)) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const { results } = await deleteJobs(Array.from(selectedJobs));
+      const deletedIds = new Set(results.filter((r) => r.deleted).map((r) => r.id));
+      setJobs((prev) => prev.filter((j) => !deletedIds.has(j.id)));
+      setSelectedJobs(new Set());
+      const failedCount = results.filter((r) => !r.deleted).length;
+      if (failedCount > 0) {
+        setDeleteError(`${failedCount} job(s) failed to delete`);
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Bulk delete failed');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const apiBase = getApiBase();
   const { workers, queueDepth, isLoading: workersLoading, refresh: refreshWorkers } = useWorkerStatus(!!isAllowed);
@@ -176,14 +216,59 @@ export default function Browse() {
         </div>
       )}
 
+      {/* Admin bulk-delete toolbar */}
+      {isAdmin && !isLoading && jobs.length > 0 && (
+        <div className="mb-3 flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2 border border-gray-700">
+          <button
+            type="button"
+            onClick={selectedJobs.size === jobs.length ? deselectAll : selectAll}
+            className="text-sm text-blue-400 hover:text-blue-300"
+          >
+            {selectedJobs.size === jobs.length ? 'Deselect All' : 'Select All'}
+          </button>
+          {selectedJobs.size > 0 && (
+            <>
+              <span className="text-sm text-gray-400">{selectedJobs.size} selected</span>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+                className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? 'Deleting...' : `Delete Selected (${selectedJobs.size})`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="mb-3 bg-red-900/50 border border-red-500 text-red-200 px-4 py-2 rounded-md text-sm">
+          {deleteError}
+        </div>
+      )}
+
       {!isLoading && !error && jobs.length > 0 && (
         <div className="space-y-3">
           {jobs.map((run) => (
             <Link
               key={run.id}
               to={`/jobs/${run.id}`}
-              className="block bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors"
+              className={`block bg-gray-800 rounded-lg p-4 border transition-colors relative ${
+                selectedJobs.has(run.id)
+                  ? 'border-blue-500'
+                  : 'border-gray-700 hover:border-gray-600'
+              } ${isAdmin ? 'pl-10' : ''}`}
             >
+              {isAdmin && (
+                <input
+                  type="checkbox"
+                  checked={selectedJobs.has(run.id)}
+                  onClick={(e) => toggleSelectJob(run.id, e)}
+                  onChange={() => {}}
+                  className="absolute left-3 top-5 w-4 h-4 accent-blue-500 cursor-pointer"
+                />
+              )}
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">

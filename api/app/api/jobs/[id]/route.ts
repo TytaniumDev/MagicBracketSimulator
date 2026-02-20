@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
@@ -112,12 +112,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * DELETE /api/jobs/[id] - Delete a job
+ * DELETE /api/jobs/[id] - Delete a job (admin only)
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    await verifyAuth(request);
-  } catch {
+    await verifyAdmin(request);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('Admin access required')) {
+      return forbiddenResponse('Admin access required');
+    }
     return unauthorizedResponse();
   }
 
@@ -137,6 +141,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       await jobStore.cancelJob(id);
     }
 
+    // Delete simulation subcollection first (Firestore doesn't cascade)
+    await jobStore.deleteSimulations(id);
     await jobStore.deleteJob(id);
 
     if (isGcpMode()) {

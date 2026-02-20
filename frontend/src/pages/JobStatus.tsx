@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { getApiBase, fetchWithAuth, fetchPublic } from '../api';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { getApiBase, fetchWithAuth, fetchPublic, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
@@ -121,8 +121,10 @@ export default function JobStatusPage() {
   const [eventFilters, setEventFilters] = useState<Set<string>>(new Set());
   
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isDeletingJob, setIsDeletingJob] = useState(false);
 
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const { workers, refresh: refreshWorkers } = useWorkerStatus(!!user);
   const apiBase = getApiBase();
   const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -461,6 +463,20 @@ export default function JobStatusPage() {
       setError(err instanceof Error ? err.message : 'Cancel failed');
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (!window.confirm('Delete this job? This cannot be undone.')) return;
+    setIsDeletingJob(true);
+    try {
+      await deleteJob(id);
+      navigate('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setIsDeletingJob(false);
     }
   };
 
@@ -1049,6 +1065,16 @@ export default function JobStatusPage() {
         <Link to="/submit" className="text-blue-400 hover:underline">
           Submit another simulation
         </Link>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeletingJob}
+            className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isDeletingJob ? 'Deleting...' : 'Delete Job'}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -53,6 +53,32 @@ const ALLOWED_EMAILS: string[] = process.env.ALLOWED_EMAILS
 // If allowlist is empty, allow all authenticated users (dev mode)
 const ALLOWLIST_ENABLED = ALLOWED_EMAILS.length > 0;
 
+// Admin email list - parsed from ADMIN_EMAILS env var (comma-separated)
+const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
+  ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase())
+  : [];
+
+/**
+ * Check if an email is an admin. Always true in local mode.
+ */
+export function isAdmin(email: string): boolean {
+  if (IS_LOCAL_MODE) return true;
+  return ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
+/**
+ * Verify that the request is from an admin user.
+ * Calls verifyAuth() first, then checks isAdmin().
+ * @throws Error with 'Admin access required' if not admin
+ */
+export async function verifyAdmin(req: NextRequest): Promise<AuthUser> {
+  const user = await verifyAuth(req);
+  if (!isAdmin(user.email)) {
+    throw new Error('Admin access required');
+  }
+  return user;
+}
+
 /**
  * Verify Firebase ID token from request
  * @param req Next.js request object

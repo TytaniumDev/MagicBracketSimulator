@@ -17,6 +17,8 @@ interface AuthContextType {
   user: User | null;
   /** True only when user is signed in AND listed in Firestore allowedUsers. */
   isAllowed: boolean | null;
+  /** True if the current user is an admin */
+  isAdmin: boolean;
   loading: boolean;
   /** Whether the user has a pending access request */
   hasRequestedAccess: boolean;
@@ -72,6 +74,7 @@ function createLocalMockUser(): User {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasRequestedAccess, setHasRequestedAccess] = useState(false);
 
@@ -93,6 +96,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!isFirebaseConfigured) {
       setUser(createLocalMockUser());
       setIsAllowed(true);
+      setIsAdmin(true);
       setLoading(false);
       return;
     }
@@ -102,6 +106,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(firebaseUser);
       if (!firebaseUser) {
         setIsAllowed(null);
+        setIsAdmin(false);
         setHasRequestedAccess(false);
         setLoading(false);
         return;
@@ -127,6 +132,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch admin status from /api/me when user is allowed
+  useEffect(() => {
+    if (!isAllowed || !user) {
+      setIsAdmin(false);
+      return;
+    }
+    const apiBase = getApiBase();
+    fetchWithAuth(`${apiBase}/api/me`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.isAdmin === 'boolean') {
+          setIsAdmin(data.isAdmin);
+        }
+      })
+      .catch(() => {});
+  }, [isAllowed, user]);
 
   const signInWithGoogle = async () => {
     if (!isFirebaseConfigured) return;
@@ -172,6 +194,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const value: AuthContextType = {
     user,
     isAllowed,
+    isAdmin,
     loading,
     hasRequestedAccess,
     refreshAccessRequestStatus: checkAccessRequestStatus,

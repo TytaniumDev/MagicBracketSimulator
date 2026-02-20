@@ -28,3 +28,5 @@ env:
     secret: resend-api-key
   - variable: ADMIN_EMAIL
     secret: admin-email
+  - variable: ADMIN_EMAILS
+    secret: admin-emails
