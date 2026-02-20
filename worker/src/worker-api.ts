@@ -6,6 +6,7 @@
  *   POST /cancel  — cancel all simulations for a job
  *   POST /notify  — notify worker that a new job is available
  *   POST /drain   — stop accepting new work (active sims complete, then idle)
+ *   POST /pull-image — trigger a fresh pull of the simulation image
  *   GET  /health  — health check (no auth)
  *
  * All POST endpoints require X-Worker-Secret header (constant-time comparison).
@@ -23,6 +24,7 @@ export interface WorkerApiHandlers {
   onCancel: (jobId: string) => void;
   onNotify: () => void;
   onDrain: (drain: boolean) => void;
+  onPullImage: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +148,12 @@ export function startWorkerApi(handlers: WorkerApiHandlers): Promise<void> {
             }
             handlers.onDrain(data.drain);
             jsonResponse(res, 200, { ok: true, draining: data.drain });
+            break;
+          }
+
+          case '/pull-image': {
+            handlers.onPullImage();
+            jsonResponse(res, 200, { ok: true, message: 'Image pull initiated' });
             break;
           }
 

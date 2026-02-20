@@ -568,6 +568,17 @@ async function ensureSimulationImage(): Promise<void> {
 }
 
 /**
+ * Re-pull the simulation image (fire-and-forget).
+ * Called by the /pull-image push endpoint after a new image is published.
+ */
+function pullSimulationImage(): void {
+  console.log('Pull-image request received, re-pulling simulation image...');
+  ensureSimulationImage().catch((err) =>
+    console.warn('Pull-image failed:', err instanceof Error ? err.message : err),
+  );
+}
+
+/**
  * Verify Docker daemon is accessible.
  */
 async function verifyDockerAvailable(): Promise<void> {
@@ -914,6 +925,7 @@ async function main(): Promise<void> {
     onCancel: cancelJob,
     onNotify: notifyJobAvailable,
     onDrain: setDraining,
+    onPullImage: pullSimulationImage,
   });
 
   // Initial heartbeat (await to apply override before Pub/Sub starts)

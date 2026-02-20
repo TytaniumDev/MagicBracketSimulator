@@ -53,6 +53,16 @@ jobs:
           cache-from: type=gha,scope=worker
           cache-to: type=gha,mode=max,scope=worker
 
+      # Resolve current Forge release version for tagging
+      - name: Resolve Forge version
+        id: forge-version
+        run: |
+          FORGE_TAG=$(curl -fsSL https://api.github.com/repos/Card-Forge/forge/releases/latest \
+            | jq -r '.tag_name')
+          FORGE_VERSION=${FORGE_TAG#forge-}
+          echo "version=${FORGE_VERSION}" >> $GITHUB_OUTPUT
+          echo "Forge version: ${FORGE_VERSION}"
+
       # Build and push simulation image (Java + Forge + xvfb)
       # Context is repo root because Dockerfile references worker/forge-engine/
       - name: Build and push simulation image
@@ -62,8 +72,11 @@ jobs:
           file: ./simulation/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            FORGE_VERSION=${{ steps.forge-version.outputs.version }}
           tags: |
             ${{ env.SIMULATION_IMAGE }}:latest
             ${{ env.SIMULATION_IMAGE }}:${{ github.sha }}
+            ${{ env.SIMULATION_IMAGE }}:forge-${{ steps.forge-version.outputs.version }}
           cache-from: type=gha,scope=simulation
           cache-to: type=gha,mode=max,scope=simulation

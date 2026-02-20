@@ -8,8 +8,9 @@
 
 FROM eclipse-temurin:17-jre-jammy
 
-# Forge version - pinned default; override with: docker build --build-arg FORGE_VERSION=2.0.10
-ARG FORGE_VERSION="2.0.09"
+# Forge version — pinned for deterministic local builds.
+# CI and nightly workflows pass --build-arg FORGE_VERSION=X.Y.Z explicitly.
+ARG FORGE_VERSION="2.0.10"
 
 # Create non-root user with home directory
 RUN groupadd -r simulator && useradd -r -g simulator -m -d /home/simulator simulator
@@ -29,8 +30,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and extract Forge
-RUN FORGE_URL="https://github.com/Card-Forge/forge/releases/download/forge-${FORGE_VERSION}/forge-installer-${FORGE_VERSION}.tar.bz2" \
+# Download and extract Forge (resolves "latest" via GitHub API)
+RUN if [ "${FORGE_VERSION}" = "latest" ]; then \
+      FORGE_VERSION=$(curl -fsSL https://api.github.com/repos/Card-Forge/forge/releases/latest \
+        | grep '"tag_name"' | sed 's/.*"forge-\([^"]*\)".*/\1/'); \
+      if [ -z "${FORGE_VERSION}" ]; then echo "ERROR: Could not resolve latest Forge version"; exit 1; fi; \
+      echo "Resolved latest Forge version: ${FORGE_VERSION}"; \
+    fi \
+    && FORGE_URL="https://github.com/Card-Forge/forge/releases/download/forge-${FORGE_VERSION}/forge-installer-${FORGE_VERSION}.tar.bz2" \
     && echo "Downloading Forge version: ${FORGE_VERSION}" \
     && curl -fsSL -o /tmp/forge.tar.bz2 "${FORGE_URL}" \
     && mkdir -p /tmp/forge_extract /app/forge \

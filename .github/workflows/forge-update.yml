@@ -1,0 +1,105 @@
+name: Nightly Forge Update
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 6 AM UTC daily
+  workflow_dispatch:
+
+jobs:
+  check-and-build:
+    name: Check for new Forge release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      rebuilt: ${{ steps.check.outputs.rebuilt }}
+      forge_version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve latest Forge version
+        id: resolve
+        run: |
+          FORGE_TAG=$(curl -fsSL https://api.github.com/repos/Card-Forge/forge/releases/latest \
+            | jq -r '.tag_name')
+          FORGE_VERSION=${FORGE_TAG#forge-}
+          echo "version=${FORGE_VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest Forge version: ${FORGE_VERSION}"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image name
+        run: |
+          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          echo "SIMULATION_IMAGE=ghcr.io/${REPO_LOWER}/simulation" >> $GITHUB_ENV
+
+      - name: Check if tag already exists
+        id: check
+        env:
+          FORGE_VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          if docker manifest inspect "${SIMULATION_IMAGE}:forge-${FORGE_VERSION}" > /dev/null 2>&1; then
+            echo "Tag forge-${FORGE_VERSION} already exists, no rebuild needed"
+            echo "rebuilt=false" >> $GITHUB_OUTPUT
+          else
+            echo "Tag forge-${FORGE_VERSION} not found, rebuild needed"
+            echo "rebuilt=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repo
+        if: steps.check.outputs.rebuilt == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: steps.check.outputs.rebuilt == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.rebuilt == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push simulation image
+        if: steps.check.outputs.rebuilt == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./simulation/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            FORGE_VERSION=${{ steps.resolve.outputs.version }}
+          tags: |
+            ${{ env.SIMULATION_IMAGE }}:latest
+            ${{ env.SIMULATION_IMAGE }}:forge-${{ steps.resolve.outputs.version }}
+
+  notify-workers:
+    name: Notify workers to pull new image
+    needs: check-and-build
+    if: needs.check-and-build.outputs.rebuilt == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify workers
+        continue-on-error: true
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+        run: |
+          if [ -z "${API_URL}" ] || [ -z "${WORKER_SECRET}" ]; then
+            echo "::warning::API_URL or WORKER_SECRET not set, skipping worker notification"
+            exit 0
+          fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${API_URL}/api/admin/pull-image" \
+            -H "Content-Type: application/json" \
+            -H "X-Worker-Secret: ${WORKER_SECRET}" \
+            -d '{}')
+          echo "Worker notification response: HTTP ${STATUS}"
+          if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
+            echo "Workers notified successfully"
+          else
+            echo "::warning::Worker notification failed with HTTP ${STATUS}"
+          fi
