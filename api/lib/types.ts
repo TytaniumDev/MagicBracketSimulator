@@ -229,4 +229,6 @@ export interface Precon {
   name: string;
   filename: string;
   primaryCommander: string;
+  setName?: string | null;
+  archidektId?: number | null;
 }

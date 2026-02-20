@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { readPreconContentByIdOrName } from './precons';
 import { DeckSlot } from './types';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -50,14 +49,9 @@ function migrateJobsToDecksJson(database: Database.Database): void {
       const decks: DeckSlot[] = [{ name: row.deck_name, dck: row.deck_dck }];
 
       for (const oppIdOrName of opponentIds) {
-        const preconContent = readPreconContentByIdOrName(oppIdOrName);
-        if (preconContent) {
-          decks.push(preconContent);
-        } else {
-          // If precon not found, use placeholder with the ID/name
-          console.warn(`[DB Migration] Precon not found for: ${oppIdOrName}, using placeholder`);
-          decks.push({ name: oppIdOrName, dck: '' });
-        }
+        // Legacy migration: precon files no longer on disk, use placeholder
+        console.warn(`[DB Migration] Legacy precon reference: ${oppIdOrName}, using placeholder`);
+        decks.push({ name: oppIdOrName, dck: '' });
       }
 
       // Update the row
@@ -248,6 +242,23 @@ export function getDb(): Database.Database {
       uptime_ms INTEGER NOT NULL DEFAULT 0,
       last_heartbeat TEXT NOT NULL,
       version TEXT
+    )
+  `);
+
+  // Precons table (synced from Archidekt)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS precons (
+      id TEXT PRIMARY KEY,
+      archidekt_id INTEGER UNIQUE,
+      name TEXT NOT NULL,
+      set_name TEXT,
+      filename TEXT NOT NULL,
+      primary_commander TEXT,
+      color_identity TEXT,
+      dck TEXT NOT NULL,
+      link TEXT,
+      archidekt_updated_at TEXT,
+      synced_at TEXT NOT NULL
     )
   `);
 

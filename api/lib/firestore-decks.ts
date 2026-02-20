@@ -22,6 +22,9 @@ export interface DeckDoc {
   ownerId: string | null;
   ownerEmail?: string | null;
   createdAt: FirebaseFirestore.Timestamp;
+  setName?: string | null;
+  archidektId?: number | null;
+  archidektUpdatedAt?: string | null;
 }
 
 export interface DeckListItem {
@@ -35,6 +38,8 @@ export interface DeckListItem {
   ownerId: string | null;
   ownerEmail?: string | null;
   createdAt: string;
+  setName?: string | null;
+  archidektId?: number | null;
 }
 
 export interface CreateDeckInput {
@@ -64,6 +69,9 @@ function docToDeck(doc: FirebaseFirestore.DocumentSnapshot): DeckDoc | null {
     ownerId: data.ownerId ?? null,
     ownerEmail: data.ownerEmail ?? null,
     createdAt: data.createdAt,
+    setName: data.setName ?? null,
+    archidektId: data.archidektId ?? null,
+    archidektUpdatedAt: data.archidektUpdatedAt ?? null,
   };
 }
 
@@ -79,6 +87,8 @@ function deckToListItem(doc: DeckDoc): DeckListItem {
     ownerId: doc.ownerId,
     ownerEmail: doc.ownerEmail,
     createdAt: doc.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+    setName: doc.setName ?? null,
+    archidektId: doc.archidektId ?? null,
   };
 }
 
@@ -146,6 +156,41 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckDoc> {
   });
 
   return doc;
+}
+
+/**
+ * Upsert a precon deck (for Archidekt sync).
+ * Uses the precon ID as the Firestore document ID.
+ */
+export async function upsertPrecon(input: {
+  id: string;
+  name: string;
+  filename: string;
+  dck: string;
+  primaryCommander?: string | null;
+  colorIdentity?: string[];
+  link?: string | null;
+  setName?: string | null;
+  archidektId?: number | null;
+  archidektUpdatedAt?: string | null;
+}): Promise<void> {
+  const docRef = decksCollection.doc(input.id);
+  await docRef.set({
+    id: input.id,
+    name: input.name,
+    filename: input.filename,
+    dck: input.dck,
+    primaryCommander: input.primaryCommander ?? null,
+    colorIdentity: input.colorIdentity ?? null,
+    isPrecon: true,
+    link: input.link ?? null,
+    ownerId: null,
+    ownerEmail: null,
+    setName: input.setName ?? null,
+    archidektId: input.archidektId ?? null,
+    archidektUpdatedAt: input.archidektUpdatedAt ?? null,
+    createdAt: Timestamp.now(),
+  }, { merge: true });
 }
 
 /**

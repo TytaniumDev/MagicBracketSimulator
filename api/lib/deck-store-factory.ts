@@ -1,10 +1,7 @@
 /**
  * Deck store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
- * otherwise to filesystem (precons + saved-decks).
+ * otherwise to SQLite (precons) + filesystem (saved-decks).
  */
-import * as fs from 'fs';
-import * as path from 'path';
-import { loadPrecons } from './precons';
 import { listSavedDecks, readSavedDeckContent, saveDeck, deleteSavedDeck } from './saved-decks';
 import { slugify } from './saved-decks';
 import { getColorIdentityByKey } from './deck-metadata';
@@ -33,6 +30,8 @@ export interface DeckListItem {
   ownerId: string | null;
   ownerEmail?: string | null;
   createdAt: string;
+  setName?: string | null;
+  archidektId?: number | null;
 }
 
 export interface CreateDeckInput {
@@ -48,26 +47,55 @@ export function isGcpMode(): boolean {
   return USE_FIRESTORE;
 }
 
+interface PreconRow {
+  id: string;
+  archidekt_id: number | null;
+  name: string;
+  set_name: string | null;
+  filename: string;
+  primary_commander: string | null;
+  color_identity: string | null;
+  dck: string;
+  link: string | null;
+}
+
+function listPreconsFromSqlite(): DeckListItem[] {
+  const { getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
+  const db = getDb();
+  const rows = db.prepare('SELECT id, archidekt_id, name, set_name, filename, primary_commander, color_identity, link FROM precons ORDER BY name').all() as PreconRow[];
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    filename: r.filename,
+    primaryCommander: r.primary_commander,
+    colorIdentity: r.color_identity ? JSON.parse(r.color_identity) : getColorIdentityByKey(r.id),
+    isPrecon: true,
+    link: r.link,
+    ownerId: null,
+    ownerEmail: null,
+    createdAt: '',
+    setName: r.set_name,
+    archidektId: r.archidekt_id,
+  }));
+}
+
+function readPreconFromSqlite(id: string): { name: string; dck: string } | null {
+  const { getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
+  const db = getDb();
+  const row = db.prepare('SELECT name, dck FROM precons WHERE id = ?').get(id) as { name: string; dck: string } | undefined;
+  if (row) return row;
+  // Fallback: try matching by name (for legacy IDs)
+  const byName = db.prepare('SELECT name, dck FROM precons WHERE LOWER(REPLACE(name, \' \', \'-\')) = LOWER(?)').get(id) as { name: string; dck: string } | undefined;
+  return byName ?? null;
+}
+
 export async function listAllDecks(): Promise<DeckListItem[]> {
   if (USE_FIRESTORE) {
     return firestoreDecks.listAllDecks();
   }
 
-  const precons = loadPrecons();
+  const preconItems = listPreconsFromSqlite();
   const saved = listSavedDecks();
-
-  const preconItems: DeckListItem[] = precons.map((p) => ({
-    id: p.id,
-    name: p.name,
-    filename: p.filename,
-    primaryCommander: p.primaryCommander ?? null,
-    colorIdentity: getColorIdentityByKey(p.id),
-    isPrecon: true,
-    link: null,
-    ownerId: null,
-    ownerEmail: null,
-    createdAt: '',
-  }));
 
   const savedItems: DeckListItem[] = saved.map((s) => ({
     id: s.filename,
@@ -90,17 +118,9 @@ export async function readDeckContent(id: string): Promise<{ name: string; dck: 
     return firestoreDecks.readDeckContent(id);
   }
 
-  const precon = loadPrecons().find((p) => p.id === id);
-  if (precon) {
-    const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../worker/forge-engine';
-    const preconPath = path.resolve(forgeEnginePath, 'precons', precon.filename);
-    try {
-      const dck = fs.readFileSync(preconPath, 'utf-8');
-      return { name: precon.name, dck };
-    } catch {
-      return null;
-    }
-  }
+  // Try precons from SQLite first
+  const precon = readPreconFromSqlite(id);
+  if (precon) return precon;
 
   return readSavedDeckContent(id);
 }
@@ -183,10 +203,9 @@ export async function deleteDeck(id: string, userId: string): Promise<boolean> {
     return firestoreDecks.deleteDeck(id, userId);
   }
 
-  const precons = loadPrecons();
-  if (precons.some((p) => p.id === id)) {
-    return false;
-  }
+  // Cannot delete precons
+  const precon = readPreconFromSqlite(id);
+  if (precon) return false;
 
   try {
     return deleteSavedDeck(id);

@@ -2,6 +2,8 @@ export interface DeckCard {
   name: string;
   quantity: number;
   isCommander?: boolean;
+  setCode?: string;
+  collectorNumber?: string;
 }
 
 export interface ParsedDeck {
@@ -12,7 +14,7 @@ export interface ParsedDeck {
 
 /**
  * Converts a ParsedDeck to .dck format for Forge
- * See: worker/forge-engine/precons/Lorehold Legacies.dck for reference
+ * Generates Forge-compatible .dck format with [metadata], [commander], [main] sections
  */
 export function toDck(deck: ParsedDeck): string {
   const lines: string[] = [];
@@ -25,16 +27,29 @@ export function toDck(deck: ParsedDeck): string {
   // Commander section
   lines.push('[commander]');
   for (const card of deck.commanders) {
-    lines.push(`${card.quantity} ${cleanCardName(card.name)}`);
+    lines.push(`${card.quantity} ${formatCardEntry(card)}`);
   }
 
   // Main section
   lines.push('[main]');
   for (const card of deck.mainboard) {
-    lines.push(`${card.quantity} ${cleanCardName(card.name)}`);
+    lines.push(`${card.quantity} ${formatCardEntry(card)}`);
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Format a card entry for .dck output.
+ * Emits `Name|SET|CollectorNumber` when set code is available, otherwise just `Name`.
+ */
+function formatCardEntry(card: DeckCard): string {
+  const name = cleanCardName(card.name);
+  if (card.setCode) {
+    const set = card.setCode.toUpperCase();
+    return card.collectorNumber ? `${name}|${set}|${card.collectorNumber}` : `${name}|${set}`;
+  }
+  return name;
 }
 
 /**

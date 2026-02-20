@@ -23,6 +23,10 @@ interface ArchidektCard {
     oracleCard: {
       name: string;
     };
+    edition?: {
+      editioncode?: string;
+    };
+    collectorNumber?: string;
   };
 }
 
@@ -67,6 +71,8 @@ export async function fetchArchidektDeck(deckId: string): Promise<ParsedDeck> {
       name: cardName,
       quantity,
       isCommander,
+      setCode: entry.card.edition?.editioncode || undefined,
+      collectorNumber: entry.card.collectorNumber || undefined,
     };
 
     if (isCommander) {

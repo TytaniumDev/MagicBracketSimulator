@@ -17,6 +17,8 @@ interface Deck {
   link?: string | null;
   ownerId: string | null;
   ownerEmail?: string | null;
+  setName?: string | null;
+  primaryCommander?: string | null;
 }
 
 interface DeckOption {
@@ -95,11 +97,24 @@ function SimulationForm() {
   // Data state - unified deck list
   const [decks, setDecks] = useState<Deck[]>([]);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const apiBase = getApiBase();
 
-  const precons = useMemo(() => decks.filter((d) => d.isPrecon), [decks]);
-  const communityDecks = useMemo(() => decks.filter((d) => !d.isPrecon), [decks]);
+  const filteredDecks = useMemo(() => {
+    if (!searchQuery.trim()) return decks;
+    const q = searchQuery.toLowerCase();
+    return decks.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        (d.setName && d.setName.toLowerCase().includes(q)) ||
+        (d.primaryCommander && d.primaryCommander.toLowerCase().includes(q)) ||
+        (d.ownerEmail && d.ownerEmail.toLowerCase().includes(q))
+    );
+  }, [decks, searchQuery]);
+
+  const precons = useMemo(() => filteredDecks.filter((d) => d.isPrecon), [filteredDecks]);
+  const communityDecks = useMemo(() => filteredDecks.filter((d) => !d.isPrecon), [filteredDecks]);
 
   // Build combined deck options
   const deckOptions: DeckOption[] = useMemo(
@@ -383,6 +398,11 @@ function SimulationForm() {
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-gray-300">
               Pick 4 Decks ({selectedDeckIds.length}/4)
+              {searchQuery.trim() && (
+                <span className="ml-2 text-gray-400 font-normal">
+                  Showing {filteredDecks.length} of {decks.length}
+                </span>
+              )}
             </label>
             {selectedDeckIds.length > 0 && (
               <button
@@ -394,6 +414,14 @@ function SimulationForm() {
               </button>
             )}
           </div>
+
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, set, or commander..."
+            className="w-full mb-2 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          />
 
           <div className="max-h-80 overflow-y-auto bg-gray-700 rounded-md p-3">
             {/* Community Decks Group */}
@@ -499,7 +527,23 @@ function SimulationForm() {
                         <span className="truncate">{deck.name}</span>
                         <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
                       </span>
-                      <div className="text-xs text-gray-400 mt-0.5">precon</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {deck.setName ?? 'precon'}
+                        {deck.link && (
+                          <>
+                            {' · '}
+                            <a
+                              href={deck.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-blue-400 hover:underline"
+                            >
+                              Archidekt
+                            </a>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
