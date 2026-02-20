@@ -123,7 +123,7 @@ export default function JobStatusPage() {
   const [isCancelling, setIsCancelling] = useState(false);
 
   const { user } = useAuth();
-  const { workers, refresh: refreshWorkers } = useWorkerStatus();
+  const { workers, refresh: refreshWorkers } = useWorkerStatus(!!user);
   const apiBase = getApiBase();
   const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -666,6 +666,7 @@ export default function JobStatusPage() {
             workers={workers}
             userEmail={user?.email}
             onWorkerRefresh={refreshWorkers}
+            isAuthenticated={!!user}
           />
         )}
         {job.status === 'FAILED' && job.errorMessage && (

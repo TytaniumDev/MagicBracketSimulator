@@ -11,8 +11,9 @@ interface WorkerStatusResult {
 
 /**
  * Polls GET /api/workers every 15 seconds to get worker fleet status.
+ * Pass enabled=false to skip polling (e.g. for unauthenticated users).
  */
-export function useWorkerStatus(): WorkerStatusResult {
+export function useWorkerStatus(enabled = true): WorkerStatusResult {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [queueDepth, setQueueDepth] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +36,10 @@ export function useWorkerStatus(): WorkerStatusResult {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
     fetchStatus();
     intervalRef.current = setInterval(fetchStatus, 15_000);
     return () => {
@@ -42,7 +47,7 @@ export function useWorkerStatus(): WorkerStatusResult {
         clearInterval(intervalRef.current);
       }
     };
-  }, [fetchStatus]);
+  }, [fetchStatus, enabled]);
 
   return { workers, queueDepth, isLoading, refresh: fetchStatus };
 }

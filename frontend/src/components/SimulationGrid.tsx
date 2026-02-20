@@ -10,6 +10,7 @@ interface SimulationGridProps {
   workers?: WorkerInfo[];
   userEmail?: string | null;
   onWorkerRefresh?: () => Promise<void>;
+  isAuthenticated?: boolean;
 }
 
 const STATE_COLORS: Record<SimulationState, string> = {
@@ -107,7 +108,7 @@ function expandContainerToGames(sim: SimulationStatus): GameCell[] {
  * Memoized to prevent re-renders when parent state changes (e.g. log navigation)
  * but simulation data remains stable.
  */
-export const SimulationGrid = memo(function SimulationGrid({ simulations, totalSimulations, workers, userEmail, onWorkerRefresh }: SimulationGridProps) {
+export const SimulationGrid = memo(function SimulationGrid({ simulations, totalSimulations, workers, userEmail, onWorkerRefresh, isAuthenticated = false }: SimulationGridProps) {
   const [hoveredGame, setHoveredGame] = useState<GameCell | null>(null);
 
   // Build a lookup from workerId to WorkerInfo
@@ -183,9 +184,10 @@ export const SimulationGrid = memo(function SimulationGrid({ simulations, totalS
       ([, a], [, b]) => a.earliestIndex - b.earliestIndex
     );
 
-    for (const [workerId, { games, workerName }] of sortedWorkers) {
+    for (let wi = 0; wi < sortedWorkers.length; wi++) {
+      const [workerId, { games, workerName }] = sortedWorkers[wi];
       result.push({
-        label: workerName || workerId.slice(0, 8),
+        label: isAuthenticated ? (workerName || workerId.slice(0, 8)) : `Worker ${wi + 1}`,
         workerId,
         workerName,
         cells: games,
@@ -201,7 +203,7 @@ export const SimulationGrid = memo(function SimulationGrid({ simulations, totalS
     }
 
     return { groups: result, gameCounts: counts };
-  }, [simulations, totalSimulations]);
+  }, [simulations, totalSimulations, isAuthenticated]);
 
   // Adaptive cell size based on total game count (global for consistency)
   const cellSize = totalSimulations <= 20 ? 'w-5 h-5' : totalSimulations <= 50 ? 'w-4 h-4' : 'w-3 h-3';
@@ -242,12 +244,12 @@ export const SimulationGrid = memo(function SimulationGrid({ simulations, totalS
                 <span className="text-gray-600">({group.cells.length})</span>
 
                 {/* Inline capacity controls for owned workers */}
-                {isOwner && worker && (
+                {isAuthenticated && isOwner && worker && (
                   <WorkerOverrideControls worker={worker} onRefresh={onWorkerRefresh} compact />
                 )}
 
                 {/* Read-only override for non-owned workers */}
-                {!isOwner && worker && worker.maxConcurrentOverride != null && (
+                {isAuthenticated && !isOwner && worker && worker.maxConcurrentOverride != null && (
                   <span className="text-gray-500 ml-1">
                     cap: {worker.maxConcurrentOverride}
                     {worker.maxConcurrentOverride > worker.capacity && (
