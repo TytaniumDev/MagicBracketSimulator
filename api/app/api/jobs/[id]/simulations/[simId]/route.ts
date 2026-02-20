@@ -55,7 +55,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       update.completedAt = new Date().toISOString();
     }
 
-    await jobStore.updateSimulationStatus(id, simId, update);
+    // For COMPLETED transitions, use conditional update to prevent double-counting
+    // when retried simulations report completion again.
+    let transitioned = true;
+    if (state === 'COMPLETED') {
+      transitioned = await jobStore.conditionalUpdateSimulationStatus(
+        id, simId, ['PENDING', 'RUNNING', 'FAILED'], update
+      );
+      if (transitioned) {
+        await jobStore.incrementGamesCompleted(id, GAMES_PER_CONTAINER);
+      }
+    } else {
+      await jobStore.updateSimulationStatus(id, simId, update);
+    }
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
@@ -66,13 +78,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (state === 'COMPLETED') {
-      await jobStore.incrementGamesCompleted(id, GAMES_PER_CONTAINER);
-    }
-
     // Check if all sims are done → trigger aggregation.
     // Only COMPLETED/CANCELLED count as done — FAILED sims will be retried by the scanner.
-    if (state === 'COMPLETED' || state === 'CANCELLED') {
+    if (transitioned && (state === 'COMPLETED' || state === 'CANCELLED')) {
       const allSims = await jobStore.getSimulationStatuses(id);
       const allDone = allSims.every(s =>
         s.state === 'COMPLETED' || s.state === 'CANCELLED'
