@@ -204,13 +204,13 @@ second call exits immediately.
 | Derive job status | `api/lib/condenser/derive-job-status.test.ts` | `deriveJobStatus` from sim states |
 | Game log files | `api/test/game-logs.test.ts` | Local filesystem log utilities |
 | Simulation wins | `api/test/simulation-wins.test.ts` | Simulation win extraction |
+| SSE stream construction | `api/lib/stream-utils.test.ts` | `jobToStreamEvent` field mapping, `durationMs` computation, `gamesCompleted` fallback, conditional fields (queuePosition, workers, deckLinks) |
+| Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
+| Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, Pub/Sub redelivery scenario |
+| Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 
 ### Coverage gaps (future work)
 
 | Flow step | Gap | Priority |
 |---|---|---|
-| Log store (`log-store.ts`) | No tests for `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` | High |
-| Aggregation (`job-store-factory.ts`) | No tests for `aggregateJobResults` | High |
-| PATCH sim route | No tests for status transition guards, terminal state rejection, aggregation trigger | Medium |
-| SSE stream construction | No tests for `jobToStreamEvent` or sim event shape | Medium |
 | Worker condenser (`worker/src/condenser.ts`) | Functions tested in API condenser tests but worker's copy is separate — no worker-specific tests | Low (worker copy mirrors API) |

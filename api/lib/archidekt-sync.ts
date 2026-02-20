@@ -122,8 +122,35 @@ export async function syncPrecons(): Promise<SyncResult> {
 
   console.log('[PreconSync] Starting Archidekt precon sync...');
 
-  // 1. Fetch full list from Archidekt
-  const archidektDecks = await fetchArchidektPreconList();
+  // 1. Fetch full list from Archidekt and deduplicate
+  const rawArchidektDecks = await fetchArchidektPreconList();
+
+  // Deduplicate by archidektId (API pagination can return overlapping results).
+  const dedupedById = new Map<number, ArchidektListDeck>();
+  for (const deck of rawArchidektDecks) {
+    const existing = dedupedById.get(deck.id);
+    if (!existing || deck.updatedAt > existing.updatedAt) {
+      dedupedById.set(deck.id, deck);
+    }
+  }
+
+  // Deduplicate by parsed name (Commander Anthology reprints share names with
+  // the original printings). Keep the oldest archidektId — typically the original.
+  const dedupedByName = new Map<string, ArchidektListDeck>();
+  for (const deck of dedupedById.values()) {
+    const { name } = parsePreconName(deck.name);
+    const existing = dedupedByName.get(name);
+    if (!existing || deck.id < existing.id) {
+      dedupedByName.set(name, deck);
+    }
+  }
+  const archidektDecks = [...dedupedByName.values()];
+
+  const idDupes = rawArchidektDecks.length - dedupedById.size;
+  const nameDupes = dedupedById.size - dedupedByName.size;
+  if (idDupes > 0 || nameDupes > 0) {
+    console.log(`[PreconSync] Deduplicated ${rawArchidektDecks.length} → ${archidektDecks.length} (${idDupes} duplicate IDs, ${nameDupes} reprint names)`);
+  }
   console.log(`[PreconSync] Found ${archidektDecks.length} precons on Archidekt`);
 
   // 2. Load existing precons from store (indexed by archidektId)
@@ -166,15 +193,28 @@ export async function syncPrecons(): Promise<SyncResult> {
   const result: SyncResult = { total: archidektDecks.length, added: 0, updated: 0, unchanged: 0, removed: 0, errors: [] };
   const keepPreconIds = new Set<string>();
   const usedIds = new Set(allExistingPreconIds);
+  // Track archidektIds processed in this run to handle concurrent syncs.
+  // If another sync already wrote a doc for this archidektId while we were
+  // running, we re-check the store before creating a new doc.
+  const processedArchidektIds = new Set<number>();
 
   // 3. Process each Archidekt deck
   for (const adeck of archidektDecks) {
     try {
-      const existing = existingByArchidektId.get(adeck.id);
+      let existing = existingByArchidektId.get(adeck.id);
+
+      // If we haven't seen this archidektId in the initial load but another
+      // concurrent sync may have inserted it, do a fresh lookup.
+      if (!existing && processedArchidektIds.has(adeck.id)) {
+        // Already processed in this run — skip (shouldn't happen after dedup above, but defensive)
+        result.unchanged++;
+        continue;
+      }
 
       // Skip if unchanged
       if (existing && existing.archidektUpdatedAt === adeck.updatedAt) {
         keepPreconIds.add(existing.id);
+        processedArchidektIds.add(adeck.id);
         result.unchanged++;
         continue;
       }
@@ -241,6 +281,8 @@ export async function syncPrecons(): Promise<SyncResult> {
           new Date().toISOString(),
         );
       }
+
+      processedArchidektIds.add(adeck.id);
 
       if (existing) {
         result.updated++;
