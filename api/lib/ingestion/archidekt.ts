@@ -62,7 +62,7 @@ export async function fetchArchidektDeck(deckId: string): Promise<ParsedDeck> {
   for (const entry of data.cards) {
     const cardName = entry.card.oracleCard.name;
     const quantity = entry.quantity;
-    const categories = entry.categories.map(c => c.toLowerCase());
+    const categories = (entry.categories ?? []).map(c => c.toLowerCase());
 
     // Check if card is a commander
     const isCommander = categories.includes('commander') || categories.includes('commanders');

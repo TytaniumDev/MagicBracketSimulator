@@ -9,7 +9,7 @@ import { syncPrecons } from '../lib/archidekt-sync';
 async function main() {
   console.log('Syncing precons from Archidekt...');
   const result = await syncPrecons();
-  console.log(`Done: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged`);
+  console.log(`Done: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.removed} removed`);
   if (result.errors.length > 0) {
     console.error(`Errors (${result.errors.length}):`);
     for (const err of result.errors) {
@@ -18,7 +18,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+main().then(() => {
+  process.exit(0);
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });

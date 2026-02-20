@@ -206,3 +206,10 @@ export async function deleteDeck(id: string, userId: string): Promise<boolean> {
   await decksCollection.doc(id).delete();
   return true;
 }
+
+/**
+ * Delete a precon deck by ID (for sync cleanup).
+ */
+export async function deletePrecon(id: string): Promise<void> {
+  await decksCollection.doc(id).delete();
+}

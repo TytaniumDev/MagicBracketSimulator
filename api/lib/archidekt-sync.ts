@@ -1,7 +1,8 @@
 /**
  * Archidekt precon sync service.
- * Fetches all precon decks from the Archidekt_Precons account
+ * Fetches all commander precon decks from the Archidekt_Precons account
  * and upserts them into the deck store (SQLite or Firestore).
+ * Sources from https://archidekt.com/commander-precons
  */
 import { fetchArchidektDeck } from './ingestion/archidekt';
 import { toDck } from './ingestion/to-dck';
@@ -11,7 +12,7 @@ import { parseCommanderFromContent } from './saved-decks';
 const ARCHIDEKT_LIST_URL = 'https://archidekt.com/api/decks/v3/';
 const ARCHIDEKT_OWNER = 'Archidekt_Precons';
 const PAGE_SIZE = 100;
-const RATE_LIMIT_MS = 500;
+const RATE_LIMIT_MS = 3000;
 
 interface ArchidektListDeck {
   id: number;
@@ -31,6 +32,7 @@ export interface SyncResult {
   added: number;
   updated: number;
   unchanged: number;
+  removed: number;
   errors: string[];
 }
 
@@ -39,7 +41,7 @@ export interface SyncResult {
  */
 export async function fetchArchidektPreconList(): Promise<ArchidektListDeck[]> {
   const allDecks: ArchidektListDeck[] = [];
-  let url: string | null = `${ARCHIDEKT_LIST_URL}?owner=${ARCHIDEKT_OWNER}&ownerexact=true&pageSize=${PAGE_SIZE}`;
+  let url: string | null = `${ARCHIDEKT_LIST_URL}?ownerUsername=${ARCHIDEKT_OWNER}&ownerexact=true&pageSize=${PAGE_SIZE}`;
 
   while (url) {
     const response = await fetch(url, {
@@ -126,14 +128,14 @@ export async function syncPrecons(): Promise<SyncResult> {
 
   // 2. Load existing precons from store (indexed by archidektId)
   const existingByArchidektId = new Map<number, { id: string; archidektUpdatedAt: string | null }>();
-  const existingIds = new Set<string>();
+  const allExistingPreconIds = new Set<string>();
 
   if (USE_FIRESTORE) {
     const firestoreDecks = await import('./firestore-decks');
     const allDecks = await firestoreDecks.listAllDecks();
     for (const deck of allDecks) {
       if (deck.isPrecon) {
-        existingIds.add(deck.id);
+        allExistingPreconIds.add(deck.id);
         if (deck.archidektId) {
           existingByArchidektId.set(deck.archidektId, {
             id: deck.id,
@@ -151,7 +153,7 @@ export async function syncPrecons(): Promise<SyncResult> {
       archidekt_updated_at: string | null;
     }[];
     for (const row of rows) {
-      existingIds.add(row.id);
+      allExistingPreconIds.add(row.id);
       if (row.archidekt_id) {
         existingByArchidektId.set(row.archidekt_id, {
           id: row.id,
@@ -161,8 +163,9 @@ export async function syncPrecons(): Promise<SyncResult> {
     }
   }
 
-  const result: SyncResult = { total: archidektDecks.length, added: 0, updated: 0, unchanged: 0, errors: [] };
-  const usedIds = new Set(existingIds);
+  const result: SyncResult = { total: archidektDecks.length, added: 0, updated: 0, unchanged: 0, removed: 0, errors: [] };
+  const keepPreconIds = new Set<string>();
+  const usedIds = new Set(allExistingPreconIds);
 
   // 3. Process each Archidekt deck
   for (const adeck of archidektDecks) {
@@ -171,6 +174,7 @@ export async function syncPrecons(): Promise<SyncResult> {
 
       // Skip if unchanged
       if (existing && existing.archidektUpdatedAt === adeck.updatedAt) {
+        keepPreconIds.add(existing.id);
         result.unchanged++;
         continue;
       }
@@ -180,6 +184,7 @@ export async function syncPrecons(): Promise<SyncResult> {
       const colorIdentity = archidektColorsToIdentity(adeck.colors);
       const id = existing?.id ?? generatePreconId(parsedName, usedIds);
       usedIds.add(id);
+      keepPreconIds.add(id);
 
       console.log(`[PreconSync] ${existing ? 'Updating' : 'Adding'}: ${parsedName} (archidekt:${adeck.id})`);
 
@@ -252,7 +257,31 @@ export async function syncPrecons(): Promise<SyncResult> {
     }
   }
 
-  console.log(`[PreconSync] Sync complete: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.errors.length} errors`);
+  // 4. Remove orphaned precons (legacy hand-imported or wrongly synced)
+  const orphanIds = [...allExistingPreconIds].filter((id) => !keepPreconIds.has(id));
+  if (orphanIds.length > 0) {
+    console.log(`[PreconSync] Removing ${orphanIds.length} orphaned precons...`);
+    for (const id of orphanIds) {
+      try {
+        if (USE_FIRESTORE) {
+          const firestoreDecks = await import('./firestore-decks');
+          await firestoreDecks.deletePrecon(id);
+        } else {
+          const { getDb } = await import('./db');
+          const db = getDb();
+          db.prepare('DELETE FROM precons WHERE id = ?').run(id);
+        }
+        result.removed++;
+        console.log(`[PreconSync] Removed orphan: ${id}`);
+      } catch (err) {
+        const msg = `Failed to remove orphan "${id}": ${err instanceof Error ? err.message : err}`;
+        console.error(`[PreconSync] ${msg}`);
+        result.errors.push(msg);
+      }
+    }
+  }
+
+  console.log(`[PreconSync] Sync complete: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.removed} removed, ${result.errors.length} errors`);
   return result;
 }
 
