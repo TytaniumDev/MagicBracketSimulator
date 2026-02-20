@@ -393,6 +393,17 @@ export function conditionalUpdateSimulationStatus(
 }
 
 /**
+ * Get a single simulation's status.
+ */
+export function getSimulationStatus(jobId: string, simId: string): SimulationStatus | null {
+  const db = getDb();
+  const row = db
+    .prepare('SELECT * FROM simulations WHERE job_id = ? AND sim_id = ?')
+    .get(jobId, simId) as SimRow | undefined;
+  return row ? simRowToStatus(row) : null;
+}
+
+/**
  * Get all simulation statuses for a job, ordered by index.
  */
 export function getSimulationStatuses(jobId: string): SimulationStatus[] {

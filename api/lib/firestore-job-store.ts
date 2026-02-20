@@ -472,6 +472,34 @@ export async function conditionalUpdateSimulationStatus(
 }
 
 /**
+ * Get a single simulation's status.
+ */
+export async function getSimulationStatus(
+  jobId: string,
+  simId: string
+): Promise<SimulationStatus | null> {
+  const doc = await simulationsCollection(jobId).doc(simId).get();
+  if (!doc.exists) return null;
+
+  const data = doc.data()!;
+  return {
+    simId: doc.id,
+    index: data.index ?? 0,
+    state: (data.state ?? 'PENDING') as SimulationState,
+    ...(data.workerId && { workerId: data.workerId }),
+    ...(data.workerName && { workerName: data.workerName }),
+    ...(data.startedAt && { startedAt: data.startedAt }),
+    ...(data.completedAt && { completedAt: data.completedAt }),
+    ...(data.durationMs != null && { durationMs: data.durationMs }),
+    ...(data.errorMessage && { errorMessage: data.errorMessage }),
+    ...(data.winner && { winner: data.winner }),
+    ...(data.winningTurn != null && { winningTurn: data.winningTurn }),
+    ...(data.winners?.length > 0 && { winners: data.winners }),
+    ...(data.winningTurns?.length > 0 && { winningTurns: data.winningTurns }),
+  } as SimulationStatus;
+}
+
+/**
  * Get all simulation statuses for a job, ordered by index.
  */
 export async function getSimulationStatuses(

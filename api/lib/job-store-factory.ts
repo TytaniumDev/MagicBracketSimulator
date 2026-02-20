@@ -153,6 +153,13 @@ export async function updateSimulationStatus(
   sqliteStore.updateSimulationStatus(jobId, simId, update);
 }
 
+export async function getSimulationStatus(jobId: string, simId: string): Promise<SimulationStatus | null> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.getSimulationStatus(jobId, simId);
+  }
+  return sqliteStore.getSimulationStatus(jobId, simId);
+}
+
 export async function getSimulationStatuses(jobId: string): Promise<SimulationStatus[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.getSimulationStatuses(jobId);

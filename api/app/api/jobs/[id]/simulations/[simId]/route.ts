@@ -48,6 +48,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (winners !== undefined) update.winners = winners;
     if (winningTurns !== undefined) update.winningTurns = winningTurns;
 
+    // Guard: reject any state transition if the sim is already in a terminal state.
+    // This prevents stale Pub/Sub redeliveries from regressing COMPLETED→RUNNING.
+    if (state !== undefined) {
+      const currentSim = await jobStore.getSimulationStatus(id, simId);
+      if (currentSim && (currentSim.state === 'COMPLETED' || currentSim.state === 'CANCELLED')) {
+        return NextResponse.json({ updated: false, reason: 'terminal_state' });
+      }
+    }
+
     // Add timestamps based on state transition
     if (state === 'RUNNING') {
       update.startedAt = new Date().toISOString();

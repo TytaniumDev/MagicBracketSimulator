@@ -223,22 +223,29 @@ async function fetchJob(jobId: string): Promise<JobData | null> {
 /**
  * Report per-simulation status to the API.
  * The API auto-detects job lifecycle transitions (QUEUED->RUNNING, all done->aggregate).
+ * Returns true if the update was accepted, false if the API rejected it (e.g. sim already terminal).
  */
 async function reportSimulationStatus(
   jobId: string,
   simId: string,
   update: Record<string, unknown>
-): Promise<void> {
+): Promise<boolean> {
   const url = `${getApiUrl()}/api/jobs/${jobId}/simulations/${simId}`;
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: 'PATCH',
       headers: getApiHeaders(),
       body: JSON.stringify(update),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
+    if (res.ok) {
+      const data = await res.json() as { updated?: boolean };
+      return data.updated !== false;
+    }
+    return false;
   } catch {
     // Non-fatal: simulation status update failing shouldn't crash the sim
+    return true; // Assume accepted on network failure to avoid skipping work
   }
 }
 
@@ -327,13 +334,18 @@ async function processSimulation(
     job.decks[3].dck,
   ];
 
-  // Report RUNNING
+  // Report RUNNING — if the API rejects (sim already completed/cancelled), skip
   activeSimCount++;
-  await reportSimulationStatus(jobId, simId, {
+  const accepted = await reportSimulationStatus(jobId, simId, {
     state: 'RUNNING',
     workerId: currentWorkerId,
     workerName: currentWorkerName,
   });
+  if (!accepted) {
+    console.log(`${simLabel} Sim already completed/cancelled, skipping`);
+    activeSimCount = Math.max(0, activeSimCount - 1);
+    return;
+  }
 
   // Register abort controller for push-based cancellation and capacity preemption
   const abortController = new AbortController();
