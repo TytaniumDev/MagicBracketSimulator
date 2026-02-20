@@ -78,10 +78,10 @@ async function runTests() {
     assertEqual(result.decks.length, 4, 'deck count');
   });
 
-  await test('buildStructuredGame: totalTurns is a valid round number', () => {
+  await test('buildStructuredGame: totalTurns is a valid personal turn count', () => {
     const result = buildStructuredGame(games[0]);
     assert(result.totalTurns > 0, `totalTurns should be > 0, got ${result.totalTurns}`);
-    assert(result.totalTurns <= 20, `totalTurns should be <= 20 (round number), got ${result.totalTurns}`);
+    assert(result.totalTurns <= 20, `totalTurns should be <= 20 (personal turn count), got ${result.totalTurns}`);
   });
 
   await test('buildStructuredGame: each deck has turn entries', () => {
@@ -114,7 +114,7 @@ async function runTests() {
     assertEqual(result.winner, expectedWinner, 'winner consistency');
   });
 
-  await test('buildStructuredGame: winningTurn is a valid round number', () => {
+  await test('buildStructuredGame: winningTurn is a valid personal turn count', () => {
     const result = buildStructuredGame(games[0]);
     assert(result.winningTurn !== undefined, 'should have a winningTurn');
     assert(result.winningTurn! > 0, `winningTurn should be > 0, got ${result.winningTurn}`);

@@ -73,6 +73,7 @@ import {
   getMaxRound,
   calculateManaPerTurn,
   calculateCardsDrawnPerTurn,
+  calculatePerDeckTurns,
   extractWinner,
   extractWinningTurn,
 } from './turns';
@@ -133,17 +134,34 @@ export function condenseGame(rawLog: string): CondensedGame {
 
   const turnRanges = extractTurnRanges(rawLog);
   const numPlayers = getNumPlayers(turnRanges);
-  const turnCount = getMaxRound(turnRanges, numPlayers);
   const manaPerTurn = calculateManaPerTurn(rawLog, numPlayers);
   const cardsDrawnPerTurn = calculateCardsDrawnPerTurn(rawLog, numPlayers);
 
   // ===========================================================================
-  // STEP 4: DETECT WINNER
+  // STEP 4: DETECT WINNER & PER-DECK TURNS
   // ===========================================================================
-  // Try to determine who won and when (round-based).
 
   const winner = extractWinner(rawLog);
-  const winningTurn = extractWinningTurn(rawLog);
+  const perDeckTurns = calculatePerDeckTurns(turnRanges);
+
+  // turnCount = winner's personal turn count (accurate with eliminations).
+  // Falls back to max across all decks, then round-based calculation.
+  let turnCount: number;
+  if (winner) {
+    const winnerKey = Object.keys(perDeckTurns).find(
+      (k) => k === winner || k.endsWith('-' + winner)
+    );
+    turnCount = winnerKey
+      ? perDeckTurns[winnerKey].turnsTaken
+      : Math.max(...Object.values(perDeckTurns).map((d) => d.turnsTaken), 0);
+  } else {
+    const allTurns = Object.values(perDeckTurns).map((d) => d.turnsTaken);
+    turnCount = allTurns.length > 0
+      ? Math.max(...allTurns)
+      : getMaxRound(turnRanges, numPlayers);
+  }
+
+  const winningTurn = turnCount > 0 ? turnCount : undefined;
 
   // ===========================================================================
   // STEP 5: BUILD OUTPUT
@@ -163,6 +181,9 @@ export function condenseGame(rawLog: string): CondensedGame {
   }
   if (winningTurn !== undefined) {
     condensed.winningTurn = winningTurn;
+  }
+  if (Object.keys(perDeckTurns).length > 0) {
+    condensed.perDeckTurns = perDeckTurns;
   }
 
   return condensed;

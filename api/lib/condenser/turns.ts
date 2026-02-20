@@ -27,7 +27,7 @@
  * =============================================================================
  */
 
-import type { TurnManaInfo } from '../types';
+import type { TurnManaInfo, DeckTurnInfo } from '../types';
 import {
   EXTRACT_TURN_NUMBER,
   EXTRACT_MANA_PRODUCED,
@@ -209,6 +209,37 @@ export function getMaxRound(ranges: TurnRange[], numPlayers: number): number {
     return 0;
   }
   return segmentToRound(maxTurn, numPlayers);
+}
+
+// -----------------------------------------------------------------------------
+// Per-Deck Turn Counting
+// -----------------------------------------------------------------------------
+
+/**
+ * Counts how many turns each deck/player actually took in the game.
+ *
+ * Unlike segmentToRound() which divides by player count, this correctly
+ * handles player eliminations: when a player is eliminated mid-game, the
+ * remaining players continue taking turns but the segments-per-round shrinks.
+ * Counting per-player appearances in the turn sequence gives accurate counts.
+ *
+ * @param ranges - Turn ranges from extractTurnRanges()
+ * @returns Map of player name -> { turnsTaken, lastSegment }
+ */
+export function calculatePerDeckTurns(ranges: TurnRange[]): Record<string, DeckTurnInfo> {
+  const result: Record<string, DeckTurnInfo> = {};
+
+  for (const range of ranges) {
+    if (!range.player) continue;
+
+    if (!result[range.player]) {
+      result[range.player] = { turnsTaken: 0, lastSegment: 0 };
+    }
+    result[range.player].turnsTaken++;
+    result[range.player].lastSegment = range.turnNumber;
+  }
+
+  return result;
 }
 
 /**
@@ -416,13 +447,15 @@ export function extractWinner(rawLog: string): string | undefined {
 }
 
 /**
- * Attempts to determine on which round the game ended.
+ * Determines the winning turn as the winner's personal turn count.
  *
- * A "round" is one full rotation where each player takes a turn.
- * In a 4-player Commander game, round 1 = segments 1-4, round 2 = segments 5-8, etc.
+ * Uses per-deck turn counting to find how many turns the winner actually took,
+ * which is accurate even when players are eliminated mid-game (shrinking the
+ * segments-per-round). Falls back to the max turn count across all decks if
+ * no winner is found, and to round-based calculation as a last resort.
  *
  * @param rawLog - The complete raw log text
- * @returns The round number when the game ended, or undefined if not determinable
+ * @returns The winner's personal turn count, or undefined if not determinable
  */
 export function extractWinningTurn(rawLog: string): number | undefined {
   const ranges = extractTurnRanges(rawLog);
@@ -430,8 +463,27 @@ export function extractWinningTurn(rawLog: string): number | undefined {
     return undefined;
   }
 
+  const perDeck = calculatePerDeckTurns(ranges);
+  const winner = extractWinner(rawLog);
+
+  // Try to find the winner's personal turn count
+  if (winner) {
+    const winnerKey = Object.keys(perDeck).find(
+      (k) => k === winner || k.endsWith('-' + winner)
+    );
+    if (winnerKey) {
+      return perDeck[winnerKey].turnsTaken;
+    }
+  }
+
+  // Fallback: max turns across all decks
+  const allTurns = Object.values(perDeck);
+  if (allTurns.length > 0) {
+    return Math.max(...allTurns.map((d) => d.turnsTaken));
+  }
+
+  // Last resort: round-based
   const numPlayers = getNumPlayers(ranges);
-  // The last round in the log is when the game ended
   return getMaxRound(ranges, numPlayers);
 }
 

@@ -60,6 +60,17 @@ export interface TurnManaInfo {
 }
 
 /**
+ * Per-deck turn tracking info.
+ * Accurately counts turns even when players are eliminated mid-game.
+ */
+export interface DeckTurnInfo {
+  /** How many turns this deck actually took */
+  turnsTaken: number;
+  /** The last Forge segment number this deck appeared in */
+  lastSegment: number;
+}
+
+/**
  * A condensed summary of a single game.
  *
  * Reduces a multi-KB raw log down to essential information:
@@ -85,6 +96,9 @@ export interface CondensedGame {
 
   /** What turn the game ended on (if determinable) */
   winningTurn?: number;
+
+  /** Per-deck turn counts (accurate even with mid-game eliminations) */
+  perDeckTurns?: Record<string, DeckTurnInfo>;
 }
 
 // -----------------------------------------------------------------------------
@@ -154,6 +168,9 @@ export interface StructuredGame {
    * Commander format starts at 40 life.
    */
   lifePerTurn?: Record<number, Record<string, number>>;
+
+  /** Per-deck turn counts (accurate even with mid-game eliminations) */
+  perDeckTurns?: Record<string, DeckTurnInfo>;
 
   /** Who won the game (if determinable from logs) */
   winner?: string;

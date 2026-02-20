@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { condenseGame, condenseGames } from './index';
-import { extractWinner, extractWinningTurn, getNumPlayers, extractTurnRanges } from './turns';
+import { extractWinner, extractWinningTurn, getNumPlayers, extractTurnRanges, calculatePerDeckTurns } from './turns';
 import { splitConcatenatedGames } from './patterns';
 
 // ---------------------------------------------------------------------------
@@ -233,15 +233,15 @@ async function runTests() {
   });
 
   // =========================================================================
-  // Regression: extractWinningTurn returns round numbers, not raw segments
+  // Regression: extractWinningTurn returns personal turn counts, not raw segments
   // =========================================================================
 
-  await test('extractWinningTurn: returns round numbers <= 20, not raw segments', () => {
+  await test('extractWinningTurn: returns personal turn counts <= 20, not raw segments', () => {
     const games = splitConcatenatedGames(rawLog);
     for (let i = 0; i < games.length; i++) {
       const turn = extractWinningTurn(games[i]);
       assert(turn !== undefined, `Game ${i + 1} should have a winning turn`);
-      assert(turn! <= 20, `Game ${i + 1} winning turn should be <= 20 (a round number), got ${turn}`);
+      assert(turn! <= 20, `Game ${i + 1} winning turn should be <= 20 (personal turn count), got ${turn}`);
     }
   });
 
@@ -258,6 +258,105 @@ async function runTests() {
         !winner!.toLowerCase().includes('game outcome'),
         `Game ${i + 1} winner should not contain "Game outcome:" prefix, got "${winner}"`
       );
+    }
+  });
+
+  // =========================================================================
+  // Per-deck turn counting (calculatePerDeckTurns)
+  // =========================================================================
+
+  // Expected per-deck turn counts from manual inspection of the fixture:
+  // | Game | Doran | Enduring | Explorers | Veloci | Winner (turns) |
+  // |------|-------|----------|-----------|--------|----------------|
+  // | 1    | 10    | 8        | 11        | 10     | Explorers (11) |
+  // | 2    | 11    | 10       | 8         | 9      | Doran (11)     |
+  // | 3    | 15    | 16       | 12        | 14     | Enduring (16)  |
+  // | 4    | 8     | 9        | 8         | 7      | Enduring (9)   |
+
+  const expectedPerDeckTurns = [
+    { 'Doran Big Butts': 10, 'Enduring Enchantments': 8, 'Explorers of the Deep': 11, 'Veloci-RAMP-Tor': 10 },
+    { 'Doran Big Butts': 11, 'Enduring Enchantments': 10, 'Explorers of the Deep': 8, 'Veloci-RAMP-Tor': 9 },
+    { 'Doran Big Butts': 15, 'Enduring Enchantments': 16, 'Explorers of the Deep': 12, 'Veloci-RAMP-Tor': 14 },
+    { 'Doran Big Butts': 8, 'Enduring Enchantments': 9, 'Explorers of the Deep': 8, 'Veloci-RAMP-Tor': 7 },
+  ];
+
+  const expectedWinnerTurns = [11, 11, 16, 9];
+
+  await test('calculatePerDeckTurns: Game 1 exact per-deck turn counts', () => {
+    const games = splitConcatenatedGames(rawLog);
+    const ranges = extractTurnRanges(games[0]);
+    const perDeck = calculatePerDeckTurns(ranges);
+    for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[0])) {
+      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      assert(key !== undefined, `Should find key for ${deckName}`);
+      assertEqual(perDeck[key!].turnsTaken, expected, `Game 1 ${deckName} turns`);
+    }
+  });
+
+  await test('calculatePerDeckTurns: Game 2 exact per-deck turn counts', () => {
+    const games = splitConcatenatedGames(rawLog);
+    const ranges = extractTurnRanges(games[1]);
+    const perDeck = calculatePerDeckTurns(ranges);
+    for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[1])) {
+      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      assert(key !== undefined, `Should find key for ${deckName}`);
+      assertEqual(perDeck[key!].turnsTaken, expected, `Game 2 ${deckName} turns`);
+    }
+  });
+
+  await test('calculatePerDeckTurns: Game 3 exact per-deck turn counts', () => {
+    const games = splitConcatenatedGames(rawLog);
+    const ranges = extractTurnRanges(games[2]);
+    const perDeck = calculatePerDeckTurns(ranges);
+    for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[2])) {
+      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      assert(key !== undefined, `Should find key for ${deckName}`);
+      assertEqual(perDeck[key!].turnsTaken, expected, `Game 3 ${deckName} turns`);
+    }
+  });
+
+  await test('calculatePerDeckTurns: Game 4 exact per-deck turn counts', () => {
+    const games = splitConcatenatedGames(rawLog);
+    const ranges = extractTurnRanges(games[3]);
+    const perDeck = calculatePerDeckTurns(ranges);
+    for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[3])) {
+      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      assert(key !== undefined, `Should find key for ${deckName}`);
+      assertEqual(perDeck[key!].turnsTaken, expected, `Game 4 ${deckName} turns`);
+    }
+  });
+
+  await test('calculatePerDeckTurns: each game has 4 decks', () => {
+    const games = splitConcatenatedGames(rawLog);
+    for (let i = 0; i < games.length; i++) {
+      const ranges = extractTurnRanges(games[i]);
+      const perDeck = calculatePerDeckTurns(ranges);
+      assertEqual(Object.keys(perDeck).length, 4, `Game ${i + 1} deck count in perDeckTurns`);
+    }
+  });
+
+  await test('condenseGame: turnCount equals winner personal turn count', () => {
+    const games = splitConcatenatedGames(rawLog);
+    for (let i = 0; i < games.length; i++) {
+      const condensed = condenseGame(games[i]);
+      assertEqual(condensed.turnCount, expectedWinnerTurns[i], `Game ${i + 1} turnCount should be winner's personal turn count`);
+    }
+  });
+
+  await test('condenseGame: winningTurn equals turnCount for all 4 games', () => {
+    const games = splitConcatenatedGames(rawLog);
+    for (let i = 0; i < games.length; i++) {
+      const condensed = condenseGame(games[i]);
+      assertEqual(condensed.winningTurn, condensed.turnCount, `Game ${i + 1} winningTurn should equal turnCount`);
+    }
+  });
+
+  await test('condenseGame: perDeckTurns is populated with 4 decks per game', () => {
+    const games = splitConcatenatedGames(rawLog);
+    for (let i = 0; i < games.length; i++) {
+      const condensed = condenseGame(games[i]);
+      assert(condensed.perDeckTurns !== undefined, `Game ${i + 1} should have perDeckTurns`);
+      assertEqual(Object.keys(condensed.perDeckTurns!).length, 4, `Game ${i + 1} perDeckTurns deck count`);
     }
   });
 

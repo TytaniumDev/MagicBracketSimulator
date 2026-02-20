@@ -30,7 +30,7 @@
  */
 
 import type { StructuredGame, DeckHistory, DeckTurnActions, DeckAction, EventType } from '../types';
-import { extractTurnRanges, sliceByTurn, getMaxRound, getNumPlayers, segmentToRound, calculateLifePerTurn, extractWinner, type TurnRange } from './turns';
+import { extractTurnRanges, sliceByTurn, getMaxRound, getNumPlayers, segmentToRound, calculateLifePerTurn, calculatePerDeckTurns, extractWinner, type TurnRange } from './turns';
 import { classifyLine } from './classify';
 import { shouldIgnoreLine } from './filter';
 
@@ -260,17 +260,36 @@ export function buildStructuredGame(
   const lifePerTurn = calculateLifePerTurn(normalized, players, numPlayers);
 
   // -------------------------------------------------------------------------
-  // Step 5: Extract winner and winning turn (round)
+  // Step 5: Per-deck turns, winner, and winning turn
   // -------------------------------------------------------------------------
+  const perDeckTurns = calculatePerDeckTurns(ranges);
   const winner = extractWinner(rawLog);
-  const winningTurn = totalTurns > 0 ? totalTurns : undefined;
+
+  // Use winner's personal turn count for totalTurns (accurate with eliminations)
+  let accurateTotalTurns = totalTurns;
+  if (winner) {
+    const winnerKey = Object.keys(perDeckTurns).find(
+      (k) => k === winner || k.endsWith('-' + winner)
+    );
+    if (winnerKey) {
+      accurateTotalTurns = perDeckTurns[winnerKey].turnsTaken;
+    }
+  } else {
+    const allTurns = Object.values(perDeckTurns).map((d) => d.turnsTaken);
+    if (allTurns.length > 0) {
+      accurateTotalTurns = Math.max(...allTurns);
+    }
+  }
+
+  const winningTurn = accurateTotalTurns > 0 ? accurateTotalTurns : undefined;
 
   return {
-    totalTurns,
+    totalTurns: accurateTotalTurns,
     players,
     turns,
     decks,
     lifePerTurn,
+    ...(Object.keys(perDeckTurns).length > 0 && { perDeckTurns }),
     ...(winner && { winner }),
     ...(winningTurn !== undefined && { winningTurn }),
   };
