@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { splitConcatenatedGames } from './patterns';
 import { condenseGames, structureGames } from './index';
+import { resolveWinnerName } from './deck-match';
 import { GAMES_PER_CONTAINER } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -59,13 +60,8 @@ function loadFixture(): string {
   return fs.readFileSync(FIXTURE_PATH, 'utf-8');
 }
 
-/** Match a winner string against clean deck names (same pattern as production). */
-function matchWinner(winner: string, deckNames: string[]): string {
-  const found = deckNames.find(
-    (name) => winner === name || winner.endsWith(`-${name}`)
-  );
-  return found ?? winner;
-}
+// Use the shared resolveWinnerName from deck-match.ts (canonical matching logic)
+const matchWinner = resolveWinnerName;
 
 /** Build a win tally from an array of winner strings. */
 function buildTally(winners: (string | undefined)[], deckNames: string[]): Record<string, number> {

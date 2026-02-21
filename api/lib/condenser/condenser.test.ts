@@ -9,6 +9,7 @@ import * as path from 'path';
 import { condenseGame, condenseGames } from './index';
 import { extractWinner, extractWinningTurn, getNumPlayers, extractTurnRanges, calculatePerDeckTurns } from './turns';
 import { splitConcatenatedGames } from './patterns';
+import { matchesDeckName } from './deck-match';
 
 // ---------------------------------------------------------------------------
 // Test Utilities (same pattern as game-logs.test.ts)
@@ -208,7 +209,7 @@ async function runTests() {
     for (const game of condensed) {
       if (game.winner) {
         const found = deckNames.find(
-          (name) => game.winner === name || game.winner?.endsWith(`-${name}`)
+          (name) => matchesDeckName(game.winner!, name)
         );
         if (found) winCounts[found]++;
       }
@@ -287,7 +288,7 @@ async function runTests() {
     const ranges = extractTurnRanges(games[0]);
     const perDeck = calculatePerDeckTurns(ranges);
     for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[0])) {
-      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      const key = Object.keys(perDeck).find((k) => matchesDeckName(k, deckName));
       assert(key !== undefined, `Should find key for ${deckName}`);
       assertEqual(perDeck[key!].turnsTaken, expected, `Game 1 ${deckName} turns`);
     }
@@ -298,7 +299,7 @@ async function runTests() {
     const ranges = extractTurnRanges(games[1]);
     const perDeck = calculatePerDeckTurns(ranges);
     for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[1])) {
-      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      const key = Object.keys(perDeck).find((k) => matchesDeckName(k, deckName));
       assert(key !== undefined, `Should find key for ${deckName}`);
       assertEqual(perDeck[key!].turnsTaken, expected, `Game 2 ${deckName} turns`);
     }
@@ -309,7 +310,7 @@ async function runTests() {
     const ranges = extractTurnRanges(games[2]);
     const perDeck = calculatePerDeckTurns(ranges);
     for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[2])) {
-      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      const key = Object.keys(perDeck).find((k) => matchesDeckName(k, deckName));
       assert(key !== undefined, `Should find key for ${deckName}`);
       assertEqual(perDeck[key!].turnsTaken, expected, `Game 3 ${deckName} turns`);
     }
@@ -320,7 +321,7 @@ async function runTests() {
     const ranges = extractTurnRanges(games[3]);
     const perDeck = calculatePerDeckTurns(ranges);
     for (const [deckName, expected] of Object.entries(expectedPerDeckTurns[3])) {
-      const key = Object.keys(perDeck).find((k) => k.endsWith('-' + deckName));
+      const key = Object.keys(perDeck).find((k) => matchesDeckName(k, deckName));
       assert(key !== undefined, `Should find key for ${deckName}`);
       assertEqual(perDeck[key!].turnsTaken, expected, `Game 4 ${deckName} turns`);
     }

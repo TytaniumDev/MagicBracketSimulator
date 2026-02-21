@@ -33,6 +33,7 @@ import type { StructuredGame, DeckHistory, DeckTurnActions, DeckAction, EventTyp
 import { extractTurnRanges, sliceByTurn, getMaxRound, getNumPlayers, segmentToRound, calculateLifePerTurn, calculatePerDeckTurns, extractWinner, type TurnRange } from './turns';
 import { classifyLine } from './classify';
 import { shouldIgnoreLine } from './filter';
+import { matchesDeckName } from './deck-match';
 
 // -----------------------------------------------------------------------------
 // Player Attribution
@@ -226,7 +227,7 @@ export function buildStructuredGame(
     const playerKey =
       (deckNames &&
         logPlayerKeys.find(
-          (k) => k === deckNames[i] || k.endsWith('-' + deckNames[i])
+          (k) => matchesDeckName(k, deckNames[i])
         )) ??
       players[i] ??
       deckLabels[i];
@@ -269,7 +270,7 @@ export function buildStructuredGame(
   let accurateTotalTurns = totalTurns;
   if (winner) {
     const winnerKey = Object.keys(perDeckTurns).find(
-      (k) => k === winner || k.endsWith('-' + winner)
+      (k) => matchesDeckName(k, winner)
     );
     if (winnerKey) {
       accurateTotalTurns = perDeckTurns[winnerKey].turnsTaken;

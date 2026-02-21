@@ -78,6 +78,7 @@ import {
   extractWinningTurn,
 } from './turns';
 import { buildStructuredGame } from './structured';
+import { matchesDeckName } from './deck-match';
 
 // Re-export sub-modules for direct access if needed
 export { shouldIgnoreLine, filterLines, splitAndFilter } from './filter';
@@ -149,7 +150,7 @@ export function condenseGame(rawLog: string): CondensedGame {
   let turnCount: number;
   if (winner) {
     const winnerKey = Object.keys(perDeckTurns).find(
-      (k) => k === winner || k.endsWith('-' + winner)
+      (k) => matchesDeckName(k, winner)
     );
     turnCount = winnerKey
       ? perDeckTurns[winnerKey].turnsTaken

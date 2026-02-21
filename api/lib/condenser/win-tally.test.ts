@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { splitConcatenatedGames } from './patterns';
 import { structureGames } from './index';
+import { resolveWinnerName } from './deck-match';
 import type { SimulationStatus, SimulationState } from '../types';
 import { GAMES_PER_CONTAINER } from '../types';
 
@@ -50,25 +51,8 @@ function assertEqual<T>(actual: T, expected: T, message: string) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// matchWinner: inline test utility mirroring the pattern from production code
-// ---------------------------------------------------------------------------
-
-/**
- * Matches a winner string (possibly "Ai(N)-DeckName") against an array of
- * clean deck names. Returns the clean name if matched, or the original string.
- *
- * This is the same logic used in:
- *   - structured.ts line 229:  k.endsWith('-' + deckNames[i])
- *   - condenser.test.ts line 211: game.winner?.endsWith(`-${name}`)
- *   - frontend/JobStatus.tsx lines 329, 380: simWinners[i]?.endsWith(`-${name}`)
- */
-function matchWinner(winner: string, deckNames: string[]): string {
-  const found = deckNames.find(
-    (name) => winner === name || winner.endsWith(`-${name}`)
-  );
-  return found ?? winner;
-}
+// Use the shared resolveWinnerName from deck-match.ts (canonical matching logic)
+const matchWinner = resolveWinnerName;
 
 // ---------------------------------------------------------------------------
 // Helpers

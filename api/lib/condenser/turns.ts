@@ -37,6 +37,7 @@ import {
   EXTRACT_WINNER,
   EXTRACT_ACTIVE_PLAYER,
 } from './patterns';
+import { matchesDeckName } from './deck-match';
 
 // -----------------------------------------------------------------------------
 // Turn Boundary Types
@@ -469,7 +470,7 @@ export function extractWinningTurn(rawLog: string): number | undefined {
   // Try to find the winner's personal turn count
   if (winner) {
     const winnerKey = Object.keys(perDeck).find(
-      (k) => k === winner || k.endsWith('-' + winner)
+      (k) => matchesDeckName(k, winner)
     );
     if (winnerKey) {
       return perDeck[winnerKey].turnsTaken;

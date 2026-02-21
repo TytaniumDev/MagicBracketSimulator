@@ -98,6 +98,14 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
 So: **condensing and structuring** of logs happens **only in the API**, during
 aggregation, using the raw logs that workers previously uploaded.
 
+**Deck name matching:** `matchesDeckName()` from `api/lib/condenser/deck-match.ts`
+is the canonical function for matching Forge log player names (e.g.
+`"Ai(2)-Blood Rites - The Lost Caverns of Ixalan Commander"`) against short
+deck names stored in the DB (e.g. `"Blood Rites"`). It handles exact match,
+`Ai(N)-` prefix with endsWith, and precon set suffixes (startsWith after
+stripping the Ai prefix). A frontend copy lives at
+`frontend/src/utils/deck-match.ts`.
+
 **Legacy route (unused):**
 
 - `**POST /api/jobs/:id/logs`** — bulk log ingest: accepts `{ gameLogs,
@@ -201,6 +209,7 @@ second call exits immediately.
 | Structure pipeline | `api/lib/condenser/structured.test.ts` | `structureGame`, `structureGames` |
 | Pipeline consistency | `api/lib/condenser/pipeline.test.ts` | raw → split → condense + structure → win tallies agree |
 | Win tallying | `api/lib/condenser/win-tally.test.ts` | Win counting logic |
+| Deck name matching | `api/lib/condenser/deck-match.test.ts` | `matchesDeckName`, `resolveWinnerName` — handles precon set suffixes (e.g. "Blood Rites - The Lost Caverns of Ixalan Commander" → "Blood Rites") |
 | Derive job status | `api/lib/condenser/derive-job-status.test.ts` | `deriveJobStatus` from sim states |
 | Game log files | `api/test/game-logs.test.ts` | Local filesystem log utilities |
 | Simulation wins | `api/test/simulation-wins.test.ts` | Simulation win extraction |

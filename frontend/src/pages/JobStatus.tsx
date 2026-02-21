@@ -7,6 +7,7 @@ import { SimulationGrid } from '../components/SimulationGrid';
 import { useJobStream } from '../hooks/useJobStream';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
+import { matchesDeckName } from '../utils/deck-match';
 
 type JobStatusValue = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
@@ -326,7 +327,7 @@ export default function JobStatusPage() {
       for (let i = 0; i < simWinners.length; i++) {
         let matchedDeck = simWinners[i];
         const found = allNames.find(
-          (name) => simWinners[i] === name || simWinners[i]?.endsWith(`-${name}`)
+          (name) => matchesDeckName(simWinners[i], name)
         );
         if (found) matchedDeck = found;
 
@@ -377,7 +378,7 @@ export default function JobStatusPage() {
         let matchedDeck = game.winner;
         if (deckNames) {
           const found = deckNames.find(
-            (name) => game.winner === name || game.winner?.endsWith(`-${name}`)
+            (name) => matchesDeckName(game.winner!, name)
           );
           if (found) {
             matchedDeck = found;
@@ -831,7 +832,7 @@ export default function JobStatusPage() {
                     const lifeTotal = turnLifeTotals ? (() => {
                       for (const [playerName, life] of Object.entries(turnLifeTotals)) {
                         // Match "Ai(1)-Doran Big Butts" to label "Doran Big Butts"
-                        if (playerName === label || playerName.endsWith('-' + label)) {
+                        if (matchesDeckName(playerName, label)) {
                           return life;
                         }
                       }
