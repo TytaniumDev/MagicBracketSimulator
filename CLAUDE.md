@@ -135,3 +135,17 @@ Routes live under `api/app/api/`. Key endpoints:
 - Frontend uses ESLint 9 flat config with typescript-eslint, react-hooks, and react-refresh plugins. Zero warnings policy (`--max-warnings 0`).
 - API lint is `tsc --noEmit` (type-check only, no ESLint).
 - Both must pass in CI before merge.
+
+## GitHub Agent Behavior
+
+When Claude is triggered from a GitHub issue and completes implementation work:
+
+1. **Always create a PR** when implementation is done — use `gh pr create` targeting `main`:
+   ```bash
+   gh pr create --base main --head <branch> \
+     --title "<title>" \
+     --body "<description>\n\nCloses #<issue-number>\n\nGenerated with [Claude Code](https://claude.ai/code)"
+   ```
+2. **PR title format**: `feat: <short description>` (or `fix:` / `chore:` as appropriate)
+3. **PR body** must include: summary bullets, test plan checklist, `Closes #N`, and the Claude Code attribution
+4. Include the PR URL in the final GitHub comment so the user can review it directly
