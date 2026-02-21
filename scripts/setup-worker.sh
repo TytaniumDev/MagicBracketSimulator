@@ -3,16 +3,11 @@ set -euo pipefail
 
 # setup-worker.sh — Bootstrap a remote worker machine.
 #
-# NEW FLOW (recommended): Uses a time-limited setup token from the frontend.
-#   No gcloud, no GCP project access needed. Works on any Mac/Linux/WSL machine.
-#
-#   bash <(curl -fsSL <scriptUrl>) --api=<apiUrl>
-#
-# LEGACY FLOW: Falls back to gcloud + Secret Manager if no token is provided
-#   and gcloud is available (backward compatible).
+# Uses a time-limited setup token from the frontend.
+# No gcloud, no GCP project access needed. Works on any Mac/Linux/WSL machine.
 #
 # Usage:
-#   ./scripts/setup-worker.sh                          # interactive (prompt for token)
+#   bash <(curl -fsSL <scriptUrl>) --api=<apiUrl>     # interactive (prompt for token)
 #   ./scripts/setup-worker.sh --api=URL                # specify API URL
 #   ./scripts/setup-worker.sh --token=TOKEN --api=URL  # non-interactive
 #   ./scripts/setup-worker.sh --worker-id=mac1         # with a worker identifier
@@ -85,10 +80,7 @@ else
   WORKER_DIR="$HOME/magic-bracket-worker"
 fi
 
-# ── Determine flow mode ─────────────────────────────────────────────
-# If a token is provided (or will be prompted), use the new token flow.
-# If no token AND gcloud is available, fall back to legacy Secret Manager flow.
-USE_TOKEN_FLOW=true
+# ── Flow mode: always use token-based setup ───────────────────────
 
 # ═══════════════════════════════════════════════════════════════════════
 # STEP 1: Checking prerequisites
@@ -308,39 +300,20 @@ step 3 "Setup token"
 if [ -n "$SETUP_TOKEN" ]; then
   info "Using token from --token argument"
 elif [ -t 0 ]; then
-  # Interactive terminal — check if we should use legacy flow
-  if command -v gcloud &>/dev/null; then
-    echo ""
-    detail "Both token-based and gcloud-based setup are available."
-    detail "Press Enter to use a setup token, or type 'gcloud' for the legacy flow."
-    echo ""
-    read -r -p "  Choice [token]: " FLOW_CHOICE
-    if [ "$FLOW_CHOICE" = "gcloud" ]; then
-      USE_TOKEN_FLOW=false
-    fi
-  fi
-
-  if $USE_TOKEN_FLOW; then
-    echo ""
-    detail "To get a setup token, visit the Worker Setup page on the"
-    detail "Magic Bracket frontend, or ask someone with access to generate one."
-    echo ""
-    read -r -p "  Setup token: " SETUP_TOKEN
-    if [ -z "$SETUP_TOKEN" ]; then
-      err "No token provided."
-      exit 1
-    fi
-    info "Token received"
-  fi
-else
-  # Non-interactive, no token — try legacy flow if gcloud available
-  if command -v gcloud &>/dev/null; then
-    USE_TOKEN_FLOW=false
-  else
-    err "No setup token provided and no interactive terminal."
-    detail "Use --token=TOKEN or run interactively."
+  echo ""
+  detail "To get a setup token, visit the Worker Setup page on the"
+  detail "Magic Bracket frontend, or ask someone with access to generate one."
+  echo ""
+  read -r -p "  Setup token: " SETUP_TOKEN
+  if [ -z "$SETUP_TOKEN" ]; then
+    err "No token provided."
     exit 1
   fi
+  info "Token received"
+else
+  err "No setup token provided and no interactive terminal."
+  detail "Use --token=TOKEN or run interactively."
+  exit 1
 fi
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -348,65 +321,62 @@ fi
 # ═══════════════════════════════════════════════════════════════════════
 step 4 "Fetching configuration"
 
-if $USE_TOKEN_FLOW; then
-  # ── Token-based flow: fetch encrypted config from API ──────────────
-
-  # Determine API URL
+# Determine API URL
+if [ -z "$API_URL" ]; then
+  detail "Detecting API URL from GitHub config..."
+  CONFIG_JSON=$(curl -fsSL "https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/frontend/public/config.json" 2>/dev/null || echo "")
+  if [ -n "$CONFIG_JSON" ]; then
+    API_URL=$(echo "$CONFIG_JSON" | jq -r '.apiUrl // empty' 2>/dev/null || echo "")
+  fi
   if [ -z "$API_URL" ]; then
-    detail "Detecting API URL from GitHub config..."
-    CONFIG_JSON=$(curl -fsSL "https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/frontend/public/config.json" 2>/dev/null || echo "")
-    if [ -n "$CONFIG_JSON" ]; then
-      API_URL=$(echo "$CONFIG_JSON" | jq -r '.apiUrl // empty' 2>/dev/null || echo "")
-    fi
-    if [ -z "$API_URL" ]; then
-      err "Could not detect API URL. Use --api=URL."
-      exit 1
-    fi
-  fi
-  # Strip trailing slash
-  API_URL="${API_URL%/}"
-  info "API: $API_URL"
-
-  # Generate AES-256 key
-  AES_KEY=$(openssl rand -hex 32)
-
-  # Fetch encrypted config
-  detail "Requesting encrypted config..."
-  HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-    -H "Content-Type: application/json" \
-    -H "X-Setup-Token: $SETUP_TOKEN" \
-    -H "X-Encryption-Key: $AES_KEY" \
-    "$API_URL/api/worker-setup/config" 2>&1) || {
-    err "Failed to connect to API at $API_URL"
-    exit 1
-  }
-
-  HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
-  HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -1)
-
-  if [ "$HTTP_CODE" = "401" ]; then
-    err "Token expired or invalid. Generate a new one from the Worker Setup page."
-    exit 1
-  elif [ "$HTTP_CODE" != "200" ]; then
-    ERROR_MSG=$(echo "$HTTP_BODY" | jq -r '.error // empty' 2>/dev/null || echo "")
-    err "API returned HTTP $HTTP_CODE${ERROR_MSG:+: $ERROR_MSG}"
+    err "Could not detect API URL. Use --api=URL."
     exit 1
   fi
+fi
+# Strip trailing slash
+API_URL="${API_URL%/}"
+info "API: $API_URL"
 
-  # Parse encrypted response
-  ENC_IV=$(echo "$HTTP_BODY" | jq -r '.iv')
-  ENC_CIPHERTEXT=$(echo "$HTTP_BODY" | jq -r '.ciphertext')
-  ENC_TAG=$(echo "$HTTP_BODY" | jq -r '.tag')
+# Generate AES-256 key
+AES_KEY=$(openssl rand -hex 32)
 
-  if [ -z "$ENC_IV" ] || [ "$ENC_IV" = "null" ]; then
-    err "Invalid response from API (missing encryption data)"
-    exit 1
-  fi
+# Fetch encrypted config
+detail "Requesting encrypted config..."
+HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Setup-Token: $SETUP_TOKEN" \
+  -H "X-Encryption-Key: $AES_KEY" \
+  "$API_URL/api/worker-setup/config" 2>&1) || {
+  err "Failed to connect to API at $API_URL"
+  exit 1
+}
 
-  # Decrypt AES-256-GCM — try node first (cleanest), then python3 fallback
-  detail "Decrypting configuration..."
-  if command -v node &>/dev/null; then
-    HOST_CONFIG=$(node -e "
+HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -1)
+
+if [ "$HTTP_CODE" = "401" ]; then
+  err "Token expired or invalid. Generate a new one from the Worker Setup page."
+  exit 1
+elif [ "$HTTP_CODE" != "200" ]; then
+  ERROR_MSG=$(echo "$HTTP_BODY" | jq -r '.error // empty' 2>/dev/null || echo "")
+  err "API returned HTTP $HTTP_CODE${ERROR_MSG:+: $ERROR_MSG}"
+  exit 1
+fi
+
+# Parse encrypted response
+ENC_IV=$(echo "$HTTP_BODY" | jq -r '.iv')
+ENC_CIPHERTEXT=$(echo "$HTTP_BODY" | jq -r '.ciphertext')
+ENC_TAG=$(echo "$HTTP_BODY" | jq -r '.tag')
+
+if [ -z "$ENC_IV" ] || [ "$ENC_IV" = "null" ]; then
+  err "Invalid response from API (missing encryption data)"
+  exit 1
+fi
+
+# Decrypt AES-256-GCM — try node first (cleanest), then python3 fallback
+detail "Decrypting configuration..."
+if command -v node &>/dev/null; then
+  HOST_CONFIG=$(node -e "
 const crypto = require('crypto');
 const iv = Buffer.from('$ENC_IV', 'base64');
 const ct = Buffer.from('$ENC_CIPHERTEXT', 'base64');
@@ -418,8 +388,8 @@ let dec = decipher.update(ct, undefined, 'utf-8');
 dec += decipher.final('utf-8');
 process.stdout.write(dec);
 " 2>/dev/null)
-  elif command -v python3 &>/dev/null; then
-    HOST_CONFIG=$(python3 -c "
+elif command -v python3 &>/dev/null; then
+  HOST_CONFIG=$(python3 -c "
 import sys, base64, subprocess, tempfile, os
 iv = base64.b64decode('$ENC_IV')
 ct = base64.b64decode('$ENC_CIPHERTEXT')
@@ -443,71 +413,25 @@ try:
 finally:
     os.unlink(combined_file)
 " 2>/dev/null)
-  else
-    err "Neither node nor python3 found. Install one and re-run."
-    exit 1
-  fi
-
-  if [ -z "$HOST_CONFIG" ]; then
-    err "Decryption produced empty output"
-    exit 1
-  fi
-
-  info "Config decrypted successfully"
-
-  # Extract fields
-  SA_KEY_JSON=$(echo "$HOST_CONFIG" | jq -r '.sa_key')
-  IMAGE_NAME=$(echo "$HOST_CONFIG" | jq -r '.IMAGE_NAME // "magic-bracket-worker"')
-  GHCR_USER=$(echo "$HOST_CONFIG" | jq -r '.GHCR_USER')
-  GHCR_TOKEN=$(echo "$HOST_CONFIG" | jq -r '.GHCR_TOKEN')
-  PROJECT_ID=$(echo "$HOST_CONFIG" | jq -r '.GOOGLE_CLOUD_PROJECT // "magic-bracket-simulator"')
-  [ "$IMAGE_NAME" = "null" ] && IMAGE_NAME="magic-bracket-worker"
-
 else
-  # ── Legacy gcloud flow ──────────────────────────────────────────────
-  info "Using legacy gcloud flow"
-
-  if ! $IN_REPO; then
-    err "Legacy flow requires running from a git clone of the repository."
-    exit 1
-  fi
-
-  GCLOUD=$(command -v gcloud)
-  export PATH="$(dirname "$GCLOUD"):$PATH"
-
-  # Ensure GCP project
-  PROJECT_ID=$("$GCLOUD" config get-value project 2>/dev/null || true)
-  if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
-    read -r -p "  Enter your GCP project ID: " PROJECT_ID
-    [ -z "$PROJECT_ID" ] && { err "Project ID required."; exit 1; }
-    "$GCLOUD" config set project "$PROJECT_ID"
-  fi
-  info "GCP project: $PROJECT_ID"
-
-  # Ensure ADC
-  if ! "$GCLOUD" auth application-default print-access-token &>/dev/null; then
-    detail "GCP login required (browser will open)."
-    "$GCLOUD" auth application-default login
-  fi
-  info "GCP credentials: OK"
-
-  # Read from Secret Manager
-  detail "Reading config from Secret Manager..."
-  SECRET_NAME="worker-host-config"
-  HOST_CONFIG=$(gcloud secrets versions access latest --secret="$SECRET_NAME" --project="$PROJECT_ID" 2>&1) || {
-    err "Failed to read secret '$SECRET_NAME' from Secret Manager."
-    echo "$HOST_CONFIG"
-    exit 1
-  }
-
-  SA_KEY_JSON=$(echo "$HOST_CONFIG" | jq -r '.sa_key')
-  IMAGE_NAME=$(echo "$HOST_CONFIG" | jq -r '.IMAGE_NAME // "magic-bracket-worker"')
-  GHCR_USER=$(echo "$HOST_CONFIG" | jq -r '.GHCR_USER')
-  GHCR_TOKEN=$(echo "$HOST_CONFIG" | jq -r '.GHCR_TOKEN')
-  [ "$IMAGE_NAME" = "null" ] && IMAGE_NAME="magic-bracket-worker"
-
-  info "Config loaded from Secret Manager"
+  err "Neither node nor python3 found. Install one and re-run."
+  exit 1
 fi
+
+if [ -z "$HOST_CONFIG" ]; then
+  err "Decryption produced empty output"
+  exit 1
+fi
+
+info "Config decrypted successfully"
+
+# Extract fields
+SA_KEY_JSON=$(echo "$HOST_CONFIG" | jq -r '.sa_key')
+IMAGE_NAME=$(echo "$HOST_CONFIG" | jq -r '.IMAGE_NAME // "magic-bracket-worker"')
+GHCR_USER=$(echo "$HOST_CONFIG" | jq -r '.GHCR_USER')
+GHCR_TOKEN=$(echo "$HOST_CONFIG" | jq -r '.GHCR_TOKEN')
+PROJECT_ID=$(echo "$HOST_CONFIG" | jq -r '.GOOGLE_CLOUD_PROJECT // "magic-bracket-simulator"')
+[ "$IMAGE_NAME" = "null" ] && IMAGE_NAME="magic-bracket-worker"
 
 # Derive simulation image
 SIMULATION_IMAGE="${IMAGE_NAME%worker}simulation"

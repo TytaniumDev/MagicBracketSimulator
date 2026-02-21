@@ -22,6 +22,8 @@ env:
   # Secrets from Cloud Secret Manager (variable + secret per docs)
   - variable: WORKER_SECRET
     secret: worker-secret
+  - variable: WORKER_HOST_CONFIG
+    secret: worker-host-config
   - variable: MOXFIELD_USER_AGENT
     secret: moxfield-user-agent
   - variable: RESEND_API_KEY
