@@ -3,6 +3,7 @@ import Browse from './pages/Browse';
 import Home from './pages/Home';
 import JobStatus from './pages/JobStatus';
 import WorkerSetup from './pages/WorkerSetup';
+import Leaderboard from './pages/Leaderboard';
 import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
 
@@ -30,6 +31,12 @@ function Header() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            to="/leaderboard"
+            className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
+          >
+            Rankings
+          </Link>
           {!loading && user && isAllowed && (
             <>
               <Link
@@ -73,6 +80,7 @@ export default function App() {
           <Route path="/submit" element={<Home />} />
           <Route path="/jobs/:id" element={<JobStatus />} />
           <Route path="/worker-setup" element={<WorkerSetup />} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
         </Routes>
       </main>
     </div>
