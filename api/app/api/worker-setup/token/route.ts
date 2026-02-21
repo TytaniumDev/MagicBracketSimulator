@@ -3,7 +3,6 @@ import crypto from 'crypto';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 
 const WORKER_SECRET = process.env.WORKER_SECRET;
-const TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 
 /**
  * Generate a stateless HMAC-based setup token.
@@ -38,14 +37,11 @@ export async function POST(req: NextRequest) {
 
   const token = generateToken();
 
-  // Build the script URL from the GitHub repo
   const scriptUrl = 'https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/scripts/setup-worker.sh';
 
-  // Determine API URL (what the worker will connect to)
+  // API_URL is always set in production (Cloud Run env or Secret Manager)
   const apiUrl = process.env.API_URL
-    || (process.env.GOOGLE_CLOUD_PROJECT
-      ? `https://api--${process.env.GOOGLE_CLOUD_PROJECT}.us-central1.hosted.app`
-      : 'http://localhost:3000');
+    || `https://api--${process.env.GOOGLE_CLOUD_PROJECT}.us-central1.hosted.app`;
 
   return NextResponse.json({
     token,

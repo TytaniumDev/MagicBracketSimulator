@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
 const WORKER_SECRET = process.env.WORKER_SECRET;
-const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 
 /**
@@ -57,9 +56,15 @@ function aesEncrypt(plaintext: string, hexKey: string): { iv: string; ciphertext
 }
 
 /**
- * Read the worker-host-config secret from GCP Secret Manager.
+ * Read the worker-host-config from the best available source:
+ * 1. WORKER_HOST_CONFIG env var (injected by Cloud Run from Secret Manager)
+ * 2. GCP Secret Manager API (direct access)
  */
-async function readSecretManagerConfig(): Promise<string> {
+async function readWorkerConfig(): Promise<string> {
+  if (process.env.WORKER_HOST_CONFIG) {
+    return process.env.WORKER_HOST_CONFIG;
+  }
+
   const { SecretManagerServiceClient } = await import('@google-cloud/secret-manager');
   const client = new SecretManagerServiceClient();
   const projectId = process.env.GOOGLE_CLOUD_PROJECT;
@@ -78,7 +83,6 @@ async function readSecretManagerConfig(): Promise<string> {
  * The encryption key is provided by the caller in X-Encryption-Key header.
  */
 export async function POST(req: NextRequest) {
-  // Validate setup token
   const token = req.headers.get('X-Setup-Token');
   if (!token) {
     return NextResponse.json({ error: 'Missing X-Setup-Token header' }, { status: 401 });
@@ -95,7 +99,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Read encryption key from header
   const encryptionKey = req.headers.get('X-Encryption-Key');
   if (!encryptionKey || !/^[0-9a-f]{64}$/i.test(encryptionKey)) {
     return NextResponse.json(
@@ -104,31 +107,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // LOCAL mode: return mock config (unencrypted for dev testing)
-  if (IS_LOCAL_MODE) {
-    const mockConfig = {
-      sa_key: '{}',
-      IMAGE_NAME: 'magic-bracket-worker',
-      GHCR_USER: 'local',
-      GHCR_TOKEN: 'local',
-      GOOGLE_CLOUD_PROJECT: 'local-dev',
-    };
-    const encrypted = aesEncrypt(JSON.stringify(mockConfig), encryptionKey);
-    return NextResponse.json(encrypted);
-  }
-
-  // GCP mode: read from Secret Manager
   try {
-    const secretJson = await readSecretManagerConfig();
-
-    // Parse and add GOOGLE_CLOUD_PROJECT
+    const secretJson = await readWorkerConfig();
     const config = JSON.parse(secretJson);
     config.GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
 
     const encrypted = aesEncrypt(JSON.stringify(config), encryptionKey);
     return NextResponse.json(encrypted);
   } catch (err) {
-    console.error('Failed to read worker config from Secret Manager:', err);
+    console.error('Failed to read worker config:', err);
     return NextResponse.json(
       { error: 'Failed to read worker configuration' },
       { status: 500 },

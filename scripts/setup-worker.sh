@@ -325,8 +325,7 @@ elif [ -t 0 ]; then
     detail "To get a setup token, visit the Worker Setup page on the"
     detail "Magic Bracket frontend, or ask someone with access to generate one."
     echo ""
-    read -r -s -p "  Setup token: " SETUP_TOKEN
-    echo ""
+    read -r -p "  Setup token: " SETUP_TOKEN
     if [ -z "$SETUP_TOKEN" ]; then
       err "No token provided."
       exit 1
@@ -404,61 +403,9 @@ if $USE_TOKEN_FLOW; then
     exit 1
   fi
 
-  # Decrypt with openssl
-  # AES-256-GCM: append the auth tag to the ciphertext for openssl
-  IV_HEX=$(echo -n "$ENC_IV" | base64 -d 2>/dev/null | xxd -p -c 256 || echo -n "$ENC_IV" | openssl base64 -d | xxd -p -c 256)
-  CIPHERTEXT_RAW=$(echo -n "$ENC_CIPHERTEXT" | base64 -d 2>/dev/null || echo -n "$ENC_CIPHERTEXT" | openssl base64 -d)
-  TAG_RAW=$(echo -n "$ENC_TAG" | base64 -d 2>/dev/null || echo -n "$ENC_TAG" | openssl base64 -d)
-
-  # openssl enc for aes-256-gcm requires ciphertext+tag concatenated
-  COMBINED=$(printf '%s%s' "$CIPHERTEXT_RAW" "$TAG_RAW" | xxd -p -c 99999)
-  # Actually, openssl aes-256-gcm via enc is tricky — use a different approach
-  # Use openssl with the EVP interface via a small script
-  HOST_CONFIG=$(python3 -c "
-import sys, json, base64, hashlib
-from struct import pack
-
-# Use openssl via subprocess for AES-256-GCM decryption
-import subprocess
-
-iv = base64.b64decode('$ENC_IV')
-ct = base64.b64decode('$ENC_CIPHERTEXT')
-tag = base64.b64decode('$ENC_TAG')
-key = bytes.fromhex('$AES_KEY')
-
-# Combine ciphertext + tag (OpenSSL expects them concatenated)
-combined = ct + tag
-
-# Write to temp files and use openssl
-import tempfile, os
-with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as f:
-    f.write(combined)
-    combined_file = f.name
-
-try:
-    result = subprocess.run([
-        'openssl', 'enc', '-aes-256-gcm', '-d',
-        '-K', key.hex(),
-        '-iv', iv.hex(),
-        '-in', combined_file,
-        '-nosalt'
-    ], capture_output=True)
-    if result.returncode == 0:
-        print(result.stdout.decode('utf-8'))
-    else:
-        # Fallback: try Python crypto if available
-        try:
-            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-            aesgcm = AESGCM(key)
-            plaintext = aesgcm.decrypt(iv, ct + tag, None)
-            print(plaintext.decode('utf-8'))
-        except ImportError:
-            sys.stderr.write('Decryption failed. OpenSSL error: ' + result.stderr.decode('utf-8') + '\n')
-            sys.exit(1)
-finally:
-    os.unlink(combined_file)
-" 2>/dev/null) || {
-    # Fallback: try node.js if python fails
+  # Decrypt AES-256-GCM — try node first (cleanest), then python3 fallback
+  detail "Decrypting configuration..."
+  if command -v node &>/dev/null; then
     HOST_CONFIG=$(node -e "
 const crypto = require('crypto');
 const iv = Buffer.from('$ENC_IV', 'base64');
@@ -470,11 +417,36 @@ decipher.setAuthTag(tag);
 let dec = decipher.update(ct, undefined, 'utf-8');
 dec += decipher.final('utf-8');
 process.stdout.write(dec);
-" 2>/dev/null) || {
-      err "Failed to decrypt config. Ensure openssl, python3, or node is available."
-      exit 1
-    }
-  }
+" 2>/dev/null)
+  elif command -v python3 &>/dev/null; then
+    HOST_CONFIG=$(python3 -c "
+import sys, base64, subprocess, tempfile, os
+iv = base64.b64decode('$ENC_IV')
+ct = base64.b64decode('$ENC_CIPHERTEXT')
+tag = base64.b64decode('$ENC_TAG')
+key = bytes.fromhex('$AES_KEY')
+combined = ct + tag
+with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as f:
+    f.write(combined)
+    combined_file = f.name
+try:
+    result = subprocess.run([
+        'openssl', 'enc', '-aes-256-gcm', '-d',
+        '-K', key.hex(), '-iv', iv.hex(),
+        '-in', combined_file, '-nosalt'
+    ], capture_output=True)
+    if result.returncode == 0:
+        sys.stdout.write(result.stdout.decode('utf-8'))
+    else:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        sys.stdout.write(AESGCM(key).decrypt(iv, ct + tag, None).decode('utf-8'))
+finally:
+    os.unlink(combined_file)
+" 2>/dev/null)
+  else
+    err "Neither node nor python3 found. Install one and re-run."
+    exit 1
+  fi
 
   if [ -z "$HOST_CONFIG" ]; then
     err "Decryption produced empty output"
