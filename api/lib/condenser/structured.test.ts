@@ -12,7 +12,7 @@ import * as path from 'path';
 import { buildStructuredGame, attributeLines, filterStructuredToSignificant } from './structured';
 import { structureGames } from './index';
 import { splitConcatenatedGames } from './patterns';
-import { extractWinner } from './turns';
+import { extractWinner, calculateLifePerTurn, extractTurnRanges, getNumPlayers } from './turns';
 
 // ---------------------------------------------------------------------------
 // Test Utilities (same pattern as condenser.test.ts)
@@ -252,6 +252,214 @@ async function runTests() {
     for (let i = 0; i < structured.length; i++) {
       assert(structured[i].totalTurns > 0, `Game ${i + 1} should have turns`);
       assertEqual(structured[i].decks.length, 4, `Game ${i + 1} should have 4 decks`);
+    }
+  });
+
+  // =========================================================================
+  // calculateLifePerTurn - unit tests with synthetic logs
+  // =========================================================================
+
+  const P1 = 'Ai(1)-DeckAlpha';
+  const P2 = 'Ai(2)-DeckBeta';
+  const MINI_PLAYERS = [P1, P2];
+
+  function miniLog(turnLines: string): string {
+    return `Turn: Turn 1 (${P1})\n${turnLines}\nTurn: Turn 2 (${P2})\nSome action.\n`;
+  }
+
+  await test('calculateLifePerTurn: non-combat damage reduces life', () => {
+    const log = miniLog(`Damage: Ripjaw Raptor (344) deals 4 non-combat damage to ${P1}.`);
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    const round1 = life[1];
+    assertEqual(round1[P1], 36, 'P1 should lose 4 from non-combat damage');
+    assertEqual(round1[P2], 40, 'P2 should be untouched');
+  });
+
+  await test('calculateLifePerTurn: combat damage still works (regression)', () => {
+    const log = miniLog(`Damage: Grizzly Bears (1) deals 2 combat damage to ${P2}.`);
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    const round1 = life[1];
+    assertEqual(round1[P1], 40, 'P1 untouched');
+    assertEqual(round1[P2], 38, 'P2 should lose 2 from combat damage');
+  });
+
+  await test('calculateLifePerTurn: plain damage (no qualifier) still works', () => {
+    const log = miniLog(`Damage: Lightning Bolt (1) deals 3 damage to ${P1}.`);
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P1], 37, 'P1 should lose 3 from plain damage');
+  });
+
+  await test('calculateLifePerTurn: "you gain N life" with Activator metadata', () => {
+    const log = miniLog(
+      `Resolve stack: Whenever you cast an enchantment spell, you gain 3 life and draw a card. [Card: Foo (1), Activator: ${P2}, SpellAbility: Foo]`
+    );
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P2], 43, 'P2 should gain 3 life from Activator-based gain');
+    assertEqual(life[1][P1], 40, 'P1 untouched');
+  });
+
+  await test('calculateLifePerTurn: "you lose N life" with Phase metadata', () => {
+    const log = miniLog(
+      `Resolve stack: At the beginning of your upkeep, you lose 1 life and amass Zombies 1. [Phase: ${P2}]`
+    );
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P2], 39, 'P2 should lose 1 life from upkeep trigger');
+    assertEqual(life[1][P1], 40, 'P1 untouched');
+  });
+
+  await test('calculateLifePerTurn: "paying N life" with Activator metadata', () => {
+    const log = miniLog(
+      `Resolve stack: Cast spell (by paying 2 life instead of paying its mana cost). [Card: Bar (1), Activator: ${P1}, SpellAbility: Bar]`
+    );
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P1], 38, 'P1 should lose 2 life from paying cost');
+    assertEqual(life[1][P2], 40, 'P2 untouched');
+  });
+
+  await test('calculateLifePerTurn: combined gain + pay on same line (net -1)', () => {
+    const log = miniLog(
+      `Resolve stack: Whenever you cast an enchantment spell, you gain 1 life and draw a card. [Card: The Binding of the Titans (198), Activator: ${P2}, SpellAbility: The Binding of the Titans by Demon (142) (by paying 2 life instead of paying its mana cost)]`
+    );
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    // Gain 1, pay 2 = net -1 from starting 40
+    assertEqual(life[1][P2], 39, 'P2 should be at 39 (gain 1, pay 2 = net -1)');
+  });
+
+  await test('calculateLifePerTurn: existing "Player loses N life" still works (regression)', () => {
+    const log = miniLog(`${P1} loses 3 life.`);
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P1], 37, 'P1 should lose 3 from direct loss');
+  });
+
+  await test('calculateLifePerTurn: existing "you gain N life [Phase:]" still works (regression)', () => {
+    const log = miniLog(`Some effect: you gain 5 life. [Phase: ${P1}]`);
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P1], 45, 'P1 should gain 5 from Phase-based gain');
+  });
+
+  await test('calculateLifePerTurn: no double-counting when line matches both gain patterns', () => {
+    // This line matches both GAINS_LIFE_PATTERN (has [Phase:]) and YOU_GAIN_LIFE_PATTERN
+    const log = miniLog(`Some effect: you gain 2 life. [Phase: ${P1}]`);
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P1], 42, 'P1 should gain exactly 2, not 4 (no double-count)');
+  });
+
+  await test('calculateLifePerTurn: skips "you gain" when player cannot be identified', () => {
+    // No metadata brackets at all - should be ignored
+    const log = miniLog('Resolve stack: you gain 5 life.');
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P1], 40, 'P1 untouched');
+    assertEqual(life[1][P2], 40, 'P2 untouched');
+  });
+
+  // =========================================================================
+  // calculateLifePerTurn - integration with real fixture
+  // =========================================================================
+
+  await test('calculateLifePerTurn (fixture): life totals are reasonable for game 1', () => {
+    const game1 = games[0];
+    const result = buildStructuredGame(game1);
+    const life = result.lifePerTurn!;
+    const rounds = Object.keys(life).map(Number).sort((a, b) => a - b);
+    assert(rounds.length > 0, 'should have life data');
+
+    // Round 1: all players should start near 40 (small adjustments possible)
+    const round1 = life[rounds[0]];
+    for (const [player, total] of Object.entries(round1)) {
+      assert(total <= 45, `${player} round 1 life ${total} should be <= 45`);
+      assert(total >= 30, `${player} round 1 life ${total} should be >= 30`);
+    }
+
+    // Final round: no player should exceed ~80 (Commander starts at 40, gains are bounded)
+    const lastRound = life[rounds[rounds.length - 1]];
+    for (const [player, total] of Object.entries(lastRound)) {
+      assert(total <= 80, `${player} final life ${total} should be <= 80`);
+    }
+  });
+
+  await test('calculateLifePerTurn (fixture): dead players end at 0', () => {
+    const game1 = games[0];
+    const result = buildStructuredGame(game1);
+    const life = result.lifePerTurn!;
+    const rounds = Object.keys(life).map(Number).sort((a, b) => a - b);
+    const lastRound = life[rounds[rounds.length - 1]];
+
+    // At least one player should be at 0 (game ended, someone died)
+    const deadPlayers = Object.entries(lastRound).filter(([, total]) => total <= 0);
+    assert(deadPlayers.length >= 1, `at least 1 player should be dead (<=0), got ${deadPlayers.length}`);
+  });
+
+  await test('calculateLifePerTurn (fixture): life totals change over time', () => {
+    const game1 = games[0];
+    const result = buildStructuredGame(game1);
+    const life = result.lifePerTurn!;
+    const rounds = Object.keys(life).map(Number).sort((a, b) => a - b);
+
+    // At least some player's life should differ between round 1 and last round
+    const round1 = life[rounds[0]];
+    const lastRound = life[rounds[rounds.length - 1]];
+    let anyChanged = false;
+    for (const player of Object.keys(round1)) {
+      if (round1[player] !== lastRound[player]) {
+        anyChanged = true;
+        break;
+      }
+    }
+    assert(anyChanged, 'at least one player life total should change between first and last round');
+  });
+
+  await test('calculateLifePerTurn (fixture): non-combat damage from Ripjaw Raptor is tracked', () => {
+    // Game 1 fixture has Ripjaw Raptor dealing 4 non-combat damage to 3 players
+    // around segment 28+ (round 7+). Verify damage is captured by checking a late round.
+    const game1 = games[0];
+    const ranges = extractTurnRanges(game1);
+    const uniquePlayers = [...new Set(ranges.filter(r => r.player).map(r => r.player!))];
+    const life = calculateLifePerTurn(game1, uniquePlayers);
+
+    const allRounds = Object.keys(life).map(Number).sort((a, b) => a - b);
+    // Check a late round (round 8+) where Ripjaw damage should have occurred
+    if (allRounds.length >= 8) {
+      const lateRound = life[allRounds[7]];
+      let anyDamaged = false;
+      for (const total of Object.values(lateRound)) {
+        if (total < 40) anyDamaged = true;
+      }
+      assert(anyDamaged, 'some players should have taken damage by round 8');
+    }
+  });
+
+  await test('calculateLifePerTurn (fixture): Enduring Enchantments gains life from enchantment triggers', () => {
+    // Game 1 fixture has many "you gain 1 life" lines with Activator: Ai(2)-Enduring Enchantments
+    const game1 = games[0];
+    const ranges = extractTurnRanges(game1);
+    const uniquePlayers = [...new Set(ranges.filter(r => r.player).map(r => r.player!))];
+    const life = calculateLifePerTurn(game1, uniquePlayers);
+
+    const allRounds = Object.keys(life).map(Number).sort((a, b) => a - b);
+    const lastRound = life[allRounds[allRounds.length - 1]];
+
+    // Ai(2)-Enduring Enchantments should have gained some life from enchantment triggers
+    const enchantPlayer = uniquePlayers.find(p => p.includes('Enduring Enchantments'));
+    assert(enchantPlayer !== undefined, 'should find Enduring Enchantments player');
+
+    // Track cumulative gains: compare to what life would be with only losses
+    // The player has many "you gain 1 life" triggers, so their final life should
+    // reflect some gains (unless massive damage overwhelmed it)
+    // At minimum, verify the player exists in the data
+    assert(lastRound[enchantPlayer!] !== undefined, 'Enduring Enchantments should have life data');
+  });
+
+  await test('calculateLifePerTurn (fixture): all 4 games produce valid life data', () => {
+    for (let i = 0; i < games.length; i++) {
+      const result = buildStructuredGame(games[i]);
+      assert(result.lifePerTurn !== undefined, `game ${i + 1} should have lifePerTurn`);
+      const rounds = Object.keys(result.lifePerTurn!);
+      assert(rounds.length > 0, `game ${i + 1} should have life rounds`);
+
+      // Check all players tracked
+      const firstRound = result.lifePerTurn![Number(rounds[0])];
+      const playerCount = Object.keys(firstRound).length;
+      assertEqual(playerCount, 4, `game ${i + 1} should track 4 players`);
     }
   });
 

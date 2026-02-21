@@ -492,12 +492,26 @@ export function extractWinningTurn(rawLog: string): number | undefined {
 // -----------------------------------------------------------------------------
 
 // Patterns for parsing life changes
-const DAMAGE_TO_PLAYER_PATTERN = /Damage:.*deals\s+(\d+)\s+(?:combat\s+)?damage\s+to\s+(Ai\([^)]+\)-[^\s.]+)/i;
+const DAMAGE_TO_PLAYER_PATTERN = /Damage:.*deals\s+(\d+)\s+(?:[\w-]+\s+)*damage\s+to\s+(Ai\([^)]+\)-[^\s.]+)/i;
 const LOSES_LIFE_PATTERN = /(Ai\([^)]+\)-[^\s]+)\s+loses\s+(\d+)\s+life/i;
 const GAINS_LIFE_PATTERN = /you\s+gain\s+(\d+)\s+life.*\[Phase:\s*([^\]]+)\]/i;
 const PLAYER_GAINS_LIFE_PATTERN = /(Ai\([^)]+\)-[^\s]+)\s+gains\s+(\d+)\s+life/i;
+const YOU_GAIN_LIFE_PATTERN = /you\s+(?:gain|may\s+gain)\s+(\d+)\s+life/i;
+const YOU_LOSE_LIFE_PATTERN = /you\s+lose\s+(\d+)\s+life/i;
+const PAYING_LIFE_PATTERN = /paying\s+(\d+)\s+life/i;
 /** Matches "Game outcome: Ai(N)-Deck Name has lost because life total reached 0" */
 const LIFE_REACHED_ZERO_PATTERN = /Game outcome:\s+(.+?)\s+has lost because life total reached 0/i;
+
+/**
+ * Extracts a player from bracketed metadata (Activator or Phase fields) in a log line.
+ * Looks for patterns like [Activator: Ai(N)-DeckName, ...] or [Phase: Ai(N)-DeckName]
+ */
+function extractPlayerFromMetadata(line: string, players: string[]): string | undefined {
+  const metadataMatch = /(?:Activator|Phase):\s*(Ai\([^)]+\)-[^\],]+)/i.exec(line);
+  if (!metadataMatch) return undefined;
+  const candidate = metadataMatch[1].trim();
+  return players.find(p => p.startsWith(candidate) || candidate.startsWith(p));
+}
 
 /**
  * Calculates life totals per round for all players.
@@ -541,9 +555,9 @@ export function calculateLifePerTurn(
   // Helper to process life changes in a chunk
   const processChunkLines = (chunk: string) => {
     const lines = chunk.split('\n');
-    
+
     for (const line of lines) {
-      // Check for damage to player
+      // 1. Damage to player (handles combat, non-combat, and plain damage)
       const damageMatch = DAMAGE_TO_PLAYER_PATTERN.exec(line);
       if (damageMatch) {
         const damage = parseInt(damageMatch[1], 10);
@@ -553,8 +567,9 @@ export function calculateLifePerTurn(
           currentLife[player] -= damage;
         }
       }
-      
-      // Check for direct life loss
+
+      // 2. "Player loses N life" (explicit player name in line)
+      let lossHandled = false;
       const lossMatch = LOSES_LIFE_PATTERN.exec(line);
       if (lossMatch) {
         const playerPart = lossMatch[1];
@@ -562,10 +577,24 @@ export function calculateLifePerTurn(
         const player = players.find(p => p.startsWith(playerPart) || playerPart.startsWith(p));
         if (player && currentLife[player] !== undefined) {
           currentLife[player] -= loss;
+          lossHandled = true;
         }
       }
-      
-      // Check for "you gain N life [Phase: PLAYER]"
+
+      // 3. "you lose N life" (player from metadata) - only if not already handled
+      if (!lossHandled) {
+        const youLoseMatch = YOU_LOSE_LIFE_PATTERN.exec(line);
+        if (youLoseMatch) {
+          const loss = parseInt(youLoseMatch[1], 10);
+          const player = extractPlayerFromMetadata(line, players);
+          if (player && currentLife[player] !== undefined) {
+            currentLife[player] -= loss;
+          }
+        }
+      }
+
+      // 4. "you gain N life [Phase: PLAYER]" (original pattern with Phase metadata)
+      let gainHandled = false;
       const gainMatch = GAINS_LIFE_PATTERN.exec(line);
       if (gainMatch) {
         const gain = parseInt(gainMatch[1], 10);
@@ -573,21 +602,47 @@ export function calculateLifePerTurn(
         const player = players.find(p => phasePart.includes(p) || p.includes(phasePart));
         if (player && currentLife[player] !== undefined) {
           currentLife[player] += gain;
-        }
-      }
-      
-      // Check for "PLAYER gains N life"
-      const playerGainMatch = PLAYER_GAINS_LIFE_PATTERN.exec(line);
-      if (playerGainMatch) {
-        const playerPart = playerGainMatch[1];
-        const gain = parseInt(playerGainMatch[2], 10);
-        const player = players.find(p => p.startsWith(playerPart) || playerPart.startsWith(p));
-        if (player && currentLife[player] !== undefined) {
-          currentLife[player] += gain;
+          gainHandled = true;
         }
       }
 
-      // Check for "Game outcome: PLAYER has lost because life total reached 0"
+      // 5. "PLAYER gains N life" - only if gain not already handled
+      if (!gainHandled) {
+        const playerGainMatch = PLAYER_GAINS_LIFE_PATTERN.exec(line);
+        if (playerGainMatch) {
+          const playerPart = playerGainMatch[1];
+          const gain = parseInt(playerGainMatch[2], 10);
+          const player = players.find(p => p.startsWith(playerPart) || playerPart.startsWith(p));
+          if (player && currentLife[player] !== undefined) {
+            currentLife[player] += gain;
+            gainHandled = true;
+          }
+        }
+      }
+
+      // 6. "you gain N life" with Activator metadata - only if gain not already handled
+      if (!gainHandled) {
+        const youGainMatch = YOU_GAIN_LIFE_PATTERN.exec(line);
+        if (youGainMatch) {
+          const gain = parseInt(youGainMatch[1], 10);
+          const player = extractPlayerFromMetadata(line, players);
+          if (player && currentLife[player] !== undefined) {
+            currentLife[player] += gain;
+          }
+        }
+      }
+
+      // 7. "paying N life" (life paid as cost) - always checked independently
+      const payingMatch = PAYING_LIFE_PATTERN.exec(line);
+      if (payingMatch) {
+        const paid = parseInt(payingMatch[1], 10);
+        const player = extractPlayerFromMetadata(line, players);
+        if (player && currentLife[player] !== undefined) {
+          currentLife[player] -= paid;
+        }
+      }
+
+      // 8. "Game outcome: PLAYER has lost because life total reached 0"
       const lifeZeroMatch = LIFE_REACHED_ZERO_PATTERN.exec(line);
       if (lifeZeroMatch) {
         const playerPart = lifeZeroMatch[1].trim();
