@@ -465,6 +465,18 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     await ingestLogs(jobId, rawLogs, deckNames, deckLists);
   }
 
+  // Update TrueSkill ratings for jobs with 4 resolved deck IDs
+  if (Array.isArray(job.deckIds) && job.deckIds.length === 4) {
+    const { getStructuredLogs } = await import('./log-store');
+    const structuredData = await getStructuredLogs(jobId);
+    if (structuredData?.games?.length) {
+      const { processJobForRatings } = await import('./trueskill-service');
+      processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
+        console.error(`[TrueSkill] Rating update failed for job ${jobId} (non-fatal):`, err);
+      });
+    }
+  }
+
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') return;
 

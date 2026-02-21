@@ -247,3 +247,31 @@ export interface Precon {
   setName?: string | null;
   archidektId?: number | null;
 }
+
+// -----------------------------------------------------------------------------
+// TrueSkill Rating Types
+// -----------------------------------------------------------------------------
+
+/** TrueSkill rating for a deck, stored persistently. */
+export interface DeckRating {
+  deckId: string;
+  mu: number;
+  sigma: number;
+  gamesPlayed: number;
+  wins: number;
+  lastUpdated: string;
+}
+
+/** A single resolved game result, stored for idempotency. */
+export interface MatchResult {
+  /** "{jobId}_{gameIndex}" */
+  id: string;
+  jobId: string;
+  gameIndex: number;
+  /** JSON-serializable array of 4 deck IDs */
+  deckIds: string[];
+  /** null if winner could not be resolved from logs */
+  winnerDeckId: string | null;
+  turnCount: number | null;
+  playedAt: string;
+}
