@@ -44,17 +44,35 @@ Merges to `main` trigger a GitHub Actions workflow that runs tests and deploys t
 
 You can run the worker on any machine with Docker — e.g., a headless Mac Mini, a spare Linux box, or a cloud VM. The worker connects to the GCP-hosted API over the network; no local API or frontend required.
 
-> **Unix only:** The worker setup script must be run on a Unix system (macOS, Linux, or WSL). It will install `jq` and the `gcloud` CLI if missing, prompt for GCP project and auth, then configure and start the worker. You only need Docker installed and running beforehand.
+### One-Line Setup (Recommended)
 
-### Quick Setup (Recommended)
+Any allowed user can set up a worker without GCP access, git, or dev tools. The setup script auto-installs Docker and all dependencies.
 
-Secrets are managed via GitHub Actions and GCP Secret Manager. No manual `.env` creation, no interactive prompts, no PAT juggling.
+**1. Generate a setup token** — visit `/worker-setup` in the frontend (requires sign-in as an allowed user). This generates a time-limited token (valid 24 hours).
 
-**First, populate Secret Manager** (one-time, from any machine):
-1. Add all required secrets to your GitHub repo (**Settings > Secrets > Actions**). See [SECRETS_SETUP.md](SECRETS_SETUP.md) for the full list.
-2. Run the **Provision Worker** workflow from the GitHub Actions tab (or `gh workflow run provision-worker.yml`). This syncs your secrets into GCP Secret Manager.
+**2. Run the one-liner** on the worker machine (macOS, Linux, or WSL):
 
-**Then, on each worker machine** (macOS, Linux, or WSL — install Docker first):
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/scripts/setup-worker.sh) --api=<API_URL>
+```
+
+**3. Paste the setup token** when prompted. The script will:
+- Install Docker, jq, curl, and openssl if missing
+- Download compose files from GitHub
+- Fetch encrypted config from the API using the setup token
+- Decrypt and write `sa.json` and `.env` locally
+- Pull Docker images and start the worker + Watchtower
+
+The setup token uses HMAC-based authentication — the worker secret never leaves the API server. Config is AES-256-GCM encrypted in transit (double-encrypted with HTTPS).
+
+**To update secrets later:**
+1. Update the secret in GitHub repo settings
+2. Re-run the Provision Worker workflow
+3. On each worker machine: re-run the setup command with a new token
+
+### Legacy Setup (gcloud)
+
+If you have GCP access, you can still use the legacy flow that reads directly from Secret Manager:
 
 ```bash
 git clone https://github.com/TytaniumDev/MagicBracketSimulator.git
@@ -62,12 +80,11 @@ cd MagicBracketSimulator
 ./scripts/setup-worker.sh
 ```
 
-The script installs `jq` and `gcloud` if needed, runs GCP auth (browser), reads config from Secret Manager, writes `worker/sa.json` and `worker/.env`, logs into GHCR, and starts the worker + Watchtower.
+When prompted, type `gcloud` to use the legacy flow. The script will install `jq` and `gcloud` if needed, run GCP auth, and read config from Secret Manager.
 
-**To update secrets later:**
-1. Update the secret in GitHub repo settings
-2. Re-run the Provision Worker workflow
-3. On each worker machine: `./scripts/setup-worker.sh`
+**First-time GCP setup:** Populate Secret Manager by running the Provision Worker workflow:
+1. Add secrets to your GitHub repo (**Settings > Secrets > Actions**). See [SECRETS_SETUP.md](SECRETS_SETUP.md).
+2. Run `gh workflow run provision-worker.yml`.
 
 ### What the Worker Does
 

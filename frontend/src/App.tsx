@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom';
 import Browse from './pages/Browse';
 import Home from './pages/Home';
 import JobStatus from './pages/JobStatus';
+import WorkerSetup from './pages/WorkerSetup';
 import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
 
@@ -30,12 +31,20 @@ function Header() {
 
         <div className="flex items-center gap-3">
           {!loading && user && isAllowed && (
-            <Link
-              to="/submit"
-              className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
-            >
-              New Simulation
-            </Link>
+            <>
+              <Link
+                to="/submit"
+                className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
+              >
+                New Simulation
+              </Link>
+              <Link
+                to="/worker-setup"
+                className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
+              >
+                Worker Setup
+              </Link>
+            </>
           )}
           {!loading && user && isAllowed === false && (
             <Link
@@ -63,6 +72,7 @@ export default function App() {
           <Route path="/" element={<Browse />} />
           <Route path="/submit" element={<Home />} />
           <Route path="/jobs/:id" element={<JobStatus />} />
+          <Route path="/worker-setup" element={<WorkerSetup />} />
         </Routes>
       </main>
     </div>
