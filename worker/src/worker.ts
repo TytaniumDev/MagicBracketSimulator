@@ -359,7 +359,10 @@ async function processSimulation(
     // Run the simulation container with cancellation signal
     const result = await runSimulationContainer(jobId, simId, simIndex, deckContents, abortController.signal);
 
-    if (result.error === 'Cancelled') {
+    if (result.error === 'AlreadyRunning') {
+      // Container is already running from a previous attempt — don't report status
+      return;
+    } else if (result.error === 'Cancelled') {
       console.log(`${simLabel} CANCELLED in ${formatDuration(result.durationMs)}`);
       await reportSimulationStatus(jobId, simId, {
         state: 'CANCELLED',
@@ -728,16 +731,20 @@ async function handleMessage(message: any): Promise<void> {
 
     console.log(`Received simulation task: job=${jobId} sim=${simId}`);
 
+    // Ack immediately — simulation state is tracked via the API, not Pub/Sub.
+    // Delaying ack until processSimulation completes (~12 min) causes the ack
+    // deadline to expire, triggering redelivery while the container is still
+    // running, which leads to Docker name conflicts and an infinite retry loop.
+    message.ack();
+
     try {
       await processSimulation(jobId, simId, simIndex);
-      message.ack();
     } catch (error) {
       console.error(`Error processing simulation ${simId} for job ${jobId}:`, error);
       await reportSimulationStatus(jobId, simId, {
         state: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
-      message.nack(); // Nack to trigger retry with backoff
     } finally {
       simSemaphore.release();
     }

@@ -70,11 +70,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Swarm mode: decode deck content from base64 env vars
-# When running as a swarm service, decks are delivered via DECK_0_B64..DECK_3_B64
-# instead of being mounted as files. This is a no-op when env vars aren't set.
+# Decode deck content from base64 env vars (DECK_0_B64..DECK_3_B64).
+# The worker passes decks this way instead of mounting files.
+# This is a no-op when env vars aren't set.
 if [[ -n "${DECK_0_B64:-}" ]]; then
-  echo "Swarm mode: decoding decks from environment variables" >&2
+  echo "Decoding decks from environment variables" >&2
   mkdir -p "$DECKS_DIR"
   for i in 0 1 2 3; do
     var="DECK_${i}_B64"
@@ -169,9 +169,7 @@ if [[ -s "$FORGE_OUTPUT" ]]; then
     fi
 fi
 
-# Output game logs to stdout for Docker service log collection (swarm mode).
-# The worker reads these via `docker service logs` since there's no shared
-# filesystem in a swarm cluster.
+# Output game logs to stdout for the worker to capture.
 for logfile in "${LOGS_DIR}/${JOB_ID}_game_"*.txt; do
     if [[ -f "$logfile" ]]; then
         cat "$logfile"

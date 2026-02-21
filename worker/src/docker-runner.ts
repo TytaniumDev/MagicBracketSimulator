@@ -1,9 +1,8 @@
 /**
  * Docker Runner — runs a single simulation via `docker run --rm`.
  *
- * Replaces Swarm orchestration with a simple blocking container execution.
- * Logs come directly from stdout — no `docker service logs` race condition.
- * The `--rm` flag auto-removes the container on exit.
+ * Runs a single simulation as a blocking container execution.
+ * Logs come directly from stdout. The `--rm` flag auto-removes the container on exit.
  */
 
 import * as os from 'os';
@@ -106,6 +105,21 @@ export async function pruneDockerResources(): Promise<void> {
 // ============================================================================
 
 /**
+ * Check if a container with the given name already exists.
+ * Returns 'running', 'stopped', or 'none'.
+ */
+async function getContainerState(containerName: string): Promise<'running' | 'stopped' | 'none'> {
+  try {
+    const status = await execDockerCommand([
+      'inspect', '--format', '{{.State.Running}}', containerName,
+    ]);
+    return status === 'true' ? 'running' : 'stopped';
+  } catch {
+    return 'none';
+  }
+}
+
+/**
  * Run a single simulation as a `docker run --rm` container.
  * Blocks until the container exits. Stdout contains the game logs.
  */
@@ -118,6 +132,18 @@ export async function runSimulationContainer(
 ): Promise<SimulationResult> {
   const startTime = Date.now();
   const containerName = `sim-${jobId.slice(0, 8)}-${simId}`;
+
+  // Guard against duplicate containers (e.g. from Pub/Sub redelivery)
+  const existing = await getContainerState(containerName);
+  if (existing === 'running') {
+    console.log(`[${simId}] Container ${containerName} is already running, skipping duplicate`);
+    return { simId, index, exitCode: 0, durationMs: 0, logText: '', error: 'AlreadyRunning' };
+  }
+  if (existing === 'stopped') {
+    console.log(`[${simId}] Removing stopped container ${containerName}`);
+    try { await execDockerCommand(['rm', '-f', containerName]); } catch { /* ignore */ }
+  }
+
   const deckFilenames: [string, string, string, string] = ['deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck'];
 
   // Base64-encode deck contents into env vars

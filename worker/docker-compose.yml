@@ -31,7 +31,7 @@ services:
       - WORKER_ID=${WORKER_ID:-}
       - JOBS_DIR=/tmp/mbs-jobs
 
-      # Simulation image — full GHCR path so swarm can resolve the digest
+      # Simulation image — full GHCR path for the worker to pull
       - SIMULATION_IMAGE=${SIMULATION_IMAGE:-ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest}
 
       # Worker owner email (for frontend UI ownership)
