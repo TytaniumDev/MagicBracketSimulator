@@ -1,0 +1,14 @@
+name: Workflow Lint
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+
+jobs:
+  workflow-lint:
+    uses: TytaniumDev/.github/.github/workflows/workflow-lint.yml@main
