@@ -174,22 +174,29 @@ else
       for dep in "${DEPS_TO_INSTALL[@]}"; do
         case $dep in
           docker)
-            detail "Installing Docker Desktop..."
-            brew install --cask docker
-            detail "Opening Docker Desktop (first-time setup may take a minute)..."
-            open -a Docker
-            # Wait for Docker daemon to be ready
-            local_timeout=60
+            detail "Installing OrbStack..."
+            brew install --cask orbstack
+            echo ""
+            warn "OrbStack needs first-time setup in its GUI window."
+            detail "Complete these steps in the OrbStack window that opens:"
+            detail "  1. Accept the license agreement"
+            detail "  2. Choose the ${BOLD}Docker${RESET}${DIM} option when prompted"
+            detail "  3. Grant any macOS permissions it requests"
+            detail "This script will resume automatically once OrbStack is ready."
+            echo ""
+            open -a OrbStack
+            # Wait for Docker daemon — generous timeout for first-run GUI setup
+            local_timeout=300
             while ! docker info &>/dev/null 2>&1; do
-              sleep 2
-              local_timeout=$((local_timeout - 2))
+              sleep 3
+              local_timeout=$((local_timeout - 3))
               if [ $local_timeout -le 0 ]; then
-                err "Docker Desktop did not start within 60 seconds."
-                detail "Open Docker Desktop manually, wait for it to start, then re-run this script."
+                err "OrbStack did not become ready within 5 minutes."
+                detail "Complete the OrbStack setup wizard, then re-run this script."
                 exit 1
               fi
             done
-            info "Docker Desktop is running"
+            info "OrbStack is running"
             ;;
           *)
             brew install "$dep"
@@ -231,13 +238,15 @@ if ! docker info &>/dev/null 2>&1; then
   detail "Starting Docker daemon..."
   case "$(uname -s)" in
     Darwin)
-      open -a Docker 2>/dev/null || true
-      timeout_secs=60
+      detail "Launching OrbStack — if this is the first run, complete the setup wizard and choose Docker."
+      open -a OrbStack 2>/dev/null || true
+      timeout_secs=120
       while ! docker info &>/dev/null 2>&1; do
         sleep 2
         timeout_secs=$((timeout_secs - 2))
         if [ $timeout_secs -le 0 ]; then
-          err "Docker daemon did not start. Start Docker Desktop manually and re-run."
+          err "Docker daemon did not start within 2 minutes."
+          detail "Open OrbStack, ensure setup is complete, then re-run this script."
           exit 1
         fi
       done
@@ -270,6 +279,7 @@ else
   case "$(uname -s)" in
     Darwin)
       if command -v brew &>/dev/null; then
+        detail "OrbStack includes docker compose. If this fails, ensure OrbStack is running."
         brew install docker-compose
         COMPOSE_CMD="docker-compose"
       fi
