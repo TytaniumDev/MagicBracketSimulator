@@ -563,6 +563,10 @@ fi
 echo "$login_output" | grep -v "Your credentials are stored unencrypted" | grep -v "Configure a credential helper" || true
 info "GHCR login successful"
 
+# Restore default DOCKER_CONFIG so CLI plugins (docker compose, buildx) are found.
+# The override was only needed for login to bypass credential helpers.
+unset DOCKER_CONFIG
+
 # ═══════════════════════════════════════════════════════════════════════
 # STEP 7: Pulling images
 # ═══════════════════════════════════════════════════════════════════════
