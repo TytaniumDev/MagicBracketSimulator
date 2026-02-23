@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { isMoxfieldApiEnabled } from '@/lib/moxfield-service';
 
 /**
@@ -9,6 +10,12 @@ import { isMoxfieldApiEnabled } from '@/lib/moxfield-service';
  * ?debug=1 returns safe env diagnostics (hasEnv, envLength) for troubleshooting.
  */
 export async function GET(request: NextRequest) {
+  try {
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   const enabled = isMoxfieldApiEnabled();
   const ua = process.env.MOXFIELD_USER_AGENT;
   const hasEnv = ua !== undefined && ua !== null;

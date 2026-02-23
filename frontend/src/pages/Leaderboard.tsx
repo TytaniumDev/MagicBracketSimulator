@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getApiBase, fetchPublic } from '../api';
+import { getApiBase, fetchWithAuth } from '../api';
 
 interface LeaderboardEntry {
   deckId: string;
@@ -74,7 +74,7 @@ export default function Leaderboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetchPublic(`${apiBase}/api/leaderboard?minGames=${minGames}&limit=500`);
+      const res = await fetchWithAuth(`${apiBase}/api/leaderboard?minGames=${minGames}&limit=500`);
       if (!res.ok) throw new Error('Failed to fetch leaderboard');
       const data = await res.json();
       setEntries(data.decks ?? []);

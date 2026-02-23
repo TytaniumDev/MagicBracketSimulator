@@ -67,25 +67,67 @@ export function isAdmin(email: string): boolean {
 }
 
 /**
- * Verify that the request is from an admin user.
- * Calls verifyAuth() first, then checks isAdmin().
- * @throws Error with 'Admin access required' if not admin
+ * Tier 1: Verify that the request is from any signed-in Google user.
+ * Does NOT check the allowlist — any valid Firebase token is accepted.
+ * Used for read-only endpoints that any authenticated user can access.
+ * @throws Error if token is missing or invalid
  */
-export async function verifyAdmin(req: NextRequest): Promise<AuthUser> {
-  const user = await verifyAuth(req);
-  if (!isAdmin(user.email)) {
-    throw new Error('Admin access required');
+export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
+  if (IS_LOCAL_MODE) {
+    return LOCAL_MOCK_USER;
   }
-  return user;
+
+  const authHeader = req.headers.get('Authorization');
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new Error('No authorization token provided');
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+
+  if (!token) {
+    throw new Error('Empty authorization token');
+  }
+
+  return verifyTokenString(token);
 }
 
 /**
- * Verify Firebase ID token from request
- * @param req Next.js request object
- * @returns Decoded user info if valid
- * @throws Error if token is invalid or user not allowed
+ * Verify a raw Firebase ID token string (not from request headers).
+ * Used by SSE stream route where the token arrives as a query parameter.
+ * @throws Error if token is invalid
  */
-export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
+export async function verifyTokenString(token: string): Promise<AuthUser> {
+  if (IS_LOCAL_MODE) {
+    return LOCAL_MOCK_USER;
+  }
+
+  try {
+    getFirebaseApp();
+    const decoded: DecodedIdToken = await getAuth().verifyIdToken(token);
+
+    if (!decoded.email) {
+      throw new Error('Token does not contain email');
+    }
+
+    return {
+      uid: decoded.uid,
+      email: decoded.email,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('email')) {
+      throw error;
+    }
+    throw new Error(`Invalid token: ${error instanceof Error ? error.message : 'unknown'}`);
+  }
+}
+
+/**
+ * Tier 2: Verify that the request is from a signed-in user on the allowlist.
+ * Used for privileged write operations (create jobs, add decks, cancel, etc.).
+ * @throws Error if token is invalid or user not on allowlist
+ */
+export async function verifyAllowedUser(req: NextRequest): Promise<AuthUser> {
   // In local mode, skip Firebase token verification and return a mock user
   if (IS_LOCAL_MODE) {
     return LOCAL_MOCK_USER;
@@ -98,7 +140,7 @@ export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
   }
 
   const token = authHeader.replace('Bearer ', '');
-  
+
   if (!token) {
     throw new Error('Empty authorization token');
   }
@@ -106,7 +148,7 @@ export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
   try {
     getFirebaseApp();
     const decoded: DecodedIdToken = await getAuth().verifyIdToken(token);
-    
+
     if (!decoded.email) {
       throw new Error('Token does not contain email');
     }
@@ -133,55 +175,28 @@ export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
 }
 
 /**
- * Optional auth - returns user if authenticated, null otherwise
- * Does not throw on missing/invalid token
+ * Tier 3: Verify that the request is from an admin user.
+ * Calls verifyAuth() (token-only, no allowlist) then checks admin email list.
+ * Admins don't need to be separately on the allowlist.
+ * @throws Error with 'Admin access required' if not admin
  */
-export async function optionalAuth(req: NextRequest): Promise<AuthUser | null> {
-  try {
-    return await verifyAuth(req);
-  } catch {
-    return null;
+export async function verifyAdmin(req: NextRequest): Promise<AuthUser> {
+  const user = await verifyAuth(req);
+  if (!isAdmin(user.email)) {
+    throw new Error('Admin access required');
   }
+  return user;
 }
 
 /**
- * Verify Firebase ID token without checking the allowlist.
- * Used for endpoints that any authenticated user can access (e.g., access requests).
+ * Optional allowed-user auth - returns user if authenticated and on allowlist, null otherwise.
+ * Does not throw on missing/invalid token.
  */
-export async function verifyAuthOnly(req: NextRequest): Promise<AuthUser> {
-  if (IS_LOCAL_MODE) {
-    return LOCAL_MOCK_USER;
-  }
-
-  const authHeader = req.headers.get('Authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('No authorization token provided');
-  }
-
-  const token = authHeader.replace('Bearer ', '');
-
-  if (!token) {
-    throw new Error('Empty authorization token');
-  }
-
+export async function optionalAllowedUser(req: NextRequest): Promise<AuthUser | null> {
   try {
-    getFirebaseApp();
-    const decoded: DecodedIdToken = await getAuth().verifyIdToken(token);
-
-    if (!decoded.email) {
-      throw new Error('Token does not contain email');
-    }
-
-    return {
-      uid: decoded.uid,
-      email: decoded.email,
-    };
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('email')) {
-      throw error;
-    }
-    throw new Error(`Invalid token: ${error instanceof Error ? error.message : 'unknown'}`);
+    return await verifyAllowedUser(req);
+  } catch {
+    return null;
   }
 }
 

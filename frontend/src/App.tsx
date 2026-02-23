@@ -69,20 +69,38 @@ function Header() {
 }
 
 export default function App() {
+  const { user, loading } = useAuth();
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 antialiased">
-      <Header />
-
-      {/* Main content */}
-      <main className="container mx-auto px-4 py-8">
-        <Routes>
-          <Route path="/" element={<Browse />} />
-          <Route path="/submit" element={<Home />} />
-          <Route path="/jobs/:id" element={<JobStatus />} />
-          <Route path="/worker-setup" element={<WorkerSetup />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-        </Routes>
-      </main>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full" />
+        </div>
+      ) : !user ? (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-6 px-4">
+          <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+            Magic Bracket Simulator
+          </span>
+          <p className="text-gray-400 text-center max-w-md">
+            Evaluate Magic: The Gathering Commander deck performance through automated Forge simulations, tracking win rates and game statistics.
+          </p>
+          <LoginButton />
+        </div>
+      ) : (
+        <>
+          <Header />
+          <main className="container mx-auto px-4 py-8">
+            <Routes>
+              <Route path="/" element={<Browse />} />
+              <Route path="/submit" element={<Home />} />
+              <Route path="/jobs/:id" element={<JobStatus />} />
+              <Route path="/worker-setup" element={<WorkerSetup />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+            </Routes>
+          </main>
+        </>
+      )}
     </div>
   );
 }

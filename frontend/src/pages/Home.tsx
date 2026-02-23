@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { ColorIdentity } from '../components/ColorIdentity';
@@ -47,7 +47,6 @@ export default function Home() {
         <h2 className="text-2xl font-bold text-gray-300">Sign in to submit simulations</h2>
         <p className="text-gray-400 text-center max-w-md">
           Sign in with your Google account to submit Commander bracket simulations.
-          You can <Link to="/" className="text-blue-400 hover:underline">browse past results</Link> without signing in.
         </p>
         <LoginButton />
       </div>
@@ -145,7 +144,7 @@ function SimulationForm() {
 
   // Check if Moxfield direct import is available
   useEffect(() => {
-    fetch(`${apiBase}/api/moxfield-status`)
+    fetchWithAuth(`${apiBase}/api/moxfield-status`)
       .then((res) => res.json())
       .then((data) => setMoxfieldEnabled(data.enabled))
       .catch(() => setMoxfieldEnabled(false));

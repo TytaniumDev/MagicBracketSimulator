@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { publishSimulationTasks } from '@/lib/pubsub';
@@ -39,7 +39,13 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
 /**
  * GET /api/jobs - List jobs
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  try {
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const jobs = await jobStore.listJobs();
     const summaries = await Promise.all(
@@ -71,7 +77,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   let user;
   try {
-    user = await verifyAuth(request);
+    user = await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }

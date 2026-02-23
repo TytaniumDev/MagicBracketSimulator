@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 
 interface RouteParams {
@@ -10,7 +10,13 @@ interface RouteParams {
  * GET /api/jobs/[id]/simulations — Get all simulation statuses for a job.
  * Used by the frontend to render per-simulation progress.
  */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const { id } = await params;
     if (!id) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { optionalAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { optionalAllowedUser, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { ingestLogs } from '@/lib/log-store';
 
 interface RouteParams {
@@ -12,7 +12,7 @@ interface RouteParams {
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!isWorkerRequest(request)) {
-    const user = await optionalAuth(request);
+    const user = await optionalAllowedUser(request);
     if (!user) return unauthorizedResponse();
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth } from '@/lib/auth';
+import { verifyAllowedUser } from '@/lib/auth';
 import * as workerStore from '@/lib/worker-store-factory';
 import { pushToWorker } from '@/lib/worker-push';
 
@@ -12,7 +12,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await verifyAuth(request);
+    const user = await verifyAllowedUser(request);
     const { id: workerId } = await params;
 
     const body = await request.json();

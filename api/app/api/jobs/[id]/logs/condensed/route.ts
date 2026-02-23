@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getCondensedLogs } from '@/lib/log-store';
 
 interface RouteParams {
@@ -8,7 +9,13 @@ interface RouteParams {
 /**
  * GET /api/jobs/[id]/logs/condensed — Return condensed game data.
  */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const { id } = await params;
     const condensed = await getCondensedLogs(id);

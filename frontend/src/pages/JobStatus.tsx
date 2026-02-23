@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getApiBase, fetchWithAuth, fetchPublic, deleteJob } from '../api';
+import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
@@ -159,7 +159,7 @@ export default function JobStatusPage() {
       // SSE didn't connect in time, start polling as fallback
       fallbackActive = true;
       const fetchJob = () => {
-        fetchPublic(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
+        fetchWithAuth(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
           .then((res) => {
             if (!res.ok) {
               if (res.status === 404) throw new Error('Job not found');
@@ -200,7 +200,7 @@ export default function JobStatusPage() {
     if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
     if (streamSimulations.length > 0) return; // SSE already delivered them
 
-    fetchPublic(`${apiBase}/api/jobs/${id}/simulations`)
+    fetchWithAuth(`${apiBase}/api/jobs/${id}/simulations`)
       .then((res) => {
         if (!res.ok) return { simulations: [] };
         return res.json();
@@ -224,7 +224,7 @@ export default function JobStatusPage() {
     if (structuredGames !== null) return; // Already fetched
 
     setStructuredError(null);
-    fetchPublic(`${apiBase}/api/jobs/${id}/logs/structured`)
+    fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/structured`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) return { games: [], deckNames: [] };
@@ -252,7 +252,7 @@ export default function JobStatusPage() {
     const list = Array.from(names);
     if (list.length === 0) return;
     const params = new URLSearchParams({ names: list.join(',') });
-    fetchPublic(`${apiBase}/api/deck-color-identity?${params}`)
+    fetchWithAuth(`${apiBase}/api/deck-color-identity?${params}`)
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
       .catch(() => {});
@@ -266,7 +266,7 @@ export default function JobStatusPage() {
     // Fetch raw logs
     if (rawLogs === null) {
       setRawLogsError(null);
-      fetchPublic(`${apiBase}/api/jobs/${id}/logs/raw`)
+      fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/raw`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { gameLogs: [] };
@@ -281,7 +281,7 @@ export default function JobStatusPage() {
     // Fetch condensed logs
     if (condensedLogs === null) {
       setCondensedError(null);
-      fetchPublic(`${apiBase}/api/jobs/${id}/logs/condensed`)
+      fetchWithAuth(`${apiBase}/api/jobs/${id}/logs/condensed`)
         .then((res) => {
           if (!res.ok) {
             if (res.status === 404) return { condensed: [] };

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getStructuredLogs } from '@/lib/log-store';
 import * as jobStore from '@/lib/job-store-factory';
 
@@ -9,7 +10,13 @@ interface RouteParams {
 /**
  * GET /api/jobs/[id]/logs/structured — Return structured games for UI visualization.
  */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const { id } = await params;
 

@@ -1,10 +1,17 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import * as workerStore from '@/lib/worker-store-factory';
 
 /**
  * GET /api/workers — List active workers and queue depth (public).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  try {
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const [workers, queueDepth] = await Promise.all([
       workerStore.getActiveWorkers(),

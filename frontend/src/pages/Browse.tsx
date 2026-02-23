@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getApiBase, fetchPublic, deleteJobs } from '../api';
+import { getApiBase, fetchWithAuth, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
@@ -119,7 +119,7 @@ export default function Browse() {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await fetchPublic(`${apiBase}/api/jobs`);
+      const res = await fetchWithAuth(`${apiBase}/api/jobs`);
       if (!res.ok) throw new Error('Failed to fetch jobs');
       const data = await res.json();
       setJobs(data.jobs || []);

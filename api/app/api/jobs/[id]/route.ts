@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAuth, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
@@ -80,9 +80,19 @@ async function jobToApiResponse(
 }
 
 /**
- * GET /api/jobs/[id] - Get job details (public, no auth required)
+ * GET /api/jobs/[id] - Get job details
+ * Dual auth: workers authenticate via X-Worker-Secret, users via Firebase token.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const isWorker = isWorkerRequest(request);
+  if (!isWorker) {
+    try {
+      await verifyAuth(request);
+    } catch {
+      return unauthorizedResponse();
+    }
+  }
+
   try {
     const { id } = await params;
     if (!id) {
@@ -105,7 +115,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const isWorker = isWorkerRequest(request);
     const response = await jobToApiResponse(job, isWorker);
     return NextResponse.json(response);
   } catch (error) {

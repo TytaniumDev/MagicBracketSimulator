@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getApiBase } from '../api';
+import { getApiBase, getFirebaseIdToken } from '../api';
 import type { SimulationStatus } from '../types/simulation';
 
 /**
@@ -36,13 +36,13 @@ export function useJobStream<T>(jobId: string | undefined) {
     closedRef.current = false;
     let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const connect = () => {
+    const connect = async () => {
       if (closedRef.current) return;
 
       try {
         const apiBase = getApiBase();
-        // No auth token needed — stream is public
-        const url = `${apiBase}/api/jobs/${jobId}/stream`;
+        const token = await getFirebaseIdToken();
+        const url = `${apiBase}/api/jobs/${jobId}/stream?token=${encodeURIComponent(token || '')}`;
 
         const es = new EventSource(url);
         eventSourceRef.current = es;

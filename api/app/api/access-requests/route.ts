@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuthOnly, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { sendAccessRequestEmail } from '@/lib/email-notification';
 import { createHmac } from 'node:crypto';
 import { Firestore } from '@google-cloud/firestore';
@@ -33,7 +33,7 @@ function generateApprovalToken(uid: string, requestId: string): string {
 export async function POST(request: NextRequest) {
   let user;
   try {
-    user = await verifyAuthOnly(request);
+    user = await verifyAuth(request);
   } catch {
     return unauthorizedResponse();
   }
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   let user;
   try {
-    user = await verifyAuthOnly(request);
+    user = await verifyAuth(request);
   } catch {
     return unauthorizedResponse();
   }

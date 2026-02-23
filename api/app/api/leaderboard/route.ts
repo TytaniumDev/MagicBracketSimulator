@@ -14,6 +14,7 @@
  * rating (mu - 3*sigma), gamesPlayed, wins, winRate.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getRatingStore } from '@/lib/rating-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
 
@@ -33,6 +34,12 @@ export interface LeaderboardEntry {
 }
 
 export async function GET(request: NextRequest) {
+  try {
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const minGames = parseInt(searchParams.get('minGames') ?? '0', 10) || 0;

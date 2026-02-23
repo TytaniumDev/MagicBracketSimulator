@@ -110,18 +110,3 @@ export async function deleteJobs(
   return res.json();
 }
 
-/**
- * Fetch without authentication — for public read-only endpoints
- */
-export function fetchPublic(
-  url: string,
-  options: RequestInit = {}
-): Promise<Response> {
-  return fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-}

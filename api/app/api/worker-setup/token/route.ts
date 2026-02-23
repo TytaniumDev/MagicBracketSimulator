@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 
 const WORKER_SECRET = process.env.WORKER_SECRET;
 
@@ -23,7 +23,7 @@ function generateToken(): string {
  */
 export async function POST(req: NextRequest) {
   try {
-    await verifyAuth(req);
+    await verifyAllowedUser(req);
   } catch {
     return unauthorizedResponse();
   }

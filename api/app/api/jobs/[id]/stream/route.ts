@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { isWorkerRequest } from '@/lib/auth';
+import { verifyAuth, verifyTokenString, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
@@ -72,12 +72,29 @@ function isTerminalStatus(status: string): boolean {
 }
 
 /**
- * GET /api/jobs/[id]/stream - Server-Sent Events stream for job updates (public, no auth required)
+ * GET /api/jobs/[id]/stream - Server-Sent Events stream for job updates
+ *
+ * Auth: accepts ?token= query param (SSE can't send headers) or Authorization header.
+ * Workers bypass auth via X-Worker-Secret.
  *
  * GCP mode: Uses Firestore onSnapshot for real-time push
  * LOCAL mode: Polls SQLite every 2 seconds server-side
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  // Auth: workers bypass, otherwise check token query param or Authorization header
+  if (!isWorkerRequest(request)) {
+    const tokenParam = request.nextUrl.searchParams.get('token');
+    try {
+      if (tokenParam) {
+        await verifyTokenString(tokenParam);
+      } else {
+        await verifyAuth(request);
+      }
+    } catch {
+      return unauthorizedResponse();
+    }
+  }
+
   const { id } = await params;
   if (!id) {
     return new Response(JSON.stringify({ error: 'Job ID is required' }), {
