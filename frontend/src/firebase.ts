@@ -1,4 +1,5 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
+import { initializeAppCheck, AppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getDatabase, Database } from 'firebase/database';
@@ -8,6 +9,7 @@ import { getDatabase, Database } from 'firebase/database';
 const isFirebaseConfigured = !!import.meta.env.VITE_FIREBASE_API_KEY;
 
 let app: FirebaseApp | null = null;
+let appCheck: AppCheck | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 let rtdb: Database | null = null;
@@ -26,11 +28,22 @@ if (isFirebaseConfigured) {
   };
 
   app = initializeApp(firebaseConfig);
+
+  // Enable App Check debug token in development so local requests pass verification.
+  // The debug token is logged to the console — register it in Firebase Console → App Check.
+  if (import.meta.env.DEV) {
+    (self as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+  appCheck = initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider('6Ldm6XQsAAAAAJ3SVyxtnI0qdqKb47uhTOaFMHqq'),
+    isTokenAutoRefreshEnabled: true,
+  });
+
   auth = getAuth(app);
   db = getFirestore(app);
   rtdb = getDatabase(app);
   googleProvider = new GoogleAuthProvider();
 }
 
-export { auth, db, rtdb, googleProvider, isFirebaseConfigured };
+export { appCheck, auth, db, rtdb, googleProvider, isFirebaseConfigured };
 export default app;

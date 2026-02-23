@@ -1,4 +1,5 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
+import { getAppCheck } from 'firebase-admin/app-check';
 import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { NextRequest } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -81,6 +82,8 @@ export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
     return LOCAL_MOCK_USER;
   }
 
+  await verifyAppCheck(req);
+
   const authHeader = req.headers.get('Authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -136,6 +139,8 @@ export async function verifyAllowedUser(req: NextRequest): Promise<AuthUser> {
   if (IS_LOCAL_MODE) {
     return LOCAL_MOCK_USER;
   }
+
+  await verifyAppCheck(req);
 
   const authHeader = req.headers.get('Authorization');
 
@@ -241,4 +246,27 @@ export function isWorkerRequest(req: NextRequest): boolean {
   const expectedHash = createHash('sha256').update(expected).digest();
 
   return timingSafeEqual(secretHash, expectedHash);
+}
+
+/**
+ * Verify the Firebase App Check token from the X-Firebase-AppCheck header.
+ * Skipped in local mode and for worker requests (server-to-server, no reCAPTCHA).
+ * @throws Error if the token is missing or invalid
+ */
+async function verifyAppCheck(req: NextRequest): Promise<void> {
+  if (IS_LOCAL_MODE || isWorkerRequest(req)) return;
+
+  const appCheckToken = req.headers.get('X-Firebase-AppCheck');
+  if (!appCheckToken) {
+    throw new Error('Missing App Check token');
+  }
+
+  try {
+    getFirebaseApp();
+    await getAppCheck().verifyToken(appCheckToken);
+  } catch (error) {
+    throw new Error(
+      `App Check verification failed: ${error instanceof Error ? error.message : 'unknown'}`
+    );
+  }
 }

@@ -1,4 +1,5 @@
-import { auth } from './firebase';
+import { getToken } from 'firebase/app-check';
+import { auth, appCheck } from './firebase';
 import { getRuntimeConfig } from './config';
 
 function resolveApiBase(): string {
@@ -50,6 +51,16 @@ export async function fetchWithAuth(
 
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Attach App Check token (skip in local mode when appCheck is null)
+  if (appCheck) {
+    try {
+      const appCheckToken = await getToken(appCheck, /* forceRefresh */ false);
+      (headers as Record<string, string>)['X-Firebase-AppCheck'] = appCheckToken.token;
+    } catch {
+      // Don't block the request — API will reject if enforcement is on
+    }
   }
 
   return fetch(url, {
