@@ -16,21 +16,17 @@ function getDb(): import('firebase-admin/database').Database | null {
   if (db) return db;
 
   try {
-    // firebase-admin must be initialized elsewhere (e.g., by Firestore init).
-    // getDatabase() retrieves the default app's RTDB instance.
     const { getDatabase } = require('firebase-admin/database') as typeof import('firebase-admin/database');
 
-    // Ensure admin app is initialized
+    // Ensure admin app is initialized (auth.ts may have already done this)
     const admin = require('firebase-admin') as typeof import('firebase-admin');
     if (admin.apps.length === 0) {
       admin.initializeApp({
         databaseURL: `https://${process.env.GOOGLE_CLOUD_PROJECT}-default-rtdb.firebaseio.com`,
       });
-    } else {
-      // If the app exists but RTDB URL wasn't configured, we may need to check.
-      // getDatabase() on the default app should work if the URL is discoverable.
     }
 
+    // auth.ts initializes the app with databaseURL, so getDatabase() works directly.
     db = getDatabase();
     return db;
   } catch (err) {

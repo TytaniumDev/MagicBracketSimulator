@@ -26,14 +26,18 @@ function getFirebaseApp(): App {
   if (process.env.FIREBASE_ADMIN_KEY) {
     // If key is provided as JSON string (e.g., from Secret Manager)
     const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_KEY);
+    const project = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
     firebaseApp = initializeApp({
       credential: cert(serviceAccount),
-      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
+      projectId: project,
+      databaseURL: `https://${project}-default-rtdb.firebaseio.com`,
     });
   } else {
     // Use Application Default Credentials
+    const project = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
     firebaseApp = initializeApp({
-      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
+      projectId: project,
+      databaseURL: `https://${project}-default-rtdb.firebaseio.com`,
     });
   }
 

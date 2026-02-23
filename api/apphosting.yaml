@@ -16,6 +16,11 @@ env:
     value: job-created
   - variable: NODE_ENV
     value: production
+  # Cloud Tasks recovery endpoint URL (used by api/lib/cloud-tasks.ts)
+  - variable: API_BASE_URL
+    value: https://api--magic-bracket-simulator.us-central1.hosted.app
+  - variable: CLOUD_TASKS_LOCATION
+    value: us-central1
   # CORS: allow the deployed frontend (middleware sends one origin per request)
   - variable: CORS_ALLOWED_ORIGINS
     value: https://magic-bracket-simulator.web.app
