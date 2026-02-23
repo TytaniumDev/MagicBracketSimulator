@@ -1,3 +1,4 @@
+import { Timestamp } from '@google-cloud/firestore';
 import { firestore } from './firestore-job-store';
 import type { WorkerInfo } from './types';
 
@@ -9,6 +10,9 @@ const jobsCollection = firestore.collection('jobs');
  * Uses merge: true to preserve maxConcurrentOverride set separately.
  */
 export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
+  // TTL: auto-delete heartbeat docs after 24 hours (requires Firestore TTL policy on 'ttl' field)
+  const ttl = Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
   await workersCollection.doc(info.workerId).set({
     workerName: info.workerName,
     status: info.status,
@@ -20,6 +24,7 @@ export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
     version: info.version ?? null,
     ownerEmail: info.ownerEmail ?? null,
     workerApiUrl: info.workerApiUrl ?? null,
+    ttl,
   }, { merge: true });
 }
 

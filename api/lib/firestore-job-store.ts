@@ -83,10 +83,13 @@ export async function createJob(data: CreateJobData): Promise<Job> {
       }
 
       // Create the job and idempotency key atomically
+      // TTL: auto-delete idempotency keys after 7 days (requires Firestore TTL policy on 'ttl' field)
+      const idempotencyTtl = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
       transaction.set(jobRef, jobData);
       transaction.set(idempotencyRef, {
         jobId: jobRef.id,
         createdAt: now,
+        ttl: idempotencyTtl,
       });
     });
   } else {
@@ -378,11 +381,18 @@ function simulationsCollection(jobId: string) {
 /**
  * Initialize simulation status documents for a job.
  * Creates `count` documents with state PENDING using batched writes.
+ * Also sets atomic counters on the job document for O(1) completion checks.
  */
 export async function initializeSimulations(
   jobId: string,
   count: number
 ): Promise<void> {
+  // Set atomic counters on the job document
+  await jobsCollection.doc(jobId).update({
+    completedSimCount: 0,
+    totalSimCount: count,
+  });
+
   const simCol = simulationsCollection(jobId);
 
   // Firestore batches are limited to 500 operations
@@ -401,6 +411,29 @@ export async function initializeSimulations(
     }
     await batch.commit();
   }
+}
+
+/**
+ * Atomically increment the completed simulation counter.
+ * Returns the updated job data (including the new counter value).
+ */
+export async function incrementCompletedSimCount(
+  jobId: string,
+): Promise<{ completedSimCount: number; totalSimCount: number }> {
+  const jobRef = jobsCollection.doc(jobId);
+
+  // Increment the counter atomically
+  await jobRef.update({
+    completedSimCount: FieldValue.increment(1),
+  });
+
+  // Read the updated document to get the new counter value
+  const doc = await jobRef.get();
+  const data = doc.data()!;
+  return {
+    completedSimCount: data.completedSimCount ?? 0,
+    totalSimCount: data.totalSimCount ?? 0,
+  };
 }
 
 /**

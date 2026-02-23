@@ -4,7 +4,7 @@ import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
-import { useJobStream } from '../hooks/useJobStream';
+import { useJobProgress } from '../hooks/useJobProgress';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { matchesDeckName } from '../utils/deck-match';
@@ -133,8 +133,8 @@ export default function JobStatusPage() {
   // Fallback simulation statuses (REST fetch for terminal jobs)
   const [fallbackSimulations, setFallbackSimulations] = useState<import('../types/simulation').SimulationStatus[]>([]);
 
-  // Primary: SSE stream for real-time job updates
-  const { job: streamJob, simulations: rawStreamSimulations, error: streamError, connected: sseConnected } = useJobStream<Job>(id);
+  // Primary: RTDB (GCP) or SSE (local) for real-time job updates
+  const { job: streamJob, simulations: rawStreamSimulations, error: streamError, connected: sseConnected } = useJobProgress<Job>(id);
 
   // Merge SSE simulations with REST fallback
   const streamSimulations = rawStreamSimulations.length > 0 ? rawStreamSimulations : fallbackSimulations;
@@ -206,7 +206,7 @@ export default function JobStatusPage() {
         return res.json();
       })
       .then((data) => {
-        // useJobStream doesn't expose a setter, but we can use the streamSimulations
+        // useJobProgress doesn't expose a setter, but we can use the streamSimulations
         // via the hook. Since we can't set it from outside, we'll store in local state.
         // Actually streamSimulations is from the hook, we need a separate state.
         if (Array.isArray(data.simulations) && data.simulations.length > 0) {

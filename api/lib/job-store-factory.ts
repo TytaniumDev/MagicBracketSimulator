@@ -6,6 +6,8 @@ import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState, WorkerInfo
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
+import { deleteJobProgress } from './rtdb';
+import { cancelRecoveryCheck } from './cloud-tasks';
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
@@ -180,6 +182,23 @@ export async function deleteSimulations(jobId: string): Promise<void> {
     return;
   }
   sqliteStore.deleteSimulations(jobId);
+}
+
+/**
+ * Atomically increment the completed simulation counter.
+ * Returns the updated counter values. GCP mode only (uses Firestore FieldValue.increment).
+ * In local mode, falls back to counting simulation statuses.
+ */
+export async function incrementCompletedSimCount(
+  jobId: string,
+): Promise<{ completedSimCount: number; totalSimCount: number }> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.incrementCompletedSimCount(jobId);
+  }
+  // Local mode fallback: count from simulation statuses
+  const sims = sqliteStore.getSimulationStatuses(jobId);
+  const completedSimCount = sims.filter(s => s.state === 'COMPLETED' || s.state === 'CANCELLED').length;
+  return { completedSimCount, totalSimCount: sims.length };
 }
 
 // ─── Stale Job Recovery ──────────────────────────────────────────────────────
@@ -478,11 +497,21 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   }
 
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
-  if (job.status === 'CANCELLED') return;
+  if (job.status === 'CANCELLED') {
+    deleteJobProgress(jobId).catch(() => {});
+    return;
+  }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
-  if (allCancelled) return; // Already handled by cancel flow
+  if (allCancelled) {
+    deleteJobProgress(jobId).catch(() => {});
+    return; // Already handled by cancel flow
+  }
 
   await setJobCompleted(jobId);
+
+  // Clean up RTDB ephemeral data and cancel recovery task
+  cancelRecoveryCheck(jobId).catch(() => {});
+  deleteJobProgress(jobId).catch(() => {});
 }
 

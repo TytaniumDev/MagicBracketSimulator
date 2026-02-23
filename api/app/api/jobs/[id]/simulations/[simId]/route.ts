@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import type { SimulationState } from '@/lib/types';
+import { updateJobProgress, updateSimProgress, deleteJobProgress } from '@/lib/rtdb';
+import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
@@ -75,23 +76,41 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await jobStore.updateSimulationStatus(id, simId, update);
     }
 
+    // Fire-and-forget RTDB write for simulation progress
+    updateSimProgress(id, simId, update).catch(() => {});
+
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
       const job = await jobStore.getJob(id);
       if (job?.status === 'QUEUED') {
         await jobStore.setJobStartedAt(id, workerId, workerName);
         await jobStore.updateJobStatus(id, 'RUNNING');
+        // Fire-and-forget RTDB write for job status transition
+        updateJobProgress(id, {
+          status: 'RUNNING',
+          startedAt: new Date().toISOString(),
+          workerName: workerName ?? null,
+        }).catch(() => {});
       }
     }
 
     // Check if all sims are done → trigger aggregation.
-    // Only COMPLETED/CANCELLED count as done — FAILED sims will be retried by the scanner.
+    // Uses atomic counter (O(1)) instead of full sim subcollection scan (O(N)).
     if (transitioned && (state === 'COMPLETED' || state === 'CANCELLED')) {
-      const allSims = await jobStore.getSimulationStatuses(id);
-      const allDone = allSims.every(s =>
-        s.state === 'COMPLETED' || s.state === 'CANCELLED'
-      );
-      if (allDone) {
+      const { completedSimCount, totalSimCount } = await jobStore.incrementCompletedSimCount(id);
+
+      // Fire-and-forget RTDB progress update
+      // Estimate gamesCompleted from completedCount (not exact for CANCELLED, but close enough for UI)
+      const gamesCompleted = completedSimCount * GAMES_PER_CONTAINER;
+      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(() => {});
+
+      if (completedSimCount >= totalSimCount && totalSimCount > 0) {
+        // Update RTDB before aggregation (frontend sees COMPLETED immediately)
+        updateJobProgress(id, {
+          status: 'COMPLETED',
+          completedAt: new Date().toISOString(),
+        }).catch(() => {});
+
         // Run aggregation in background — don't block the response
         jobStore.aggregateJobResults(id).catch(err => {
           console.error(`[Aggregation] Failed for job ${id}:`, err);

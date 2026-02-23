@@ -3,9 +3,8 @@ import { verifyAuth, verifyTokenString, unauthorizedResponse, isWorkerRequest } 
 import * as jobStore from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
-import * as workerStore from '@/lib/worker-store-factory';
 import { GAMES_PER_CONTAINER, type Job } from '@/lib/types';
-import { jobToStreamEvent, type QueueInfo } from '@/lib/stream-utils';
+import { jobToStreamEvent } from '@/lib/stream-utils';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -27,46 +26,6 @@ async function resolveDeckLinks(job: Job): Promise<Record<string, string | null>
   return Object.fromEntries(entries);
 }
 
-/**
- * Compute queue position for a QUEUED job and worker availability.
- * Cached to avoid excessive queries.
- */
-let cachedQueueInfo: { data: { allQueued: Job[]; workerStats: { online: number; idle: number; busy: number; updating: number } }; at: number } | null = null;
-
-async function getQueueInfo(jobId: string, jobCreatedAt: Date): Promise<QueueInfo> {
-  const now = Date.now();
-  // Refresh cache every 10 seconds
-  if (!cachedQueueInfo || now - cachedQueueInfo.at > 10_000) {
-    try {
-      const [allJobs, activeWorkers] = await Promise.all([
-        jobStore.listJobs(),
-        workerStore.getActiveWorkers(),
-      ]);
-      const allQueued = allJobs.filter((j) => j.status === 'QUEUED');
-      const idle = activeWorkers.filter((w) => w.status === 'idle').length;
-      const updating = activeWorkers.filter((w) => w.status === 'updating').length;
-      const busy = activeWorkers.length - idle - updating;
-      cachedQueueInfo = {
-        data: {
-          allQueued,
-          workerStats: { online: activeWorkers.length, idle, busy, updating },
-        },
-        at: now,
-      };
-    } catch {
-      return {};
-    }
-  }
-
-  const { allQueued, workerStats } = cachedQueueInfo!.data;
-  // Queue position: count of QUEUED jobs created before this one
-  const position = allQueued.filter(
-    (j) => j.id !== jobId && j.createdAt.getTime() <= jobCreatedAt.getTime()
-  ).length;
-
-  return { queuePosition: position, workers: workerStats };
-}
-
 function isTerminalStatus(status: string): boolean {
   return status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED';
 }
@@ -77,8 +36,8 @@ function isTerminalStatus(status: string): boolean {
  * Auth: accepts ?token= query param (SSE can't send headers) or Authorization header.
  * Workers bypass auth via X-Worker-Secret.
  *
- * GCP mode: Uses Firestore onSnapshot for real-time push
- * LOCAL mode: Polls SQLite every 2 seconds server-side
+ * GCP mode: Returns 410 Gone — frontend uses Firebase RTDB direct streaming instead.
+ * LOCAL mode: Polls SQLite every 2 seconds server-side (RTDB not available locally).
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   // Auth: workers bypass, otherwise check token query param or Authorization header
@@ -103,6 +62,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
   }
 
+  // In GCP mode, frontend streams from RTDB directly — SSE endpoint no longer needed
+  if (isGcpMode()) {
+    return new Response(JSON.stringify({ error: 'Use Firebase RTDB for real-time streaming' }), {
+      status: 410,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // ─── LOCAL mode: Poll SQLite every 2 seconds ──────────────────────────────
+
   // Verify job exists before starting stream
   let initialJob = await jobStore.getJob(id);
   if (!initialJob) {
@@ -112,7 +81,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
   }
 
-  // Attempt stale job recovery on stream open (RUNNING or stuck QUEUED)
+  // Attempt stale job recovery on stream open
   if (initialJob.status === 'RUNNING' || initialJob.status === 'QUEUED') {
     const recovered = await jobStore.recoverStaleJob(id);
     if (recovered) {
@@ -120,7 +89,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
   }
 
-  // Resolve deck links once (they don't change during a job)
   const deckLinks = await resolveDeckLinks(initialJob);
 
   const encoder = new TextEncoder();
@@ -128,7 +96,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const stream = new ReadableStream({
     start(controller) {
-      /** Send a named SSE event (or default 'data' event if no eventName). */
       const send = (data: object, eventName?: string) => {
         if (closed) return;
         try {
@@ -139,7 +106,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           msg += `data: ${JSON.stringify(data)}\n\n`;
           controller.enqueue(encoder.encode(msg));
         } catch {
-          // Stream already closed
           closed = true;
         }
       };
@@ -154,20 +120,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
       };
 
-      // Send initial state immediately (with queue info if QUEUED)
       const sendInitial = async () => {
-        const queueInfo = initialJob.status === 'QUEUED'
-          ? await getQueueInfo(id, initialJob.createdAt).catch(() => ({}))
-          : undefined;
-        // Derive gamesCompleted from simulation statuses
         const sims = await jobStore.getSimulationStatuses(id);
         const computedGames = sims.length > 0
           ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
           : undefined;
-        send(jobToStreamEvent(initialJob, queueInfo, deckLinks, computedGames));
+        send(jobToStreamEvent(initialJob, undefined, deckLinks, computedGames));
       };
 
-      // Send simulation statuses
       const sendSimulations = async () => {
         try {
           const sims = await jobStore.getSimulationStatuses(id);
@@ -178,7 +138,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       };
 
       if (isTerminalStatus(initialJob.status)) {
-        // For terminal jobs, await both sends before closing to avoid race condition
         (async () => {
           await sendInitial();
           await sendSimulations();
@@ -187,194 +146,60 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return;
       }
 
-      // For non-terminal jobs, fire-and-forget initial sends
       sendInitial();
       sendSimulations();
 
-      if (isGcpMode()) {
-        // GCP mode: Use Firestore onSnapshot for real-time updates
-        const { firestore } = require('@/lib/firestore-job-store') as { firestore: import('@google-cloud/firestore').Firestore };
+      // LOCAL mode: Poll SQLite every 2 seconds
+      let lastJobJson = JSON.stringify(jobToStreamEvent(initialJob, undefined, deckLinks));
+      let lastSimsJson = '';
 
-        // Listener 1: Job document changes
-        const unsubJob = firestore.collection('jobs').doc(id).onSnapshot(
-          async (snapshot) => {
-            if (!snapshot.exists) {
-              send({ error: 'Job not found' });
-              unsubJob();
-              unsubSims();
-              close();
-              return;
-            }
-
-            const data = snapshot.data()!;
-            const deckIds = Array.isArray(data.deckIds) && data.deckIds.length === 4 ? data.deckIds as string[] : undefined;
-            const job: Job = {
-              id: snapshot.id,
-              decks: data.decks || [],
-              ...(deckIds != null && { deckIds }),
-              status: data.status,
-              simulations: data.simulations,
-              parallelism: data.parallelism,
-              createdAt: data.createdAt?.toDate() || new Date(),
-              startedAt: data.startedAt?.toDate(),
-              completedAt: data.completedAt?.toDate(),
-              gamesCompleted: data.gamesCompleted,
-              errorMessage: data.errorMessage,
-              dockerRunDurationsMs: data.dockerRunDurationsMs,
-              ...(data.workerId && { workerId: data.workerId }),
-              ...(data.workerName && { workerName: data.workerName }),
-              ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
-              ...(data.retryCount != null && data.retryCount > 0 && { retryCount: data.retryCount }),
-            };
-
-            const queueInfo = job.status === 'QUEUED'
-              ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
-              : undefined;
-            // Derive gamesCompleted from simulation statuses
-            const sims = await jobStore.getSimulationStatuses(id);
-            const computedGames = sims.length > 0
-              ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
-              : undefined;
-            send(jobToStreamEvent(job, queueInfo, deckLinks, computedGames));
-
-            if (isTerminalStatus(job.status)) {
-              unsubJob();
-              unsubSims();
-              close();
-            }
-          },
-          (error) => {
-            console.error(`SSE onSnapshot error for job ${id}:`, error);
-            send({ error: 'Stream error' });
-            close();
-          },
-        );
-
-        // Listener 2: Simulations subcollection changes
-        const unsubSims = firestore
-          .collection('jobs').doc(id).collection('simulations')
-          .orderBy('index', 'asc')
-          .onSnapshot(
-            (snapshot) => {
-              if (snapshot.empty) return;
-              const sims = snapshot.docs.map((doc) => {
-                const d = doc.data();
-                return {
-                  simId: doc.id,
-                  index: d.index ?? 0,
-                  state: d.state ?? 'PENDING',
-                  ...(d.workerId && { workerId: d.workerId }),
-                  ...(d.workerName && { workerName: d.workerName }),
-                  ...(d.startedAt && { startedAt: d.startedAt }),
-                  ...(d.completedAt && { completedAt: d.completedAt }),
-                  ...(d.durationMs != null && { durationMs: d.durationMs }),
-                  ...(d.errorMessage && { errorMessage: d.errorMessage }),
-                  ...(d.winner && { winner: d.winner }),
-                  ...(d.winningTurn != null && { winningTurn: d.winningTurn }),
-                  ...(d.winners?.length > 0 && { winners: d.winners }),
-                  ...(d.winningTurns?.length > 0 && { winningTurns: d.winningTurns }),
-                };
-              });
-              send({ simulations: sims }, 'simulations');
-            },
-            (error) => {
-              console.error(`SSE simulations onSnapshot error for job ${id}:`, error);
-              // Non-fatal: simulation updates just won't appear
-            },
-          );
-
-        // Periodic stale job recovery check (every 30s)
-        const recoveryInterval = setInterval(async () => {
-          if (closed) {
-            clearInterval(recoveryInterval);
-            return;
-          }
-          try {
-            await jobStore.recoverStaleJob(id);
-          } catch {
-            // Non-fatal: recovery check failed
-          }
-        }, 30_000);
-
-        // Cleanup on client disconnect
-        request.signal.addEventListener('abort', () => {
-          clearInterval(recoveryInterval);
-          unsubJob();
-          unsubSims();
-          close();
-        });
-      } else {
-        // LOCAL mode: Poll SQLite every 2 seconds server-side
-        let lastJobJson = JSON.stringify(jobToStreamEvent(initialJob, undefined, deckLinks));
-        let lastSimsJson = '';
-
-        const interval = setInterval(async () => {
-          if (closed) {
-            clearInterval(interval);
-            return;
-          }
-          try {
-            const job = await jobStore.getJob(id);
-            if (!job) {
-              send({ error: 'Job not found' });
-              clearInterval(interval);
-              close();
-              return;
-            }
-
-            // Poll simulation statuses (also used to derive gamesCompleted)
-            const sims = await jobStore.getSimulationStatuses(id);
-            const computedGames = sims.length > 0
-              ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
-              : undefined;
-
-            // Only send job event if data changed
-            const queueInfo = job.status === 'QUEUED'
-              ? await getQueueInfo(id, job.createdAt).catch(() => ({}))
-              : undefined;
-            const currentJobJson = JSON.stringify(jobToStreamEvent(job, queueInfo, deckLinks, computedGames));
-            if (currentJobJson !== lastJobJson) {
-              lastJobJson = currentJobJson;
-              send(jobToStreamEvent(job, queueInfo, deckLinks, computedGames));
-            }
-            if (sims.length > 0) {
-              const currentSimsJson = JSON.stringify(sims);
-              if (currentSimsJson !== lastSimsJson) {
-                lastSimsJson = currentSimsJson;
-                send({ simulations: sims }, 'simulations');
-              }
-            }
-
-            if (isTerminalStatus(job.status)) {
-              clearInterval(interval);
-              close();
-            }
-          } catch (error) {
-            console.error(`SSE poll error for job ${id}:`, error);
-            clearInterval(interval);
-            close();
-          }
-        }, 2000);
-
-        // Periodic stale job recovery check (every 30s)
-        const localRecoveryInterval = setInterval(async () => {
-          if (closed) {
-            clearInterval(localRecoveryInterval);
-            return;
-          }
-          try {
-            await jobStore.recoverStaleJob(id);
-          } catch {
-            // Non-fatal: recovery check failed
-          }
-        }, 30_000);
-
-        request.signal.addEventListener('abort', () => {
+      const interval = setInterval(async () => {
+        if (closed) {
           clearInterval(interval);
-          clearInterval(localRecoveryInterval);
+          return;
+        }
+        try {
+          const job = await jobStore.getJob(id);
+          if (!job) {
+            send({ error: 'Job not found' });
+            clearInterval(interval);
+            close();
+            return;
+          }
+
+          const sims = await jobStore.getSimulationStatuses(id);
+          const computedGames = sims.length > 0
+            ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+            : undefined;
+
+          const currentJobJson = JSON.stringify(jobToStreamEvent(job, undefined, deckLinks, computedGames));
+          if (currentJobJson !== lastJobJson) {
+            lastJobJson = currentJobJson;
+            send(jobToStreamEvent(job, undefined, deckLinks, computedGames));
+          }
+          if (sims.length > 0) {
+            const currentSimsJson = JSON.stringify(sims);
+            if (currentSimsJson !== lastSimsJson) {
+              lastSimsJson = currentSimsJson;
+              send({ simulations: sims }, 'simulations');
+            }
+          }
+
+          if (isTerminalStatus(job.status)) {
+            clearInterval(interval);
+            close();
+          }
+        } catch (error) {
+          console.error(`SSE poll error for job ${id}:`, error);
+          clearInterval(interval);
           close();
-        });
-      }
+        }
+      }, 2000);
+
+      request.signal.addEventListener('abort', () => {
+        clearInterval(interval);
+        close();
+      });
     },
   });
 

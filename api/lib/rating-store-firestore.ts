@@ -35,13 +35,19 @@ export const firestoreRatingStore: RatingStore = {
     const batch = firestore.batch();
     const now = Timestamp.now();
     for (const r of updates) {
-      batch.set(ratingsCol.doc(r.deckId), {
+      const doc: Record<string, unknown> = {
         mu: r.mu,
         sigma: r.sigma,
         gamesPlayed: r.gamesPlayed,
         wins: r.wins,
         lastUpdated: now,
-      });
+      };
+      // Write denormalized deck metadata (for leaderboard without N+1 queries)
+      if (r.deckName !== undefined) doc.deckName = r.deckName;
+      if (r.setName !== undefined) doc.setName = r.setName;
+      if (r.isPrecon !== undefined) doc.isPrecon = r.isPrecon;
+      if (r.primaryCommander !== undefined) doc.primaryCommander = r.primaryCommander;
+      batch.set(ratingsCol.doc(r.deckId), doc);
     }
     await batch.commit();
   },
@@ -80,6 +86,11 @@ export const firestoreRatingStore: RatingStore = {
         gamesPlayed: d.gamesPlayed as number,
         wins: d.wins as number,
         lastUpdated: (d.lastUpdated as Timestamp).toDate().toISOString(),
+        // Denormalized metadata (may be absent on older docs)
+        ...(d.deckName && { deckName: d.deckName as string }),
+        ...(d.setName !== undefined && { setName: d.setName as string | null }),
+        ...(d.isPrecon !== undefined && { isPrecon: d.isPrecon as boolean }),
+        ...(d.primaryCommander !== undefined && { primaryCommander: d.primaryCommander as string | null }),
       };
     });
 

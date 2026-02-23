@@ -150,11 +150,17 @@ export async function processJobForRatings(
     return;
   }
 
-  // Resolve deck names for winner matching (fallback to null if deck not found)
+  // Resolve full deck metadata for winner matching and rating denormalization
   const deckInfos = await Promise.all(
     deckIds.map(async (id) => {
       const deck = await getDeckById(id);
-      return { id, name: deck?.name ?? null };
+      return {
+        id,
+        name: deck?.name ?? null,
+        setName: deck?.setName ?? null,
+        isPrecon: deck?.isPrecon ?? false,
+        primaryCommander: deck?.primaryCommander ?? null,
+      };
     }),
   );
 
@@ -162,18 +168,25 @@ export async function processJobForRatings(
   const initialStoredRatings = await Promise.all(deckIds.map((id) => store.getRating(id)));
 
   // Build in-memory state, starting from stored values (or TrueSkill defaults)
+  // Always include denormalized deck metadata for leaderboard optimization
   const currentRatings: DeckRating[] = deckIds.map((id, idx) => {
     const stored = initialStoredRatings[idx];
-    return (
-      stored ?? {
-        deckId: id,
-        mu: MU_0,
-        sigma: SIGMA_0,
-        gamesPlayed: 0,
-        wins: 0,
-        lastUpdated: new Date().toISOString(),
-      }
-    );
+    const info = deckInfos[idx]!;
+    const base = stored ?? {
+      deckId: id,
+      mu: MU_0,
+      sigma: SIGMA_0,
+      gamesPlayed: 0,
+      wins: 0,
+      lastUpdated: new Date().toISOString(),
+    };
+    return {
+      ...base,
+      deckName: info.name ?? undefined,
+      setName: info.setName,
+      isPrecon: info.isPrecon,
+      primaryCommander: info.primaryCommander,
+    };
   });
 
   const matchResults: MatchResult[] = [];

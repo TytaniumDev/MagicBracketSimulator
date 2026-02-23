@@ -260,6 +260,11 @@ export interface DeckRating {
   gamesPlayed: number;
   wins: number;
   lastUpdated: string;
+  /** Denormalized deck metadata (for leaderboard without N+1 queries) */
+  deckName?: string;
+  setName?: string | null;
+  isPrecon?: boolean;
+  primaryCommander?: string | null;
 }
 
 /** A single resolved game result, stored for idempotency. */

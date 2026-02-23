@@ -52,19 +52,22 @@ Order in code: status is reported first (PATCH), then raw log is uploaded
 
 - Persists the simulation status (state, winners, winningTurns, etc.) in the job
 store (SQLite or Firestore).
-- If this is a transition to COMPLETED/CANCELLED and **all** simulations for the
-job are COMPLETED or CANCELLED, it triggers `**aggregateJobResults(jobId)`**
-in the background (does not block the PATCH response).
+- Writes simulation progress to **Firebase RTDB** (fire-and-forget) for
+real-time frontend streaming.
+- Uses an **atomic counter** (`FieldValue.increment(1)` on
+`completedSimCount`) to detect when all sims are done — O(1) instead of
+scanning the entire subcollection. When `completedSimCount >= totalSimCount`,
+triggers `**aggregateJobResults(jobId)`** in the background.
 - FAILED sims are **not** terminal for aggregation — they get retried by the
-recovery scanner (`recoverStaleSimulations`). Only COMPLETED/CANCELLED count
-as "done".
+worker locally (up to 2 retries) or by Cloud Tasks recovery. Only
+COMPLETED/CANCELLED count as "done".
 
 **Other aggregation triggers:**
 
-- **Recovery scanner** (`recoverStaleSimulations`, GCP mode only): if no
-simulations need recovery and all are COMPLETED/CANCELLED, it fires
-`aggregateJobResults`. Also retries FAILED sims by resetting them to PENDING
-and re-publishing to Pub/Sub.
+- **Cloud Tasks recovery** (`POST /api/jobs/:id/recover`): scheduled at job
+creation (T+10min). If the job is still active when the task fires, runs
+`recoverStaleJob` once and reschedules for 5 more minutes. Replaces the
+former background polling scanner.
 - **Job cancellation** (`POST /api/jobs/:id/cancel`): triggers aggregation so
 `structured.json` gets created from whatever sims completed before
 cancellation.
@@ -117,26 +120,24 @@ unused by the current worker, which uploads per-simulation via
 
 ## 4. Frontend
 
-**Real-time (SSE):**
+**Real-time streaming:**
 
-- **GET** `/api/jobs/:id/stream`
-  - **Event types:**
-    - **Default (unnamed) event** — job snapshot: `id`, `name`, `deckNames`,
-    `status`, `simulations` (count), `gamesCompleted`, `parallelism`,
-    `createdAt`, `startedAt`, `completedAt`, `durationMs`,
-    `dockerRunDurationsMs`, `workerId`, `workerName`, `claimedAt`,
-    `retryCount`, `errorMessage`. Conditionally: `queuePosition` and
-    `workers` (only for QUEUED jobs), `deckLinks` (when deck IDs are set).
-    - **Named `simulations` event** — `{ simulations: SimStatus[] }`: array
-    of per-sim status (state, winners, winningTurns, durationMs, etc.).
-  - `gamesCompleted` is **derived** from simulation statuses
-  (`COMPLETED sims * GAMES_PER_CONTAINER`), not read from a stored counter.
-  The stored `job.gamesCompleted` field is only a fallback.
-  - No raw, condensed, or structured logs on the stream.
-  - **LOCAL mode** uses server-side **2-second polling** with change
-  detection (SQLite). **GCP mode** uses **Firestore `onSnapshot`** listeners
-  for real-time push on both the job document and the simulations
-  subcollection.
+- **GCP mode: Firebase RTDB direct streaming** (new)
+  - Frontend listens directly to RTDB via Firebase JS SDK (`onValue`).
+  - Cloud Run is **not** in the real-time path — zero persistent connections.
+  - RTDB path: `/jobs/{jobId}/` for job-level data, `/jobs/{jobId}/simulations/{simId}/` for per-sim data.
+  - API writes to RTDB as a fire-and-forget side effect when updating Firestore.
+  - RTDB data is **ephemeral** — deleted when jobs reach terminal state. Frontend falls back to REST for completed jobs.
+  - The `useJobProgress` hook manages RTDB listeners with automatic cleanup.
+
+- **LOCAL mode: SSE fallback** — **GET** `/api/jobs/:id/stream`
+  - Server-side 2-second polling of SQLite with change detection.
+  - **Event types:** same as before (default job event + named `simulations` event).
+  - GCP mode returns **410 Gone** from this endpoint — frontend uses RTDB instead.
+
+- `gamesCompleted` is **derived** from the atomic `completedSimCount` counter
+  (COMPLETED sims * GAMES_PER_CONTAINER). The stored `job.gamesCompleted`
+  field is only a fallback.
 
 **One-off job fetch:**
 
@@ -192,9 +193,9 @@ second call exits immediately.
 | Layer                    | Processing                                                                                                                                                         | Network (data)                                                                                                                               |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Simulation container** | Writes raw Forge log to stdout                                                                                                                                     | None                                                                                                                                         |
-| **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory                                                                                          | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
-| **API**                  | Stores raw logs; on “all sims done” runs **aggregation**: read raw logs, **condense + structure** (api condenser), write condensed/structured + mark job COMPLETED | ← PATCH (status), ← POST (raw log); → **GET** job/stream (status only); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
-| **Frontend**             | Displays job + sim status from stream/GET; fetches structured/raw/condensed only when needed                                                                       | ← SSE job + simulations; ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                                          |
+| **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory; retries failed containers locally (2 attempts, 30s backoff)                             | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
+| **API**                  | Stores raw logs + writes to RTDB; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED; cleans up RTDB + Cloud Tasks | ← PATCH (status), ← POST (raw log); → **RTDB** writes; → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
+| **Frontend**             | Listens to RTDB directly (GCP) or SSE (local); fetches structured/raw/condensed only when needed                                                                   | ← **RTDB** onValue (GCP) or SSE (local); ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                         |
 
 
 ---

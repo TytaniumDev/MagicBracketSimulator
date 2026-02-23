@@ -7,6 +7,8 @@ import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, GAM
 import { isGcpMode } from '@/lib/job-store-factory';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { pushToAllWorkers } from '@/lib/worker-push';
+import { updateJobProgress } from '@/lib/rtdb';
+import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 
 /**
  * Convert Job to API summary format.
@@ -135,21 +137,37 @@ export async function POST(request: NextRequest) {
     // Initialize per-simulation tracking and publish messages (1 sim record = 1 container)
     await jobStore.initializeSimulations(job.id, containerCount);
 
+    // Fire-and-forget: write initial progress to RTDB for real-time frontend streaming
+    const deckNames = job.decks.map((d) => d.name);
+    updateJobProgress(job.id, {
+      status: 'QUEUED',
+      totalCount: containerCount,
+      completedCount: 0,
+      gamesCompleted: 0,
+      errorMessage: null,
+      startedAt: null,
+      completedAt: null,
+      workerName: null,
+      deckNames,
+    }).catch(() => {});
+
     if (isGcpMode()) {
       try {
         await publishSimulationTasks(job.id, containerCount);
       } catch (pubsubError) {
         // Log but don't fail — the job is already persisted in Firestore.
-        // Stale job recovery will re-publish messages if needed.
+        // Recovery Cloud Task will re-publish messages if needed.
         console.error(`Failed to publish simulation tasks for job ${job.id}:`, pubsubError);
       }
+      // Schedule a recovery check at T+10min in case something goes wrong
+      scheduleRecoveryCheck(job.id, 600).catch(() => {});
     } else {
       // Local mode: notify workers that a new job is available (best-effort)
       pushToAllWorkers('/notify', {}).catch(() => {});
     }
 
     return NextResponse.json(
-      { id: job.id, deckNames: job.decks.map((d) => d.name) },
+      { id: job.id, deckNames },
       { status: 201 }
     );
   } catch (error) {

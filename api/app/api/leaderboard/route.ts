@@ -10,8 +10,10 @@
  * Response:
  *   { decks: LeaderboardEntry[] }
  *
- * LeaderboardEntry includes deckId, name, setName, isPrecon, mu, sigma,
- * rating (mu - 3*sigma), gamesPlayed, wins, winRate.
+ * Optimizations:
+ *   - Reads denormalized deck metadata from rating docs (no N+1 getDeckById calls)
+ *   - Falls back to getDeckById only for rating docs missing denormalized fields
+ *   - 5-minute in-memory cache + Cache-Control headers
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
@@ -33,6 +35,10 @@ export interface LeaderboardEntry {
   winRate: number;
 }
 
+// In-memory cache with 5-minute TTL
+let cache: { data: LeaderboardEntry[]; minGames: number; limit: number; at: number } | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 export async function GET(request: NextRequest) {
   try {
     await verifyAuth(request);
@@ -45,20 +51,42 @@ export async function GET(request: NextRequest) {
     const minGames = parseInt(searchParams.get('minGames') ?? '0', 10) || 0;
     const limit = Math.min(parseInt(searchParams.get('limit') ?? '500', 10) || 500, 1000);
 
+    // Check cache
+    const now = Date.now();
+    if (cache && cache.minGames === minGames && cache.limit === limit && now - cache.at < CACHE_TTL_MS) {
+      return NextResponse.json({ decks: cache.data }, {
+        headers: { 'Cache-Control': 'public, max-age=300, s-maxage=300' },
+      });
+    }
+
     const store = getRatingStore();
     const ratings = await store.getLeaderboard({ minGames, limit });
 
-    // Enrich with deck metadata in parallel
+    // Build leaderboard entries using denormalized metadata when available
     const entries = await Promise.all(
       ratings.map(async (r): Promise<LeaderboardEntry | null> => {
-        const deck = await getDeckById(r.deckId);
-        if (!deck) return null;
+        // Use denormalized fields if present, otherwise fall back to getDeckById
+        let name = r.deckName;
+        let setName = r.setName;
+        let isPrecon = r.isPrecon;
+        let primaryCommander = r.primaryCommander;
+
+        if (!name) {
+          // Backcompat: older rating docs may not have denormalized metadata
+          const deck = await getDeckById(r.deckId);
+          if (!deck) return null;
+          name = deck.name;
+          setName = deck.setName ?? null;
+          isPrecon = deck.isPrecon;
+          primaryCommander = deck.primaryCommander ?? null;
+        }
+
         return {
           deckId: r.deckId,
-          name: deck.name,
-          setName: deck.setName ?? null,
-          isPrecon: deck.isPrecon,
-          primaryCommander: deck.primaryCommander ?? null,
+          name,
+          setName: setName ?? null,
+          isPrecon: isPrecon ?? false,
+          primaryCommander: primaryCommander ?? null,
           mu: r.mu,
           sigma: r.sigma,
           rating: r.mu - 3 * r.sigma,
@@ -69,10 +97,14 @@ export async function GET(request: NextRequest) {
       }),
     );
 
-    // Filter out decks that no longer exist in the store
     const validEntries = entries.filter((e): e is LeaderboardEntry => e !== null);
 
-    return NextResponse.json({ decks: validEntries });
+    // Update cache
+    cache = { data: validEntries, minGames, limit, at: now };
+
+    return NextResponse.json({ decks: validEntries }, {
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=300' },
+    });
   } catch (error) {
     console.error('[Leaderboard] Failed to fetch leaderboard:', error);
     return NextResponse.json({ error: 'Failed to fetch leaderboard' }, { status: 500 });

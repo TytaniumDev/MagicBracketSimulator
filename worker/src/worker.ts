@@ -356,53 +356,78 @@ async function processSimulation(
   allActiveAbortControllers.push(abortController);
 
   try {
-    // Run the simulation container with cancellation signal
-    const result = await runSimulationContainer(jobId, simId, simIndex, deckContents, abortController.signal);
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 30_000;
 
-    if (result.error === 'AlreadyRunning') {
-      // Container is already running from a previous attempt — don't report status
-      return;
-    } else if (result.error === 'Cancelled') {
-      console.log(`${simLabel} CANCELLED in ${formatDuration(result.durationMs)}`);
-      await reportSimulationStatus(jobId, simId, {
-        state: 'CANCELLED',
-        durationMs: result.durationMs,
-      });
-    } else if (result.exitCode === 0) {
-      // Split concatenated 4-game log and extract per-game winners/turns
-      const games = splitConcatenatedGames(result.logText);
-      const winners: string[] = [];
-      const winningTurns: number[] = [];
-      for (const game of games) {
-        const w = extractWinner(game);
-        if (w) winners.push(w);
-        const t = extractWinningTurn(game);
-        if (t > 0) winningTurns.push(t);
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      // Run the simulation container with cancellation signal
+      const result = await runSimulationContainer(jobId, simId, simIndex, deckContents, abortController.signal);
+
+      if (result.error === 'AlreadyRunning') {
+        // Container is already running from a previous attempt — don't report status
+        return;
+      } else if (result.error === 'Cancelled') {
+        console.log(`${simLabel} CANCELLED in ${formatDuration(result.durationMs)}`);
+        await reportSimulationStatus(jobId, simId, {
+          state: 'CANCELLED',
+          durationMs: result.durationMs,
+        });
+        return;
+      } else if (result.exitCode === 0) {
+        // Split concatenated 4-game log and extract per-game winners/turns
+        const games = splitConcatenatedGames(result.logText);
+        const winners: string[] = [];
+        const winningTurns: number[] = [];
+        for (const game of games) {
+          const w = extractWinner(game);
+          if (w) winners.push(w);
+          const t = extractWinningTurn(game);
+          if (t > 0) winningTurns.push(t);
+        }
+        console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB, games=${games.length}, winners=${winners.length}`);
+
+        await reportSimulationStatus(jobId, simId, {
+          state: 'COMPLETED',
+          durationMs: result.durationMs,
+          winners,
+          winningTurns,
+        });
+
+        // Upload log incrementally (non-fatal)
+        if (result.logText.trim()) {
+          await uploadSingleSimulationLog(jobId, simIndex, result.logText);
+        }
+        return;
+      } else {
+        // Container failed — retry locally before reporting FAILED
+        const errorMsg = result.error || `Exit code ${result.exitCode}`;
+
+        if (attempt < MAX_RETRIES && !abortController.signal.aborted) {
+          console.log(`${simLabel} FAILED (attempt ${attempt + 1}/${MAX_RETRIES + 1}) in ${formatDuration(result.durationMs)}: ${errorMsg}, retrying in ${RETRY_DELAY_MS / 1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+
+          // Check if job was cancelled during backoff
+          if (abortController.signal.aborted) {
+            console.log(`${simLabel} Cancelled during retry backoff`);
+            await reportSimulationStatus(jobId, simId, { state: 'CANCELLED' });
+            return;
+          }
+          continue; // Retry
+        }
+
+        // All retries exhausted — report FAILED
+        console.log(`${simLabel} FAILED in ${formatDuration(result.durationMs)} after ${attempt + 1} attempt(s): ${errorMsg}`);
+        if (result.logText) {
+          console.log(`${simLabel} Log preview (first 500 chars): ${result.logText.slice(0, 500)}`);
+        }
+
+        await reportSimulationStatus(jobId, simId, {
+          state: 'FAILED',
+          durationMs: result.durationMs,
+          errorMessage: errorMsg,
+        });
+        return;
       }
-      console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB, games=${games.length}, winners=${winners.length}`);
-
-      await reportSimulationStatus(jobId, simId, {
-        state: 'COMPLETED',
-        durationMs: result.durationMs,
-        winners,
-        winningTurns,
-      });
-
-      // Upload log incrementally (non-fatal)
-      if (result.logText.trim()) {
-        await uploadSingleSimulationLog(jobId, simIndex, result.logText);
-      }
-    } else {
-      console.log(`${simLabel} FAILED in ${formatDuration(result.durationMs)}: ${result.error || `Exit code ${result.exitCode}`}`);
-      if (result.logText) {
-        console.log(`${simLabel} Log preview (first 500 chars): ${result.logText.slice(0, 500)}`);
-      }
-
-      await reportSimulationStatus(jobId, simId, {
-        state: 'FAILED',
-        durationMs: result.durationMs,
-        errorMessage: result.error || `Exit code ${result.exitCode}`,
-      });
     }
   } finally {
     // Unregister abort controller from both per-job and global lists
