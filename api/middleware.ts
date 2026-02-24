@@ -32,7 +32,7 @@ export function middleware(request: NextRequest) {
       headers: {
         'Access-Control-Allow-Origin': allowedOrigin || '',
         'Access-Control-Allow-Methods': 'GET, POST, DELETE, PATCH, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Firebase-AppCheck',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Credentials': 'true',
         'Access-Control-Max-Age': '86400',
       },
@@ -43,7 +43,7 @@ export function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/api/') && allowedOrigin) {
     response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, PATCH, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Firebase-AppCheck');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     response.headers.set('Access-Control-Allow-Credentials', 'true');
   }
   return response;

@@ -4,11 +4,6 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
 jobs:
   add-label:
     uses: TytaniumDev/.github/.github/workflows/automerge-label.yml@main

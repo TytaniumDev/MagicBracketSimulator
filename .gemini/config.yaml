@@ -1,6 +1,0 @@
-# Configuration for Gemini Code Assist
-code_review:
-  pull_request_opened:
-    code_review: true
-    summary: true
-    include_drafts: true
