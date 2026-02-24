@@ -6,8 +6,6 @@
  */
 
 import * as os from 'os';
-import * as fs from 'fs';
-import * as path from 'path';
 import { execFile } from 'child_process';
 import { spawn } from 'child_process';
 import { GAMES_PER_CONTAINER } from './constants.js';
@@ -35,7 +33,6 @@ const SYSTEM_RESERVE_MB = 2048;
 const CONTAINER_TIMEOUT_MS = 2 * 60 * 60 * 1000;  // 2 hours (4 sequential games per container)
 const MAX_CONCURRENT_SIMS = parseInt(process.env.MAX_CONCURRENT_SIMS || '6', 10);
 const CPUS_PER_SIM = 2;  // Forge + Java JIT + xvfb needs ~2 CPUs per sim
-const JOBS_DIR = process.env.JOBS_DIR || '/tmp/mbs-jobs';
 
 // ============================================================================
 // Docker helpers
@@ -125,9 +122,6 @@ async function getContainerState(containerName: string): Promise<'running' | 'st
 /**
  * Run a single simulation as a `docker run --rm` container.
  * Blocks until the container exits. Stdout contains the game logs.
- *
- * Uses a temporary directory mount for deck files to avoid exposing
- * sensitive data in environment variables (process listing).
  */
 export async function runSimulationContainer(
   jobId: string,
@@ -152,116 +146,101 @@ export async function runSimulationContainer(
 
   const deckFilenames: [string, string, string, string] = ['deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck'];
 
-  // Create temporary directory for job files
-  const jobDir = path.join(JOBS_DIR, `sim-${jobId.slice(0, 8)}-${simId}`);
-  fs.mkdirSync(jobDir, { recursive: true });
+  // Base64-encode deck contents into env vars
+  const deckEnvVars: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    const b64 = Buffer.from(deckContents[i], 'utf-8').toString('base64');
+    deckEnvVars.push('-e', `DECK_${i}_B64=${b64}`);
+  }
 
-  try {
-    // Write deck contents to files
-    for (let i = 0; i < 4; i++) {
-      fs.writeFileSync(path.join(jobDir, deckFilenames[i]), deckContents[i], 'utf8');
+  const args = [
+    'run', '--rm',
+    '--name', containerName,
+    '--memory', `${RAM_PER_SIM_MB}m`,
+    '--cpus', String(CPUS_PER_SIM),
+    ...deckEnvVars,
+    '-e', 'FORGE_PATH=/app/forge',
+    '-e', 'LOGS_DIR=/app/logs',
+    SIMULATION_IMAGE,
+    '--decks', ...deckFilenames,
+    '--simulations', String(GAMES_PER_CONTAINER),
+    '--id', `${jobId}_${simId}`,
+  ];
+
+  console.log(`[${simId}] Starting container ${containerName} (image=${SIMULATION_IMAGE}, memory=${RAM_PER_SIM_MB}m)`);
+
+  return new Promise<SimulationResult>((resolve) => {
+    const proc = spawn('docker', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    proc.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+    proc.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+    // Timeout: kill the container if it hangs
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      console.error(`[${simId}] Container timed out after ${CONTAINER_TIMEOUT_MS / 1000}s, killing...`);
+      // Kill the docker run process
+      proc.kill('SIGTERM');
+      // Also force-remove the container in case SIGTERM doesn't propagate
+      spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
+    }, CONTAINER_TIMEOUT_MS);
+
+    // AbortSignal: kill the container if the job is cancelled
+    let cancelled = false;
+    const onAbort = () => {
+      cancelled = true;
+      console.log(`[${simId}] Cancellation signal received, killing container ${containerName}...`);
+      proc.kill('SIGTERM');
+      spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
+    };
+    if (signal) {
+      if (signal.aborted) {
+        // Already aborted before we started
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
     }
 
-    const args = [
-      'run', '--rm',
-      '--name', containerName,
-      '--memory', `${RAM_PER_SIM_MB}m`,
-      '--cpus', String(CPUS_PER_SIM),
-      // Mount temporary deck directory to the container's deck path
-      '-v', `${jobDir}:/home/simulator/.forge/decks/commander:ro`,
-      '-e', 'FORGE_PATH=/app/forge',
-      '-e', 'LOGS_DIR=/app/logs',
-      SIMULATION_IMAGE,
-      '--decks', ...deckFilenames,
-      '--simulations', String(GAMES_PER_CONTAINER),
-      '--id', `${jobId}_${simId}`,
-    ];
-
-    console.log(`[${simId}] Starting container ${containerName} (image=${SIMULATION_IMAGE}, memory=${RAM_PER_SIM_MB}m)`);
-
-    return await new Promise<SimulationResult>((resolve) => {
-      const proc = spawn('docker', args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-
-      proc.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-      proc.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-
-      // Timeout: kill the container if it hangs
-      let timedOut = false;
-      const timeout = setTimeout(() => {
-        timedOut = true;
-        console.error(`[${simId}] Container timed out after ${CONTAINER_TIMEOUT_MS / 1000}s, killing...`);
-        // Kill the docker run process
-        proc.kill('SIGTERM');
-        // Also force-remove the container in case SIGTERM doesn't propagate
-        spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
-      }, CONTAINER_TIMEOUT_MS);
-
-      // AbortSignal: kill the container if the job is cancelled
-      let cancelled = false;
-      const onAbort = () => {
-        cancelled = true;
-        console.log(`[${simId}] Cancellation signal received, killing container ${containerName}...`);
-        proc.kill('SIGTERM');
-        spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
-      };
-      if (signal) {
-        if (signal.aborted) {
-          // Already aborted before we started
-          onAbort();
-        } else {
-          signal.addEventListener('abort', onAbort, { once: true });
-        }
-      }
-
-      proc.on('error', (err) => {
-        clearTimeout(timeout);
-        signal?.removeEventListener('abort', onAbort);
-        const durationMs = Date.now() - startTime;
-        resolve({
-          simId, index, exitCode: 1, durationMs,
-          logText: '', error: `Failed to start container: ${err.message}`,
-        });
-      });
-
-      proc.on('close', (code) => {
-        clearTimeout(timeout);
-        signal?.removeEventListener('abort', onAbort);
-        const durationMs = Date.now() - startTime;
-        const logText = Buffer.concat(stdoutChunks).toString('utf-8');
-        const stderr = Buffer.concat(stderrChunks).toString('utf-8');
-
-        let exitCode = code ?? 1;
-        let error: string | undefined;
-
-        if (cancelled) {
-          exitCode = 137;
-          error = 'Cancelled';
-        } else if (timedOut) {
-          exitCode = 124;
-          error = `Container timed out after ${CONTAINER_TIMEOUT_MS / 1000}s`;
-        } else if (exitCode !== 0) {
-          error = stderr.trim().slice(0, 500) || `Exit code ${exitCode}`;
-        }
-
-        resolve({ simId, index, exitCode, durationMs, logText, error });
+    proc.on('error', (err) => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+      const durationMs = Date.now() - startTime;
+      resolve({
+        simId, index, exitCode: 1, durationMs,
+        logText: '', error: `Failed to start container: ${err.message}`,
       });
     });
 
-  } finally {
-    // Cleanup temporary job directory
-    try {
-      if (fs.existsSync(jobDir)) {
-        fs.rmSync(jobDir, { recursive: true, force: true });
+    proc.on('close', (code) => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+      const durationMs = Date.now() - startTime;
+      const logText = Buffer.concat(stdoutChunks).toString('utf-8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf-8');
+
+      let exitCode = code ?? 1;
+      let error: string | undefined;
+
+      if (cancelled) {
+        exitCode = 137;
+        error = 'Cancelled';
+      } else if (timedOut) {
+        exitCode = 124;
+        error = `Container timed out after ${CONTAINER_TIMEOUT_MS / 1000}s`;
+      } else if (exitCode !== 0) {
+        error = stderr.trim().slice(0, 500) || `Exit code ${exitCode}`;
       }
-    } catch (err) {
-      console.warn(`[${simId}] Failed to cleanup job directory ${jobDir}:`, err);
-    }
-  }
+
+      resolve({ simId, index, exitCode, durationMs, logText, error });
+    });
+  });
 }
 
 // ============================================================================
