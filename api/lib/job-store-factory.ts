@@ -6,7 +6,7 @@ import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState, WorkerInfo
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
-import { deleteJobProgress } from './rtdb';
+import { deleteJobProgress, updateJobProgress } from './rtdb';
 import { cancelRecoveryCheck } from './cloud-tasks';
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
@@ -509,6 +509,13 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   }
 
   await setJobCompleted(jobId);
+
+  // Notify frontend via RTDB — Firestore is already COMPLETED at this point,
+  // so the REST fallback in useJobProgress will see the correct status.
+  updateJobProgress(jobId, {
+    status: 'COMPLETED',
+    completedAt: new Date().toISOString(),
+  }).catch(() => {});
 
   // Clean up RTDB ephemeral data and cancel recovery task
   cancelRecoveryCheck(jobId).catch(() => {});

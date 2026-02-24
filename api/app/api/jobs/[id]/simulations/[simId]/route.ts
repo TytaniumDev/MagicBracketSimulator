@@ -105,13 +105,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(() => {});
 
       if (completedSimCount >= totalSimCount && totalSimCount > 0) {
-        // Update RTDB before aggregation (frontend sees COMPLETED immediately)
-        updateJobProgress(id, {
-          status: 'COMPLETED',
-          completedAt: new Date().toISOString(),
-        }).catch(() => {});
-
-        // Run aggregation in background — don't block the response
+        // Run aggregation in background — don't block the response.
+        // aggregateJobResults() updates Firestore first, then writes COMPLETED to RTDB,
+        // ensuring the frontend's REST fallback always sees the correct status.
         jobStore.aggregateJobResults(id).catch(err => {
           console.error(`[Aggregation] Failed for job ${id}:`, err);
         });
