@@ -54,6 +54,18 @@ export function useJobProgress<T>(jobId: string | undefined) {
         cleanupSims?.();
       };
 
+      // Fetch full job from REST to establish base state. RTDB only has
+      // ephemeral progress fields and lacks id, name, simulations count, etc.
+      fetchJobRest(jobId).then((restJob) => {
+        if (unsubscribed || !restJob) return;
+        setJob(prev => {
+          if (!prev) return restJob as T;
+          // RTDB already fired — layer REST underneath so real-time fields win
+          return { ...(restJob as T), ...prev };
+        });
+        setConnected(true);
+      });
+
       // Job-level listener
       cleanupJob = onValue(jobRef, (snapshot) => {
         if (unsubscribed) return;
@@ -74,7 +86,16 @@ export function useJobProgress<T>(jobId: string | undefined) {
         // Simulation data is handled by the dedicated simsRef listener below.
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { simulations: _rtdbSims, ...jobData } = data;
-        setJob(jobData as T);
+        setJob(prev => {
+          if (!prev) return jobData as T;
+          const merged = { ...prev };
+          for (const [key, value] of Object.entries(jobData)) {
+            if (value !== undefined) {
+              (merged as Record<string, unknown>)[key] = value;
+            }
+          }
+          return merged;
+        });
         setConnected(true);
         setError(null);
 
