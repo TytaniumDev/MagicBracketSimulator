@@ -100,7 +100,7 @@ export function useJobData(jobId: string | undefined) {
           setFallbackSimulations(data.simulations);
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error('Failed to fetch fallback simulations:', err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, apiBase, job?.status]);
 

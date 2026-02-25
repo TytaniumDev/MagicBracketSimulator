@@ -75,6 +75,7 @@ export function useJobLogs(
   // Stable keys for color identity dependencies
   const deckNamesKey = job?.deckNames?.join(',') ?? '';
   const logDeckNamesKey = deckNames?.join(',') ?? '';
+  const colorIdentityKey = JSON.stringify(job?.colorIdentity);
 
   // Resolve color identity (server-provided or separate fetch)
   useEffect(() => {
@@ -94,9 +95,9 @@ export function useJobLogs(
     fetchWithAuth(`${apiBase}/api/deck-color-identity?${params}`)
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
-      .catch(() => {});
+      .catch((err) => console.error('Failed to fetch color identity:', err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiBase, job?.id, deckNamesKey, logDeckNamesKey]);
+  }, [apiBase, job?.id, deckNamesKey, logDeckNamesKey, colorIdentityKey]);
 
   // Fetch raw and condensed logs when log panel is opened
   useEffect(() => {
