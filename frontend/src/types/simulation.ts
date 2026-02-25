@@ -1,22 +1,3 @@
-/** Number of games each simulation container runs sequentially. Must match api/lib/types.ts. */
-export const GAMES_PER_CONTAINER = 4;
-
-/** Lifecycle state for an individual simulation within a job. */
-export type SimulationState = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-/** Status tracking for a single simulation within a job. */
-export interface SimulationStatus {
-  simId: string;
-  index: number;
-  state: SimulationState;
-  workerId?: string;
-  workerName?: string;
-  startedAt?: string;
-  completedAt?: string;
-  durationMs?: number;
-  errorMessage?: string;
-  winner?: string;
-  winningTurn?: number;
-  winners?: string[];
-  winningTurns?: number[];
-}
+/** Re-export from shared types — single source of truth. */
+export { GAMES_PER_CONTAINER } from '@shared/types/job';
+export type { SimulationState, SimulationStatus } from '@shared/types/simulation';

@@ -1,4 +1,5 @@
-import { GAMES_PER_CONTAINER, type Job } from './types';
+import type { Job } from './types';
+import type { JobResponse } from '@shared/types/job';
 
 export interface QueueInfo {
   queuePosition?: number;
@@ -10,7 +11,7 @@ export function jobToStreamEvent(
   queueInfo?: QueueInfo,
   deckLinks?: Record<string, string | null>,
   computedGamesCompleted?: number
-) {
+): JobResponse {
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();

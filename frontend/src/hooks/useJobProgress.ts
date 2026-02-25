@@ -2,11 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { getApiBase, getFirebaseIdToken } from '../api';
+import { isTerminal } from '../utils/status';
 import type { SimulationStatus } from '../types/simulation';
-
-function isTerminal(status: string | undefined): boolean {
-  return status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED';
-}
 
 /**
  * Hook for real-time job progress updates.

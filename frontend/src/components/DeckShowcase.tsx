@@ -1,6 +1,7 @@
 import { ColorIdentity } from './ColorIdentity';
+import type { JobStatus } from '@shared/types/job';
 
-type JobStatusValue = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+type JobStatusValue = JobStatus;
 
 interface DeckShowcaseProps {
   deckNames: string[];
