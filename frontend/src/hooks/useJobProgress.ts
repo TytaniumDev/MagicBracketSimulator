@@ -66,6 +66,30 @@ export function useJobProgress<T>(jobId: string | undefined) {
         setConnected(true);
       });
 
+      // Poll simulations via REST as a fallback in case RTDB doesn't deliver them.
+      // Polls every 3s; stops once sims arrive from any source or job is unsubscribed.
+      let simsReceived = false;
+      let simPollTimer: ReturnType<typeof setInterval> | null = null;
+      simPollTimer = setInterval(() => {
+        if (unsubscribed || simsReceived) {
+          if (simPollTimer) { clearInterval(simPollTimer); simPollTimer = null; }
+          return;
+        }
+        fetchSimsRest(jobId).then((sims) => {
+          if (!unsubscribed && sims && sims.length > 0) {
+            simsReceived = true;
+            if (simPollTimer) { clearInterval(simPollTimer); simPollTimer = null; }
+            setSimulations(sims);
+          }
+        });
+      }, 3000);
+
+      // Helper to mark sims as received (called when RTDB delivers sims)
+      const markSimsReceived = () => {
+        simsReceived = true;
+        if (simPollTimer) { clearInterval(simPollTimer); simPollTimer = null; }
+      };
+
       // Job-level listener
       cleanupJob = onValue(jobRef, (snapshot) => {
         if (unsubscribed) return;
@@ -83,9 +107,7 @@ export function useJobProgress<T>(jobId: string | undefined) {
         }
         // Strip the `simulations` child — RTDB subtree includes it as a nested
         // object, but our Job type expects `simulations` to be a number.
-        // Simulation data is handled by the dedicated simsRef listener below.
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { simulations: _rtdbSims, ...jobData } = data;
+        const { simulations: rtdbSims, ...jobData } = data;
         setJob(prev => {
           if (!prev) return jobData as T;
           const merged = { ...prev };
@@ -98,6 +120,22 @@ export function useJobProgress<T>(jobId: string | undefined) {
         });
         setConnected(true);
         setError(null);
+
+        // Extract simulation statuses directly from the parent snapshot.
+        // This is more reliable than the dedicated simsRef listener since
+        // the parent snapshot always includes the full subtree.
+        if (rtdbSims && typeof rtdbSims === 'object') {
+          const sims: SimulationStatus[] = Object.entries(rtdbSims)
+            .map(([simId, simData]) => ({
+              simId,
+              ...(simData as Record<string, unknown>),
+            }))
+            .sort((a, b) => ((a as SimulationStatus).index ?? 0) - ((b as SimulationStatus).index ?? 0)) as SimulationStatus[];
+          if (sims.length > 0) {
+            markSimsReceived();
+            setSimulations(sims);
+          }
+        }
 
         if (isTerminal(data.status)) {
           // Job is done — unsubscribe from RTDB
@@ -113,7 +151,7 @@ export function useJobProgress<T>(jobId: string | undefined) {
         setConnected(false);
       });
 
-      // Simulations listener
+      // Simulations listener (belt-and-suspenders alongside parent extraction)
       cleanupSims = onValue(simsRef, (snapshot) => {
         if (unsubscribed) return;
         const data = snapshot.val();
@@ -127,12 +165,16 @@ export function useJobProgress<T>(jobId: string | undefined) {
           }))
           .sort((a, b) => ((a as SimulationStatus).index ?? 0) - ((b as SimulationStatus).index ?? 0)) as SimulationStatus[];
 
+        markSimsReceived();
         setSimulations(sims);
       }, () => {
         // Non-fatal: simulation updates just won't appear
       });
 
-      return () => unsubAll();
+      return () => {
+        unsubAll();
+        if (simPollTimer) { clearInterval(simPollTimer); simPollTimer = null; }
+      };
     }
 
     // ─── LOCAL mode: SSE fallback ───────────────────────────────────────
@@ -224,6 +266,26 @@ async function fetchJobRest(jobId: string): Promise<unknown | null> {
     const res = await fetch(`${apiBase}/api/jobs/${jobId}`, { headers });
     if (!res.ok) return null;
     return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch simulation statuses via REST API.
+ * Fallback for when RTDB doesn't deliver simulation data.
+ */
+async function fetchSimsRest(jobId: string): Promise<SimulationStatus[] | null> {
+  try {
+    const apiBase = getApiBase();
+    const token = await getFirebaseIdToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${apiBase}/api/jobs/${jobId}/simulations`, { headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data.simulations) ? data.simulations : null;
   } catch {
     return null;
   }
