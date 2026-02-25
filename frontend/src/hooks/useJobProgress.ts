@@ -69,7 +69,12 @@ export function useJobProgress<T>(jobId: string | undefined) {
           });
           return;
         }
-        setJob(data as T);
+        // Strip the `simulations` child — RTDB subtree includes it as a nested
+        // object, but our Job type expects `simulations` to be a number.
+        // Simulation data is handled by the dedicated simsRef listener below.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { simulations: _rtdbSims, ...jobData } = data;
+        setJob(jobData as T);
         setConnected(true);
         setError(null);
 
