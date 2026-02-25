@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { publishSimulationTasks } from '@/lib/pubsub';
 import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, GAMES_PER_CONTAINER, type CreateJobRequest } from '@/lib/types';
+import type { JobSummary } from '@shared/types/job';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { pushToAllWorkers } from '@/lib/worker-push';
@@ -14,7 +15,7 @@ import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
  * Convert Job to API summary format.
  * Accepts pre-computed gamesCompleted derived from simulation statuses.
  */
-function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCompleted: number) {
+function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCompleted: number): JobSummary | null {
   if (!job) return null;
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();

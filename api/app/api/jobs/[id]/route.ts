@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
+import type { JobResponse } from '@shared/types/job';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -32,7 +33,7 @@ async function resolveDeckLinksAndColors(
 async function jobToApiResponse(
   job: Awaited<ReturnType<typeof jobStore.getJob>>,
   isWorker: boolean
-) {
+): Promise<JobResponse | null> {
   if (!job) return null;
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();

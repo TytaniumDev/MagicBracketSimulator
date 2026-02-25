@@ -4,20 +4,7 @@ import { getApiBase, fetchWithAuth, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
-
-type JobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-interface JobSummary {
-  id: string;
-  name: string;
-  deckNames: string[];
-  status: JobStatus;
-  simulations: number;
-  gamesCompleted: number;
-  createdAt: string;
-  hasResult: boolean;
-  durationMs?: number | null;
-}
+import type { JobStatus, JobSummary } from '@shared/types/job';
 
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
