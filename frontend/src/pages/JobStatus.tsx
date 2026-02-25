@@ -121,6 +121,7 @@ export default function JobStatusPage() {
   // Event type filter state - empty set means show all
   const [eventFilters, setEventFilters] = useState<Set<string>>(new Set());
   
+  const [loadStructuredLogs, setLoadStructuredLogs] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeletingJob, setIsDeletingJob] = useState(false);
 
@@ -217,9 +218,9 @@ export default function JobStatusPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, apiBase, job?.status]);
 
-  // Fetch structured logs for Deck Actions when job is completed/failed
+  // Fetch structured logs for Deck Actions (deferred until user requests them)
   useEffect(() => {
-    if (!id || !job) return;
+    if (!id || !job || !loadStructuredLogs) return;
     if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
     if (structuredGames !== null) return; // Already fetched
 
@@ -237,7 +238,7 @@ export default function JobStatusPage() {
         setDeckNames(data.deckNames ?? null);
       })
       .catch((err) => setStructuredError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [id, apiBase, job, structuredGames]);
+  }, [id, apiBase, job, structuredGames, loadStructuredLogs]);
 
   // Stable keys for color identity dependencies (avoid re-fetching on every poll cycle)
   const deckNamesKey = job?.deckNames?.join(',') ?? '';
@@ -705,7 +706,16 @@ export default function JobStatusPage() {
             {structuredError && (
               <p className="text-sm text-red-400 mb-2">{structuredError}</p>
             )}
-            {structuredGames === null && !structuredError && (
+            {structuredGames === null && !structuredError && !loadStructuredLogs && (
+              <button
+                type="button"
+                onClick={() => setLoadStructuredLogs(true)}
+                className="px-4 py-2 text-sm bg-gray-700 text-gray-200 rounded hover:bg-gray-600 transition-colors"
+              >
+                Load Deck Actions
+              </button>
+            )}
+            {structuredGames === null && !structuredError && loadStructuredLogs && (
               <p className="text-sm text-gray-500">Loading deck actions...</p>
             )}
             {structuredGames && structuredGames.length === 0 && !structuredError && (

@@ -50,20 +50,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const jobs = await jobStore.listJobs();
-    const summaries = await Promise.all(
-      jobs.map(async (j) => {
-        if (!j) return null;
-        // Derive gamesCompleted from simulation statuses (source of truth)
-        const sims = await jobStore.getSimulationStatuses(j.id);
-        const gamesCompleted = sims.length > 0
-          ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+    // Derive gamesCompleted from atomic counters (O(1) — no subcollection reads)
+    const summaries = jobs
+      .filter((j): j is NonNullable<typeof j> => j !== null)
+      .map((j) => {
+        const gamesCompleted = (j.completedSimCount != null && j.completedSimCount > 0)
+          ? j.completedSimCount * GAMES_PER_CONTAINER
           : (j.gamesCompleted ?? 0);
         return jobToSummary(j, gamesCompleted);
       })
-    );
-    const filtered = summaries.filter((s): s is NonNullable<typeof s> => s !== null);
+      .filter((s): s is NonNullable<typeof s> => s !== null);
 
-    return NextResponse.json({ jobs: filtered });
+    return NextResponse.json({ jobs: summaries });
   } catch (error) {
     console.error('GET /api/jobs error:', error);
     return NextResponse.json(

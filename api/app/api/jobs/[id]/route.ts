@@ -36,10 +36,9 @@ async function jobToApiResponse(
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
 
-  // Derive gamesCompleted from simulation statuses (source of truth)
-  const sims = await jobStore.getSimulationStatuses(job.id);
-  const gamesCompleted = sims.length > 0
-    ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+  // Derive gamesCompleted from atomic counters (O(1) — no subcollection reads)
+  const gamesCompleted = (job.completedSimCount != null && job.completedSimCount > 0)
+    ? job.completedSimCount * GAMES_PER_CONTAINER
     : (job.gamesCompleted ?? 0);
 
   const base = {

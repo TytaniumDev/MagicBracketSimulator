@@ -205,6 +205,8 @@ export interface Job {
   workerName?: string;
   claimedAt?: Date;
   retryCount?: number;
+  completedSimCount?: number;
+  totalSimCount?: number;
 }
 
 // -----------------------------------------------------------------------------

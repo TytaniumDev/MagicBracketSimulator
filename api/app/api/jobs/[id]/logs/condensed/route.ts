@@ -22,7 +22,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!condensed) {
       return NextResponse.json({ error: 'Logs not found for this job' }, { status: 404 });
     }
-    return NextResponse.json({ condensed });
+    return NextResponse.json({ condensed }, {
+      headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=86400' },
+    });
   } catch (error) {
     console.error('GET /api/jobs/[id]/logs/condensed error:', error);
     return NextResponse.json(

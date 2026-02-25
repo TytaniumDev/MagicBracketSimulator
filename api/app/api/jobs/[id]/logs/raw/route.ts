@@ -22,7 +22,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!gameLogs) {
       return NextResponse.json({ error: 'Logs not found for this job' }, { status: 404 });
     }
-    return NextResponse.json({ gameLogs });
+    return NextResponse.json({ gameLogs }, {
+      headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=86400' },
+    });
   } catch (error) {
     console.error('GET /api/jobs/[id]/logs/raw error:', error);
     return NextResponse.json(

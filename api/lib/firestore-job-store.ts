@@ -33,6 +33,8 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     ...(data.workerName && { workerName: data.workerName }),
     ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
     ...(data.retryCount != null && data.retryCount > 0 && { retryCount: data.retryCount }),
+    ...(data.completedSimCount != null && { completedSimCount: data.completedSimCount }),
+    ...(data.totalSimCount != null && { totalSimCount: data.totalSimCount }),
   };
 }
 
