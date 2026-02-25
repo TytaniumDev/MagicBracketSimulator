@@ -39,9 +39,9 @@ export function computeSimWins(
     (s) => (s.winners && s.winners.length > 0) || s.winner
   );
   if (!hasAnyWinData) {
-    const gamesCompleted =
-      completedSims.reduce((sum, s) => sum + (s.winners?.length ?? 0), 0) ||
-      completedSims.length;
+    const gamesCompleted = completedSims.reduce(
+      (sum, s) => sum + (s.winners && s.winners.length > 0 ? s.winners.length : 1), 0,
+    ) || completedSims.length;
     return { simWinTally: null, simWinTurns: null, simGamesCompleted: gamesCompleted };
   }
 
@@ -84,9 +84,11 @@ export function computeSimWins(
     turns[deck].sort((a, b) => a - b);
   }
 
-  const gamesCompleted =
-    completedSims.reduce((sum, s) => sum + (s.winners?.length ?? 0), 0) ||
-    completedSims.length;
+  // Count games per sim: prefer winners[].length for multi-game containers,
+  // fall back to 1 for single-game containers (winner field only).
+  const gamesCompleted = completedSims.reduce(
+    (sum, s) => sum + (s.winners && s.winners.length > 0 ? s.winners.length : 1), 0,
+  ) || completedSims.length;
 
   return { simWinTally: tally, simWinTurns: turns, simGamesCompleted: gamesCompleted };
 }
@@ -157,6 +159,9 @@ export function resolveEffectiveWins(
     (structuredWinTally && Object.keys(structuredWinTally).length > 0
       ? structuredWinTally
       : simWinTally);
+  // winTurns resolves independently of winTally — server results (jobResults)
+  // don't include per-game turn data, so turns always come from structured
+  // games or simulation statuses regardless of which source provides the tally.
   const winTurns =
     structuredWinTally && Object.keys(structuredWinTally).length > 0
       ? structuredWinTurns

@@ -6,10 +6,7 @@
     "strict": true,
     "noEmit": true,
     "isolatedModules": true,
-    "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
-    "composite": true
+    "skipLibCheck": true
   },
   "include": ["types/**/*.ts"]
 }

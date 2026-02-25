@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { getApiBase, fetchWithAuth } from '../api';
 import { useJobProgress } from './useJobProgress';
+import { isTerminal } from '../utils/status';
 import type { JobResponse } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
-
-function isTerminal(status: string | undefined): boolean {
-  return status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED';
-}
 
 /**
  * Consolidates all job data fetching: RTDB/SSE streaming + REST fallback

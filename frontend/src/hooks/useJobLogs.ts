@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getApiBase, fetchWithAuth } from '../api';
+import { isTerminal } from '../utils/status';
 import type { JobResponse } from '@shared/types/job';
 import type { CondensedGame, StructuredGame } from '@shared/types/log';
 
@@ -21,10 +22,6 @@ export interface JobLogsData {
   deckNames: string[] | null;
   /** Color identity by deck name (server-provided or fetched) */
   colorIdentityByDeckName: Record<string, string[]>;
-}
-
-function isTerminal(status: string | undefined): boolean {
-  return status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED';
 }
 
 /**
@@ -53,9 +50,10 @@ export function useJobLogs(
   const apiBase = getApiBase();
 
   // Fetch structured logs (deferred until user requests them)
+  const jobStatus = job?.status;
   useEffect(() => {
-    if (!jobId || !job || !options.loadStructured) return;
-    if (!isTerminal(job.status)) return;
+    if (!jobId || !jobStatus || !options.loadStructured) return;
+    if (!isTerminal(jobStatus)) return;
     if (structuredGames !== null) return; // Already fetched
 
     setStructuredError(null);
@@ -72,7 +70,7 @@ export function useJobLogs(
         setDeckNames(data.deckNames ?? null);
       })
       .catch((err) => setStructuredError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [jobId, apiBase, job, structuredGames, options.loadStructured]);
+  }, [jobId, apiBase, jobStatus, structuredGames, options.loadStructured]);
 
   // Stable keys for color identity dependencies
   const deckNamesKey = job?.deckNames?.join(',') ?? '';

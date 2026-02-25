@@ -127,9 +127,8 @@ describe('computeSimWins', () => {
       'Deck C': 1,
       'Deck D': 0,
     });
-    // gamesCompleted: reduce over winners?.length gives 2 (sim_001) + 0 (sim_002 has no winners[]).
-    // Since reduce result (2) is truthy, it doesn't fall back to completedSims.length.
-    expect(result.simGamesCompleted).toBe(2);
+    // gamesCompleted: 2 (sim_001 winners[].length) + 1 (sim_002 single-game fallback) = 3
+    expect(result.simGamesCompleted).toBe(3);
   });
 });
 
