@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Row {
@@ -46,6 +46,7 @@ function rowToJob(row: Row): Job {
     ...(row.worker_name && { workerName: row.worker_name }),
     ...(row.claimed_at && { claimedAt: new Date(row.claimed_at) }),
     ...(row.retry_count != null && row.retry_count > 0 && { retryCount: row.retry_count }),
+    ...(row.result_json != null && { results: JSON.parse(row.result_json) as JobResults }),
   };
 }
 
@@ -146,6 +147,15 @@ export function setJobFailed(id: string, errorMessage: string, options?: SetJobF
     .prepare('UPDATE jobs SET status = ?, error_message = ?, completed_at = ?, docker_run_durations_ms = ? WHERE id = ?')
     .run('FAILED', errorMessage, completedAt.toISOString(), dockerRunDurationsJson, id);
   return result.changes > 0;
+}
+
+/**
+ * Store aggregated results on the job document.
+ */
+export function setJobResults(id: string, results: JobResults): void {
+  const db = getDb();
+  db.prepare('UPDATE jobs SET result_json = ? WHERE id = ?')
+    .run(JSON.stringify(results), id);
 }
 
 /**

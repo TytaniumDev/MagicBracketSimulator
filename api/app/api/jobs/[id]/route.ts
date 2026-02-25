@@ -9,21 +9,24 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-async function resolveDeckLinks(
+async function resolveDeckLinksAndColors(
   deckIds: string[],
   deckNames: string[]
-): Promise<Record<string, string | null>> {
-  const entries = await Promise.all(
+): Promise<{ links: Record<string, string | null>; colors: Record<string, string[]> }> {
+  const links: Record<string, string | null> = {};
+  const colors: Record<string, string[]> = {};
+  await Promise.all(
     deckIds.map(async (id, i) => {
       try {
         const deck = await getDeckById(id);
-        return [deckNames[i], deck?.link ?? null] as [string, string | null];
+        links[deckNames[i]] = deck?.link ?? null;
+        if (deck?.colorIdentity?.length) colors[deckNames[i]] = deck.colorIdentity;
       } catch {
-        return [deckNames[i], null] as [string, string | null];
+        links[deckNames[i]] = null;
       }
     })
   );
-  return Object.fromEntries(entries);
+  return { links, colors };
 }
 
 async function jobToApiResponse(
@@ -59,6 +62,7 @@ async function jobToApiResponse(
     workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
     retryCount: job.retryCount ?? 0,
+    results: job.results ?? null,
   };
   // Worker needs decks and/or deckIds to run the job
   if (isWorker) {
@@ -69,13 +73,20 @@ async function jobToApiResponse(
     };
   }
 
-  // Resolve deck links for frontend consumers
+  // Resolve deck links and color identity for frontend consumers
   let deckLinks: Record<string, string | null> | undefined;
+  let colorIdentity: Record<string, string[]> | undefined;
   if (job.deckIds && job.deckIds.length === 4) {
-    deckLinks = await resolveDeckLinks(job.deckIds, deckNames);
+    const resolved = await resolveDeckLinksAndColors(job.deckIds, deckNames);
+    deckLinks = resolved.links;
+    if (Object.keys(resolved.colors).length > 0) colorIdentity = resolved.colors;
   }
 
-  return { ...base, ...(deckLinks && { deckLinks }) };
+  return {
+    ...base,
+    ...(deckLinks && { deckLinks }),
+    ...(colorIdentity && { colorIdentity }),
+  };
 }
 
 /**

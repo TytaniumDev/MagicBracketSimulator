@@ -1,5 +1,5 @@
 import { Firestore, Timestamp, FieldValue } from '@google-cloud/firestore';
-import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState } from './types';
 
 // Initialize Firestore client
 const firestore = new Firestore({
@@ -35,6 +35,7 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     ...(data.retryCount != null && data.retryCount > 0 && { retryCount: data.retryCount }),
     ...(data.completedSimCount != null && { completedSimCount: data.completedSimCount }),
     ...(data.totalSimCount != null && { totalSimCount: data.totalSimCount }),
+    ...(data.results != null && { results: data.results as JobResults }),
   };
 }
 
@@ -184,6 +185,13 @@ export async function setJobFailed(id: string, errorMessage: string): Promise<vo
     completedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
+}
+
+/**
+ * Store aggregated results on the job document.
+ */
+export async function setJobResults(jobId: string, results: JobResults): Promise<void> {
+  await jobsCollection.doc(jobId).update({ results });
 }
 
 /**

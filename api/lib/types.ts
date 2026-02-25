@@ -183,6 +183,16 @@ export interface StructuredGame {
   winningTurn?: number;
 }
 
+/** Aggregated results computed during job completion. */
+export interface JobResults {
+  /** Per-deck win counts. Key = deck name, value = number of wins */
+  wins: Record<string, number>;
+  /** Per-deck average winning turn. Key = deck name, value = avg turn */
+  avgWinTurn: Record<string, number>;
+  /** Total games actually played (may be < simulations if some failed) */
+  gamesPlayed: number;
+}
+
 export interface DeckSlot {
   name: string;
   dck: string;
@@ -207,6 +217,7 @@ export interface Job {
   retryCount?: number;
   completedSimCount?: number;
   totalSimCount?: number;
+  results?: JobResults;
 }
 
 // -----------------------------------------------------------------------------

@@ -34,6 +34,7 @@ export function jobToStreamEvent(
     workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
     retryCount: job.retryCount ?? 0,
+    results: job.results ?? null,
     ...(queueInfo?.queuePosition != null && { queuePosition: queueInfo.queuePosition }),
     ...(queueInfo?.workers && { workers: queueInfo.workers }),
     ...(deckLinks && { deckLinks }),

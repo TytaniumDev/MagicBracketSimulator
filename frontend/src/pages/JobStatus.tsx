@@ -31,6 +31,12 @@ interface Job {
   workers?: { online: number; idle: number; busy: number; updating?: number };
   retryCount?: number;
   deckLinks?: Record<string, string | null>;
+  results?: {
+    wins: Record<string, number>;
+    avgWinTurn: Record<string, number>;
+    gamesPlayed: number;
+  } | null;
+  colorIdentity?: Record<string, string[]>;
 }
 
 // Types for Log Analyzer responses
@@ -244,9 +250,17 @@ export default function JobStatusPage() {
   const deckNamesKey = job?.deckNames?.join(',') ?? '';
   const logDeckNamesKey = deckNames?.join(',') ?? '';
 
-  // Fetch color identity for deck names (job.deckNames, deckNames from logs)
+  // Use server-provided colorIdentity, fall back to separate fetch
   useEffect(() => {
     if (!job) return;
+
+    // If the API provided colorIdentity, use it directly
+    if (job.colorIdentity && Object.keys(job.colorIdentity).length > 0) {
+      setColorIdentityByDeckName(job.colorIdentity);
+      return;
+    }
+
+    // Fallback: fetch color identity for deck names (old jobs without colorIdentity)
     const names = new Set<string>();
     job.deckNames?.forEach((n) => names.add(n));
     deckNames?.forEach((n) => names.add(n));
@@ -405,12 +419,11 @@ export default function JobStatusPage() {
     return { winTally: tally, winTurns: turns };
   }, [structuredGames, deckNames]);
 
-  // Effective win data: prefer structured game data, fall back to simulation statuses
-  const effectiveWinTally = winTally && Object.keys(winTally).length > 0 ? winTally : simWinTally;
+  // Effective win data: prefer job.results (server-computed), fall back to structured games, then sim statuses
+  const effectiveWinTally = job?.results?.wins ?? (winTally && Object.keys(winTally).length > 0 ? winTally : simWinTally);
   const effectiveWinTurns = winTally && Object.keys(winTally).length > 0 ? winTurns : simWinTurns;
-  const effectiveGamesPlayed = structuredGames && structuredGames.length > 0
-    ? structuredGames.length
-    : simGamesCompleted;
+  const effectiveGamesPlayed = job?.results?.gamesPlayed
+    ?? (structuredGames && structuredGames.length > 0 ? structuredGames.length : simGamesCompleted);
 
   if (error) {
     return (

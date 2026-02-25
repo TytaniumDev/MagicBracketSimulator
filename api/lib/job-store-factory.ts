@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER } from './types';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER } from './types';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -108,6 +108,14 @@ export async function setJobFailed(id: string, errorMessage: string, dockerRunDu
     return;
   }
   sqliteStore.setJobFailed(id, errorMessage, { dockerRunDurationsMs });
+}
+
+export async function setJobResults(jobId: string, results: JobResults): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.setJobResults(jobId, results);
+    return;
+  }
+  sqliteStore.setJobResults(jobId, results);
 }
 
 export async function claimNextJob(): Promise<Job | null> {
@@ -475,25 +483,54 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') return; // Already aggregated
 
   // Read raw logs uploaded incrementally by workers
-  const { getRawLogs, ingestLogs } = await import('./log-store');
+  const { getRawLogs, ingestLogs, getStructuredLogs } = await import('./log-store');
   const rawLogs = await getRawLogs(jobId);
 
+  const deckNames = job.decks.map(d => d.name);
   if (rawLogs && rawLogs.length > 0) {
-    const deckNames = job.decks.map(d => d.name);
     const deckLists = job.decks.map(d => d.dck ?? '');
     await ingestLogs(jobId, rawLogs, deckNames, deckLists);
   }
 
-  // Update TrueSkill ratings for jobs with 4 resolved deck IDs
-  if (Array.isArray(job.deckIds) && job.deckIds.length === 4) {
-    const { getStructuredLogs } = await import('./log-store');
-    const structuredData = await getStructuredLogs(jobId);
-    if (structuredData?.games?.length) {
-      const { processJobForRatings } = await import('./trueskill-service');
-      processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
-        console.error(`[TrueSkill] Rating update failed for job ${jobId} (non-fatal):`, err);
-      });
+  // Load structured games for results computation and TrueSkill
+  const structuredData = await getStructuredLogs(jobId);
+
+  // Compute aggregated results from structured games
+  if (structuredData?.games?.length) {
+    const { matchesDeckName } = await import('./condenser/deck-match');
+    const results: JobResults = { wins: {}, avgWinTurn: {}, gamesPlayed: structuredData.games.length };
+    const turnSums: Record<string, number[]> = {};
+    for (const name of deckNames) {
+      results.wins[name] = 0;
+      results.avgWinTurn[name] = 0;
+      turnSums[name] = [];
     }
+
+    for (const game of structuredData.games) {
+      if (game.winner) {
+        const matched = deckNames.find(n => matchesDeckName(game.winner!, n)) ?? game.winner;
+        results.wins[matched] = (results.wins[matched] ?? 0) + 1;
+        if (game.winningTurn) {
+          if (!turnSums[matched]) turnSums[matched] = [];
+          turnSums[matched].push(game.winningTurn);
+        }
+      }
+    }
+    for (const [name, turns] of Object.entries(turnSums)) {
+      results.avgWinTurn[name] = turns.length > 0
+        ? Math.round((turns.reduce((a, b) => a + b, 0) / turns.length) * 10) / 10
+        : 0;
+    }
+
+    await setJobResults(jobId, results);
+  }
+
+  // Update TrueSkill ratings for jobs with 4 resolved deck IDs
+  if (Array.isArray(job.deckIds) && job.deckIds.length === 4 && structuredData?.games?.length) {
+    const { processJobForRatings } = await import('./trueskill-service');
+    processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
+      console.error(`[TrueSkill] Rating update failed for job ${jobId} (non-fatal):`, err);
+    });
   }
 
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
