@@ -377,8 +377,11 @@ describe('JobStatus — Run Again', () => {
 
     fireEvent.click(screen.getByText('Run Again'));
 
+    // After successful resubmit, navigate() is called which triggers a route change.
+    // In MemoryRouter, this causes the component to unmount and the new route
+    // (which doesn't match /jobs/:id pattern) results in no content rendered.
     await waitFor(() => {
-      expect(fetchWithAuth).toHaveBeenCalled();
+      expect(screen.queryByText('Run Again')).not.toBeInTheDocument();
     });
   });
 
@@ -404,33 +407,14 @@ describe('JobStatus — Run Again', () => {
     const mockSetError = vi.fn();
     vi.mocked(fetchWithAuth).mockRejectedValue(new Error('Network error'));
 
+    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    // Replace just setError with our spy
     vi.mocked(useJobData).mockReturnValue({
       job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }),
       setJob: vi.fn(),
       simulations: [],
       error: null,
       setError: mockSetError,
-    });
-
-    vi.mocked(useWinData).mockReturnValue(defaultWinData);
-    vi.mocked(useJobLogs).mockReturnValue(emptyLogs);
-    vi.mocked(useWorkerStatus).mockReturnValue({
-      workers: [],
-      queueDepth: 0,
-      isLoading: false,
-      refresh: vi.fn().mockResolvedValue(undefined),
-    });
-    vi.mocked(useAuth).mockReturnValue({
-      user: null,
-      isAllowed: true,
-      isAdmin: false,
-      loading: false,
-      hasRequestedAccess: false,
-      refreshAccessRequestStatus: vi.fn().mockResolvedValue(undefined),
-      signInWithGoogle: vi.fn(),
-      signInWithEmail: vi.fn(),
-      signOut: vi.fn(),
-      getIdToken: vi.fn().mockResolvedValue(null),
     });
 
     renderJobStatus();

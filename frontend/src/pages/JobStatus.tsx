@@ -140,11 +140,11 @@ export default function JobStatusPage() {
           idempotencyKey: crypto.randomUUID(),
         }),
       });
+      const data = await response.json();
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Failed to create job');
       }
-      const data = await response.json();
+      if (!data.id) throw new Error('Server returned invalid job');
       navigate(`/jobs/${data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Resubmit failed');
