@@ -11,8 +11,28 @@ jobs:
     uses: TytaniumDev/.github/.github/workflows/lint.yml@main
 
   build:
-    name: CI
-    uses: TytaniumDev/.github/.github/workflows/build.yml@main
+    name: CI / Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            api/package-lock.json
+            worker/package-lock.json
+
+      - uses: actions/cache@v4
+        with:
+          path: api/.next/cache
+          key: nextjs-${{ hashFiles('api/package-lock.json') }}-${{ hashFiles('api/**/*.ts', 'api/**/*.tsx') }}
+          restore-keys: |
+            nextjs-${{ hashFiles('api/package-lock.json') }}-
+
+      - run: ./scripts/build.sh
 
   test:
     name: CI
