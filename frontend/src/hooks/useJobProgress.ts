@@ -6,6 +6,16 @@ import { isTerminal } from '../utils/status';
 import type { SimulationStatus } from '../types/simulation';
 
 /**
+ * Derive simulation index from simId (e.g., "sim_003" → 3).
+ * Falls back to existingIndex if present, or 0 if simId doesn't match the pattern.
+ */
+function parseSimIndex(simId: string, existingIndex?: number): number {
+  if (existingIndex != null) return existingIndex;
+  const match = simId.match(/_(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+/**
  * Hook for real-time job progress updates.
  *
  * GCP mode (rtdb available): Listens to Firebase RTDB directly via onValue.
@@ -105,6 +115,11 @@ export function useJobProgress<T>(jobId: string | undefined) {
         // Strip the `simulations` child — RTDB subtree includes it as a nested
         // object, but our Job type expects `simulations` to be a number.
         const { simulations: rtdbSims, ...jobData } = data;
+        // RTDB stores total game count as `totalGames` to avoid collision with the
+        // `simulations/` subtree. Map it back to `simulations` for the Job type.
+        if (jobData.totalGames != null && !('simulations' in jobData)) {
+          (jobData as Record<string, unknown>).simulations = jobData.totalGames;
+        }
         setJob(prev => {
           if (!prev) return jobData as T;
           const merged = { ...prev };
@@ -126,6 +141,7 @@ export function useJobProgress<T>(jobId: string | undefined) {
             .map(([simId, simData]) => ({
               simId,
               ...(simData as Record<string, unknown>),
+              index: parseSimIndex(simId, (simData as Record<string, unknown>).index as number | undefined),
             }))
             .sort((a, b) => ((a as SimulationStatus).index ?? 0) - ((b as SimulationStatus).index ?? 0)) as SimulationStatus[];
           if (sims.length > 0) {
@@ -159,6 +175,7 @@ export function useJobProgress<T>(jobId: string | undefined) {
           .map(([simId, simData]) => ({
             simId,
             ...(simData as Record<string, unknown>),
+            index: parseSimIndex(simId, (simData as Record<string, unknown>).index as number | undefined),
           }))
           .sort((a, b) => ((a as SimulationStatus).index ?? 0) - ((b as SimulationStatus).index ?? 0)) as SimulationStatus[];
 

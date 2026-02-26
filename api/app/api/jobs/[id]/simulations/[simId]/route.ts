@@ -76,8 +76,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await jobStore.updateSimulationStatus(id, simId, update);
     }
 
-    // Fire-and-forget RTDB write for simulation progress
-    updateSimProgress(id, simId, update).catch(() => {});
+    // Fire-and-forget RTDB write for simulation progress (include index derived from simId)
+    const simIndex = parseInt(simId.replace(/^sim_/, ''), 10);
+    const rtdbUpdate = { ...update, ...(Number.isFinite(simIndex) ? { index: simIndex } : {}) };
+    updateSimProgress(id, simId, rtdbUpdate).catch(() => {});
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {

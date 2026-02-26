@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
     const deckNames = job.decks.map((d) => d.name);
     updateJobProgress(job.id, {
       status: 'QUEUED',
+      totalGames: simulations,
       totalCount: containerCount,
       completedCount: 0,
       gamesCompleted: 0,
