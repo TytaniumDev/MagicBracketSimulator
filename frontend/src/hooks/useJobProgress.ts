@@ -105,6 +105,8 @@ export function useJobProgress<T>(jobId: string | undefined) {
         // Strip the `simulations` child — RTDB subtree includes it as a nested
         // object, but our Job type expects `simulations` to be a number.
         const { simulations: rtdbSims, ...jobData } = data;
+        // RTDB stores id in the path, not the document — inject it
+        (jobData as Record<string, unknown>).id = jobId;
         setJob(prev => {
           if (!prev) return jobData as T;
           const merged = { ...prev };
