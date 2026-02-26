@@ -115,6 +115,8 @@ export function useJobProgress<T>(jobId: string | undefined) {
         // Strip the `simulations` child — RTDB subtree includes it as a nested
         // object, but our Job type expects `simulations` to be a number.
         const { simulations: rtdbSims, ...jobData } = data;
+        // RTDB stores id in the path, not the document — inject it
+        (jobData as Record<string, unknown>).id = jobId;
         // RTDB stores total game count as `totalGames` to avoid collision with the
         // `simulations/` subtree. Map it back to `simulations` for the Job type.
         if (jobData.totalGames != null && !('simulations' in jobData)) {
