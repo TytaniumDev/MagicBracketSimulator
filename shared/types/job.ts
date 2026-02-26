@@ -48,6 +48,8 @@ export interface JobResponse {
   id: string;
   name: string;
   deckNames: string[];
+  /** Original deck IDs used to create the job (for re-submission). May be absent on older jobs. */
+  deckIds?: string[];
   status: JobStatus;
   simulations: number;
   gamesCompleted: number;

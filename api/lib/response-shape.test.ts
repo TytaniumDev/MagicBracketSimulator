@@ -140,6 +140,42 @@ async function runTests() {
   });
 
   // =========================================================================
+  // jobToStreamEvent shape with deckIds
+  // =========================================================================
+
+  await test('Job with deckIds includes deckIds in stream event', () => {
+    const jobWithDeckIds = makeJob({
+      status: 'COMPLETED',
+      deckIds: ['deck-a', 'deck-b', 'deck-c', 'deck-d'],
+    });
+    const event = jobToStreamEvent(jobWithDeckIds);
+    assert('deckIds' in event, 'deckIds should be present');
+    assertHasExactKeys(event as unknown as Record<string, unknown>, [
+      'id', 'name', 'deckNames', 'deckIds', 'status', 'simulations', 'gamesCompleted',
+      'parallelism', 'createdAt', 'errorMessage', 'startedAt', 'completedAt',
+      'durationMs', 'dockerRunDurationsMs', 'workerId', 'workerName',
+      'claimedAt', 'retryCount', 'results',
+    ], 'Job with deckIds');
+    const ids = (event as unknown as Record<string, unknown>).deckIds as string[];
+    assert(Array.isArray(ids) && ids.length === 4, 'deckIds should be array of 4');
+  });
+
+  await test('Job without deckIds does not include deckIds field', () => {
+    const jobNoDeckIds = makeJob({ status: 'COMPLETED' });
+    const event = jobToStreamEvent(jobNoDeckIds);
+    assert(!('deckIds' in event), 'deckIds should NOT be present');
+  });
+
+  await test('Job with fewer than 4 deckIds does not include deckIds field', () => {
+    const jobPartial = makeJob({
+      status: 'COMPLETED',
+      deckIds: ['deck-a', 'deck-b'],
+    });
+    const event = jobToStreamEvent(jobPartial);
+    assert(!('deckIds' in event), 'deckIds should NOT be present for partial deckIds');
+  });
+
+  // =========================================================================
   // Type compatibility checks (compile-time, verified at runtime)
   // =========================================================================
 

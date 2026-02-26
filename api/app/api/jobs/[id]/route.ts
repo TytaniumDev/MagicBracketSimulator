@@ -85,6 +85,7 @@ async function jobToApiResponse(
 
   return {
     ...base,
+    ...(job.deckIds && job.deckIds.length === 4 && { deckIds: job.deckIds }),
     ...(deckLinks && { deckLinks }),
     ...(colorIdentity && { colorIdentity }),
   };

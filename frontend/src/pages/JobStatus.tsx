@@ -50,6 +50,7 @@ export default function JobStatusPage() {
   const [loadStructuredLogs, setLoadStructuredLogs] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeletingJob, setIsDeletingJob] = useState(false);
+  const [isResubmitting, setIsResubmitting] = useState(false);
 
   // Data hooks
   const { job, setJob, simulations, error, setError } = useJobData(id);
@@ -127,6 +128,31 @@ export default function JobStatusPage() {
     }
   };
 
+  const handleRunAgain = async () => {
+    if (!job.deckIds || job.deckIds.length !== 4) return;
+    setIsResubmitting(true);
+    try {
+      const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          deckIds: job.deckIds,
+          simulations: job.simulations,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create job');
+      }
+      const data = await response.json();
+      navigate(`/jobs/${data.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Resubmit failed');
+    } finally {
+      setIsResubmitting(false);
+    }
+  };
+
   const currentGame = logs.structuredGames?.[selectedGame];
   const maxTurns = Math.max(1, currentGame?.totalTurns ?? 1);
   const isTerminal = job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED';
@@ -142,9 +168,21 @@ export default function JobStatusPage() {
           Back to browse
         </Link>
       </div>
-      <h1 className="text-2xl font-bold mb-1">
-        {job.simulations} Game Simulation
-      </h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold">
+          {job.simulations} Game Simulation
+        </h1>
+        {isTerminal && job.deckIds?.length === 4 && (
+          <button
+            type="button"
+            onClick={handleRunAgain}
+            disabled={isResubmitting}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isResubmitting ? 'Submitting...' : 'Run Again'}
+          </button>
+        )}
+      </div>
       <p className="text-gray-500 text-xs mb-6">ID: {job.id}</p>
 
       {/* Deck Showcase */}
