@@ -130,6 +130,20 @@ Routes live under `api/app/api/`. Key endpoints:
 - Firebase deploy requires `FIREBASE_TOKEN` in GitHub Actions secrets
 - `npm run populate-worker-secret` and `npm run populate-frontend-secret` manage GCP Secret Manager entries
 
+### Sentry
+
+Error tracking via `@sentry/nextjs` in `api/`. Graceful no-op when `SENTRY_DSN` is unset.
+
+- **Runtime DSN**: `SENTRY_DSN` — set in `api/apphosting.yaml` via GCP Secret Manager (`sentry-dsn`)
+- **API auth token** (for managing alerts, releases, source maps): stored in GCP Secret Manager as `sentry-auth-token`. Retrieve with:
+  ```bash
+  gcloud secrets versions access latest --secret=sentry-auth-token
+  ```
+  Also available in `api/.env` as `SENTRY_AUTH_TOKEN` for local use.
+- **Sentry org/project**: `tytaniumdev` / `magic-bracket-api`
+- **Alerts**: 4 alert rules configured with GitHub issue creation (labels: `bug`, `sentry`):
+  - Error Spike (catch-all), Aggregation Failures (critical), TrueSkill Rating Failures, Backfill Rating Failures
+
 ## Lint & Type Checking
 
 - Frontend uses ESLint 9 flat config with typescript-eslint, react-hooks, and react-refresh plugins. Zero warnings policy (`--max-warnings 0`).

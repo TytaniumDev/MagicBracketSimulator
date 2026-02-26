@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { getRatingStore } from '@/lib/rating-store-factory';
+import { isJobStuck } from '@/lib/job-utils';
 import * as Sentry from '@sentry/nextjs';
 
 /**
@@ -15,7 +16,8 @@ import * as Sentry from '@sentry/nextjs';
 export async function POST(request: NextRequest) {
   try {
     await verifyAdmin(request);
-  } catch {
+  } catch (err) {
+    console.error('[Backfill] Admin verification failed:', err);
     return unauthorizedResponse('Admin access required');
   }
 
@@ -31,9 +33,7 @@ export async function POST(request: NextRequest) {
       if (!job) continue;
 
       const isCompleted = job.status === 'COMPLETED';
-      const isStuckRunning = job.status === 'RUNNING' &&
-        job.completedSimCount != null && job.totalSimCount != null &&
-        job.completedSimCount >= job.totalSimCount && job.totalSimCount > 0;
+      const isStuckRunning = isJobStuck(job);
 
       if (!isCompleted && !isStuckRunning) continue;
       if (!Array.isArray(job.deckIds) || job.deckIds.length !== 4) continue;

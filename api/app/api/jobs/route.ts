@@ -11,6 +11,11 @@ import { pushToAllWorkers } from '@/lib/worker-push';
 import { updateJobProgress } from '@/lib/rtdb';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
+import { isJobStuck } from '@/lib/job-utils';
+
+// In-process dedup: track job IDs that already have recovery aggregation in flight.
+// Prevents redundant concurrent aggregation runs when Browse page is refreshed.
+const pendingRecoveryAggregations = new Set<string>();
 
 /**
  * Convert Job to API summary format.
@@ -30,15 +35,20 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
   // Derive effective status: if all sims done but Firestore still says RUNNING,
   // show COMPLETED and trigger recovery aggregation in the background.
   let effectiveStatus = job.status;
-  if (job.status === 'RUNNING' &&
-    job.completedSimCount != null && job.totalSimCount != null &&
-    job.completedSimCount >= job.totalSimCount && job.totalSimCount > 0) {
+  if (isJobStuck(job)) {
     effectiveStatus = 'COMPLETED';
-    // Trigger background recovery aggregation for stuck job
-    jobStore.aggregateJobResults(job.id).catch((err) => {
-      console.error(`[Browse Recovery] Aggregation failed for stuck job ${job.id}:`, err);
-      Sentry.captureException(err, { tags: { component: 'browse-recovery', jobId: job.id } });
-    });
+    // Trigger background recovery aggregation for stuck job (deduped per job ID)
+    if (!pendingRecoveryAggregations.has(job.id)) {
+      pendingRecoveryAggregations.add(job.id);
+      jobStore.aggregateJobResults(job.id)
+        .catch((err) => {
+          console.error(`[Browse Recovery] Aggregation failed for stuck job ${job.id}:`, err);
+          Sentry.captureException(err, { tags: { component: 'browse-recovery', jobId: job.id } });
+        })
+        .finally(() => {
+          pendingRecoveryAggregations.delete(job.id);
+        });
+    }
   }
 
   return {

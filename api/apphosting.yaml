@@ -39,3 +39,5 @@ env:
     secret: admin-emails
   - variable: SENTRY_DSN
     secret: sentry-dsn
+  - variable: NEXT_PUBLIC_SENTRY_DSN
+    secret: sentry-dsn

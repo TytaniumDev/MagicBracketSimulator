@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import * as jobStore from '@/lib/job-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
 import { getRatingStore } from '@/lib/rating-store-factory';
+import { isJobStuck } from '@/lib/job-utils';
 
 interface HealthCheck {
   ok: boolean;
@@ -25,9 +26,7 @@ export async function GET() {
     const stuckJobs: string[] = [];
 
     for (const job of activeJobs) {
-      if (job.status === 'RUNNING' &&
-        job.completedSimCount != null && job.totalSimCount != null &&
-        job.completedSimCount >= job.totalSimCount && job.totalSimCount > 0) {
+      if (isJobStuck(job)) {
         stuckJobs.push(job.id);
       }
     }
@@ -36,7 +35,7 @@ export async function GET() {
       ok: stuckJobs.length === 0,
       detail: stuckJobs.length === 0
         ? `${activeJobs.length} active job(s), none stuck`
-        : `${stuckJobs.length} stuck job(s): ${stuckJobs.join(', ')}`,
+        : `${stuckJobs.length} stuck job(s)`,
     };
   } catch (err) {
     checks.stuckJobs = { ok: false, detail: `Error checking jobs: ${err instanceof Error ? err.message : 'unknown'}` };
