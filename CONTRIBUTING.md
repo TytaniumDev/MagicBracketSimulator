@@ -5,7 +5,8 @@ Thank you for your interest in contributing!
 ## Getting Started
 
 1.  **Architecture:** Please read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) to understand the system design.
-2.  **Setup:** Follow the prerequisites in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) to get your environment ready.
+2.  **API Reference:** See [docs/API.md](docs/API.md) for endpoint documentation.
+3.  **Setup:** Follow the prerequisites in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) to get your environment ready.
 
 ## Project Structure
 
@@ -27,6 +28,6 @@ Thank you for your interest in contributing!
 Please ensure all tests pass before submitting your PR.
 
 *   **API:** Run `npm run test:unit`, `npm run test:ingestion`, and `npm run test:integration` within `api/`.
-*   **Frontend:** No specific test script. Verify changes visually via `npm run dev`.
+*   **Frontend:** Run `npm test` (Vitest). Verify changes visually via `npm run dev`.
 *   **Worker:** Test locally by running `npm run dev` in `worker/` (requires Docker).
 *   **Full Stack:** Run `npm run dev` in the root to start API & Frontend, and `npm run dev` in `worker/` to start the worker.
