@@ -3,12 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock firebase module (prevents SDK initialization)
 vi.mock('./firebase');
 
+// Mock firebase/app-check so we can control getToken behavior
+const mockGetToken = vi.fn();
+vi.mock('firebase/app-check', () => ({
+  getToken: (...args: unknown[]) => mockGetToken(...args),
+}));
+
 // We need to control what `auth` and `appCheck` resolve to at the module level.
 // The __mocks__/firebase.ts exports null for both, which matches local mode.
 // For tests that need a logged-in user, we mock `auth` via the imported module.
 import * as firebaseModule from './firebase';
 
-// Dynamic import so mocks are in place before the module initializes
+// Dynamic import ensures vi.mock('./firebase') is hoisted and applied
+// before the api module initializes its module-level bindings (appCheck, auth).
 const { fetchWithAuth, getFirebaseIdToken } = await import('./api');
 
 // ---------------------------------------------------------------------------
@@ -21,7 +28,10 @@ function mockFetch(...responses: Array<{ status: number; body?: unknown }>) {
 
   const fn = vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url, init });
-    const resp = responses[Math.min(callIndex, responses.length - 1)];
+    if (callIndex >= responses.length) {
+      throw new Error(`mockFetch: unexpected call #${callIndex + 1} (only ${responses.length} responses configured)`);
+    }
+    const resp = responses[callIndex];
     callIndex++;
     return new Response(JSON.stringify(resp.body ?? {}), {
       status: resp.status,
@@ -51,6 +61,24 @@ function clearAuthUser() {
   });
 }
 
+function clearAppCheck() {
+  Object.defineProperty(firebaseModule, 'appCheck', {
+    value: null,
+    writable: true,
+    configurable: true,
+  });
+}
+
+function mockAppCheck() {
+  const fakeAppCheck = { name: 'mock-app-check' };
+  Object.defineProperty(firebaseModule, 'appCheck', {
+    value: fakeAppCheck,
+    writable: true,
+    configurable: true,
+  });
+  return fakeAppCheck;
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -58,6 +86,7 @@ function clearAuthUser() {
 beforeEach(() => {
   vi.restoreAllMocks();
   clearAuthUser();
+  clearAppCheck();
 });
 
 // ---------------------------------------------------------------------------
@@ -137,6 +166,20 @@ describe('fetchWithAuth', () => {
     for (const call of fetchMock.mock.calls) {
       expect((call[1] as RequestInit).signal).toBe(controller.signal);
     }
+  });
+
+  it('includes X-Firebase-AppCheck header when appCheck is available', async () => {
+    mockAuthUser();
+    mockAppCheck();
+    mockGetToken.mockResolvedValue({ token: 'mock-appcheck-token' });
+    const { fetchMock } = mockFetch({ status: 200, body: { ok: true } });
+
+    await fetchWithAuth('https://api.test/jobs/1');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-Firebase-AppCheck']).toBe('mock-appcheck-token');
+    expect(headers['Authorization']).toBe('Bearer test-token');
   });
 });
 
