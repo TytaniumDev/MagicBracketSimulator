@@ -14,3 +14,5 @@
 *   **Golden Template Alignment:** Reordered `README.md` to strictly follow the "Golden Template" (Title -> Links -> Badges -> Hook -> Hero Visual).
 *   **Internal Link Repair:** Updated `docs/DEPLOYMENT.md` and `CONTRIBUTING.md` to reflect the new file locations.
 *   **Quick Start Reality Check:** Updated `README.md` to explicitly state that the Worker must be started in a separate terminal (requires Docker), preventing user confusion about why simulations aren't running.
+*   **Header Polish:** Upgraded the `README.md` header to a centered HTML block for maximum "Curb Appeal", consolidating Title, Links, and Badges.
+*   **Docs Organization:** Moved `API.md` to `docs/API.md` to further declutter the root directory and linked it in `README.md` and `CONTRIBUTING.md`.

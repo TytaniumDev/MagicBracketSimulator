@@ -1,10 +1,21 @@
-# Magic Bracket Simulator
+<div align="center">
+  <h1>Magic Bracket Simulator</h1>
 
-[🚀 Launch App](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [📖 Documentation](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [🐞 Report Bug](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
+  <p>
+    <a href="https://magic-bracket-simulator.web.app">🚀 Launch App</a> &nbsp;|&nbsp;
+    <a href="docs/ARCHITECTURE.md">📖 Documentation</a> &nbsp;|&nbsp;
+    <a href="https://github.com/TytaniumDev/MagicBracketSimulator/issues">🐞 Report Bug</a>
+  </p>
 
-![Status](https://img.shields.io/badge/Status-Active-success) ![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Docker-blue)
+  <p>
+    <img src="https://img.shields.io/badge/Status-Active-success" alt="Status" />
+    <img src="https://img.shields.io/badge/Platform-Web%20%7C%20Docker-blue" alt="Platform" />
+  </p>
 
-Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.
+  <p>
+    Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.
+  </p>
+</div>
 
 ![Magic Bracket Simulator UI](docs/images/hero-screenshot.png)
 
@@ -40,6 +51,7 @@ Visit **http://localhost:5173** to start simulating.
 ## Documentation Map
 
 *   **[Architecture Overview](docs/ARCHITECTURE.md):** Deep dive into the system design, Docker worker, and data flow.
+*   **[API Reference](docs/API.md):** Comprehensive guide to REST endpoints for Jobs, Simulations, and Workers.
 *   **[Deployment Guide](docs/DEPLOYMENT.md):** Detailed setup instructions, prerequisites, and cloud deployment.
 *   **[Mode Setup](docs/MODE_SETUP.md):** Configure for Local vs GCP operation.
 *   **[Secrets Setup](docs/SECRETS_SETUP.md):** How to configure API keys and credentials.

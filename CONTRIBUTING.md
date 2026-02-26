@@ -5,7 +5,8 @@ Thank you for your interest in contributing!
 ## Getting Started
 
 1.  **Architecture:** Please read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) to understand the system design.
-2.  **Setup:** Follow the prerequisites in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) to get your environment ready.
+2.  **API:** Please read [docs/API.md](docs/API.md) for API endpoint details.
+3.  **Setup:** Follow the prerequisites in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) to get your environment ready.
 
 ## Project Structure
 
