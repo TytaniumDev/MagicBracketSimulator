@@ -8,6 +8,7 @@ import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
 import { deleteJobProgress } from './rtdb';
 import { cancelRecoveryCheck } from './cloud-tasks';
+import * as Sentry from '@sentry/nextjs';
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
@@ -367,6 +368,7 @@ async function recoverStaleSimulations(
     if (allDone) {
       aggregateJobResults(jobId).catch((err) => {
         console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
+        Sentry.captureException(err, { tags: { component: 'recovery-aggregation', jobId } });
       });
     }
   }
@@ -530,6 +532,7 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     const { processJobForRatings } = await import('./trueskill-service');
     processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
       console.error(`[TrueSkill] Rating update failed for job ${jobId} (non-fatal):`, err);
+      Sentry.captureException(err, { tags: { component: 'trueskill', jobId } });
     });
   }
 

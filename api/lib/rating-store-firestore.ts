@@ -28,6 +28,11 @@ export const firestoreRatingStore: RatingStore = {
       gamesPlayed: d.gamesPlayed as number,
       wins: d.wins as number,
       lastUpdated: (d.lastUpdated as Timestamp).toDate().toISOString(),
+      // Denormalized metadata (may be absent on older docs)
+      ...(d.deckName && { deckName: d.deckName as string }),
+      ...(d.setName !== undefined && { setName: d.setName as string | null }),
+      ...(d.isPrecon !== undefined && { isPrecon: d.isPrecon as boolean }),
+      ...(d.primaryCommander !== undefined && { primaryCommander: d.primaryCommander as string | null }),
     };
   },
 
@@ -74,6 +79,7 @@ export const firestoreRatingStore: RatingStore = {
 
     const snapshot = await ratingsCol
       .where('gamesPlayed', '>=', minGames)
+      .orderBy('gamesPlayed', 'desc')
       .limit(limit)
       .get();
 

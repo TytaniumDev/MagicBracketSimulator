@@ -191,6 +191,8 @@ export async function getDeckById(id: string): Promise<DeckListItem | null> {
       ownerId: deck.ownerId,
       ownerEmail: deck.ownerEmail,
       createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
+      setName: deck.setName ?? null,
+      archidektId: deck.archidektId ?? null,
     };
   }
 

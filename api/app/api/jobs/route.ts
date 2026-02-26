@@ -10,10 +10,15 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { pushToAllWorkers } from '@/lib/worker-push';
 import { updateJobProgress } from '@/lib/rtdb';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * Convert Job to API summary format.
  * Accepts pre-computed gamesCompleted derived from simulation statuses.
+ *
+ * Derives effective status from sim counts: if all sims are done but
+ * Firestore status is still RUNNING (aggregation failed), show COMPLETED
+ * to the Browse page and trigger background recovery aggregation.
  */
 function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCompleted: number): JobSummary | null {
   if (!job) return null;
@@ -22,11 +27,25 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
 
+  // Derive effective status: if all sims done but Firestore still says RUNNING,
+  // show COMPLETED and trigger recovery aggregation in the background.
+  let effectiveStatus = job.status;
+  if (job.status === 'RUNNING' &&
+    job.completedSimCount != null && job.totalSimCount != null &&
+    job.completedSimCount >= job.totalSimCount && job.totalSimCount > 0) {
+    effectiveStatus = 'COMPLETED';
+    // Trigger background recovery aggregation for stuck job
+    jobStore.aggregateJobResults(job.id).catch((err) => {
+      console.error(`[Browse Recovery] Aggregation failed for stuck job ${job.id}:`, err);
+      Sentry.captureException(err, { tags: { component: 'browse-recovery', jobId: job.id } });
+    });
+  }
+
   return {
     id: job.id,
     name: deckNames.join(' vs '),
     deckNames,
-    status: job.status,
+    status: effectiveStatus,
     simulations: job.simulations,
     gamesCompleted,
     createdAt: job.createdAt.toISOString(),
