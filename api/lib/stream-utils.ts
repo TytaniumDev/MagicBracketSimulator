@@ -1,5 +1,5 @@
 import type { Job } from './types';
-import type { JobResponse } from '@shared/types/job';
+import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
 
 export interface QueueInfo {
   queuePosition?: number;
@@ -36,7 +36,7 @@ export function jobToStreamEvent(
     claimedAt: job.claimedAt?.toISOString(),
     retryCount: job.retryCount ?? 0,
     results: job.results ?? null,
-    ...(job.deckIds && job.deckIds.length === 4 && { deckIds: job.deckIds }),
+    ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
     ...(queueInfo?.queuePosition != null && { queuePosition: queueInfo.queuePosition }),
     ...(queueInfo?.workers && { workers: queueInfo.workers }),
     ...(deckLinks && { deckLinks }),

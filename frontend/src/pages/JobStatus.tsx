@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
@@ -129,7 +130,7 @@ export default function JobStatusPage() {
   };
 
   const handleRunAgain = async () => {
-    if (!job.deckIds || job.deckIds.length !== 4) return;
+    if (!job.deckIds || job.deckIds.length !== REQUIRED_DECK_COUNT) return;
     setIsResubmitting(true);
     try {
       const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
@@ -172,7 +173,7 @@ export default function JobStatusPage() {
         <h1 className="text-2xl font-bold">
           {job.simulations} Game Simulation
         </h1>
-        {isTerminal && job.deckIds?.length === 4 && (
+        {isTerminal && job.deckIds?.length === REQUIRED_DECK_COUNT && (
           <button
             type="button"
             onClick={handleRunAgain}
