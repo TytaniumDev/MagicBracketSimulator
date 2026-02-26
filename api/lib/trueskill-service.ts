@@ -21,6 +21,7 @@ import type { DeckRating, MatchResult, StructuredGame } from './types';
 import { matchesDeckName } from './condenser/deck-match';
 import { getDeckById } from './deck-store-factory';
 import { getRatingStore } from './rating-store-factory';
+import * as Sentry from '@sentry/nextjs';
 
 // ─── TrueSkill constants ──────────────────────────────────────────────────────
 
@@ -219,6 +220,12 @@ export async function processJobForRatings(
 
     if (!winnerDeckId) {
       // No winner resolved — record the match but skip rating update
+      Sentry.addBreadcrumb({
+        category: 'trueskill',
+        message: `Game ${i} in job ${jobId}: winner "${winner}" could not be resolved to a deck ID`,
+        level: 'warning',
+        data: { jobId, gameIndex: i, winner, deckNames: deckInfos.map(d => d.name) },
+      });
       continue;
     }
 
@@ -259,5 +266,12 @@ export async function processJobForRatings(
     console.log(
       `[TrueSkill] Job ${jobId}: rated ${games.length} game(s) for decks [${deckIds.join(', ')}]`,
     );
+  } else {
+    Sentry.addBreadcrumb({
+      category: 'trueskill',
+      message: `Job ${jobId}: no games had resolvable winners — ratings unchanged`,
+      level: 'warning',
+      data: { jobId, gameCount: games.length, deckIds },
+    });
   }
 }

@@ -3,6 +3,7 @@ import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { updateJobProgress, updateSimProgress, deleteJobProgress } from '@/lib/rtdb';
 import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
@@ -114,6 +115,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         // Run aggregation in background — don't block the response
         jobStore.aggregateJobResults(id).catch(err => {
           console.error(`[Aggregation] Failed for job ${id}:`, err);
+          Sentry.captureException(err, { tags: { component: 'sim-aggregation', jobId: id } });
         });
       }
     }
