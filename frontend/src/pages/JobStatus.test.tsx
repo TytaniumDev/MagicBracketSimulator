@@ -8,6 +8,7 @@ import { useJobLogs } from '../hooks/useJobLogs';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { emptyLogs } from '../test/fixtures';
+import type { SimulationStatus } from '../types/simulation';
 import {
   makeJob,
   completedWithResults,
@@ -47,7 +48,7 @@ const defaultWinData = {
 
 function setupMocks(overrides: {
   job?: ReturnType<typeof makeJob> | null;
-  simulations?: Parameters<typeof useJobData>[0] extends string ? never : unknown[];
+  simulations?: SimulationStatus[];
   error?: string | null;
   winData?: Partial<typeof defaultWinData>;
   isAdmin?: boolean;
@@ -55,7 +56,7 @@ function setupMocks(overrides: {
   vi.mocked(useJobData).mockReturnValue({
     job: overrides.job ?? null,
     setJob: vi.fn(),
-    simulations: (overrides.simulations ?? []) as never,
+    simulations: overrides.simulations ?? [],
     error: overrides.error ?? null,
     setError: vi.fn(),
   });
