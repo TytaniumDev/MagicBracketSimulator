@@ -76,7 +76,7 @@ function setupMocks(overrides: {
   });
 
   vi.mocked(useAuth).mockReturnValue({
-    user: overrides.isAdmin ? { email: 'admin@test.com' } as never : null,
+    user: overrides.isAdmin ? { email: 'admin@test.com' } as unknown as import('firebase/auth').User : null,
     isAllowed: true,
     isAdmin: overrides.isAdmin ?? false,
     loading: false,
