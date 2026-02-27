@@ -64,7 +64,7 @@ async function runTests() {
       simulations: 8,
     });
     assertEqual(result.success, false, 'should fail');
-    if (!result.success) assert(result.error.includes('4'), 'error should mention 4');
+    if (!result.success) assertEqual(result.error, 'deckIds: Exactly 4 deckIds are required', 'error message');
   });
 
   await test('createJobSchema: rejects empty deckIds', () => {

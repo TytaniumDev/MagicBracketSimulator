@@ -64,6 +64,8 @@ export function parseBody<T>(schema: z.ZodSchema<T>, body: unknown):
   if (result.success) {
     return { success: true, data: result.data };
   }
-  const messages = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).filter(Boolean);
+  const messages = result.error.issues.map(
+    (i) => (i.path.length > 0 ? `${i.path.join('.')}: ` : '') + i.message
+  );
   return { success: false, error: messages.join('; ') || 'Invalid request body' };
 }
