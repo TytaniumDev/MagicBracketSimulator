@@ -7,7 +7,6 @@ import { isTerminalSimState } from '@shared/types/state-machine';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
-import { deleteJobProgress } from './rtdb';
 import { cancelRecoveryCheck } from './cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from './logger';
@@ -575,14 +574,12 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') {
     await setNeedsAggregation(jobId, false);
-    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
     return;
   }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
   if (allCancelled) {
     await setNeedsAggregation(jobId, false);
-    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
     return; // Already handled by cancel flow
   }
 
@@ -591,8 +588,7 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   // Clear the flag — aggregation completed successfully
   await setNeedsAggregation(jobId, false);
 
-  // Clean up RTDB ephemeral data and cancel recovery task
+  // Cancel recovery task
   cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
-  deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
 }
 

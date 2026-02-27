@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithRouter } from '../test/render';
 import JobStatusPage from './JobStatus';
-import { useJobData } from '../hooks/useJobData';
+import { useJobStream } from '../hooks/useJobStream';
 import { useWinData } from '../hooks/useWinData';
 import { useJobLogs } from '../hooks/useJobLogs';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
@@ -25,7 +25,7 @@ import {
 // Mock all data hooks at module level
 // ---------------------------------------------------------------------------
 
-vi.mock('../hooks/useJobData');
+vi.mock('../hooks/useJobStream');
 vi.mock('../hooks/useWinData');
 vi.mock('../hooks/useJobLogs');
 vi.mock('../hooks/useWorkerStatus');
@@ -35,6 +35,16 @@ vi.mock('../api', () => ({
   fetchWithAuth: vi.fn(),
   deleteJob: vi.fn(),
 }));
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual('@tanstack/react-query');
+  return {
+    ...actual,
+    useQueryClient: () => ({
+      setQueryData: vi.fn(),
+      invalidateQueries: vi.fn(),
+    }),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,12 +64,11 @@ function setupMocks(overrides: {
   winData?: Partial<typeof defaultWinData>;
   isAdmin?: boolean;
 } = {}) {
-  vi.mocked(useJobData).mockReturnValue({
+  vi.mocked(useJobStream).mockReturnValue({
     job: overrides.job ?? null,
-    setJob: vi.fn(),
     simulations: overrides.simulations ?? [],
     error: overrides.error ?? null,
-    setError: vi.fn(),
+    isLoading: false,
   });
 
   vi.mocked(useWinData).mockReturnValue({
@@ -113,8 +122,7 @@ describe('JobStatus — ID display', () => {
     expect(idElement).toHaveTextContent('ID: job-abc-123');
   });
 
-  it('shows blank ID when id field is undefined (the RTDB bug)', () => {
-    // This documents the bug before the fix — RTDB data lacks `id`
+  it('shows blank ID when id field is undefined', () => {
     setupMocks({ job: makeJob({ id: undefined as unknown as string }) });
     renderJobStatus();
     const idElement = screen.getByText(/ID:/);
@@ -404,25 +412,15 @@ describe('JobStatus — Run Again', () => {
   });
 
   it('shows error when resubmit fails', async () => {
-    const mockSetError = vi.fn();
     vi.mocked(fetchWithAuth).mockRejectedValue(new Error('Network error'));
 
     setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
-    // Replace just setError with our spy
-    vi.mocked(useJobData).mockReturnValue({
-      job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }),
-      setJob: vi.fn(),
-      simulations: [],
-      error: null,
-      setError: mockSetError,
-    });
-
     renderJobStatus();
 
     fireEvent.click(screen.getByText('Run Again'));
 
     await waitFor(() => {
-      expect(mockSetError).toHaveBeenCalledWith('Network error');
+      expect(screen.getByText('Network error')).toBeInTheDocument();
     });
   });
 });

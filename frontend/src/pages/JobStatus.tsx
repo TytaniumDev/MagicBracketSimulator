@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
+import type { JobResponse } from '@shared/types/job';
 import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
-import { useJobData } from '../hooks/useJobData';
+import { useJobStream } from '../hooks/useJobStream';
 import { useWinData } from '../hooks/useWinData';
 import { useJobLogs } from '../hooks/useJobLogs';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
@@ -39,6 +41,7 @@ export default function JobStatusPage() {
   const { id } = useParams<{ id: string }>();
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { workers, refresh: refreshWorkers } = useWorkerStatus(!!user);
   const apiBase = getApiBase();
 
@@ -52,9 +55,11 @@ export default function JobStatusPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeletingJob, setIsDeletingJob] = useState(false);
   const [isResubmitting, setIsResubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Data hooks
-  const { job, setJob, simulations, error, setError } = useJobData(id);
+  const { job, simulations, error: streamError } = useJobStream(id);
+  const error = actionError ?? streamError;
   const logs = useJobLogs(id, job, { showLogPanel, loadStructured: loadStructuredLogs });
   const { winTally, winTurns, gamesPlayed, simGamesCompleted } = useWinData(
     job, simulations, logs.structuredGames, logs.deckNames,
@@ -107,9 +112,11 @@ export default function JobStatusPage() {
         const data = await response.json();
         throw new Error(data.error || 'Failed to cancel');
       }
-      setJob((prev) => prev ? { ...prev, status: 'CANCELLED' } : null);
+      queryClient.setQueryData<JobResponse>(['job', id], (prev) =>
+        prev ? { ...prev, status: 'CANCELLED' } : prev,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cancel failed');
+      setActionError(err instanceof Error ? err.message : 'Cancel failed');
     } finally {
       setIsCancelling(false);
     }
@@ -123,7 +130,7 @@ export default function JobStatusPage() {
       await deleteJob(id);
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed');
+      setActionError(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setIsDeletingJob(false);
     }
@@ -148,7 +155,7 @@ export default function JobStatusPage() {
       if (!data.id) throw new Error('Server returned invalid job');
       navigate(`/jobs/${data.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Resubmit failed');
+      setActionError(err instanceof Error ? err.message : 'Resubmit failed');
     } finally {
       setIsResubmitting(false);
     }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { pushToAllWorkers } from '@/lib/worker-push';
-import { updateJobProgress, deleteJobProgress } from '@/lib/rtdb';
 import { cancelRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
@@ -40,11 +39,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Cancel scheduled recovery task (fire-and-forget)
     cancelRecoveryCheck(id).catch(err => console.warn('[Recovery] Cancel check failed:', err instanceof Error ? err.message : err));
-
-    // Update RTDB then clean up (fire-and-forget)
-    updateJobProgress(id, { status: 'CANCELLED', completedAt: new Date().toISOString() })
-      .then(() => deleteJobProgress(id))
-      .catch(err => console.warn('[RTDB] Cancel update failed:', err instanceof Error ? err.message : err));
 
     // Push cancel to all active workers (best-effort)
     pushToAllWorkers('/cancel', { jobId: id }).catch(err => console.warn('[Worker Push] Cancel push failed:', err instanceof Error ? err.message : err));

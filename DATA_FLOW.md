@@ -27,8 +27,8 @@ container exits.
 - `**worker.ts`** uses `**worker/src/condenser.ts**` only for lightweight
 parsing:
   - `splitConcatenatedGames(logText)` → one string per game
-  - `extractWinner(game)` / `extractWinningTurn(game)` per game  
-  → produces `winners[]` and `winningTurns[]` for status updates.  
+  - `extractWinner(game)` / `extractWinningTurn(game)` per game
+  → produces `winners[]` and `winningTurns[]` for status updates.
   The worker does **not** run the full condense/structure pipeline; that
   happens in the API.
 
@@ -52,10 +52,6 @@ Order in code: status is reported first (PATCH), then raw log is uploaded
 
 - Persists the simulation status (state, winners, winningTurns, etc.) in the job
 store (SQLite or Firestore).
-- Writes simulation progress to **Firebase RTDB** (fire-and-forget) for
-real-time frontend streaming. The RTDB write includes the simulation `index`
-(resolved from the job store or parsed from the simId) so the frontend can
-build the simulation grid without waiting for a REST fallback.
 - Uses an **atomic counter** (`FieldValue.increment(1)` on
 `completedSimCount`) to detect when all sims are done — O(1) instead of
 scanning the entire subcollection. When `completedSimCount >= totalSimCount`,
@@ -114,7 +110,7 @@ stripping the Ai prefix). A frontend copy lives at
 **Legacy route (unused):**
 
 - `**POST /api/jobs/:id/logs`** — bulk log ingest: accepts `{ gameLogs,
-deckNames, deckLists }` all at once. Still exists in the codebase but is
+ deckNames, deckLists }` all at once. Still exists in the codebase but is
 unused by the current worker, which uploads per-simulation via
 `/logs/simulation` instead.
 
@@ -122,23 +118,24 @@ unused by the current worker, which uploads per-simulation via
 
 ## 4. Frontend
 
-**Real-time streaming:**
+**Real-time streaming (Firestore onSnapshot + TanStack Query):**
 
-- **GCP mode: Firebase RTDB direct streaming** (new)
-  - Frontend listens directly to RTDB via Firebase JS SDK (`onValue`).
+- **GCP mode: Firestore `onSnapshot` direct streaming**
+  - Frontend listens directly to Firestore via `onSnapshot` (WebSocket-based).
   - Cloud Run is **not** in the real-time path — zero persistent connections.
-  - RTDB path: `/jobs/{jobId}/` for job-level data, `/jobs/{jobId}/simulations/{simId}/` for per-sim data.
-  - API writes to RTDB as a fire-and-forget side effect when updating Firestore.
-  - RTDB data is **ephemeral** — deleted when jobs reach terminal state. Frontend falls back to REST for completed jobs.
-  - The `useJobProgress` hook manages RTDB listeners with automatic cleanup.
-  - Frontend defensively parses `index` from the simId key (`sim_003` → `3`)
-    when RTDB data lacks it, and continues REST polling until valid indices
-    are available.
+  - Firestore paths: `jobs/{jobId}` for job-level data, `jobs/{jobId}/simulations/{simId}` for per-sim data.
+  - The `useJobStream` hook manages Firestore listeners with automatic cleanup.
+  - Real-time field updates (status, gamesCompleted, results, etc.) are pushed into TanStack Query's cache via `queryClient.setQueryData()`.
+  - On terminal state, a final REST fetch retrieves complete data (deckLinks, colorIdentity, etc.).
 
-- **LOCAL mode: SSE fallback** — **GET** `/api/jobs/:id/stream`
-  - Server-side 2-second polling of SQLite with change detection.
-  - **Event types:** same as before (default job event + named `simulations` event).
-  - GCP mode returns **410 Gone** from this endpoint — frontend uses RTDB instead.
+- **LOCAL mode: TanStack Query polling**
+  - TanStack Query `refetchInterval` polls `GET /api/jobs/:id` and `GET /api/jobs/:id/simulations` every 2 seconds.
+  - Polling stops automatically when the job reaches a terminal state.
+
+- **Strategy: "REST base + real-time overlay"**
+  - Initial data comes from REST (`GET /api/jobs/:id`) which provides the complete formatted `JobResponse` with computed fields (name, durationMs, deckLinks, colorIdentity).
+  - In GCP mode, Firestore `onSnapshot` overlays real-time field updates on top of the cached REST data.
+  - Both modes share the same TanStack Query cache — components are mode-agnostic.
 
 - `gamesCompleted` is **derived** from the atomic `completedSimCount` counter
   (COMPLETED sims * GAMES_PER_CONTAINER). The stored `job.gamesCompleted`
@@ -161,9 +158,10 @@ unused by the current worker, which uploads per-simulation via
 `structured.json`) don't exist (e.g. for FAILED jobs where aggregation
 never ran), logs are recomputed on-the-fly from raw logs in `log-store.ts`.
 
-So the frontend only receives **job + sim status** on the stream and via GET
-job; **raw/condensed/structured** are separate GETs that hit the artifacts
-produced during API-side aggregation (or recomputed on demand).
+So the frontend only receives **job + sim status** via Firestore onSnapshot
+(GCP) or REST polling (local); **raw/condensed/structured** are separate GETs
+that hit the artifacts produced during API-side aggregation (or recomputed on
+demand).
 
 ---
 
@@ -199,8 +197,8 @@ second call exits immediately.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Simulation container** | Writes raw Forge log to stdout                                                                                                                                     | None                                                                                                                                         |
 | **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory; retries failed containers locally (2 attempts, 30s backoff)                             | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
-| **API**                  | Stores raw logs + writes to RTDB; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED; cleans up RTDB + Cloud Tasks | ← PATCH (status), ← POST (raw log); → **RTDB** writes; → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
-| **Frontend**             | Listens to RTDB directly (GCP) or SSE (local); fetches structured/raw/condensed only when needed                                                                   | ← **RTDB** onValue (GCP) or SSE (local); ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                         |
+| **API**                  | Stores raw logs in Firestore/SQLite; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED; cancels Cloud Tasks | ← PATCH (status), ← POST (raw log); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
+| **Frontend**             | Listens to Firestore `onSnapshot` (GCP) or polls REST via TanStack Query (local); fetches structured/raw/condensed only when needed                                                                   | ← **Firestore** onSnapshot (GCP) or REST polling (local); ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                         |
 
 
 ---
@@ -219,12 +217,11 @@ second call exits immediately.
 | Derive job status | `api/lib/condenser/derive-job-status.test.ts` | `deriveJobStatus` from sim states |
 | Game log files | `api/test/game-logs.test.ts` | Local filesystem log utilities |
 | Simulation wins | `api/test/simulation-wins.test.ts` | Simulation win extraction |
-| SSE stream construction | `api/lib/stream-utils.test.ts` | `jobToStreamEvent` field mapping, `durationMs` computation, `gamesCompleted` fallback, conditional fields (queuePosition, workers, deckLinks) |
 | Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
 | Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, Pub/Sub redelivery scenario |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
-| RTDB sim parsing | `frontend/src/hooks/useJobProgress.test.ts` | `parseRtdbSimulations`: index fallback from simId, sorting, filtering, edge cases |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
+| JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |
 
 ### Coverage gaps (future work)
 

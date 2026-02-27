@@ -9,7 +9,6 @@ import type { JobSummary } from '@shared/types/job';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { pushToAllWorkers } from '@/lib/worker-push';
-import { updateJobProgress } from '@/lib/rtdb';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
 import { isJobStuck } from '@/lib/job-utils';
@@ -147,19 +146,7 @@ export async function POST(request: NextRequest) {
     // Initialize per-simulation tracking and publish messages (1 sim record = 1 container)
     await jobStore.initializeSimulations(job.id, containerCount);
 
-    // Fire-and-forget: write initial progress to RTDB for real-time frontend streaming
     const deckNames = job.decks.map((d) => d.name);
-    updateJobProgress(job.id, {
-      status: 'QUEUED',
-      totalCount: containerCount,
-      completedCount: 0,
-      gamesCompleted: 0,
-      errorMessage: null,
-      startedAt: null,
-      completedAt: null,
-      workerName: null,
-      deckNames,
-    }).catch(err => console.warn('[RTDB] Initial progress write failed:', err instanceof Error ? err.message : err));
 
     if (isGcpMode()) {
       try {

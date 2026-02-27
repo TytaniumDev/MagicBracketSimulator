@@ -31,14 +31,12 @@ function getFirebaseApp(): App {
     firebaseApp = initializeApp({
       credential: cert(serviceAccount),
       projectId: project,
-      databaseURL: `https://${project}-default-rtdb.firebaseio.com`,
     });
   } else {
     // Use Application Default Credentials
     const project = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
     firebaseApp = initializeApp({
       projectId: project,
-      databaseURL: `https://${project}-default-rtdb.firebaseio.com`,
     });
   }
 
