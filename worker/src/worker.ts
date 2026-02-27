@@ -49,6 +49,9 @@ import {
 } from './condenser.js';
 import { startWorkerApi, stopWorkerApi } from './worker-api.js';
 import { GAMES_PER_CONTAINER } from './constants.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('Worker');
 
 
 const SECRET_NAME = 'simulation-worker-config';
@@ -557,7 +560,7 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
       signal: AbortSignal.timeout(timeoutMs ?? API_TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.warn(`Heartbeat failed: HTTP ${res.status} ${res.statusText}`);
+      log.warn('Heartbeat failed', { status: res.status, statusText: res.statusText });
       return;
     }
 
@@ -567,7 +570,7 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
       applyOverride(data.maxConcurrentOverride ?? null);
     }
   } catch (err) {
-    console.warn('Heartbeat error:', err instanceof Error ? err.message : err);
+    log.warn('Heartbeat error', { error: err instanceof Error ? err.message : err });
   }
 }
 
@@ -928,14 +931,13 @@ async function main(): Promise<void> {
 
   currentWorkerName = getWorkerName();
   currentWorkerId = getWorkerId();
-  console.log('Worker ID:', currentWorkerId);
-  console.log('Worker Name:', currentWorkerName);
+  log.info('Worker identity', { workerId: currentWorkerId, workerName: currentWorkerName });
 
-  console.log('Worker starting...');
-  console.log('Mode: Per-Simulation (docker run --rm)');
-  console.log('Transport:', usePubSub ? 'Pub/Sub' : 'Polling');
-  console.log('API URL:', getApiUrl());
-  console.log('Simulation image:', SIMULATION_IMAGE);
+  log.info('Worker starting');
+  log.info('Mode', { mode: 'Per-Simulation (docker run --rm)' });
+  log.info('Transport', { transport: usePubSub ? 'Pub/Sub' : 'Polling' });
+  log.info('API URL', { url: getApiUrl() });
+  log.info('Simulation image', { image: SIMULATION_IMAGE });
 
   // Verify Docker is accessible
   await verifyDockerAvailable();
@@ -1003,6 +1005,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error('Worker failed to start:', error);
+  log.error('Failed to start', { error: error instanceof Error ? error.message : String(error) });
   process.exit(1);
 });

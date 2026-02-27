@@ -5,6 +5,9 @@ import { updateJobProgress, updateSimProgress } from '@/lib/rtdb';
 import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
 import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
 import * as Sentry from '@sentry/nextjs';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('SimPatch');
 
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
@@ -95,7 +98,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Fire-and-forget RTDB write for simulation progress
-    updateSimProgress(id, simId, update).catch(err => console.warn('[RTDB] updateSimProgress failed:', err instanceof Error ? err.message : err));
+    updateSimProgress(id, simId, update).catch(err => log.warn('RTDB updateSimProgress failed', { jobId: id, simId, error: err instanceof Error ? err.message : err }));
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
@@ -108,7 +111,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           status: 'RUNNING',
           startedAt: new Date().toISOString(),
           workerName: workerName ?? null,
-        }).catch(err => console.warn('[RTDB] job RUNNING transition failed:', err instanceof Error ? err.message : err));
+        }).catch(err => log.warn('RTDB job RUNNING transition failed', { jobId: id, error: err instanceof Error ? err.message : err }));
       }
     }
 
@@ -120,18 +123,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // Fire-and-forget RTDB progress update
       // Estimate gamesCompleted from completedCount (not exact for CANCELLED, but close enough for UI)
       const gamesCompleted = completedSimCount * GAMES_PER_CONTAINER;
-      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(err => console.warn('[RTDB] progress count update failed:', err instanceof Error ? err.message : err));
+      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(err => log.warn('RTDB progress count update failed', { jobId: id, error: err instanceof Error ? err.message : err }));
 
       if (completedSimCount >= totalSimCount && totalSimCount > 0) {
         // Update RTDB before aggregation (frontend sees COMPLETED immediately)
         updateJobProgress(id, {
           status: 'COMPLETED',
           completedAt: new Date().toISOString(),
-        }).catch(err => console.warn('[RTDB] job COMPLETED status update failed:', err instanceof Error ? err.message : err));
+        }).catch(err => log.warn('RTDB job COMPLETED status update failed', { jobId: id, error: err instanceof Error ? err.message : err }));
 
         // Run aggregation in background — don't block the response
         jobStore.aggregateJobResults(id).catch(err => {
-          console.error(`[Aggregation] Failed for job ${id}:`, err);
+          log.error('Aggregation failed', { jobId: id, error: err instanceof Error ? err.message : String(err) });
           Sentry.captureException(err, { tags: { component: 'sim-aggregation', jobId: id } });
         });
       }
@@ -139,7 +142,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ updated: true });
   } catch (error) {
-    console.error('PATCH /api/jobs/[id]/simulations/[simId] error:', error);
+    log.error('PATCH error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to update simulation' },
       { status: 500 }

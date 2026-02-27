@@ -9,6 +9,9 @@ import * as os from 'os';
 import { execFile } from 'child_process';
 import { spawn } from 'child_process';
 import { GAMES_PER_CONTAINER } from './constants.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('DockerRunner');
 
 // ============================================================================
 // Types
@@ -63,11 +66,11 @@ export async function cleanupOrphanedContainers(): Promise<void> {
       'ps', '-a', '--filter', 'name=sim-', '--format', '{{.Names}}',
     ]);
     if (!output) {
-      console.log('Startup cleanup: no orphaned sim containers found');
+      log.info('Startup cleanup: no orphaned sim containers found');
       return;
     }
     const names = output.split('\n').filter(Boolean);
-    console.log(`Startup cleanup: removing ${names.length} orphaned sim container(s)...`);
+    log.info('Startup cleanup: removing orphaned sim containers', { count: names.length });
     for (const name of names) {
       try {
         await execDockerCommand(['rm', '-f', name]);
@@ -88,13 +91,13 @@ export async function cleanupOrphanedContainers(): Promise<void> {
 export async function pruneDockerResources(): Promise<void> {
   try {
     const containerOutput = await execDockerCommand(['container', 'prune', '-f']);
-    console.log('Docker container prune:', containerOutput || '(nothing to prune)');
+    log.info('Docker container prune', { result: containerOutput || '(nothing to prune)' });
   } catch (err) {
     console.warn('Docker container prune failed:', err instanceof Error ? err.message : err);
   }
   try {
     const imageOutput = await execDockerCommand(['image', 'prune', '-f']);
-    console.log('Docker image prune:', imageOutput || '(nothing to prune)');
+    log.info('Docker image prune', { result: imageOutput || '(nothing to prune)' });
   } catch (err) {
     console.warn('Docker image prune failed:', err instanceof Error ? err.message : err);
   }
@@ -184,7 +187,7 @@ export async function runSimulationContainer(
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
-      console.error(`[${simId}] Container timed out after ${CONTAINER_TIMEOUT_MS / 1000}s, killing...`);
+      log.error('Container timed out', { simId, timeoutMs: CONTAINER_TIMEOUT_MS });
       // Kill the docker run process
       proc.kill('SIGTERM');
       // Also force-remove the container in case SIGTERM doesn't propagate
@@ -261,10 +264,7 @@ export function calculateLocalCapacity(): number {
 
   const capacity = Math.max(1, Math.min(memSlots, cpuSlots, MAX_CONCURRENT_SIMS));
 
-  console.log(
-    `Local capacity: ${totalMemMB}MB RAM, ${cpuCount} CPUs → ` +
-    `memSlots=${memSlots}, cpuSlots=${cpuSlots}, cap=${MAX_CONCURRENT_SIMS}, using=${capacity}`,
-  );
+  log.info('Local capacity', { totalMemMB, cpuCount, memSlots, cpuSlots, cap: MAX_CONCURRENT_SIMS, using: capacity });
 
   return capacity;
 }
