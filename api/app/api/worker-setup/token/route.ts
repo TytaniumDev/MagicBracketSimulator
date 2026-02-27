@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
+import { errorResponse } from '@/lib/api-response';
 
 const WORKER_SECRET = process.env.WORKER_SECRET;
 
@@ -29,10 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!WORKER_SECRET) {
-    return NextResponse.json(
-      { error: 'Worker setup not configured (WORKER_SECRET missing)' },
-      { status: 500 },
-    );
+    return errorResponse('Worker setup not configured (WORKER_SECRET missing)', 500);
   }
 
   const token = generateToken();

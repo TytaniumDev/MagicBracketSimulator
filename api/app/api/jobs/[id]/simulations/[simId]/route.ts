@@ -6,6 +6,7 @@ import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
 import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from '@/lib/logger';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 const log = createLogger('SimPatch');
 
@@ -28,7 +29,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id, simId } = await params;
     if (!id || !simId) {
-      return NextResponse.json({ error: 'Job ID and simulation ID are required' }, { status: 400 });
+      return badRequestResponse('Job ID and simulation ID are required');
     }
 
     const body = await request.json();
@@ -36,10 +37,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Validate state if provided
     if (state !== undefined && !VALID_STATES.includes(state)) {
-      return NextResponse.json(
-        { error: `Invalid state. Must be one of: ${VALID_STATES.join(', ')}` },
-        { status: 400 }
-      );
+      return badRequestResponse(`Invalid state. Must be one of: ${VALID_STATES.join(', ')}`);
     }
 
     // Build update object, only including defined fields
@@ -102,11 +100,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
-      const job = await jobStore.getJob(id);
-      if (job?.status === 'QUEUED') {
-        await jobStore.setJobStartedAt(id, workerId, workerName);
-        await jobStore.updateJobStatus(id, 'RUNNING');
-        // Fire-and-forget RTDB write for job status transition
+      // Atomically transition QUEUED → RUNNING (prevents duplicate writes from concurrent sims)
+      const transitioned = await jobStore.conditionalUpdateJobStatus(id, ['QUEUED'], 'RUNNING', { workerId, workerName });
+      if (transitioned) {
         updateJobProgress(id, {
           status: 'RUNNING',
           startedAt: new Date().toISOString(),
@@ -126,13 +122,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(err => log.warn('RTDB progress count update failed', { jobId: id, error: err instanceof Error ? err.message : err }));
 
       if (completedSimCount >= totalSimCount && totalSimCount > 0) {
-        // Update RTDB before aggregation (frontend sees COMPLETED immediately)
+        // Set flag before fire-and-forget aggregation
+        await jobStore.setNeedsAggregation(id, true);
+
         updateJobProgress(id, {
           status: 'COMPLETED',
           completedAt: new Date().toISOString(),
         }).catch(err => log.warn('RTDB job COMPLETED status update failed', { jobId: id, error: err instanceof Error ? err.message : err }));
 
-        // Run aggregation in background — don't block the response
         jobStore.aggregateJobResults(id).catch(err => {
           log.error('Aggregation failed', { jobId: id, error: err instanceof Error ? err.message : String(err) });
           Sentry.captureException(err, { tags: { component: 'sim-aggregation', jobId: id } });
@@ -143,9 +140,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ updated: true });
   } catch (error) {
     log.error('PATCH error', { error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update simulation' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to update simulation', 500);
   }
 }

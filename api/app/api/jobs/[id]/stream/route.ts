@@ -5,6 +5,7 @@ import { isGcpMode } from '@/lib/job-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
 import { GAMES_PER_CONTAINER, type Job } from '@/lib/types';
 import { jobToStreamEvent } from '@/lib/stream-utils';
+import { badRequestResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -56,18 +57,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const { id } = await params;
   if (!id) {
-    return new Response(JSON.stringify({ error: 'Job ID is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return badRequestResponse('Job ID is required');
   }
 
   // In GCP mode, frontend streams from RTDB directly — SSE endpoint no longer needed
   if (isGcpMode()) {
-    return new Response(JSON.stringify({ error: 'Use Firebase RTDB for real-time streaming' }), {
-      status: 410,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return errorResponse('Use Firebase RTDB for real-time streaming', 410);
   }
 
   // ─── LOCAL mode: Poll SQLite every 2 seconds ──────────────────────────────
@@ -75,10 +70,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   // Verify job exists before starting stream
   let initialJob = await jobStore.getJob(id);
   if (!initialJob) {
-    return new Response(JSON.stringify({ error: 'Job not found' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return notFoundResponse('Job');
   }
 
   // Attempt stale job recovery on stream open
@@ -120,6 +112,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
       };
 
+      let interval: ReturnType<typeof setInterval> | undefined;
+
+      const cleanup = () => {
+        if (interval) {
+          clearInterval(interval);
+          interval = undefined;
+        }
+        close();
+      };
+
       const sendInitial = async () => {
         const sims = await jobStore.getSimulationStatuses(id);
         const computedGames = sims.length > 0
@@ -153,17 +155,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       let lastJobJson = JSON.stringify(jobToStreamEvent(initialJob, undefined, deckLinks));
       let lastSimsJson = '';
 
-      const interval = setInterval(async () => {
+      interval = setInterval(async () => {
         if (closed) {
-          clearInterval(interval);
+          cleanup();
           return;
         }
         try {
           const job = await jobStore.getJob(id);
           if (!job) {
             send({ error: 'Job not found' });
-            clearInterval(interval);
-            close();
+            cleanup();
             return;
           }
 
@@ -186,19 +187,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           }
 
           if (isTerminalStatus(job.status)) {
-            clearInterval(interval);
-            close();
+            cleanup();
           }
         } catch (error) {
           console.error(`SSE poll error for job ${id}:`, error);
-          clearInterval(interval);
-          close();
+          cleanup();
         }
       }, 2000);
 
       request.signal.addEventListener('abort', () => {
-        clearInterval(interval);
-        close();
+        cleanup();
       });
     },
   });

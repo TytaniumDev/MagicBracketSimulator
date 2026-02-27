@@ -17,7 +17,6 @@
 export type { JobStatus } from '@shared/types/job';
 export type { JobResults } from '@shared/types/job';
 export { GAMES_PER_CONTAINER } from '@shared/types/job';
-export { REQUIRED_DECK_COUNT } from '@shared/types/job';
 
 export type { SimulationState, SimulationStatus } from '@shared/types/simulation';
 
@@ -72,6 +71,7 @@ export interface Job {
   workerName?: string;
   claimedAt?: Date;
   retryCount?: number;
+  needsAggregation?: boolean;
   completedSimCount?: number;
   totalSimCount?: number;
   results?: JobResults;

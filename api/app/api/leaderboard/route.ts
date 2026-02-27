@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getRatingStore } from '@/lib/rating-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
+import { errorResponse } from '@/lib/api-response';
 
 export interface LeaderboardEntry {
   deckId: string;
@@ -107,6 +108,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Leaderboard] Failed to fetch leaderboard:', error);
-    return NextResponse.json({ error: 'Failed to fetch leaderboard' }, { status: 500 });
+    return errorResponse('Failed to fetch leaderboard', 500);
   }
 }
