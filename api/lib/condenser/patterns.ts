@@ -123,16 +123,25 @@ export const IGNORE_PATTERNS = [
 export const KEEP_EXTRA_DRAW = /draw(s)?\s+(an?\s+)?(additional|extra|\d+)\s+card|draw\s+\d+\s+card/i;
 
 /**
- * Pattern: Life total changes
+ * Pattern: Life total changes (for log condensing / event classification)
  *
  * Why keep: Life changes indicate damage dealt, life gain, and game pacing.
  * A deck that deals 40+ damage by turn 5 is more powerful than one that
  * chips away slowly.
  *
+ * This pattern is used by the classifier to tag lines as `life_change` events
+ * in the condensed output. It matches both the new native format and legacy
+ * heuristic patterns so that condensed logs correctly classify life-related
+ * lines regardless of Forge version.
+ *
+ * Note: Actual life total *calculation* is handled separately by
+ * `calculateLifePerTurn()` in `turns.ts`, which only reads the native
+ * `[LIFE]` entries for absolute values.
+ *
  * Forge examples:
- *   - "[LIFE] Life: Ai(1)-Doran Big Butts 40 -> 37" (native Forge log)
- *   - "Player A loses 5 life."
- *   - "Player B gains 4 life."
+ *   - "[LIFE] Life: Ai(1)-Doran Big Butts 40 -> 37" (native, post-2.0.10)
+ *   - "Player A loses 5 life." (legacy heuristic)
+ *   - "Player B gains 4 life." (legacy heuristic)
  */
 export const KEEP_LIFE_CHANGE = /^\[LIFE\]\s+Life:|life\s+(total\s+)?(change|loss|gain|to)|(\d+)\s+life|loses?\s+\d+\s+life|gains?\s+\d+\s+life/i;
 

@@ -197,15 +197,12 @@ async function runTests() {
   // Life tracking
   // =========================================================================
 
-  await test('buildStructuredGame: lifePerTurn has entries for each player', () => {
+  await test('buildStructuredGame: lifePerTurn is empty for old-format logs (no [LIFE] entries)', () => {
     const result = buildStructuredGame(games[0]);
-    assert(result.lifePerTurn !== undefined, 'should have lifePerTurn');
+    assert(result.lifePerTurn !== undefined, 'should have lifePerTurn field');
     const rounds = Object.keys(result.lifePerTurn!);
-    assert(rounds.length > 0, 'should have life data for at least one round');
-    // Check that the first round has entries for all players
-    const firstRound = result.lifePerTurn![Number(rounds[0])];
-    const playerCount = Object.keys(firstRound).length;
-    assertEqual(playerCount, 4, 'life entries per round');
+    // The fixture was generated with Forge 2.0.10 (pre-[LIFE] logs), so no life data
+    assertEqual(rounds.length, 0, 'should have no life data for old-format logs');
   });
 
   // =========================================================================
@@ -307,11 +304,10 @@ async function runTests() {
     assertEqual(life[1][P1], -3, 'P1 should be at -3');
   });
 
-  await test('calculateLifePerTurn: no [LIFE] entries leaves all at starting life', () => {
+  await test('calculateLifePerTurn: no [LIFE] entries returns empty object', () => {
     const log = miniLog('Some action that does not change life.');
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
-    assertEqual(life[1][P1], 40, 'P1 should be at starting life 40');
-    assertEqual(life[1][P2], 40, 'P2 should be at starting life 40');
+    assertEqual(Object.keys(life).length, 0, 'should return empty object when no [LIFE] entries');
   });
 
   await test('calculateLifePerTurn: both players change in same round', () => {
@@ -375,21 +371,84 @@ async function runTests() {
   // calculateLifePerTurn - integration with real fixture
   // =========================================================================
   // Note: The real fixture was generated with Forge 2.0.10 (pre-[LIFE] logs).
-  // Without [LIFE] entries, all players remain at starting life (40).
+  // Without [LIFE] entries, calculateLifePerTurn returns empty {}.
   // These tests verify the function handles old-format logs gracefully.
 
-  await test('calculateLifePerTurn (fixture): all 4 games produce valid life data', () => {
+  await test('calculateLifePerTurn (fixture): old-format logs return empty life data', () => {
     for (let i = 0; i < games.length; i++) {
       const result = buildStructuredGame(games[i]);
-      assert(result.lifePerTurn !== undefined, `game ${i + 1} should have lifePerTurn`);
+      assert(result.lifePerTurn !== undefined, `game ${i + 1} should have lifePerTurn field`);
       const rounds = Object.keys(result.lifePerTurn!);
-      assert(rounds.length > 0, `game ${i + 1} should have life rounds`);
-
-      // Check all players tracked
-      const firstRound = result.lifePerTurn![Number(rounds[0])];
-      const playerCount = Object.keys(firstRound).length;
-      assertEqual(playerCount, 4, `game ${i + 1} should track 4 players`);
+      assertEqual(rounds.length, 0, `game ${i + 1} should have empty life data (no [LIFE] entries)`);
     }
+  });
+
+  // =========================================================================
+  // buildStructuredGame - integration with [LIFE] log data
+  // =========================================================================
+  // Tests the full pipeline: raw log with [LIFE] entries → buildStructuredGame
+  // → lifePerTurn populated correctly.
+
+  await test('buildStructuredGame: full pipeline with [LIFE] entries populates lifePerTurn', () => {
+    const PA = 'Ai(1)-Alpha Deck';
+    const PB = 'Ai(2)-Beta Deck';
+    const PC = 'Ai(3)-Gamma Deck';
+    const PD = 'Ai(4)-Delta Deck';
+
+    // Synthetic 4-player game log with [LIFE] entries
+    const syntheticLog = [
+      `Turn: Turn 1 (${PA})`,
+      `Land: ${PA} played Forest (41)`,
+      `[LIFE] Life: ${PA} 40 -> 39`,
+      `Turn: Turn 2 (${PB})`,
+      `Land: ${PB} played Island (42)`,
+      `[LIFE] Life: ${PB} 40 -> 38`,
+      `Turn: Turn 3 (${PC})`,
+      `Land: ${PC} played Mountain (43)`,
+      `Turn: Turn 4 (${PD})`,
+      `Land: ${PD} played Swamp (44)`,
+      `[LIFE] Life: ${PD} 40 -> 35`,
+      // Round 2
+      `Turn: Turn 5 (${PA})`,
+      `[LIFE] Life: ${PA} 39 -> 30`,
+      `Turn: Turn 6 (${PB})`,
+      `[LIFE] Life: ${PB} 38 -> 25`,
+      `Turn: Turn 7 (${PC})`,
+      `[LIFE] Life: ${PC} 40 -> 20`,
+      `Turn: Turn 8 (${PD})`,
+      `[LIFE] Life: ${PD} 35 -> 0`,
+      `${PD} loses the game.`,
+      `${PA} wins the game.`,
+      `Game Result: Game 1 ended in 12345 ms. ${PA} has won!`,
+    ].join('\n');
+
+    const result = buildStructuredGame(syntheticLog);
+
+    // Verify basic structure
+    assertEqual(result.players.length, 4, 'should have 4 players');
+    assertEqual(result.decks.length, 4, 'should have 4 decks');
+    assert(result.winner !== undefined, 'should have a winner');
+
+    // Verify lifePerTurn is populated
+    assert(result.lifePerTurn !== undefined, 'should have lifePerTurn');
+    const rounds = Object.keys(result.lifePerTurn!);
+    assert(rounds.length > 0, 'should have life data for at least one round');
+
+    // Verify round 1 life totals
+    const round1 = result.lifePerTurn![1];
+    assert(round1 !== undefined, 'round 1 should exist');
+    assertEqual(round1[PA], 39, 'PA round 1');
+    assertEqual(round1[PB], 38, 'PB round 1');
+    assertEqual(round1[PC], 40, 'PC round 1 (no change)');
+    assertEqual(round1[PD], 35, 'PD round 1');
+
+    // Verify round 2 life totals
+    const round2 = result.lifePerTurn![2];
+    assert(round2 !== undefined, 'round 2 should exist');
+    assertEqual(round2[PA], 30, 'PA round 2');
+    assertEqual(round2[PB], 25, 'PB round 2');
+    assertEqual(round2[PC], 20, 'PC round 2');
+    assertEqual(round2[PD], 0, 'PD round 2 (dead)');
   });
 
   // =========================================================================

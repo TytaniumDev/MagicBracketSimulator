@@ -107,8 +107,9 @@ aggregation, using the raw logs that workers previously uploaded.
 parses Forge's native `[LIFE] Life: PlayerName oldValue -> newValue` log entries
 (added in the Forge version after 2.0.10, via Card-Forge/forge#9845). This gives
 absolute life totals directly from the game engine — no heuristic inference
-needed. For logs from older Forge versions (without `[LIFE]` entries), all
-players remain at starting life (40).
+needed. For logs from older Forge versions (without `[LIFE]` entries), the
+function returns an empty object `{}` so the frontend can detect that life data
+is unavailable rather than showing misleading defaults.
 
 **Deck name matching:** `matchesDeckName()` from `api/lib/condenser/deck-match.ts`
 is the canonical function for matching Forge log player names (e.g.

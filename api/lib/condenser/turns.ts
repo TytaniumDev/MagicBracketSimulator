@@ -506,8 +506,11 @@ export function extractWinningTurn(rawLog: string): number | undefined {
  *   1: Player name (e.g., "Ai(1)-Doran Big Butts")
  *   2: Old life total
  *   3: New life total
+ *
+ * The player name group uses a greedy match up to the last space-digit sequence,
+ * which avoids ambiguity with digit-suffix deck names (e.g., "Ai(4)-Deck 2000").
  */
-const LIFE_LOG_PATTERN = /^\[LIFE\] Life: (.+?)\s+(-?\d+)\s*->\s*(-?\d+)/;
+const LIFE_LOG_PATTERN = /^\[LIFE\] Life: (.+)\s+(-?\d+)\s*->\s*(-?\d+)$/;
 
 /**
  * Calculates life totals per round for all players.
@@ -519,13 +522,15 @@ const LIFE_LOG_PATTERN = /^\[LIFE\] Life: (.+?)\s+(-?\d+)\s*->\s*(-?\d+)/;
  * A "round" is one full rotation where each player takes a turn.
  * In a 4-player Commander game, round 1 = segments 1-4, round 2 = segments 5-8, etc.
  *
- * Commander format starts at 40 life. Players whose life hasn't changed yet
- * remain at 40 until a `[LIFE]` entry updates them.
+ * Returns an empty object when no `[LIFE]` entries are found (e.g., logs from
+ * Forge versions before the life tracking feature). This lets the frontend
+ * detect that life data is unavailable rather than showing misleading defaults.
  *
  * @param rawLog - The complete raw log text
  * @param players - Array of player identifiers (e.g., ["Ai(1)-Doran Big Butts", ...])
  * @param numPlayers - Number of players in the game (optional, auto-detected if not provided)
- * @returns Map of round number -> map of player name -> life total at end of round
+ * @returns Map of round number -> map of player name -> life total at end of round.
+ *          Empty `{}` when no `[LIFE]` entries are present.
  */
 export function calculateLifePerTurn(
   rawLog: string,
@@ -544,6 +549,7 @@ export function calculateLifePerTurn(
   }
 
   const lifePerRound: Record<number, Record<string, number>> = {};
+  let hasLifeEntries = false;
 
   // Group segments by round
   const roundGroups = new Map<number, typeof chunks>();
@@ -566,12 +572,14 @@ export function calculateLifePerTurn(
         const match = LIFE_LOG_PATTERN.exec(line);
         if (!match) continue;
 
+        hasLifeEntries = true;
         const logName = match[1];
         const newLife = parseInt(match[3], 10);
 
         // Match the player name from the [LIFE] entry to our known players list
+        // using matchesDeckName for consistency with deck matching elsewhere
         const player = players.find(
-          (p) => p === logName || p.startsWith(logName) || logName.startsWith(p)
+          (p) => matchesDeckName(p, logName) || matchesDeckName(logName, p)
         );
         if (player) {
           currentLife[player] = newLife;
@@ -581,6 +589,12 @@ export function calculateLifePerTurn(
 
     // Snapshot life totals at end of this round
     lifePerRound[round] = { ...currentLife };
+  }
+
+  // Return empty object when no [LIFE] entries found (old Forge versions).
+  // This lets the frontend distinguish "no data" from "everyone at 40".
+  if (!hasLifeEntries) {
+    return {};
   }
 
   return lifePerRound;
