@@ -10,6 +10,7 @@ FROM eclipse-temurin:17-jre-jammy
 
 # Forge version — pinned for deterministic local builds.
 # CI and nightly workflows pass --build-arg FORGE_VERSION=X.Y.Z explicitly.
+# The nightly forge-update workflow auto-updates this when new releases are published.
 ARG FORGE_VERSION="2.0.10"
 
 # Create non-root user with home directory
