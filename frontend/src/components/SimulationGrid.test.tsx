@@ -230,7 +230,7 @@ describe('SimulationGrid', () => {
   // ---------------------------------------------------------------------------
 
   it('renders pending placeholders when simulations have undefined index', () => {
-    // Simulates the bug: RTDB delivers sims without index field
+    // Defense: handles sims delivered without index field
     const simsWithoutIndex = [
       { simId: 'sim_000', state: 'RUNNING', workerId: 'w1' } as unknown as SimulationStatus,
       { simId: 'sim_001', state: 'RUNNING', workerId: 'w1' } as unknown as SimulationStatus,

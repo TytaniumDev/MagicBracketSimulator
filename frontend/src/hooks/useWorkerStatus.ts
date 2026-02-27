@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiBase, fetchWithAuth } from '../api';
 import type { WorkerInfo } from '../types/worker';
 
@@ -9,45 +9,36 @@ interface WorkerStatusResult {
   refresh: () => Promise<void>;
 }
 
+async function fetchWorkerStatus(): Promise<{ workers: WorkerInfo[]; queueDepth: number }> {
+  const apiBase = getApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/workers`);
+  if (!res.ok) return { workers: [], queueDepth: 0 };
+  const data = await res.json();
+  return { workers: data.workers ?? [], queueDepth: data.queueDepth ?? 0 };
+}
+
 /**
  * Polls GET /api/workers every 15 seconds to get worker fleet status.
  * Pass enabled=false to skip polling (e.g. for unauthenticated users).
  */
 export function useWorkerStatus(enabled = true): WorkerStatusResult {
-  const [workers, setWorkers] = useState<WorkerInfo[]>([]);
-  const [queueDepth, setQueueDepth] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const apiBase = getApiBase();
-      const res = await fetchWithAuth(`${apiBase}/api/workers`);
-      if (res.ok) {
-        const data = await res.json();
-        setWorkers(data.workers ?? []);
-        setQueueDepth(data.queueDepth ?? 0);
-      }
-    } catch {
-      // Non-fatal: keep showing last known state
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const { data, isLoading } = useQuery({
+    queryKey: ['workers'],
+    queryFn: fetchWorkerStatus,
+    enabled,
+    refetchInterval: 15_000,
+  });
 
-  useEffect(() => {
-    if (!enabled) {
-      setIsLoading(false);
-      return;
-    }
-    fetchStatus();
-    intervalRef.current = setInterval(fetchStatus, 15_000);
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [fetchStatus, enabled]);
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['workers'] });
+  };
 
-  return { workers, queueDepth, isLoading, refresh: fetchStatus };
+  return {
+    workers: data?.workers ?? [],
+    queueDepth: data?.queueDepth ?? 0,
+    isLoading,
+    refresh,
+  };
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { getApiBase, fetchWithAuth } from '../api';
 import { isTerminal } from '../utils/status';
 import type { JobResponse } from '@shared/types/job';
@@ -14,10 +14,13 @@ interface UseJobLogsOptions {
 export interface JobLogsData {
   rawLogs: string[] | null;
   rawLogsError: string | null;
+  rawLogsLoading: boolean;
   condensedLogs: CondensedGame[] | null;
   condensedError: string | null;
+  condensedLoading: boolean;
   structuredGames: StructuredGame[] | null;
   structuredError: string | null;
+  structuredLoading: boolean;
   /** Deck names extracted from structured logs */
   deckNames: string[] | null;
   /** Color identity by deck name (server-provided or fetched) */
@@ -25,121 +28,103 @@ export interface JobLogsData {
 }
 
 /**
- * Manages all log data fetching: raw, condensed, structured logs
- * and color identity resolution.
+ * Manages all log data fetching using TanStack Query.
  *
  * Lazy-loads data based on user interaction:
  * - Raw + condensed logs load when the log panel is opened
  * - Structured logs load when the user clicks "Load Deck Actions"
- * - Color identity is resolved from the server or fetched separately
+ * - Color identity is resolved from the job or fetched separately
  */
 export function useJobLogs(
   jobId: string | undefined,
   job: JobResponse | null,
   options: UseJobLogsOptions,
 ): JobLogsData {
-  const [rawLogs, setRawLogs] = useState<string[] | null>(null);
-  const [rawLogsError, setRawLogsError] = useState<string | null>(null);
-  const [condensedLogs, setCondensedLogs] = useState<CondensedGame[] | null>(null);
-  const [condensedError, setCondensedError] = useState<string | null>(null);
-  const [structuredGames, setStructuredGames] = useState<StructuredGame[] | null>(null);
-  const [structuredError, setStructuredError] = useState<string | null>(null);
-  const [deckNames, setDeckNames] = useState<string[] | null>(null);
-  const [colorIdentityByDeckName, setColorIdentityByDeckName] = useState<Record<string, string[]>>({});
-
   const apiBase = getApiBase();
-
-  // Fetch structured logs (deferred until user requests them)
   const jobStatus = job?.status;
-  useEffect(() => {
-    if (!jobId || !jobStatus || !options.loadStructured) return;
-    if (!isTerminal(jobStatus)) return;
-    if (structuredGames !== null) return; // Already fetched
+  const terminal = isTerminal(jobStatus);
 
-    setStructuredError(null);
-    fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/structured`)
-      .then((res) => {
-        if (!res.ok) {
-          if (res.status === 404) return { games: [], deckNames: [] };
-          throw new Error('Failed to load structured logs');
-        }
-        return res.json();
-      })
-      .then((data) => {
-        setStructuredGames(data.games ?? []);
-        setDeckNames(data.deckNames ?? null);
-      })
-      .catch((err) => setStructuredError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [jobId, apiBase, jobStatus, structuredGames, options.loadStructured]);
+  const rawLogsQuery = useQuery({
+    queryKey: ['job', jobId, 'logs', 'raw'],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/raw`);
+      if (!res.ok) {
+        if (res.status === 404) return { gameLogs: [] };
+        throw new Error('Failed to load raw logs');
+      }
+      return res.json();
+    },
+    enabled: !!jobId && terminal && options.showLogPanel,
+    staleTime: Infinity,
+  });
 
-  // Stable keys for color identity dependencies
-  const deckNamesKey = job?.deckNames?.join(',') ?? '';
-  const logDeckNamesKey = deckNames?.join(',') ?? '';
-  const colorIdentityKey = JSON.stringify(job?.colorIdentity);
+  const condensedQuery = useQuery({
+    queryKey: ['job', jobId, 'logs', 'condensed'],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/condensed`);
+      if (!res.ok) {
+        if (res.status === 404) return { condensed: [] };
+        throw new Error('Failed to load condensed logs');
+      }
+      return res.json();
+    },
+    enabled: !!jobId && terminal && options.showLogPanel,
+    staleTime: Infinity,
+  });
 
-  // Resolve color identity (server-provided or separate fetch)
-  useEffect(() => {
-    if (!job) return;
+  const structuredQuery = useQuery({
+    queryKey: ['job', jobId, 'logs', 'structured'],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/structured`);
+      if (!res.ok) {
+        if (res.status === 404) return { games: [], deckNames: [] };
+        throw new Error('Failed to load structured logs');
+      }
+      return res.json();
+    },
+    enabled: !!jobId && terminal && options.loadStructured,
+    staleTime: Infinity,
+  });
 
-    if (job.colorIdentity && Object.keys(job.colorIdentity).length > 0) {
-      setColorIdentityByDeckName(job.colorIdentity);
-      return;
-    }
+  // Collect deck names from all sources
+  const structuredDeckNames: string[] | null = structuredQuery.data?.deckNames ?? null;
 
-    const names = new Set<string>();
-    job.deckNames?.forEach((n) => names.add(n));
-    deckNames?.forEach((n) => names.add(n));
-    const list = Array.from(names);
-    if (list.length === 0) return;
-    const params = new URLSearchParams({ names: list.join(',') });
-    fetchWithAuth(`${apiBase}/api/deck-color-identity?${params}`)
-      .then((res) => (res.ok ? res.json() : {}))
-      .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
-      .catch((err) => console.error('Failed to fetch color identity:', err));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiBase, job?.id, deckNamesKey, logDeckNamesKey, colorIdentityKey]);
+  // Build the names list for color identity lookup
+  const allDeckNames = new Set<string>();
+  job?.deckNames?.forEach((n) => allDeckNames.add(n));
+  structuredDeckNames?.forEach((n) => allDeckNames.add(n));
+  const namesList = Array.from(allDeckNames).sort();
 
-  // Fetch raw and condensed logs when log panel is opened
-  useEffect(() => {
-    if (!jobId || !options.showLogPanel) return;
+  // Color identity: prefer job-level data, fall back to separate fetch
+  const jobHasColorIdentity = !!job?.colorIdentity && Object.keys(job.colorIdentity).length > 0;
 
-    if (rawLogs === null) {
-      setRawLogsError(null);
-      fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/raw`)
-        .then((res) => {
-          if (!res.ok) {
-            if (res.status === 404) return { gameLogs: [] };
-            throw new Error('Failed to load raw logs');
-          }
-          return res.json();
-        })
-        .then((data) => setRawLogs(data.gameLogs ?? []))
-        .catch((err) => setRawLogsError(err instanceof Error ? err.message : 'Unknown error'));
-    }
+  const colorIdentityQuery = useQuery({
+    queryKey: ['colorIdentity', jobId, ...namesList],
+    queryFn: async () => {
+      const params = new URLSearchParams({ names: namesList.join(',') });
+      const res = await fetchWithAuth(`${apiBase}/api/deck-color-identity?${params}`);
+      if (!res.ok) return {};
+      return res.json() as Promise<Record<string, string[]>>;
+    },
+    enabled: !!jobId && namesList.length > 0 && !jobHasColorIdentity,
+    staleTime: Infinity,
+  });
 
-    if (condensedLogs === null) {
-      setCondensedError(null);
-      fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/condensed`)
-        .then((res) => {
-          if (!res.ok) {
-            if (res.status === 404) return { condensed: [] };
-            throw new Error('Failed to load condensed logs');
-          }
-          return res.json();
-        })
-        .then((data) => setCondensedLogs(data.condensed ?? []))
-        .catch((err) => setCondensedError(err instanceof Error ? err.message : 'Unknown error'));
-    }
-  }, [jobId, apiBase, options.showLogPanel, rawLogs, condensedLogs]);
+  const colorIdentityByDeckName = jobHasColorIdentity
+    ? job!.colorIdentity!
+    : (colorIdentityQuery.data ?? {});
 
   return {
-    rawLogs,
-    rawLogsError,
-    condensedLogs,
-    condensedError,
-    structuredGames,
-    structuredError,
-    deckNames,
+    rawLogs: rawLogsQuery.data?.gameLogs ?? null,
+    rawLogsError: rawLogsQuery.error?.message ?? null,
+    rawLogsLoading: rawLogsQuery.isLoading && rawLogsQuery.fetchStatus !== 'idle',
+    condensedLogs: condensedQuery.data?.condensed ?? null,
+    condensedError: condensedQuery.error?.message ?? null,
+    condensedLoading: condensedQuery.isLoading && condensedQuery.fetchStatus !== 'idle',
+    structuredGames: structuredQuery.data?.games ?? null,
+    structuredError: structuredQuery.error?.message ?? null,
+    structuredLoading: structuredQuery.isLoading && structuredQuery.fetchStatus !== 'idle',
+    deckNames: structuredDeckNames,
     colorIdentityByDeckName,
   };
 }

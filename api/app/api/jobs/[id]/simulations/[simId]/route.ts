@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import { updateJobProgress, updateSimProgress } from '@/lib/rtdb';
-import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, updateSimulationSchema } from '@/lib/validation';
 import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
 import * as Sentry from '@sentry/nextjs';
@@ -57,11 +55,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // The worker treats these as idempotent no-ops (Pub/Sub redelivery is expected),
     // whereas job PATCH returns 409 because invalid transitions there indicate a
     // real bug in the caller, not a retry scenario.
-    let simIndex: number | undefined;
     if (state !== undefined) {
       const currentSim = await jobStore.getSimulationStatus(id, simId);
       if (currentSim) {
-        simIndex = currentSim.index;
         // Explicit terminal check before canSimTransition: while canSimTransition
         // would also reject these (terminal states have no valid transitions), we
         // check separately to return a distinct 'terminal_state' reason code that
@@ -95,27 +91,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await jobStore.updateSimulationStatus(id, simId, update);
     }
 
-    // Resolve sim index for RTDB: prefer the fetched value, fall back to parsing simId (e.g. "sim_003" → 3)
-    if (simIndex === undefined) {
-      const match = simId.match(/^sim_(\d+)$/);
-      if (match) simIndex = parseInt(match[1], 10);
-    }
-
-    // Fire-and-forget RTDB write for simulation progress (include index so frontend can build the grid)
-    const rtdbUpdate = simIndex !== undefined ? { ...update, index: simIndex } : update;
-    updateSimProgress(id, simId, rtdbUpdate).catch(err => log.warn('RTDB updateSimProgress failed', { jobId: id, simId, error: err instanceof Error ? err.message : err }));
-
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
       // Atomically transition QUEUED → RUNNING (prevents duplicate writes from concurrent sims)
-      const transitioned = await jobStore.conditionalUpdateJobStatus(id, ['QUEUED'], 'RUNNING', { workerId, workerName });
-      if (transitioned) {
-        updateJobProgress(id, {
-          status: 'RUNNING',
-          startedAt: new Date().toISOString(),
-          workerName: workerName ?? null,
-        }).catch(err => log.warn('RTDB job RUNNING transition failed', { jobId: id, error: err instanceof Error ? err.message : err }));
-      }
+      await jobStore.conditionalUpdateJobStatus(id, ['QUEUED'], 'RUNNING', { workerId, workerName });
     }
 
     // Check if all sims are done → trigger aggregation.
@@ -123,19 +102,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (transitioned && (state === 'COMPLETED' || state === 'CANCELLED')) {
       const { completedSimCount, totalSimCount } = await jobStore.incrementCompletedSimCount(id);
 
-      // Fire-and-forget RTDB progress update
-      // Estimate gamesCompleted from completedCount (not exact for CANCELLED, but close enough for UI)
-      const gamesCompleted = completedSimCount * GAMES_PER_CONTAINER;
-      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(err => log.warn('RTDB progress count update failed', { jobId: id, error: err instanceof Error ? err.message : err }));
-
       if (completedSimCount >= totalSimCount && totalSimCount > 0) {
         // Set flag before fire-and-forget aggregation
         await jobStore.setNeedsAggregation(id, true);
-
-        updateJobProgress(id, {
-          status: 'COMPLETED',
-          completedAt: new Date().toISOString(),
-        }).catch(err => log.warn('RTDB job COMPLETED status update failed', { jobId: id, error: err instanceof Error ? err.message : err }));
 
         jobStore.aggregateJobResults(id).catch(err => {
           log.error('Aggregation failed', { jobId: id, error: err instanceof Error ? err.message : String(err) });

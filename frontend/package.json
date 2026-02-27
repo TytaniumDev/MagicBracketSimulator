@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@sentry/react": "^10.40.0",
+    "@tanstack/react-query": "^5.90.21",
     "d3-array": "^3.2.4",
     "firebase": "^12.8.0",
     "react": "^19.1.0",
