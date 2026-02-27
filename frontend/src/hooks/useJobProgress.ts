@@ -178,7 +178,9 @@ export function useJobProgress<T>(jobId: string | undefined) {
         if (!data) return;
 
         const sims = parseRtdbSimulations(data as Record<string, Record<string, unknown>>);
+        if (sims.length === 0) return;
 
+        // Only cancel REST polling if all sims have valid indices (every() on empty is true, guarded above)
         const hasValidIndices = sims.every(s => typeof s.index === 'number' && s.index >= 0);
         if (hasValidIndices) markSimsReceived();
         setSimulations(sims);
