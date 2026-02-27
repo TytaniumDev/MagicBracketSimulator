@@ -253,8 +253,10 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
 
 // ─── Per-Simulation Stale Detection ──────────────────────────────────────────
 
-const STALE_PENDING_THRESHOLD_MS = 5 * 60 * 1000;       // 5 minutes
-const STALE_RUNNING_THRESHOLD_MS = 2.5 * 60 * 60 * 1000; // 2.5 hours (container timeout + buffer)
+const STALE_PENDING_THRESHOLD_MS = parseInt(process.env.STALE_PENDING_THRESHOLD_MS || String(5 * 60 * 1000), 10);  // Default: 5 min
+// Should exceed CONTAINER_TIMEOUT_MS (default 2h) to avoid false positives
+const STALE_RUNNING_THRESHOLD_MS = parseInt(process.env.STALE_RUNNING_THRESHOLD_MS || String(2.5 * 60 * 60 * 1000), 10);  // Default: 2.5 hours
+const REQUEUE_COOLDOWN_MS = parseInt(process.env.REQUEUE_COOLDOWN_MS || '120000', 10);
 
 /**
  * Detect and recover individual stuck simulations within a RUNNING job.
@@ -390,11 +392,11 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
   if (!USE_FIRESTORE) return false; // Polling mode picks up QUEUED jobs automatically
 
   const queuedForMs = Date.now() - job.createdAt.getTime();
-  if (queuedForMs < 120_000) return false; // Not stuck yet
+  if (queuedForMs < REQUEUE_COOLDOWN_MS) return false; // Not stuck yet
 
   // Cooldown: don't re-publish more often than every 2 minutes per job
   const lastRequeue = requeueCooldowns.get(jobId) ?? 0;
-  if (Date.now() - lastRequeue < 120_000) return false;
+  if (Date.now() - lastRequeue < REQUEUE_COOLDOWN_MS) return false;
 
   // Only re-publish if there's at least one active worker to receive it
   const activeWorkers = await workerStore.getActiveWorkers();
