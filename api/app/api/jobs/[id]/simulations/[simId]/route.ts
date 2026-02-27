@@ -6,6 +6,7 @@ import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, updateSimulationSchema } from '@/lib/validation';
 import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
 import * as Sentry from '@sentry/nextjs';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
@@ -24,7 +25,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id, simId } = await params;
     if (!id || !simId) {
-      return NextResponse.json({ error: 'Job ID and simulation ID are required' }, { status: 400 });
+      return badRequestResponse('Job ID and simulation ID are required');
     }
 
     const body = await request.json();
@@ -135,9 +136,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ updated: true });
   } catch (error) {
     console.error('PATCH /api/jobs/[id]/simulations/[simId] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update simulation' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to update simulation', 500);
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getStructuredLogs } from '@/lib/log-store';
 import * as jobStore from '@/lib/job-store-factory';
+import { errorResponse, notFoundResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -26,16 +27,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const result = await getStructuredLogs(id, deckNames && deckNames.length > 0 ? deckNames : undefined);
 
     if (!result) {
-      return NextResponse.json({ error: 'Logs not found for this job' }, { status: 404 });
+      return notFoundResponse('Logs');
     }
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=86400' },
     });
   } catch (error) {
     console.error('GET /api/jobs/[id]/logs/structured error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get structured logs' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to get structured logs', 500);
   }
 }

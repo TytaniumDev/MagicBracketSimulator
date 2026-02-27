@@ -4,6 +4,7 @@ import { listAllDecks, createDeck } from '@/lib/deck-store-factory';
 import { parseCommanderFromContent } from '@/lib/saved-decks';
 import { getColorIdentity } from '@/lib/scryfall';
 import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 /**
  * GET /api/decks - List all decks (precons + every user's submissions, public)
@@ -20,10 +21,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ decks });
   } catch (error) {
     console.error('Failed to list decks:', error);
-    return NextResponse.json(
-      { error: 'Failed to list decks' },
-      { status: 500 }
-    );
+    return errorResponse('Failed to list decks', 500);
   }
 }
 
@@ -53,10 +51,7 @@ export async function POST(request: NextRequest) {
     if (url) {
       // URL-based import
       if (!isMoxfieldUrl(url) && !isArchidektUrl(url) && !isManaboxUrl(url)) {
-        return NextResponse.json(
-          { error: 'Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.' },
-          { status: 400 }
-        );
+        return badRequestResponse('Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.');
       }
 
       const result = await fetchDeckAsDck(url);
@@ -74,10 +69,7 @@ export async function POST(request: NextRequest) {
         link = deckLink.trim();
       }
     } else {
-      return NextResponse.json(
-        { error: 'Either deckUrl or deckText is required' },
-        { status: 400 }
-      );
+      return badRequestResponse('Either deckUrl or deckText is required');
     }
 
     const commander = parseCommanderFromContent(dck);
@@ -101,10 +93,6 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Failed to save deck:', error);
-    const message = error instanceof Error ? error.message : 'Failed to save deck';
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to save deck', 500);
   }
 }

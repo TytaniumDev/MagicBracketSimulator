@@ -3,6 +3,7 @@ export { GAMES_PER_CONTAINER } from './job';
 export type { SimulationState, SimulationStatus } from './simulation';
 export type { EventType, GameEvent, TurnManaInfo, DeckTurnInfo, CondensedGame, DeckAction, DeckTurnActions, DeckHistory, StructuredGame } from './log';
 export type { WorkerInfo } from './worker';
+export type { ApiErrorResponse, ApiUpdateResponse } from './api';
 export {
   canSimTransition,
   isTerminalSimState,

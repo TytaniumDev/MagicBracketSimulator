@@ -7,6 +7,7 @@ import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
 import { parseBody, updateJobSchema } from '@/lib/validation';
 import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
 import { canJobTransition } from '@shared/types/state-machine';
+import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -110,12 +111,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
     let job = await jobStore.getJob(id);
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      return notFoundResponse('Job');
     }
 
     // Attempt stale job recovery for RUNNING or stuck QUEUED jobs
@@ -124,7 +125,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (recovered) {
         job = await jobStore.getJob(id);
         if (!job) {
-          return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+          return notFoundResponse('Job');
         }
       }
     }
@@ -133,10 +134,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(response);
   } catch (error) {
     console.error('GET /api/jobs/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to get job', 500);
   }
 }
 
@@ -157,12 +155,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
     const job = await jobStore.getJob(id);
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      return notFoundResponse('Job');
     }
 
     // Cancel the job first if it's still active, so the worker can detect it
@@ -185,10 +183,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error('DELETE /api/jobs/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to delete job', 500);
   }
 }
 
@@ -204,7 +199,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
     const body = await request.json();
@@ -216,15 +211,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const job = await jobStore.getJob(id);
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      return notFoundResponse('Job');
     }
 
     // Validate job state transition using the state machine
     if (typeof status === 'string' && !canJobTransition(job.status, status as JobStatus)) {
-      return NextResponse.json(
-        { error: `Invalid status transition: ${job.status} → ${status}` },
-        { status: 409 }
-      );
+      return errorResponse(`Invalid status transition: ${job.status} → ${status}`, 409);
     }
 
     if (status === 'RUNNING') {
@@ -243,9 +235,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(response);
   } catch (error) {
     console.error('PATCH /api/jobs/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to update job', 500);
   }
 }
