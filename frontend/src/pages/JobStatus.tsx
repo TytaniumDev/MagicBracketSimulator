@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
@@ -50,6 +51,7 @@ export default function JobStatusPage() {
   const [loadStructuredLogs, setLoadStructuredLogs] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeletingJob, setIsDeletingJob] = useState(false);
+  const [isResubmitting, setIsResubmitting] = useState(false);
 
   // Data hooks
   const { job, setJob, simulations, error, setError } = useJobData(id);
@@ -127,6 +129,31 @@ export default function JobStatusPage() {
     }
   };
 
+  const handleRunAgain = async () => {
+    if (!job.deckIds || job.deckIds.length !== REQUIRED_DECK_COUNT) return;
+    setIsResubmitting(true);
+    try {
+      const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          deckIds: job.deckIds,
+          simulations: job.simulations,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create job');
+      }
+      if (!data.id) throw new Error('Server returned invalid job');
+      navigate(`/jobs/${data.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Resubmit failed');
+    } finally {
+      setIsResubmitting(false);
+    }
+  };
+
   const currentGame = logs.structuredGames?.[selectedGame];
   const maxTurns = Math.max(1, currentGame?.totalTurns ?? 1);
   const isTerminal = job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED';
@@ -142,9 +169,21 @@ export default function JobStatusPage() {
           Back to browse
         </Link>
       </div>
-      <h1 className="text-2xl font-bold mb-1">
-        {job.simulations} Game Simulation
-      </h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold">
+          {job.simulations} Game Simulation
+        </h1>
+        {isTerminal && job.deckIds?.length === REQUIRED_DECK_COUNT && (
+          <button
+            type="button"
+            onClick={handleRunAgain}
+            disabled={isResubmitting}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isResubmitting ? 'Submitting...' : 'Run Again'}
+          </button>
+        )}
+      </div>
       <p className="text-gray-500 text-xs mb-6">ID: {job.id}</p>
 
       {/* Deck Showcase */}
