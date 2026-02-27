@@ -86,7 +86,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Fire-and-forget RTDB write for simulation progress
-    updateSimProgress(id, simId, update).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
+    updateSimProgress(id, simId, update).catch(err => console.warn('[RTDB] updateSimProgress failed:', err instanceof Error ? err.message : err));
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
@@ -99,7 +99,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           status: 'RUNNING',
           startedAt: new Date().toISOString(),
           workerName: workerName ?? null,
-        }).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
+        }).catch(err => console.warn('[RTDB] job RUNNING transition failed:', err instanceof Error ? err.message : err));
       }
     }
 
@@ -111,14 +111,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // Fire-and-forget RTDB progress update
       // Estimate gamesCompleted from completedCount (not exact for CANCELLED, but close enough for UI)
       const gamesCompleted = completedSimCount * GAMES_PER_CONTAINER;
-      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
+      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(err => console.warn('[RTDB] progress count update failed:', err instanceof Error ? err.message : err));
 
       if (completedSimCount >= totalSimCount && totalSimCount > 0) {
         // Update RTDB before aggregation (frontend sees COMPLETED immediately)
         updateJobProgress(id, {
           status: 'COMPLETED',
           completedAt: new Date().toISOString(),
-        }).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
+        }).catch(err => console.warn('[RTDB] job COMPLETED status update failed:', err instanceof Error ? err.message : err));
 
         // Run aggregation in background — don't block the response
         jobStore.aggregateJobResults(id).catch(err => {

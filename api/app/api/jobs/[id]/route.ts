@@ -214,6 +214,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
+    // Validate status is a known JobStatus value before checking transitions
+    const VALID_JOB_STATUSES: JobStatus[] = ['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'];
+    if (typeof status === 'string' && !VALID_JOB_STATUSES.includes(status as JobStatus)) {
+      return NextResponse.json(
+        { error: `Invalid status. Must be one of: ${VALID_JOB_STATUSES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     // Validate job state transition using the state machine
     if (typeof status === 'string' && !canJobTransition(job.status, status as JobStatus)) {
       return NextResponse.json(
