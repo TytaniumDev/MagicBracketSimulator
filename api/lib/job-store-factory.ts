@@ -544,20 +544,20 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') {
-    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { error: err instanceof Error ? err.message : err }));
+    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
     return;
   }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
   if (allCancelled) {
-    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { error: err instanceof Error ? err.message : err }));
+    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
     return; // Already handled by cancel flow
   }
 
   await setJobCompleted(jobId);
 
   // Clean up RTDB ephemeral data and cancel recovery task
-  cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { error: err instanceof Error ? err.message : err }));
-  deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { error: err instanceof Error ? err.message : err }));
+  cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
+  deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
 }
 
