@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import { updateJobProgress, updateSimProgress, deleteJobProgress } from '@/lib/rtdb';
+import { updateJobProgress, updateSimProgress } from '@/lib/rtdb';
 import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
+import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
 import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
@@ -50,12 +51,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (winners !== undefined) update.winners = winners;
     if (winningTurns !== undefined) update.winningTurns = winningTurns;
 
-    // Guard: reject any state transition if the sim is already in a terminal state.
-    // This prevents stale Pub/Sub redeliveries from regressing COMPLETED→RUNNING.
+    // Guard: validate state transitions using the simulation state machine.
+    // Rejects invalid transitions (e.g., COMPLETED→RUNNING from stale Pub/Sub redeliveries).
     if (state !== undefined) {
       const currentSim = await jobStore.getSimulationStatus(id, simId);
-      if (currentSim && (currentSim.state === 'COMPLETED' || currentSim.state === 'CANCELLED')) {
-        return NextResponse.json({ updated: false, reason: 'terminal_state' });
+      if (currentSim) {
+        if (isTerminalSimState(currentSim.state)) {
+          return NextResponse.json({ updated: false, reason: 'terminal_state' });
+        }
+        if (!canSimTransition(currentSim.state, state)) {
+          return NextResponse.json(
+            { updated: false, reason: 'invalid_transition', from: currentSim.state, to: state },
+          );
+        }
       }
     }
 
@@ -78,7 +86,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // Fire-and-forget RTDB write for simulation progress
-    updateSimProgress(id, simId, update).catch(() => {});
+    updateSimProgress(id, simId, update).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
@@ -91,7 +99,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           status: 'RUNNING',
           startedAt: new Date().toISOString(),
           workerName: workerName ?? null,
-        }).catch(() => {});
+        }).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
       }
     }
 
@@ -103,14 +111,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // Fire-and-forget RTDB progress update
       // Estimate gamesCompleted from completedCount (not exact for CANCELLED, but close enough for UI)
       const gamesCompleted = completedSimCount * GAMES_PER_CONTAINER;
-      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(() => {});
+      updateJobProgress(id, { completedCount: completedSimCount, gamesCompleted }).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
 
       if (completedSimCount >= totalSimCount && totalSimCount > 0) {
         // Update RTDB before aggregation (frontend sees COMPLETED immediately)
         updateJobProgress(id, {
           status: 'COMPLETED',
           completedAt: new Date().toISOString(),
-        }).catch(() => {});
+        }).catch(err => console.warn('[RTDB] fire-and-forget failed:', err instanceof Error ? err.message : err));
 
         // Run aggregation in background — don't block the response
         jobStore.aggregateJobResults(id).catch(err => {

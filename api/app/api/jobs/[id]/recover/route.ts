@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
+import { isTerminalJobState } from '@shared/types/state-machine';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // No-op for terminal jobs
-    if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
+    if (isTerminalJobState(job.status)) {
       return NextResponse.json({ status: 'terminal', jobStatus: job.status });
     }
 
@@ -45,11 +46,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Re-check job status after recovery
     const updatedJob = await jobStore.getJob(id);
-    const stillActive = updatedJob && updatedJob.status !== 'COMPLETED' && updatedJob.status !== 'FAILED' && updatedJob.status !== 'CANCELLED';
+    const stillActive = updatedJob && !isTerminalJobState(updatedJob.status);
 
     // If still active, reschedule for another check in 5 minutes
     if (stillActive) {
-      scheduleRecoveryCheck(id, 300).catch(() => {});
+      scheduleRecoveryCheck(id, 300).catch(err => console.warn('[Recovery] Reschedule failed:', err instanceof Error ? err.message : err));
     }
 
     return NextResponse.json({ status: 'ok', recovered, stillActive });
