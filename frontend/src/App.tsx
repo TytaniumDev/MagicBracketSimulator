@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import JobStatus from './pages/JobStatus';
 import WorkerSetup from './pages/WorkerSetup';
 import Leaderboard from './pages/Leaderboard';
+import SentryExamplePage from './pages/SentryExamplePage';
 import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
 
@@ -97,6 +98,7 @@ export default function App() {
               <Route path="/jobs/:id" element={<JobStatus />} />
               <Route path="/worker-setup" element={<WorkerSetup />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/sentry-example-page" element={<SentryExamplePage />} />
             </Routes>
           </main>
         </>

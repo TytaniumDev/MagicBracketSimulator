@@ -5,6 +5,7 @@
 
 export interface RuntimeConfig {
   apiUrl?: string;
+  sentryDsn?: string;
 }
 
 let cached: RuntimeConfig = {};
@@ -21,10 +22,12 @@ export function loadRuntimeConfig(): Promise<RuntimeConfig> {
       const base = typeof window !== 'undefined' ? window.location.origin : '';
       const r = await fetch(`${base}/config.json`, { cache: 'no-store' });
       if (r.ok) {
-        const j = (await r.json()) as RuntimeConfig;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const j = (await r.json()) as any;
         if (j && typeof j === 'object') {
           cached = {
             apiUrl: typeof j.apiUrl === 'string' ? j.apiUrl.replace(/\/$/, '') : undefined,
+            sentryDsn: typeof j.sentryDsn === 'string' ? j.sentryDsn : undefined,
           };
         }
       }
