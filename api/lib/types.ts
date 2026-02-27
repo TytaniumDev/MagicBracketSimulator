@@ -1,203 +1,60 @@
-export type JobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-// -----------------------------------------------------------------------------
-// Per-Simulation Tracking Types
-// -----------------------------------------------------------------------------
-
-/** Lifecycle state for an individual simulation within a job. */
-export type SimulationState = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
 /**
- * Status tracking for a single simulation within a job.
- * In GCP mode these live in a Firestore subcollection: jobs/{jobId}/simulations/{simId}.
- * In local mode they live in the `simulations` SQLite table.
+ * API type definitions.
+ *
+ * SHARED TYPES: Re-exported from @shared/types/ so both API and frontend
+ * import from the same source of truth. Any field change becomes a compile
+ * error in both projects.
+ *
+ * INTERNAL TYPES: API-only types (Job, DeckSlot, CreateJobRequest, Precon,
+ * DeckRating, MatchResult) that use server-side constructs like Date objects
+ * and are never serialized directly to the frontend.
  */
-export interface SimulationStatus {
-  /** Unique ID for this simulation within the job (e.g., "sim_001") */
-  simId: string;
-  /** 0-based index within the job */
-  index: number;
-  /** Current state */
-  state: SimulationState;
-  /** Which worker is running this simulation */
-  workerId?: string;
-  /** Human-readable worker name */
-  workerName?: string;
-  /** When the simulation started (ISO string) */
-  startedAt?: string;
-  /** When the simulation finished (ISO string) */
-  completedAt?: string;
-  /** Duration in ms */
-  durationMs?: number;
-  /** Error message if FAILED */
-  errorMessage?: string;
-  /** Winner of this game (if completed) */
-  winner?: string;
-  /** Turn the game ended on */
-  winningTurn?: number;
-  /** Winners of each game in this container batch (e.g. 4 games per container) */
-  winners?: string[];
-  /** Winning turns for each game in this container batch */
-  winningTurns?: number[];
-}
 
-// -----------------------------------------------------------------------------
-// Condenser Types (from forge-log-analyzer)
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Re-exports from shared types (single source of truth)
+// ---------------------------------------------------------------------------
 
-/**
- * Categories of events we extract from Forge logs.
- * Each type represents a significant game action worth keeping for analysis.
- */
-export type EventType =
-  | 'life_change'           // Player life total changed (damage, life gain)
-  | 'spell_cast'            // Any spell cast (tracked for activity)
-  | 'spell_cast_high_cmc'   // High mana value spell (CMC >= 5) - indicates power level
-  | 'land_played'           // Land was played (tracked for mana development)
-  | 'zone_change_gy_to_bf'  // Graveyard to battlefield - reanimation, recursion
-  | 'win_condition'         // Game ending event (player wins/loses)
-  | 'commander_cast'        // Commander was cast (important for Commander format)
-  | 'combat'                // Combat-related action
-  | 'draw_extra';           // Extra card draw beyond normal draw step
+export type { JobStatus } from '@shared/types/job';
+export type { JobResults } from '@shared/types/job';
+export { GAMES_PER_CONTAINER } from '@shared/types/job';
+export { REQUIRED_DECK_COUNT } from '@shared/types/job';
 
-/**
- * A single event extracted from the game log.
- * Contains the event type, raw line, and optional metadata.
- */
-export interface GameEvent {
-  /** The category of this event */
-  type: EventType;
-  /** The original log line (truncated to 200 chars for sanity) */
-  line: string;
-  /** Turn number when this event occurred (if determinable) */
-  turn?: number;
-  /** Which player performed this action (if determinable) */
-  player?: string;
-}
+export type { SimulationState, SimulationStatus } from '@shared/types/simulation';
 
-/**
- * Mana information for a single turn.
- * Helps the AI understand ramp and mana development.
- */
-export interface TurnManaInfo {
-  /** Number of mana-producing events detected this turn */
-  manaEvents: number;
-}
+export type {
+  EventType,
+  GameEvent,
+  TurnManaInfo,
+  DeckTurnInfo,
+  CondensedGame,
+  DeckAction,
+  DeckTurnActions,
+  DeckHistory,
+  StructuredGame,
+} from '@shared/types/log';
 
-/**
- * Per-deck turn tracking info.
- * Accurately counts turns even when players are eliminated mid-game.
- */
-export interface DeckTurnInfo {
-  /** How many turns this deck actually took */
-  turnsTaken: number;
-  /** The last Forge segment number this deck appeared in */
-  lastSegment: number;
-}
+export type { WorkerInfo } from '@shared/types/worker';
 
-/**
- * A condensed summary of a single game.
- * This is what gets sent to the AI for bracket analysis.
- */
-export interface CondensedGame {
-  /** Significant events that passed our filters */
-  keptEvents: GameEvent[];
-  /** Mana production/usage per turn (key = turn number) */
-  manaPerTurn: Record<number, TurnManaInfo>;
-  /** Cards drawn per turn (key = turn number) */
-  cardsDrawnPerTurn: Record<number, number>;
-  /** Total number of turns in the game */
-  turnCount: number;
-  /** Who won the game (if determinable from logs) */
-  winner?: string;
-  /** What turn the game ended on (if determinable) */
-  winningTurn?: number;
-  /** Per-deck turn counts (accurate even with mid-game eliminations) */
-  perDeckTurns?: Record<string, DeckTurnInfo>;
-}
+// ---------------------------------------------------------------------------
+// API-internal types (not shared with frontend)
+// ---------------------------------------------------------------------------
 
-/**
- * A single action performed by a deck during a turn.
- */
-export interface DeckAction {
-  /** The raw log line */
-  line: string;
-  /** Classified event type (if it matched a pattern) */
-  eventType?: EventType;
-}
-
-/**
- * All actions for a single deck during a single turn.
- */
-export interface DeckTurnActions {
-  /** The turn number */
-  turnNumber: number;
-  /** All actions this deck took during this turn */
-  actions: DeckAction[];
-}
-
-/**
- * Complete action history for a single deck across all turns.
- */
-export interface DeckHistory {
-  /** The deck/player identifier (e.g., "Player A", "Hero", or deck name) */
-  deckLabel: string;
-  /** Actions organized by turn */
-  turns: DeckTurnActions[];
-}
-
-/**
- * Structured representation of a game for frontend visualization.
- * Organizes the log by turn and by deck so the UI can show
- * "what each deck did on turn N" in a 4-column layout.
- */
-export interface StructuredGame {
-  /** Total turns in the game */
-  totalTurns: number;
-  /** All player/deck identifiers found in the log */
-  players: string[];
-  /**
-   * Turn-by-turn breakdown.
-   * Each entry is a turn with segments for each player who acted.
-   */
-  turns: {
-    turnNumber: number;
-    segments: {
-      playerId: string;
-      lines: string[];
-    }[];
-  }[];
-  /** Per-deck history for the 4-deck visualization */
-  decks: DeckHistory[];
-  /**
-   * Life totals per turn per player.
-   * Key is game turn number, value is map of player name to life total at end of that turn.
-   * Commander format starts at 40 life.
-   */
-  lifePerTurn?: Record<number, Record<string, number>>;
-  /** Per-deck turn counts (accurate even with mid-game eliminations) */
-  perDeckTurns?: Record<string, DeckTurnInfo>;
-  /** Who won the game (if determinable from logs) */
-  winner?: string;
-  /** What turn (round) the game ended on (if determinable) */
-  winningTurn?: number;
-}
-
-/** Aggregated results computed during job completion. */
-export interface JobResults {
-  /** Per-deck win counts. Key = deck name, value = number of wins */
-  wins: Record<string, number>;
-  /** Per-deck average winning turn. Key = deck name, value = avg turn */
-  avgWinTurn: Record<string, number>;
-  /** Total games actually played (may be < simulations if some failed) */
-  gamesPlayed: number;
-}
+// These imports duplicate the re-exports above, but are necessary:
+// `export type { X }` re-exports make X available to consumers of this module,
+// while `import type { X }` below makes X available within THIS file for use
+// in the interface definitions that follow (e.g., Job.status, Job.results).
+import type { JobStatus } from '@shared/types/job';
+import type { JobResults } from '@shared/types/job';
 
 export interface DeckSlot {
   name: string;
   dck: string;
 }
 
+/**
+ * Internal Job representation. Uses Date objects for timestamps
+ * (the shared JobResponse type uses ISO strings for serialization).
+ */
 export interface Job {
   id: string;
   decks: DeckSlot[]; // Always length 4 (for backward compat; may be empty when deckIds used)
@@ -220,25 +77,6 @@ export interface Job {
   results?: JobResults;
 }
 
-// -----------------------------------------------------------------------------
-// Worker Fleet Types
-// -----------------------------------------------------------------------------
-
-export interface WorkerInfo {
-  workerId: string;
-  workerName: string;
-  status: 'idle' | 'busy' | 'updating';
-  currentJobId?: string;
-  capacity: number;
-  activeSimulations: number;
-  uptimeMs: number;
-  lastHeartbeat: string; // ISO timestamp
-  version?: string;
-  maxConcurrentOverride?: number | null; // admin-set override (null = use auto)
-  ownerEmail?: string | null;            // email of the worker's operator
-  workerApiUrl?: string | null;          // URL for push-based control (e.g., http://host:9090)
-}
-
 export interface CreateJobRequest {
   deckIds: string[]; // Length 4: each is a precon id or saved deck filename
   simulations: number;
@@ -248,7 +86,6 @@ export interface CreateJobRequest {
 
 export const SIMULATIONS_MIN = 4;
 export const SIMULATIONS_MAX = 100;
-export const GAMES_PER_CONTAINER = 4;
 export const PARALLELISM_MIN = 1;
 export const PARALLELISM_MAX = 16;
 
@@ -261,9 +98,9 @@ export interface Precon {
   archidektId?: number | null;
 }
 
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // TrueSkill Rating Types
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
 /** TrueSkill rating for a deck, stored persistently. */
 export interface DeckRating {

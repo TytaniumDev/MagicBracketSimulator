@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       completedAt: null,
       workerName: null,
       deckNames,
-    }).catch(() => {});
+    }).catch(err => console.warn('[RTDB] Initial progress write failed:', err instanceof Error ? err.message : err));
 
     if (isGcpMode()) {
       try {
@@ -188,10 +188,10 @@ export async function POST(request: NextRequest) {
         console.error(`Failed to publish simulation tasks for job ${job.id}:`, pubsubError);
       }
       // Schedule a recovery check at T+10min in case something goes wrong
-      scheduleRecoveryCheck(job.id, 600).catch(() => {});
+      scheduleRecoveryCheck(job.id, 600).catch(err => console.warn('[Recovery] Failed to schedule check:', err instanceof Error ? err.message : err));
     } else {
       // Local mode: notify workers that a new job is available (best-effort)
-      pushToAllWorkers('/notify', {}).catch(() => {});
+      pushToAllWorkers('/notify', {}).catch(err => console.warn('[Worker Push] Notify failed:', err instanceof Error ? err.message : err));
     }
 
     return NextResponse.json(

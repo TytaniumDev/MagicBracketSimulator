@@ -5,6 +5,7 @@ import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
 import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
+import { canJobTransition } from '@shared/types/state-machine';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -211,6 +212,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const job = await jobStore.getJob(id);
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    // Validate status is a known JobStatus value before checking transitions
+    const VALID_JOB_STATUSES: JobStatus[] = ['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'];
+    if (typeof status === 'string' && !VALID_JOB_STATUSES.includes(status as JobStatus)) {
+      return NextResponse.json(
+        { error: `Invalid status. Must be one of: ${VALID_JOB_STATUSES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Validate job state transition using the state machine
+    if (typeof status === 'string' && !canJobTransition(job.status, status as JobStatus)) {
+      return NextResponse.json(
+        { error: `Invalid status transition: ${job.status} → ${status}` },
+        { status: 409 }
+      );
     }
 
     if (status === 'RUNNING') {

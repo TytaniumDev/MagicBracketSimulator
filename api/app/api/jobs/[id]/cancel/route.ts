@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { pushToAllWorkers } from '@/lib/worker-push';
 import { updateJobProgress, deleteJobProgress } from '@/lib/rtdb';
 import { cancelRecoveryCheck } from '@/lib/cloud-tasks';
+import { isTerminalJobState } from '@shared/types/state-machine';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
+    if (isTerminalJobState(job.status)) {
       return NextResponse.json(
         { error: `Job is already ${job.status}` },
         { status: 409 }
@@ -40,15 +41,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     await jobStore.cancelJob(id);
 
     // Cancel scheduled recovery task (fire-and-forget)
-    cancelRecoveryCheck(id).catch(() => {});
+    cancelRecoveryCheck(id).catch(err => console.warn('[Recovery] Cancel check failed:', err instanceof Error ? err.message : err));
 
     // Update RTDB then clean up (fire-and-forget)
     updateJobProgress(id, { status: 'CANCELLED', completedAt: new Date().toISOString() })
       .then(() => deleteJobProgress(id))
-      .catch(() => {});
+      .catch(err => console.warn('[RTDB] Cancel update failed:', err instanceof Error ? err.message : err));
 
     // Push cancel to all active workers (best-effort)
-    pushToAllWorkers('/cancel', { jobId: id }).catch(() => {});
+    pushToAllWorkers('/cancel', { jobId: id }).catch(err => console.warn('[Worker Push] Cancel push failed:', err instanceof Error ? err.message : err));
 
     // Trigger log aggregation so structured.json gets created from completed sims
     jobStore.aggregateJobResults(id).catch(err => {

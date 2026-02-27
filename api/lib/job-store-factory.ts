@@ -3,6 +3,7 @@
  * otherwise to SQLite (job-store).
  */
 import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER } from './types';
+import { isTerminalSimState } from '@shared/types/state-machine';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -446,10 +447,11 @@ export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | nu
   if (simulations.length === 0) return null;
 
   const states = simulations.map((s) => s.state);
-  const terminal = (s: string) => s === 'COMPLETED' || s === 'FAILED' || s === 'CANCELLED';
+  // A sim is "done" if it's in a terminal state OR FAILED (which will be retried but counts as done for derivation)
+  const isDone = (s: SimulationState) => isTerminalSimState(s) || s === 'FAILED';
   const allPending = states.every((s) => s === 'PENDING');
   const anyRunning = states.some((s) => s === 'RUNNING');
-  const allDone = states.every(terminal);
+  const allDone = states.every(isDone);
   const allFailed = states.every((s) => s === 'FAILED');
   const allCancelled = states.every((s) => s === 'CANCELLED');
   const anyCancelled = states.some((s) => s === 'CANCELLED');
@@ -476,9 +478,9 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   const sims = await getSimulationStatuses(jobId);
   if (sims.length === 0) return;
 
-  // Only aggregate when all sims are COMPLETED or CANCELLED.
+  // Only aggregate when all sims are in terminal states (COMPLETED or CANCELLED).
   // FAILED sims will be retried by the stale job scanner.
-  const allDone = sims.every(s => s.state === 'COMPLETED' || s.state === 'CANCELLED');
+  const allDone = sims.every(s => isTerminalSimState(s.state));
   if (!allDone) return;
 
   const job = await getJob(jobId);
@@ -538,20 +540,20 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') {
-    deleteJobProgress(jobId).catch(() => {});
+    deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
     return;
   }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
   if (allCancelled) {
-    deleteJobProgress(jobId).catch(() => {});
+    deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
     return; // Already handled by cancel flow
   }
 
   await setJobCompleted(jobId);
 
   // Clean up RTDB ephemeral data and cancel recovery task
-  cancelRecoveryCheck(jobId).catch(() => {});
-  deleteJobProgress(jobId).catch(() => {});
+  cancelRecoveryCheck(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
+  deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
 }
 
