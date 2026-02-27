@@ -56,69 +56,83 @@ async function runTests() {
 
   await test('cancelJob: cancels a QUEUED job', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    const result = await jobStore.cancelJob(job.id);
-    assertEqual(result, true, 'should succeed');
-    const updated = await jobStore.getJob(job.id);
-    assertEqual(updated!.status, 'CANCELLED', 'status should be CANCELLED');
-    assert(updated!.completedAt instanceof Date, 'completedAt should be set');
-    await jobStore.deleteJob(job.id);
+    try {
+      const result = await jobStore.cancelJob(job.id);
+      assertEqual(result, true, 'should succeed');
+      const updated = await jobStore.getJob(job.id);
+      assertEqual(updated!.status, 'CANCELLED', 'status should be CANCELLED');
+      assert(updated!.completedAt instanceof Date, 'completedAt should be set');
+    } finally {
+      await jobStore.deleteJob(job.id);
+    }
   });
 
   // ── Cancel RUNNING job ───────────────────────────────────────────────
 
   await test('cancelJob: cancels a RUNNING job and cancels its sims', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    // Transition to RUNNING
-    await jobStore.updateJobStatus(job.id, 'RUNNING');
-    await jobStore.setJobStartedAt(job.id, 'worker-1', 'Worker 1');
-    // Initialize sims
-    await jobStore.initializeSimulations(job.id, 2);
-    // Set one sim to RUNNING
-    await jobStore.updateSimulationStatus(job.id, 'sim_000', { state: 'RUNNING' });
+    try {
+      // Transition to RUNNING
+      await jobStore.updateJobStatus(job.id, 'RUNNING');
+      await jobStore.setJobStartedAt(job.id, 'worker-1', 'Worker 1');
+      // Initialize sims
+      await jobStore.initializeSimulations(job.id, 2);
+      // Set one sim to RUNNING
+      await jobStore.updateSimulationStatus(job.id, 'sim_000', { state: 'RUNNING' });
 
-    const result = await jobStore.cancelJob(job.id);
-    assertEqual(result, true, 'should succeed');
+      const result = await jobStore.cancelJob(job.id);
+      assertEqual(result, true, 'should succeed');
 
-    const updated = await jobStore.getJob(job.id);
-    assertEqual(updated!.status, 'CANCELLED', 'job status should be CANCELLED');
+      const updated = await jobStore.getJob(job.id);
+      assertEqual(updated!.status, 'CANCELLED', 'job status should be CANCELLED');
 
-    // Check sims were cancelled
-    const sims = await jobStore.getSimulationStatuses(job.id);
-    for (const sim of sims) {
-      assertEqual(sim.state, 'CANCELLED', `sim ${sim.simId} should be CANCELLED`);
+      // Check sims were cancelled
+      const sims = await jobStore.getSimulationStatuses(job.id);
+      for (const sim of sims) {
+        assertEqual(sim.state, 'CANCELLED', `sim ${sim.simId} should be CANCELLED`);
+      }
+    } finally {
+      await jobStore.deleteSimulations(job.id);
+      await jobStore.deleteJob(job.id);
     }
-
-    await jobStore.deleteSimulations(job.id);
-    await jobStore.deleteJob(job.id);
   });
 
   // ── Cancel terminal job (rejected) ───────────────────────────────────
 
   await test('cancelJob: rejects cancel on COMPLETED job', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    await jobStore.setJobCompleted(job.id);
-    const result = await jobStore.cancelJob(job.id);
-    assertEqual(result, false, 'should reject');
-    const updated = await jobStore.getJob(job.id);
-    assertEqual(updated!.status, 'COMPLETED', 'status should still be COMPLETED');
-    await jobStore.deleteJob(job.id);
+    try {
+      await jobStore.setJobCompleted(job.id);
+      const result = await jobStore.cancelJob(job.id);
+      assertEqual(result, false, 'should reject');
+      const updated = await jobStore.getJob(job.id);
+      assertEqual(updated!.status, 'COMPLETED', 'status should still be COMPLETED');
+    } finally {
+      await jobStore.deleteJob(job.id);
+    }
   });
 
   await test('cancelJob: rejects cancel on FAILED job', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    await jobStore.updateJobStatus(job.id, 'RUNNING');
-    await jobStore.setJobFailed(job.id, 'test error');
-    const result = await jobStore.cancelJob(job.id);
-    assertEqual(result, false, 'should reject');
-    await jobStore.deleteJob(job.id);
+    try {
+      await jobStore.updateJobStatus(job.id, 'RUNNING');
+      await jobStore.setJobFailed(job.id, 'test error');
+      const result = await jobStore.cancelJob(job.id);
+      assertEqual(result, false, 'should reject');
+    } finally {
+      await jobStore.deleteJob(job.id);
+    }
   });
 
   await test('cancelJob: rejects cancel on already CANCELLED job', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    await jobStore.cancelJob(job.id); // First cancel
-    const result = await jobStore.cancelJob(job.id); // Second cancel
-    assertEqual(result, false, 'should reject second cancel');
-    await jobStore.deleteJob(job.id);
+    try {
+      await jobStore.cancelJob(job.id); // First cancel
+      const result = await jobStore.cancelJob(job.id); // Second cancel
+      assertEqual(result, false, 'should reject second cancel');
+    } finally {
+      await jobStore.deleteJob(job.id);
+    }
   });
 
   // ── Cancel nonexistent job ───────────────────────────────────────────
@@ -132,27 +146,36 @@ async function runTests() {
 
   await test('recoverStaleJob: no-ops on COMPLETED job', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    await jobStore.setJobCompleted(job.id);
-    const result = await jobStore.recoverStaleJob(job.id);
-    assertEqual(result, false, 'should not recover terminal job');
-    await jobStore.deleteJob(job.id);
+    try {
+      await jobStore.setJobCompleted(job.id);
+      const result = await jobStore.recoverStaleJob(job.id);
+      assertEqual(result, false, 'should not recover terminal job');
+    } finally {
+      await jobStore.deleteJob(job.id);
+    }
   });
 
   await test('recoverStaleJob: no-ops on FAILED job', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    await jobStore.updateJobStatus(job.id, 'RUNNING');
-    await jobStore.setJobFailed(job.id, 'test error');
-    const result = await jobStore.recoverStaleJob(job.id);
-    assertEqual(result, false, 'should not recover terminal job');
-    await jobStore.deleteJob(job.id);
+    try {
+      await jobStore.updateJobStatus(job.id, 'RUNNING');
+      await jobStore.setJobFailed(job.id, 'test error');
+      const result = await jobStore.recoverStaleJob(job.id);
+      assertEqual(result, false, 'should not recover terminal job');
+    } finally {
+      await jobStore.deleteJob(job.id);
+    }
   });
 
   await test('recoverStaleJob: no-ops on CANCELLED job', async () => {
     const job = await jobStore.createJob(TEST_DECKS, 8);
-    await jobStore.cancelJob(job.id);
-    const result = await jobStore.recoverStaleJob(job.id);
-    assertEqual(result, false, 'should not recover terminal job');
-    await jobStore.deleteJob(job.id);
+    try {
+      await jobStore.cancelJob(job.id);
+      const result = await jobStore.recoverStaleJob(job.id);
+      assertEqual(result, false, 'should not recover terminal job');
+    } finally {
+      await jobStore.deleteJob(job.id);
+    }
   });
 
   await test('recoverStaleJob: returns false for nonexistent job', async () => {
@@ -164,9 +187,12 @@ async function runTests() {
 
   await test('createJob: idempotency key returns same job', async () => {
     const job1 = await jobStore.createJob(TEST_DECKS, 8, { idempotencyKey: 'test-idempotency-key-cancel' });
-    const job2 = await jobStore.createJob(TEST_DECKS, 8, { idempotencyKey: 'test-idempotency-key-cancel' });
-    assertEqual(job1.id, job2.id, 'should return same job ID');
-    await jobStore.deleteJob(job1.id);
+    try {
+      const job2 = await jobStore.createJob(TEST_DECKS, 8, { idempotencyKey: 'test-idempotency-key-cancel' });
+      assertEqual(job1.id, job2.id, 'should return same job ID');
+    } finally {
+      await jobStore.deleteJob(job1.id);
+    }
   });
 
   // ── Summary ──────────────────────────────────────────────────────────
