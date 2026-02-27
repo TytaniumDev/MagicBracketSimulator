@@ -99,6 +99,14 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
 So: **condensing and structuring** of logs happens **only in the API**, during
 aggregation, using the raw logs that workers previously uploaded.
 
+**Life total tracking:** `calculateLifePerTurn()` in `api/lib/condenser/turns.ts`
+parses Forge's native `[LIFE] Life: PlayerName oldValue -> newValue` log entries
+(added in the Forge version after 2.0.10, via Card-Forge/forge#9845). This gives
+absolute life totals directly from the game engine — no heuristic inference
+needed. For logs from older Forge versions (without `[LIFE]` entries), the
+function returns an empty object `{}` so the frontend can detect that life data
+is unavailable rather than showing misleading defaults.
+
 **Deck name matching:** `matchesDeckName()` from `api/lib/condenser/deck-match.ts`
 is the canonical function for matching Forge log player names (e.g.
 `"Ai(2)-Blood Rites - The Lost Caverns of Ixalan Commander"`) against short
