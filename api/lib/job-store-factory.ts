@@ -96,6 +96,26 @@ export async function setJobStartedAt(id: string, workerId?: string, workerName?
   sqliteStore.setJobStartedAt(id, workerId, workerName);
 }
 
+export async function conditionalUpdateJobStatus(
+  id: string,
+  expectedStatuses: JobStatus[],
+  newStatus: JobStatus,
+  metadata?: { workerId?: string; workerName?: string }
+): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
+  }
+  return sqliteStore.conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
+}
+
+export async function setNeedsAggregation(id: string, value: boolean): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.setNeedsAggregation(id, value);
+    return;
+  }
+  sqliteStore.setNeedsAggregation(id, value);
+}
+
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.setJobCompleted(id, dockerRunDurationsMs);
@@ -253,8 +273,10 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
 
 // ─── Per-Simulation Stale Detection ──────────────────────────────────────────
 
-const STALE_PENDING_THRESHOLD_MS = 5 * 60 * 1000;       // 5 minutes
-const STALE_RUNNING_THRESHOLD_MS = 2.5 * 60 * 60 * 1000; // 2.5 hours (container timeout + buffer)
+const STALE_PENDING_THRESHOLD_MS = parseInt(process.env.STALE_PENDING_THRESHOLD_MS || '300000', 10);  // Default: 5 min
+// Should exceed CONTAINER_TIMEOUT_MS (default 2h) to avoid false positives
+const STALE_RUNNING_THRESHOLD_MS = parseInt(process.env.STALE_RUNNING_THRESHOLD_MS || '9000000', 10);  // Default: 2.5 hours
+const REQUEUE_COOLDOWN_MS = parseInt(process.env.REQUEUE_COOLDOWN_MS || '120000', 10);
 
 /**
  * Detect and recover individual stuck simulations within a RUNNING job.
@@ -367,10 +389,15 @@ async function recoverStaleSimulations(
       (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
     );
     if (allDone) {
-      aggregateJobResults(jobId).catch((err) => {
-        console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
-        Sentry.captureException(err, { tags: { component: 'recovery-aggregation', jobId } });
-      });
+      // Re-trigger aggregation if job is stuck (all sims done but still RUNNING)
+      // or if a previous aggregation failed (needsAggregation flag set)
+      const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
+      if (needsRetrigger) {
+        aggregateJobResults(jobId).catch((err) => {
+          console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
+          Sentry.captureException(err, { tags: { component: 'recovery-aggregation', jobId } });
+        });
+      }
     }
   }
 
@@ -390,11 +417,11 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
   if (!USE_FIRESTORE) return false; // Polling mode picks up QUEUED jobs automatically
 
   const queuedForMs = Date.now() - job.createdAt.getTime();
-  if (queuedForMs < 120_000) return false; // Not stuck yet
+  if (queuedForMs < REQUEUE_COOLDOWN_MS) return false; // Not stuck yet
 
   // Cooldown: don't re-publish more often than every 2 minutes per job
   const lastRequeue = requeueCooldowns.get(jobId) ?? 0;
-  if (Date.now() - lastRequeue < 120_000) return false;
+  if (Date.now() - lastRequeue < REQUEUE_COOLDOWN_MS) return false;
 
   // Only re-publish if there's at least one active worker to receive it
   const activeWorkers = await workerStore.getActiveWorkers();
@@ -486,6 +513,9 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   const job = await getJob(jobId);
   if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') return; // Already aggregated
 
+  // Mark that aggregation is in progress — recovery can detect and retry if this crashes
+  await setNeedsAggregation(jobId, true);
+
   // Read raw logs uploaded incrementally by workers
   const { getRawLogs, ingestLogs, getStructuredLogs } = await import('./log-store');
   const rawLogs = await getRawLogs(jobId);
@@ -540,17 +570,22 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') {
+    await setNeedsAggregation(jobId, false);
     deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
     return;
   }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
   if (allCancelled) {
+    await setNeedsAggregation(jobId, false);
     deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
     return; // Already handled by cancel flow
   }
 
   await setJobCompleted(jobId);
+
+  // Clear the flag — aggregation completed successfully
+  await setNeedsAggregation(jobId, false);
 
   // Clean up RTDB ephemeral data and cancel recovery task
   cancelRecoveryCheck(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
