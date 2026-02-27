@@ -5,6 +5,7 @@ import { pushToAllWorkers } from '@/lib/worker-push';
 import { updateJobProgress, deleteJobProgress } from '@/lib/rtdb';
 import { cancelRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
+import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -23,19 +24,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
     const job = await jobStore.getJob(id);
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      return notFoundResponse('Job');
     }
 
     if (isTerminalJobState(job.status)) {
-      return NextResponse.json(
-        { error: `Job is already ${job.status}` },
-        { status: 409 }
-      );
+      return errorResponse(`Job is already ${job.status}`, 409);
     }
 
     await jobStore.cancelJob(id);
@@ -59,9 +57,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ id, status: 'CANCELLED' });
   } catch (error) {
     console.error('POST /api/jobs/[id]/cancel error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to cancel job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to cancel job', 500);
   }
 }

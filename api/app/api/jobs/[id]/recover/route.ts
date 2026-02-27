@@ -3,6 +3,7 @@ import { isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,13 +23,13 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   // Authenticate: accept Cloud Tasks OIDC or worker secret
   if (!isWorkerRequest(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return errorResponse('Unauthorized', 401);
   }
 
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
     const job = await jobStore.getJob(id);
@@ -56,9 +57,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ status: 'ok', recovered, stillActive });
   } catch (error) {
     console.error('POST /api/jobs/[id]/recover error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Recovery failed' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Recovery failed', 500);
   }
 }

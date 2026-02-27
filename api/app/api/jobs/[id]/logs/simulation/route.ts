@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest, unauthorizedResponse } from '@/lib/auth';
 import { uploadSingleSimulationLog } from '@/lib/log-store';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,10 +23,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { filename, logText } = body;
 
     if (!filename || typeof filename !== 'string') {
-      return NextResponse.json({ error: 'filename is required' }, { status: 400 });
+      return badRequestResponse('filename is required');
     }
     if (!logText || typeof logText !== 'string') {
-      return NextResponse.json({ error: 'logText is required' }, { status: 400 });
+      return badRequestResponse('logText is required');
     }
 
     await uploadSingleSimulationLog(id, filename, logText);
@@ -33,9 +34,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ uploaded: true }, { status: 201 });
   } catch (error) {
     console.error('POST /api/jobs/[id]/logs/simulation error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to upload log' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to upload log', 500);
   }
 }

@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { getRatingStore } from '@/lib/rating-store-factory';
 import { isJobStuck } from '@/lib/job-utils';
 import * as Sentry from '@sentry/nextjs';
+import { errorResponse } from '@/lib/api-response';
 
 /**
  * POST /api/admin/backfill-ratings — Re-run TrueSkill ratings for completed jobs.
@@ -77,9 +78,6 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('[Backfill] Fatal error:', err);
     Sentry.captureException(err, { tags: { component: 'backfill-ratings' } });
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Backfill failed' },
-      { status: 500 },
-    );
+    return errorResponse(err instanceof Error ? err.message : 'Backfill failed', 500);
   }
 }

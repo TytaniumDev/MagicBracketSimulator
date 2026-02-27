@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { deleteDeck } from '@/lib/deck-store-factory';
 import { removeColorIdentity } from '@/lib/deck-metadata';
+import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,10 +23,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     if (!id) {
-      return NextResponse.json(
-        { error: 'Deck ID is required' },
-        { status: 400 }
-      );
+      return badRequestResponse('Deck ID is required');
     }
 
     const deleted = await deleteDeck(id, user.uid);
@@ -35,10 +33,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     if (!deleted) {
-      return NextResponse.json(
-        { error: 'Deck not found or you do not have permission to delete it' },
-        { status: 404 }
-      );
+      return notFoundResponse('Deck');
     }
 
     return new NextResponse(null, { status: 204 });
@@ -47,12 +42,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const message = error instanceof Error ? error.message : 'Failed to delete deck';
 
     if (message.includes('Only the deck owner')) {
-      return NextResponse.json({ error: message }, { status: 403 });
+      return errorResponse(message, 403);
     }
 
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return errorResponse(message, 500);
   }
 }
