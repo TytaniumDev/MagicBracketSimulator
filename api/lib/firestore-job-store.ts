@@ -33,6 +33,7 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     ...(data.workerName && { workerName: data.workerName }),
     ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
     ...(data.retryCount != null && data.retryCount > 0 && { retryCount: data.retryCount }),
+    ...(data.needsAggregation === true && { needsAggregation: true }),
     ...(data.completedSimCount != null && { completedSimCount: data.completedSimCount }),
     ...(data.totalSimCount != null && { totalSimCount: data.totalSimCount }),
     ...(data.results != null && { results: data.results as JobResults }),
@@ -156,6 +157,54 @@ export async function setJobStartedAt(id: string, workerId?: string, workerName?
     updateData.workerName = workerName;
   }
   await jobsCollection.doc(id).update(updateData);
+}
+
+/**
+ * Conditionally update a job's status using a Firestore transaction.
+ * Only applies the update if the job is currently in one of the expectedStatuses.
+ * Returns true if the update was applied, false if the status had already changed.
+ */
+export async function conditionalUpdateJobStatus(
+  id: string,
+  expectedStatuses: JobStatus[],
+  newStatus: JobStatus,
+  metadata?: { workerId?: string; workerName?: string }
+): Promise<boolean> {
+  const jobRef = jobsCollection.doc(id);
+
+  return firestore.runTransaction(async (transaction) => {
+    const doc = await transaction.get(jobRef);
+    if (!doc.exists) return false;
+
+    const currentStatus = doc.data()!.status as JobStatus;
+    if (!expectedStatuses.includes(currentStatus)) return false;
+
+    const updateData: Record<string, unknown> = {
+      status: newStatus,
+      startedAt: FieldValue.serverTimestamp(),
+      claimedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (metadata?.workerId) {
+      updateData.workerId = metadata.workerId;
+    }
+    if (metadata?.workerName) {
+      updateData.workerName = metadata.workerName;
+    }
+
+    transaction.update(jobRef, updateData);
+    return true;
+  });
+}
+
+/**
+ * Set or clear the needsAggregation flag on a job.
+ */
+export async function setNeedsAggregation(id: string, value: boolean): Promise<void> {
+  await jobsCollection.doc(id).update({
+    needsAggregation: value,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 }
 
 /**

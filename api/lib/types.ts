@@ -72,6 +72,7 @@ export interface Job {
   workerName?: string;
   claimedAt?: Date;
   retryCount?: number;
+  needsAggregation?: boolean;
   completedSimCount?: number;
   totalSimCount?: number;
   results?: JobResults;

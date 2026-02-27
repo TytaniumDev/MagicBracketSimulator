@@ -96,6 +96,26 @@ export async function setJobStartedAt(id: string, workerId?: string, workerName?
   sqliteStore.setJobStartedAt(id, workerId, workerName);
 }
 
+export async function conditionalUpdateJobStatus(
+  id: string,
+  expectedStatuses: JobStatus[],
+  newStatus: JobStatus,
+  metadata?: { workerId?: string; workerName?: string }
+): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
+  }
+  return sqliteStore.conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
+}
+
+export async function setNeedsAggregation(id: string, value: boolean): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.setNeedsAggregation(id, value);
+    return;
+  }
+  sqliteStore.setNeedsAggregation(id, value);
+}
+
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.setJobCompleted(id, dockerRunDurationsMs);
@@ -374,6 +394,20 @@ async function recoverStaleSimulations(
     }
   }
 
+  // Re-trigger aggregation if the flag is set (previous aggregation crashed) and all sims are done
+  if (job.needsAggregation) {
+    const allDone = sims.every(
+      (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
+    );
+    if (allDone) {
+      console.log(`[Recovery] Job ${jobId} has needsAggregation flag set, re-triggering aggregation`);
+      aggregateJobResults(jobId).catch((err) => {
+        console.error(`[Recovery] Re-triggered aggregation failed for job ${jobId}:`, err);
+        Sentry.captureException(err, { tags: { component: 'recovery-aggregation-retry', jobId } });
+      });
+    }
+  }
+
   return recovered;
 }
 
@@ -486,6 +520,9 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   const job = await getJob(jobId);
   if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') return; // Already aggregated
 
+  // Mark that aggregation is in progress — recovery can detect and retry if this crashes
+  await setNeedsAggregation(jobId, true);
+
   // Read raw logs uploaded incrementally by workers
   const { getRawLogs, ingestLogs, getStructuredLogs } = await import('./log-store');
   const rawLogs = await getRawLogs(jobId);
@@ -540,17 +577,22 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') {
+    await setNeedsAggregation(jobId, false);
     deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
     return;
   }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
   if (allCancelled) {
+    await setNeedsAggregation(jobId, false);
     deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
     return; // Already handled by cancel flow
   }
 
   await setJobCompleted(jobId);
+
+  // Clear the flag — aggregation completed successfully
+  await setNeedsAggregation(jobId, false);
 
   // Clean up RTDB ephemeral data and cancel recovery task
   cancelRecoveryCheck(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
