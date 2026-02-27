@@ -6,6 +6,30 @@ import { isTerminal } from '../utils/status';
 import type { SimulationStatus } from '../types/simulation';
 
 /**
+ * Parse RTDB simulation entries into SimulationStatus objects.
+ * Falls back to parsing `index` from simId (e.g. "sim_003" → 3) when RTDB data lacks it.
+ * Filters out entries with unparseable simIds and sorts by index.
+ */
+export function parseRtdbSimulations(
+  rtdbSims: Record<string, Record<string, unknown>>
+): SimulationStatus[] {
+  return Object.entries(rtdbSims)
+    .map(([simId, simData]) => {
+      let index = typeof simData.index === 'number' ? simData.index : undefined;
+      if (index === undefined) {
+        const match = simId.match(/^sim_(\d+)$/);
+        if (match) {
+          index = parseInt(match[1], 10);
+        }
+      }
+      if (index === undefined) return null;
+      return { simId, ...simData, index } as SimulationStatus;
+    })
+    .filter((s): s is SimulationStatus => s !== null)
+    .sort((a, b) => a.index - b.index);
+}
+
+/**
  * Hook for real-time job progress updates.
  *
  * GCP mode (rtdb available): Listens to Firebase RTDB directly via onValue.
@@ -124,14 +148,11 @@ export function useJobProgress<T>(jobId: string | undefined) {
         // This is more reliable than the dedicated simsRef listener since
         // the parent snapshot always includes the full subtree.
         if (rtdbSims && typeof rtdbSims === 'object') {
-          const sims: SimulationStatus[] = Object.entries(rtdbSims)
-            .map(([simId, simData]) => ({
-              simId,
-              ...(simData as Record<string, unknown>),
-            }))
-            .sort((a, b) => ((a as SimulationStatus).index ?? 0) - ((b as SimulationStatus).index ?? 0)) as SimulationStatus[];
+          const sims = parseRtdbSimulations(rtdbSims as Record<string, Record<string, unknown>>);
           if (sims.length > 0) {
-            markSimsReceived();
+            // Only cancel REST polling if all sims have valid indices
+            const hasValidIndices = sims.every(s => typeof s.index === 'number' && s.index >= 0);
+            if (hasValidIndices) markSimsReceived();
             setSimulations(sims);
           }
         }
@@ -156,15 +177,10 @@ export function useJobProgress<T>(jobId: string | undefined) {
         const data = snapshot.val();
         if (!data) return;
 
-        // RTDB stores simulations as an object keyed by simId
-        const sims: SimulationStatus[] = Object.entries(data)
-          .map(([simId, simData]) => ({
-            simId,
-            ...(simData as Record<string, unknown>),
-          }))
-          .sort((a, b) => ((a as SimulationStatus).index ?? 0) - ((b as SimulationStatus).index ?? 0)) as SimulationStatus[];
+        const sims = parseRtdbSimulations(data as Record<string, Record<string, unknown>>);
 
-        markSimsReceived();
+        const hasValidIndices = sims.every(s => typeof s.index === 'number' && s.index >= 0);
+        if (hasValidIndices) markSimsReceived();
         setSimulations(sims);
       }, () => {
         // Non-fatal: simulation updates just won't appear

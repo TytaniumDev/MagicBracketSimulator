@@ -57,9 +57,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // The worker treats these as idempotent no-ops (Pub/Sub redelivery is expected),
     // whereas job PATCH returns 409 because invalid transitions there indicate a
     // real bug in the caller, not a retry scenario.
+    let simIndex: number | undefined;
     if (state !== undefined) {
       const currentSim = await jobStore.getSimulationStatus(id, simId);
       if (currentSim) {
+        simIndex = currentSim.index;
         // Explicit terminal check before canSimTransition: while canSimTransition
         // would also reject these (terminal states have no valid transitions), we
         // check separately to return a distinct 'terminal_state' reason code that
@@ -93,8 +95,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await jobStore.updateSimulationStatus(id, simId, update);
     }
 
-    // Fire-and-forget RTDB write for simulation progress
-    updateSimProgress(id, simId, update).catch(err => log.warn('RTDB updateSimProgress failed', { jobId: id, simId, error: err instanceof Error ? err.message : err }));
+    // Resolve sim index for RTDB: prefer the fetched value, fall back to parsing simId (e.g. "sim_003" → 3)
+    if (simIndex === undefined) {
+      const match = simId.match(/^sim_(\d+)$/);
+      if (match) simIndex = parseInt(match[1], 10);
+    }
+
+    // Fire-and-forget RTDB write for simulation progress (include index so frontend can build the grid)
+    const rtdbUpdate = simIndex !== undefined ? { ...update, index: simIndex } : update;
+    updateSimProgress(id, simId, rtdbUpdate).catch(err => log.warn('RTDB updateSimProgress failed', { jobId: id, simId, error: err instanceof Error ? err.message : err }));
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SimulationGrid } from './SimulationGrid';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
+import type { SimulationStatus } from '../types/simulation';
 import {
   mixedStateSimulations,
   allCompletedSimulations,
@@ -222,5 +223,51 @@ describe('SimulationGrid', () => {
     // 3 real + 2 placeholder = 5 containers × 4 = 20 cells
     const cells = screen.getAllByTitle(/sim_\d+ game \d+:/);
     expect(cells).toHaveLength(20);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Defense-in-depth: undefined index and edge cases
+  // ---------------------------------------------------------------------------
+
+  it('renders pending placeholders when simulations have undefined index', () => {
+    // Simulates the bug: RTDB delivers sims without index field
+    const simsWithoutIndex = [
+      { simId: 'sim_000', state: 'RUNNING', workerId: 'w1' } as unknown as SimulationStatus,
+      { simId: 'sim_001', state: 'RUNNING', workerId: 'w1' } as unknown as SimulationStatus,
+    ];
+    render(
+      <SimulationGrid
+        simulations={simsWithoutIndex}
+        totalSimulations={20}
+      />,
+    );
+    // Sims with undefined index are skipped in simByIndex, so all 5 containers
+    // become pending placeholders = 20 pending cells
+    const cells = screen.getAllByTitle(/sim_\d+ game \d+: Pending/);
+    expect(cells).toHaveLength(20);
+  });
+
+  it('handles totalSimulations=0 without crashing', () => {
+    const { container } = render(
+      <SimulationGrid
+        simulations={[]}
+        totalSimulations={0}
+      />,
+    );
+    // No game cells rendered, but component doesn't crash
+    const cells = container.querySelectorAll('[title]');
+    expect(cells).toHaveLength(0);
+  });
+
+  it('handles totalSimulations=undefined without crashing', () => {
+    const { container } = render(
+      <SimulationGrid
+        simulations={[]}
+        totalSimulations={undefined as unknown as number}
+      />,
+    );
+    // totalContainers guard produces 0, no cells rendered
+    const cells = container.querySelectorAll('[title]');
+    expect(cells).toHaveLength(0);
   });
 });

@@ -124,13 +124,15 @@ export const SimulationGrid = memo(function SimulationGrid({ simulations, totalS
 
   // Expand containers into game cells and group by worker
   const { groups, gameCounts } = useMemo(() => {
-    // Total expected containers
-    const totalContainers = Math.ceil(totalSimulations / GAMES_PER_CONTAINER);
+    // Total expected containers (guard against NaN/0)
+    const totalContainers = totalSimulations > 0 ? Math.ceil(totalSimulations / GAMES_PER_CONTAINER) : 0;
 
     // Build a lookup from container index to SimulationStatus
     const simByIndex = new Map<number, SimulationStatus>();
     for (const s of simulations) {
-      simByIndex.set(s.index, s);
+      if (typeof s.index === 'number' && !Number.isNaN(s.index)) {
+        simByIndex.set(s.index, s);
+      }
     }
 
     // Separate into pending (no workerId) and assigned (has workerId)
