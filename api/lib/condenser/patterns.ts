@@ -130,12 +130,11 @@ export const KEEP_EXTRA_DRAW = /draw(s)?\s+(an?\s+)?(additional|extra|\d+)\s+car
  * chips away slowly.
  *
  * Forge examples:
- *   - "Life total changes: Player B 40 -> 38."
+ *   - "[LIFE] Life: Ai(1)-Doran Big Butts 40 -> 37" (native Forge log)
  *   - "Player A loses 5 life."
  *   - "Player B gains 4 life."
- *   - "Player C is at 15 life."
  */
-export const KEEP_LIFE_CHANGE = /life\s+(total\s+)?(change|loss|gain|to)|(\d+)\s+life|loses?\s+\d+\s+life|gains?\s+\d+\s+life/i;
+export const KEEP_LIFE_CHANGE = /^\[LIFE\]\s+Life:|life\s+(total\s+)?(change|loss|gain|to)|(\d+)\s+life|loses?\s+\d+\s+life|gains?\s+\d+\s+life/i;
 
 /**
  * Pattern: High mana value spell cast (CMC >= 5)

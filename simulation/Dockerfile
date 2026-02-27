@@ -10,7 +10,7 @@ FROM eclipse-temurin:17-jre-jammy
 
 # Forge version — pinned for deterministic local builds.
 # CI and nightly workflows pass --build-arg FORGE_VERSION=X.Y.Z explicitly.
-ARG FORGE_VERSION="2.0.10"
+ARG FORGE_VERSION="latest"
 
 # Create non-root user with home directory
 RUN groupadd -r simulator && useradd -r -g simulator -m -d /home/simulator simulator

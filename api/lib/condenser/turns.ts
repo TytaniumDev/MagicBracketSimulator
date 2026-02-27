@@ -492,41 +492,35 @@ export function extractWinningTurn(rawLog: string): number | undefined {
 // Life Total Tracking
 // -----------------------------------------------------------------------------
 
-// Patterns for parsing life changes
-const DAMAGE_TO_PLAYER_PATTERN = /Damage:.*deals\s+(\d+)\s+(?:[\w-]+\s+)*damage\s+to\s+(Ai\([^)]+\)-[^\s.]+)/i;
-const LOSES_LIFE_PATTERN = /(Ai\([^)]+\)-[^\s]+)\s+loses\s+(\d+)\s+life/i;
-const GAINS_LIFE_PATTERN = /you\s+gain\s+(\d+)\s+life.*\[Phase:\s*([^\]]+)\]/i;
-const PLAYER_GAINS_LIFE_PATTERN = /(Ai\([^)]+\)-[^\s]+)\s+gains\s+(\d+)\s+life/i;
-const YOU_GAIN_LIFE_PATTERN = /you\s+(?:gain|may\s+gain)\s+(\d+)\s+life/i;
-const YOU_LOSE_LIFE_PATTERN = /you\s+lose\s+(\d+)\s+life/i;
-const PAYING_LIFE_PATTERN = /paying\s+(\d+)\s+life/i;
-/** Matches "Game outcome: Ai(N)-Deck Name has lost because life total reached 0" */
-const LIFE_REACHED_ZERO_PATTERN = /Game outcome:\s+(.+?)\s+has lost because life total reached 0/i;
-
 /**
- * Extracts a player from bracketed metadata (Activator or Phase fields) in a log line.
- * Looks for patterns like [Activator: Ai(N)-DeckName, ...] or [Phase: Ai(N)-DeckName]
+ * Pattern for Forge's native life change log entries.
+ *
+ * Forge (since the version after 2.0.10) outputs explicit life changes as:
+ *   [LIFE] Life: PlayerName oldValue -> newValue
+ *
+ * Examples:
+ *   [LIFE] Life: Ai(1)-Doran Big Butts 40 -> 37
+ *   [LIFE] Life: Ai(2)-Enduring Enchantments 37 -> 0
+ *
+ * Capture groups:
+ *   1: Player name (e.g., "Ai(1)-Doran Big Butts")
+ *   2: Old life total
+ *   3: New life total
  */
-function extractPlayerFromMetadata(line: string, players: string[]): string | undefined {
-  const metadataMatch = /(?:Activator|Phase):\s*(Ai\([^)]+\)-[^\],]+)/i.exec(line);
-  if (!metadataMatch) return undefined;
-  const candidate = metadataMatch[1].trim();
-  return players.find(p => p.startsWith(candidate) || candidate.startsWith(p));
-}
+const LIFE_LOG_PATTERN = /^\[LIFE\] Life: (.+?)\s+(-?\d+)\s*->\s*(-?\d+)/;
 
 /**
  * Calculates life totals per round for all players.
  *
+ * Parses Forge's native `[LIFE] Life: PlayerName oldValue -> newValue` log
+ * entries to track absolute life totals. This gives us exact values directly
+ * from the game engine — no heuristic inference needed.
+ *
  * A "round" is one full rotation where each player takes a turn.
  * In a 4-player Commander game, round 1 = segments 1-4, round 2 = segments 5-8, etc.
  *
- * Parses the log for:
- *   - Damage dealt to players
- *   - Life loss effects
- *   - Life gain effects
- *   - Game outcome lines ("has lost because life total reached 0") to set final life to 0
- *
- * Commander format starts at 40 life.
+ * Commander format starts at 40 life. Players whose life hasn't changed yet
+ * remain at 40 until a `[LIFE]` entry updates them.
  *
  * @param rawLog - The complete raw log text
  * @param players - Array of player identifiers (e.g., ["Ai(1)-Doran Big Butts", ...])
@@ -541,120 +535,16 @@ export function calculateLifePerTurn(
   const normalized = rawLog.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const ranges = extractTurnRanges(normalized);
   const chunks = sliceByTurn(normalized, ranges);
-  
-  // Determine number of players if not provided
   const playerCount = numPlayers ?? getNumPlayers(ranges);
-  
+
   // Initialize life totals (Commander starts at 40)
   const currentLife: Record<string, number> = {};
   for (const player of players) {
     currentLife[player] = 40;
   }
-  
+
   const lifePerRound: Record<number, Record<string, number>> = {};
-  
-  // Helper to process life changes in a chunk
-  const processChunkLines = (chunk: string) => {
-    const lines = chunk.split('\n');
 
-    for (const line of lines) {
-      // 1. Damage to player (handles combat, non-combat, and plain damage)
-      const damageMatch = DAMAGE_TO_PLAYER_PATTERN.exec(line);
-      if (damageMatch) {
-        const damage = parseInt(damageMatch[1], 10);
-        const target = damageMatch[2];
-        const player = players.find(p => target.startsWith(p) || p.startsWith(target));
-        if (player && currentLife[player] !== undefined) {
-          currentLife[player] -= damage;
-        }
-      }
-
-      // 2. "Player loses N life" (explicit player name in line)
-      let lossHandled = false;
-      const lossMatch = LOSES_LIFE_PATTERN.exec(line);
-      if (lossMatch) {
-        const playerPart = lossMatch[1];
-        const loss = parseInt(lossMatch[2], 10);
-        const player = players.find(p => p.startsWith(playerPart) || playerPart.startsWith(p));
-        if (player && currentLife[player] !== undefined) {
-          currentLife[player] -= loss;
-          lossHandled = true;
-        }
-      }
-
-      // 3. "you lose N life" (player from metadata) - only if not already handled
-      if (!lossHandled) {
-        const youLoseMatch = YOU_LOSE_LIFE_PATTERN.exec(line);
-        if (youLoseMatch) {
-          const loss = parseInt(youLoseMatch[1], 10);
-          const player = extractPlayerFromMetadata(line, players);
-          if (player && currentLife[player] !== undefined) {
-            currentLife[player] -= loss;
-          }
-        }
-      }
-
-      // 4. "you gain N life [Phase: PLAYER]" (original pattern with Phase metadata)
-      let gainHandled = false;
-      const gainMatch = GAINS_LIFE_PATTERN.exec(line);
-      if (gainMatch) {
-        const gain = parseInt(gainMatch[1], 10);
-        const phasePart = gainMatch[2].trim();
-        const player = players.find(p => phasePart.includes(p) || p.includes(phasePart));
-        if (player && currentLife[player] !== undefined) {
-          currentLife[player] += gain;
-          gainHandled = true;
-        }
-      }
-
-      // 5. "PLAYER gains N life" - only if gain not already handled
-      if (!gainHandled) {
-        const playerGainMatch = PLAYER_GAINS_LIFE_PATTERN.exec(line);
-        if (playerGainMatch) {
-          const playerPart = playerGainMatch[1];
-          const gain = parseInt(playerGainMatch[2], 10);
-          const player = players.find(p => p.startsWith(playerPart) || playerPart.startsWith(p));
-          if (player && currentLife[player] !== undefined) {
-            currentLife[player] += gain;
-            gainHandled = true;
-          }
-        }
-      }
-
-      // 6. "you gain N life" with Activator metadata - only if gain not already handled
-      if (!gainHandled) {
-        const youGainMatch = YOU_GAIN_LIFE_PATTERN.exec(line);
-        if (youGainMatch) {
-          const gain = parseInt(youGainMatch[1], 10);
-          const player = extractPlayerFromMetadata(line, players);
-          if (player && currentLife[player] !== undefined) {
-            currentLife[player] += gain;
-          }
-        }
-      }
-
-      // 7. "paying N life" (life paid as cost) - always checked independently
-      const payingMatch = PAYING_LIFE_PATTERN.exec(line);
-      if (payingMatch) {
-        const paid = parseInt(payingMatch[1], 10);
-        const player = extractPlayerFromMetadata(line, players);
-        if (player && currentLife[player] !== undefined) {
-          currentLife[player] -= paid;
-        }
-      }
-
-      // 8. "Game outcome: PLAYER has lost because life total reached 0"
-      const lifeZeroMatch = LIFE_REACHED_ZERO_PATTERN.exec(line);
-      if (lifeZeroMatch) {
-        const playerPart = lifeZeroMatch[1].trim();
-        const player = players.find(p => p === playerPart || p.startsWith(playerPart) || playerPart.startsWith(p));
-        if (player && currentLife[player] !== undefined) {
-          currentLife[player] = 0;
-        }
-      }
-    }
-  };
-  
   // Group segments by round
   const roundGroups = new Map<number, typeof chunks>();
   for (const chunk of chunks) {
@@ -664,21 +554,34 @@ export function calculateLifePerTurn(
     }
     roundGroups.get(round)!.push(chunk);
   }
-  
+
   // Process each round in order and snapshot at end of each round
   const sortedRounds = Array.from(roundGroups.keys()).sort((a, b) => a - b);
-  
+
   for (const round of sortedRounds) {
     const roundChunks = roundGroups.get(round)!;
-    
-    // Process all segments in this round
+
     for (const { chunk } of roundChunks) {
-      processChunkLines(chunk);
+      for (const line of chunk.split('\n')) {
+        const match = LIFE_LOG_PATTERN.exec(line);
+        if (!match) continue;
+
+        const logName = match[1];
+        const newLife = parseInt(match[3], 10);
+
+        // Match the player name from the [LIFE] entry to our known players list
+        const player = players.find(
+          (p) => p === logName || p.startsWith(logName) || logName.startsWith(p)
+        );
+        if (player) {
+          currentLife[player] = newLife;
+        }
+      }
     }
-    
+
     // Snapshot life totals at end of this round
     lifePerRound[round] = { ...currentLife };
   }
-  
+
   return lifePerRound;
 }
