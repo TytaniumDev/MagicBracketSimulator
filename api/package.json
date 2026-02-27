@@ -8,7 +8,7 @@
     "start": "next start -p ${PORT:-3000}",
     "lint": "tsc --noEmit",
     "test:integration": "tsx test/integration.test.ts",
-    "test:unit": "tsx test/state-machine.test.ts && tsx test/game-logs.test.ts && tsx lib/condenser/condenser.test.ts && tsx lib/condenser/structured.test.ts && tsx lib/condenser/derive-job-status.test.ts && tsx lib/condenser/win-tally.test.ts && tsx lib/condenser/pipeline.test.ts && tsx lib/stream-utils.test.ts && tsx lib/response-shape.test.ts && tsx lib/log-store.test.ts && tsx lib/store-guards.test.ts && tsx lib/job-store-aggregation.test.ts && tsx test/cors.test.ts && tsx test/job-store-contract.test.ts",
+    "test:unit": "tsx test/state-machine.test.ts && tsx test/game-logs.test.ts && tsx lib/condenser/condenser.test.ts && tsx lib/condenser/structured.test.ts && tsx lib/condenser/derive-job-status.test.ts && tsx lib/condenser/win-tally.test.ts && tsx lib/condenser/pipeline.test.ts && tsx lib/stream-utils.test.ts && tsx lib/response-shape.test.ts && tsx lib/log-store.test.ts && tsx lib/store-guards.test.ts && tsx lib/job-store-aggregation.test.ts && tsx test/cors.test.ts && tsx test/job-store-contract.test.ts && tsx test/cancel-recover.test.ts",
     "test:response-shape": "tsx lib/response-shape.test.ts",
     "test:cors": "tsx test/cors.test.ts",
     "test:ingestion": "tsx test/ingestion.test.ts",
