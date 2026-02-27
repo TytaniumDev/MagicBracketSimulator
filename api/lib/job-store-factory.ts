@@ -10,16 +10,20 @@ import * as workerStore from './worker-store-factory';
 import { deleteJobProgress } from './rtdb';
 import { cancelRecoveryCheck } from './cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
+import { createLogger } from './logger';
+
+const log = createLogger('JobStore');
+const recoveryLog = createLogger('Recovery');
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
 // Log mode detection at startup
-console.log(`[Job Store] Running in ${USE_FIRESTORE ? 'GCP' : 'LOCAL'} mode`);
+log.info('Running in mode', { mode: USE_FIRESTORE ? 'GCP' : 'LOCAL' });
 if (USE_FIRESTORE) {
-  console.log(`[Job Store] Project: ${process.env.GOOGLE_CLOUD_PROJECT}`);
-  console.log(`[Job Store] Using: Firestore + Cloud Storage + Pub/Sub`);
+  log.info('Project', { project: process.env.GOOGLE_CLOUD_PROJECT });
+  log.info('Using Firestore + Cloud Storage + Pub/Sub');
 } else {
-  console.log(`[Job Store] Using: SQLite + local filesystem`);
+  log.info('Using SQLite + local filesystem');
 }
 
 export function isGcpMode(): boolean {
@@ -312,7 +316,7 @@ async function recoverStaleSimulations(
       const jobStartedMs = job.startedAt ? job.startedAt.getTime() : job.createdAt.getTime();
       const pendingForMs = now - jobStartedMs;
       if (pendingForMs > STALE_PENDING_THRESHOLD_MS) {
-        console.log(`[Recovery] Job ${jobId} sim ${sim.simId} stuck PENDING for ${Math.round(pendingForMs / 1000)}s, republishing`);
+        recoveryLog.info('Sim stuck PENDING, republishing', { jobId, simId: sim.simId, pendingSec: Math.round(pendingForMs / 1000) });
         simsToRepublish.push(sim);
         recovered = true;
       }
@@ -322,7 +326,7 @@ async function recoverStaleSimulations(
     if (sim.state === 'RUNNING' && sim.startedAt) {
       const runningForMs = now - new Date(sim.startedAt).getTime();
       if (runningForMs > STALE_RUNNING_THRESHOLD_MS) {
-        console.log(`[Recovery] Job ${jobId} sim ${sim.simId} stuck RUNNING for ${Math.round(runningForMs / 60000)}min, marking FAILED for retry`);
+        recoveryLog.info('Sim stuck RUNNING, marking FAILED for retry', { jobId, simId: sim.simId, runningMin: Math.round(runningForMs / 60000) });
         const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
           state: 'FAILED',
           errorMessage: `Simulation timed out after ${Math.round(runningForMs / 60000)} minutes`,
@@ -337,7 +341,7 @@ async function recoverStaleSimulations(
 
     // Case 3: RUNNING sim whose specific worker is dead
     if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
-      console.log(`[Recovery] Job ${jobId} sim ${sim.simId} worker ${sim.workerId} is dead, marking FAILED for retry`);
+      recoveryLog.info('Sim worker is dead, marking FAILED for retry', { jobId, simId: sim.simId, workerId: sim.workerId });
       const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
         state: 'FAILED',
         errorMessage: 'Worker lost connection',
@@ -351,7 +355,7 @@ async function recoverStaleSimulations(
 
     // Case 4: FAILED sim — retry by resetting to PENDING + republish
     if (sim.state === 'FAILED' && activeWorkers.length > 0) {
-      console.log(`[Recovery] Job ${jobId} sim ${sim.simId} is FAILED, retrying`);
+      recoveryLog.info('Sim is FAILED, retrying', { jobId, simId: sim.simId });
       simsToRepublish.push(sim);
       recovered = true;
     }
@@ -377,9 +381,9 @@ async function recoverStaleSimulations(
           });
       });
       await Promise.all(promises);
-      console.log(`[Recovery] Republished ${simsToRepublish.length} simulation messages for job ${jobId}`);
+      recoveryLog.info('Republished simulation messages', { jobId, count: simsToRepublish.length });
     } catch (err) {
-      console.warn(`[Recovery] Failed to republish sims for job ${jobId}:`, err);
+      recoveryLog.warn('Failed to republish sims', { jobId, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -394,7 +398,7 @@ async function recoverStaleSimulations(
       const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
       if (needsRetrigger) {
         aggregateJobResults(jobId).catch((err) => {
-          console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
+          recoveryLog.error('Aggregation failed', { jobId, error: err instanceof Error ? err.message : String(err) });
           Sentry.captureException(err, { tags: { component: 'recovery-aggregation', jobId } });
         });
       }
@@ -427,7 +431,7 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
   const activeWorkers = await workerStore.getActiveWorkers();
   if (activeWorkers.length === 0) return false;
 
-  console.log(`[Recovery] Job ${jobId} stuck in QUEUED for ${Math.round(queuedForMs / 1000)}s, re-publishing to Pub/Sub`);
+  recoveryLog.info('Job stuck in QUEUED, re-publishing to Pub/Sub', { jobId, queuedSec: Math.round(queuedForMs / 1000) });
   requeueCooldowns.set(jobId, Date.now());
 
   try {
@@ -456,12 +460,12 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
           return topic.publishMessage({ json: msg });
         });
         await Promise.all(promises);
-        console.log(`[Recovery] Re-published ${pendingSims.length} pending simulation messages for job ${jobId}`);
+        recoveryLog.info('Re-published pending simulation messages', { jobId, count: pendingSims.length });
       }
     }
     return true;
   } catch (err) {
-    console.warn(`[Recovery] Failed to re-publish queued job ${jobId}:`, err);
+    recoveryLog.warn('Failed to re-publish queued job', { jobId, error: err instanceof Error ? err.message : String(err) });
     return false;
   }
 }
@@ -563,7 +567,7 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   if (Array.isArray(job.deckIds) && job.deckIds.length === 4 && structuredData?.games?.length) {
     const { processJobForRatings } = await import('./trueskill-service');
     processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
-      console.error(`[TrueSkill] Rating update failed for job ${jobId} (non-fatal):`, err);
+      log.error('TrueSkill rating update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
       Sentry.captureException(err, { tags: { component: 'trueskill', jobId } });
     });
   }
@@ -571,14 +575,14 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') {
     await setNeedsAggregation(jobId, false);
-    deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
+    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
     return;
   }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
   if (allCancelled) {
     await setNeedsAggregation(jobId, false);
-    deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
+    deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
     return; // Already handled by cancel flow
   }
 
@@ -588,7 +592,7 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   await setNeedsAggregation(jobId, false);
 
   // Clean up RTDB ephemeral data and cancel recovery task
-  cancelRecoveryCheck(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
-  deleteJobProgress(jobId).catch(err => console.warn('[Cleanup] fire-and-forget failed:', err instanceof Error ? err.message : err));
+  cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
+  deleteJobProgress(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
 }
 
