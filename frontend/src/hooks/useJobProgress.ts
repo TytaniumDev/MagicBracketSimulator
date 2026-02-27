@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { getApiBase, getFirebaseIdToken, fetchWithAuth } from '../api';
+import { getApiBase, getFirebaseIdToken } from '../api';
 import { isTerminal } from '../utils/status';
 import type { SimulationStatus } from '../types/simulation';
 
@@ -254,12 +254,15 @@ export function useJobProgress<T>(jobId: string | undefined) {
 
 /**
  * Fetch job data via REST API (used for terminal jobs after RTDB cleanup).
- * Uses fetchWithAuth to include both Auth and App Check headers.
  */
 async function fetchJobRest(jobId: string): Promise<unknown | null> {
   try {
     const apiBase = getApiBase();
-    const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}`);
+    const token = await getFirebaseIdToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${apiBase}/api/jobs/${jobId}`, { headers });
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -270,12 +273,15 @@ async function fetchJobRest(jobId: string): Promise<unknown | null> {
 /**
  * Fetch simulation statuses via REST API.
  * Fallback for when RTDB doesn't deliver simulation data.
- * Uses fetchWithAuth to include both Auth and App Check headers.
  */
 async function fetchSimsRest(jobId: string): Promise<SimulationStatus[] | null> {
   try {
     const apiBase = getApiBase();
-    const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/simulations`);
+    const token = await getFirebaseIdToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${apiBase}/api/jobs/${jobId}/simulations`, { headers });
     if (!res.ok) return null;
     const data = await res.json();
     return Array.isArray(data.simulations) ? data.simulations : null;

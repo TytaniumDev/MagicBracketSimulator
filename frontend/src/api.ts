@@ -20,16 +20,14 @@ export function getApiBase(): string {
 }
 
 /**
- * Get the current Firebase ID token for authenticated requests.
- * @param forceRefresh - When true, forces a token refresh from Firebase servers
- *   (useful for retrying after a 401 caused by a stale cached token).
+ * Get the current Firebase ID token for authenticated requests
  */
-export async function getFirebaseIdToken(forceRefresh = false): Promise<string | null> {
+export async function getFirebaseIdToken(): Promise<string | null> {
   if (!auth) return 'local-mock-token';
   const user = auth.currentUser;
   if (!user) return null;
   try {
-    return await user.getIdToken(forceRefresh);
+    return await user.getIdToken();
   } catch (error) {
     console.error('Error getting Firebase ID token:', error);
     return null;
@@ -37,15 +35,14 @@ export async function getFirebaseIdToken(forceRefresh = false): Promise<string |
 }
 
 /**
- * Single-attempt fetch with Firebase auth + App Check headers.
- * Internal helper — callers should use fetchWithAuth() which adds retry.
+ * Fetch with Firebase authentication token
+ * Automatically adds Authorization header with Bearer token
  */
-async function _fetchWithAuth(
+export async function fetchWithAuth(
   url: string,
-  options: RequestInit = {},
-  forceRefresh = false
+  options: RequestInit = {}
 ): Promise<Response> {
-  const token = await getFirebaseIdToken(forceRefresh);
+  const token = await getFirebaseIdToken();
 
   const headers: HeadersInit = {
     ...options.headers,
@@ -70,24 +67,6 @@ async function _fetchWithAuth(
     ...options,
     headers,
   });
-}
-
-/**
- * Fetch with Firebase authentication token and App Check.
- * Automatically adds Authorization + X-Firebase-AppCheck headers.
- * Retries exactly once on 401 with a force-refreshed token to handle staleness.
- */
-export async function fetchWithAuth(
-  url: string,
-  options: RequestInit = {}
-): Promise<Response> {
-  const response = await _fetchWithAuth(url, options);
-
-  if (response.status === 401) {
-    return _fetchWithAuth(url, options, /* forceRefresh */ true);
-  }
-
-  return response;
 }
 
 /**
