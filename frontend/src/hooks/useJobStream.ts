@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { doc, collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
@@ -21,7 +21,7 @@ async function fetchJob(jobId: string): Promise<JobResponse> {
 async function fetchSimulations(jobId: string): Promise<SimulationStatus[]> {
   const apiBase = getApiBase();
   const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/simulations`);
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error('Failed to load simulations');
   const data = await res.json();
   return Array.isArray(data.simulations) ? data.simulations : [];
 }
@@ -81,14 +81,19 @@ function mergeFirestoreJobUpdate(
 
 /**
  * Convert a Firestore simulation document to SimulationStatus.
+ * Returns null for malformed simIds that can't be parsed.
  */
-function firestoreSimToStatus(simId: string, data: Record<string, unknown>): SimulationStatus {
+function firestoreSimToStatus(simId: string, data: Record<string, unknown>): SimulationStatus | null {
+  const index = typeof data.index === 'number' ? data.index : (() => {
+    const match = simId.match(/^sim_(\d+)$/);
+    return match ? parseInt(match[1], 10) : -1;
+  })();
+
+  if (index === -1) return null;
+
   return {
     simId,
-    index: typeof data.index === 'number' ? data.index : (() => {
-      const match = simId.match(/^sim_(\d+)$/);
-      return match ? parseInt(match[1], 10) : 0;
-    })(),
+    index,
     state: (data.state as SimulationStatus['state']) ?? 'PENDING',
     workerId: data.workerId as string | undefined,
     workerName: data.workerName as string | undefined,
@@ -120,36 +125,39 @@ function firestoreSimToStatus(simId: string, data: Record<string, unknown>): Sim
  */
 export function useJobStream(jobId: string | undefined) {
   const queryClient = useQueryClient();
-  const jobTerminalRef = useRef(false);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
-  // Track terminal state for refetchInterval
   const jobQuery = useQuery({
     queryKey: ['job', jobId],
     queryFn: () => fetchJob(jobId!),
     enabled: !!jobId,
-    // LOCAL mode: poll every 2s while job is active
-    refetchInterval: !isFirebaseConfigured && !jobTerminalRef.current ? 2000 : false,
+    // LOCAL mode: poll every 2s while job is active; evaluated dynamically per cycle
+    refetchInterval: (query) => {
+      if (isFirebaseConfigured) return false;
+      const status = query.state.data?.status;
+      if (status && isTerminal(status)) return false;
+      return 2000;
+    },
   });
 
   const simsQuery = useQuery({
     queryKey: ['job', jobId, 'simulations'],
     queryFn: () => fetchSimulations(jobId!),
     enabled: !!jobId,
-    refetchInterval: !isFirebaseConfigured && !jobTerminalRef.current ? 2000 : false,
+    refetchInterval: (query) => {
+      if (isFirebaseConfigured) return false;
+      // Stop polling sims when all are terminal
+      const sims = query.state.data;
+      if (sims && sims.length > 0 && sims.every((s) => isTerminal(s.state))) return false;
+      return 2000;
+    },
   });
-
-  // Update terminal ref when job status changes
-  const jobStatus = jobQuery.data?.status;
-  useEffect(() => {
-    if (jobStatus && isTerminal(jobStatus)) {
-      jobTerminalRef.current = true;
-    }
-  }, [jobStatus]);
 
   // GCP mode: Firestore onSnapshot for real-time job updates
   useEffect(() => {
     if (!db || !jobId) return;
 
+    let unsubscribed = false;
     const jobDocRef = doc(db, 'jobs', jobId);
     const unsubscribe = onSnapshot(
       jobDocRef,
@@ -161,54 +169,70 @@ export function useJobStream(jobId: string | undefined) {
           (prev) => mergeFirestoreJobUpdate(prev, data),
         );
 
-        if (isTerminal(data.status as string)) {
-          jobTerminalRef.current = true;
+        if (isTerminal(data.status as string) && !unsubscribed) {
+          unsubscribed = true;
           // Do a final REST fetch to get complete data (deckLinks, colorIdentity, etc.)
           fetchJob(jobId).then((fullJob) => {
             queryClient.setQueryData(['job', jobId], fullJob);
-          }).catch(() => { /* REST fetch is best-effort */ });
+          }).catch((err) => {
+            console.error('[useJobStream] Final REST fetch failed:', err);
+          });
           unsubscribe();
         }
       },
       (error) => {
         console.error('[useJobStream] Firestore job listener error:', error);
+        setFirestoreError('Lost real-time connection. Refresh to retry.');
       },
     );
 
-    return () => unsubscribe();
+    return () => {
+      if (!unsubscribed) {
+        unsubscribed = true;
+        unsubscribe();
+      }
+    };
   }, [jobId, queryClient]);
 
   // GCP mode: Firestore onSnapshot for real-time simulation updates
   useEffect(() => {
     if (!db || !jobId) return;
 
+    let unsubscribed = false;
     const simsCollectionRef = collection(db, 'jobs', jobId, 'simulations');
     const unsubscribe = onSnapshot(
       simsCollectionRef,
       (snapshot) => {
-        const sims: SimulationStatus[] = snapshot.docs.map((simDoc) =>
-          firestoreSimToStatus(simDoc.id, simDoc.data()),
-        );
+        const sims: SimulationStatus[] = snapshot.docs
+          .map((simDoc) => firestoreSimToStatus(simDoc.id, simDoc.data()))
+          .filter((s): s is SimulationStatus => s !== null);
         sims.sort((a, b) => a.index - b.index);
         queryClient.setQueryData(['job', jobId, 'simulations'], sims);
 
         // Unsubscribe if all sims are in terminal state
-        if (sims.length > 0 && sims.every((s) => isTerminal(s.state))) {
+        if (sims.length > 0 && sims.every((s) => isTerminal(s.state)) && !unsubscribed) {
+          unsubscribed = true;
           unsubscribe();
         }
       },
       (error) => {
         console.error('[useJobStream] Firestore simulations listener error:', error);
+        setFirestoreError('Lost real-time connection. Refresh to retry.');
       },
     );
 
-    return () => unsubscribe();
+    return () => {
+      if (!unsubscribed) {
+        unsubscribed = true;
+        unsubscribe();
+      }
+    };
   }, [jobId, queryClient]);
 
   return {
     job: jobQuery.data ?? null,
     simulations: simsQuery.data ?? [],
-    error: jobQuery.error?.message ?? simsQuery.error?.message ?? null,
+    error: jobQuery.error?.message ?? simsQuery.error?.message ?? firestoreError ?? null,
     isLoading: jobQuery.isLoading,
   };
 }

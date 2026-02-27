@@ -59,16 +59,15 @@ export default function JobStatusPage() {
 
   // Data hooks
   const { job, simulations, error: streamError } = useJobStream(id);
-  const error = actionError ?? streamError;
   const logs = useJobLogs(id, job, { showLogPanel, loadStructured: loadStructuredLogs });
   const { winTally, winTurns, gamesPlayed, simGamesCompleted } = useWinData(
     job, simulations, logs.structuredGames, logs.deckNames,
   );
 
-  if (error) {
+  if (streamError) {
     return (
       <div className="max-w-2xl mx-auto text-center">
-        <p className="text-red-400 mb-4">{error}</p>
+        <p className="text-red-400 mb-4">{streamError}</p>
         <Link to="/" className="text-blue-400 hover:underline">
           Back to browse
         </Link>
@@ -208,6 +207,21 @@ export default function JobStatusPage() {
       )}
 
       <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+        {/* Inline action error banner */}
+        {actionError && (
+          <div className="flex items-center justify-between bg-red-900/30 border border-red-600 rounded p-3 text-red-200 text-sm">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="ml-3 text-red-400 hover:text-red-200 text-lg leading-none"
+              aria-label="Dismiss error"
+            >
+              &times;
+            </button>
+          </div>
+        )}
+
         {/* Rich Queue Info Panel for QUEUED jobs */}
         {job.status === 'QUEUED' && (
           <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 space-y-3">

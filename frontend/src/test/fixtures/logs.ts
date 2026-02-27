@@ -7,10 +7,13 @@ import { DEFAULT_DECK_NAMES } from './factory';
 export const emptyLogs: JobLogsData = {
   rawLogs: null,
   rawLogsError: null,
+  rawLogsLoading: false,
   condensedLogs: null,
   condensedError: null,
+  condensedLoading: false,
   structuredGames: null,
   structuredError: null,
+  structuredLoading: false,
   deckNames: null,
   colorIdentityByDeckName: {},
 };

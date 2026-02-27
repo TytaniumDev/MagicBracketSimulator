@@ -423,4 +423,37 @@ describe('JobStatus — Run Again', () => {
       expect(screen.getByText('Network error')).toBeInTheDocument();
     });
   });
+
+  it('shows action error inline without hiding the job UI', async () => {
+    vi.mocked(fetchWithAuth).mockRejectedValue(new Error('Cancel failed'));
+
+    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    renderJobStatus();
+
+    fireEvent.click(screen.getByText('Run Again'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cancel failed')).toBeInTheDocument();
+    });
+    // Job UI should still be visible
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.getByText('Run Again')).toBeInTheDocument();
+  });
+
+  it('dismisses action error when close button is clicked', async () => {
+    vi.mocked(fetchWithAuth).mockRejectedValue(new Error('Something went wrong'));
+
+    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    renderJobStatus();
+
+    fireEvent.click(screen.getByText('Run Again'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText('Dismiss error'));
+
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+  });
 });

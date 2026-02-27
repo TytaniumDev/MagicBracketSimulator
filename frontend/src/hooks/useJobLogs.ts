@@ -14,10 +14,13 @@ interface UseJobLogsOptions {
 export interface JobLogsData {
   rawLogs: string[] | null;
   rawLogsError: string | null;
+  rawLogsLoading: boolean;
   condensedLogs: CondensedGame[] | null;
   condensedError: string | null;
+  condensedLoading: boolean;
   structuredGames: StructuredGame[] | null;
   structuredError: string | null;
+  structuredLoading: boolean;
   /** Deck names extracted from structured logs */
   deckNames: string[] | null;
   /** Color identity by deck name (server-provided or fetched) */
@@ -90,16 +93,15 @@ export function useJobLogs(
   const allDeckNames = new Set<string>();
   job?.deckNames?.forEach((n) => allDeckNames.add(n));
   structuredDeckNames?.forEach((n) => allDeckNames.add(n));
-  const namesList = Array.from(allDeckNames);
-  const namesKey = namesList.join(',');
+  const namesList = Array.from(allDeckNames).sort();
 
   // Color identity: prefer job-level data, fall back to separate fetch
   const jobHasColorIdentity = !!job?.colorIdentity && Object.keys(job.colorIdentity).length > 0;
 
   const colorIdentityQuery = useQuery({
-    queryKey: ['colorIdentity', jobId, namesKey],
+    queryKey: ['colorIdentity', jobId, ...namesList],
     queryFn: async () => {
-      const params = new URLSearchParams({ names: namesKey });
+      const params = new URLSearchParams({ names: namesList.join(',') });
       const res = await fetchWithAuth(`${apiBase}/api/deck-color-identity?${params}`);
       if (!res.ok) return {};
       return res.json() as Promise<Record<string, string[]>>;
@@ -115,10 +117,13 @@ export function useJobLogs(
   return {
     rawLogs: rawLogsQuery.data?.gameLogs ?? null,
     rawLogsError: rawLogsQuery.error?.message ?? null,
+    rawLogsLoading: rawLogsQuery.isLoading && rawLogsQuery.fetchStatus !== 'idle',
     condensedLogs: condensedQuery.data?.condensed ?? null,
     condensedError: condensedQuery.error?.message ?? null,
+    condensedLoading: condensedQuery.isLoading && condensedQuery.fetchStatus !== 'idle',
     structuredGames: structuredQuery.data?.games ?? null,
     structuredError: structuredQuery.error?.message ?? null,
+    structuredLoading: structuredQuery.isLoading && structuredQuery.fetchStatus !== 'idle',
     deckNames: structuredDeckNames,
     colorIdentityByDeckName,
   };
