@@ -22,6 +22,7 @@ export function makeJob(overrides: Partial<JobResponse> = {}): JobResponse {
     id: 'job-abc-123',
     name: 'Test Simulation',
     deckNames: [...DEFAULT_DECK_NAMES],
+    deckIds: ['deck-atraxa', 'deck-korvold', 'deck-yuriko', 'deck-tymna-kraum'],
     status: 'COMPLETED',
     simulations: 20,
     gamesCompleted: 20,

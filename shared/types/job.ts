@@ -48,6 +48,8 @@ export interface JobResponse {
   id: string;
   name: string;
   deckNames: string[];
+  /** Original deck IDs used to create the job (for re-submission). May be absent on older jobs. */
+  deckIds?: string[];
   status: JobStatus;
   simulations: number;
   gamesCompleted: number;
@@ -99,3 +101,6 @@ export interface JobSummary {
 
 /** Number of games each simulation container runs sequentially. */
 export const GAMES_PER_CONTAINER = 4;
+
+/** Number of decks required per Commander simulation job (4-player Commander). */
+export const REQUIRED_DECK_COUNT = 4;

@@ -4,7 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
-import type { JobResponse } from '@shared/types/job';
+import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -69,15 +69,15 @@ async function jobToApiResponse(
   if (isWorker) {
     return {
       ...base,
-      ...(job.decks.length === 4 && { decks: job.decks }),
-      ...(job.deckIds && job.deckIds.length === 4 && { deckIds: job.deckIds }),
+      ...(job.decks.length === REQUIRED_DECK_COUNT && { decks: job.decks }),
+      ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
     };
   }
 
   // Resolve deck links and color identity for frontend consumers
   let deckLinks: Record<string, string | null> | undefined;
   let colorIdentity: Record<string, string[]> | undefined;
-  if (job.deckIds && job.deckIds.length === 4) {
+  if (job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT) {
     const resolved = await resolveDeckLinksAndColors(job.deckIds, deckNames);
     deckLinks = resolved.links;
     if (Object.keys(resolved.colors).length > 0) colorIdentity = resolved.colors;
@@ -85,6 +85,7 @@ async function jobToApiResponse(
 
   return {
     ...base,
+    ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
     ...(deckLinks && { deckLinks }),
     ...(colorIdentity && { colorIdentity }),
   };
