@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { updateJobProgress, updateSimProgress } from '@/lib/rtdb';
-import { GAMES_PER_CONTAINER, type SimulationState } from '@/lib/types';
+import { GAMES_PER_CONTAINER } from '@/lib/types';
+import { parseBody, updateSimulationSchema } from '@/lib/validation';
 import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from '@/lib/logger';
@@ -13,8 +14,6 @@ const log = createLogger('SimPatch');
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
 }
-
-const VALID_STATES: SimulationState[] = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'];
 
 /**
  * PATCH /api/jobs/[id]/simulations/[simId] — Update a single simulation's status.
@@ -33,12 +32,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { state, workerId, workerName, durationMs, errorMessage, winner, winningTurn, winners, winningTurns } = body;
-
-    // Validate state if provided
-    if (state !== undefined && !VALID_STATES.includes(state)) {
-      return badRequestResponse(`Invalid state. Must be one of: ${VALID_STATES.join(', ')}`);
+    const parsed = parseBody(updateSimulationSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
+    const { state, workerId, workerName, durationMs, errorMessage, winner, winningTurn, winners, winningTurns } = parsed.data;
 
     // Build update object, only including defined fields
     const update: Record<string, unknown> = {};

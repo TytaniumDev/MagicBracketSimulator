@@ -3,7 +3,8 @@ import { verifyAuth, verifyAllowedUser, unauthorizedResponse } from '@/lib/auth'
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { publishSimulationTasks } from '@/lib/pubsub';
-import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, GAMES_PER_CONTAINER, type CreateJobRequest } from '@/lib/types';
+import { GAMES_PER_CONTAINER } from '@/lib/types';
+import { parseBody, createJobSchema } from '@/lib/validation';
 import type { JobSummary } from '@shared/types/job';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { checkRateLimit } from '@/lib/rate-limiter';
@@ -111,27 +112,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as CreateJobRequest;
-    const { deckIds, simulations, parallelism, idempotencyKey } = body;
+    const body = await request.json();
+    const parsed = parseBody(createJobSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const { deckIds, simulations, parallelism, idempotencyKey } = parsed.data;
 
     // Rate limiting
-    const rateCheck = await checkRateLimit(user.uid, typeof simulations === 'number' ? simulations : 0);
+    const rateCheck = await checkRateLimit(user.uid, simulations);
     if (!rateCheck.allowed) {
       return errorResponse(rateCheck.reason ?? 'Rate limit exceeded', 429);
     }
-
-    if (!Array.isArray(deckIds) || deckIds.length !== 4) {
-      return badRequestResponse('Exactly 4 deckIds are required');
-    }
-
-    if (typeof simulations !== 'number' || simulations < SIMULATIONS_MIN || simulations > SIMULATIONS_MAX) {
-      return badRequestResponse(`simulations must be between ${SIMULATIONS_MIN} and ${SIMULATIONS_MAX}`);
-    }
-
-    // parallelism is accepted but no longer required — worker auto-scales
-    const par = (typeof parallelism === 'number' && parallelism >= PARALLELISM_MIN && parallelism <= PARALLELISM_MAX)
-      ? parallelism
-      : undefined;
 
     // Warn about duplicate decks (not an error, but produces meaningless results)
     const uniqueDeckIds = new Set(deckIds);
@@ -144,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     const job = await jobStore.createJob(decks, simulations, {
       idempotencyKey,
-      parallelism: par,
+      parallelism,
       createdBy: user.uid,
       deckIds,
     });
