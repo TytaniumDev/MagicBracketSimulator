@@ -112,6 +112,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
       };
 
+      let interval: ReturnType<typeof setInterval> | undefined;
+
+      const cleanup = () => {
+        if (interval) {
+          clearInterval(interval);
+          interval = undefined;
+        }
+        close();
+      };
+
       const sendInitial = async () => {
         const sims = await jobStore.getSimulationStatuses(id);
         const computedGames = sims.length > 0
@@ -145,17 +155,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       let lastJobJson = JSON.stringify(jobToStreamEvent(initialJob, undefined, deckLinks));
       let lastSimsJson = '';
 
-      const interval = setInterval(async () => {
+      interval = setInterval(async () => {
         if (closed) {
-          clearInterval(interval);
+          cleanup();
           return;
         }
         try {
           const job = await jobStore.getJob(id);
           if (!job) {
             send({ error: 'Job not found' });
-            clearInterval(interval);
-            close();
+            cleanup();
             return;
           }
 
@@ -178,19 +187,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           }
 
           if (isTerminalStatus(job.status)) {
-            clearInterval(interval);
-            close();
+            cleanup();
           }
         } catch (error) {
           console.error(`SSE poll error for job ${id}:`, error);
-          clearInterval(interval);
-          close();
+          cleanup();
         }
       }, 2000);
 
       request.signal.addEventListener('abort', () => {
-        clearInterval(interval);
-        close();
+        cleanup();
       });
     },
   });
