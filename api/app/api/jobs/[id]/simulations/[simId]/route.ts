@@ -53,9 +53,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Guard: validate state transitions using the simulation state machine.
     // Rejects invalid transitions (e.g., COMPLETED→RUNNING from stale Pub/Sub redeliveries).
+    //
+    // NOTE: Returns 200 with { updated: false } instead of 409, intentionally.
+    // The worker treats these as idempotent no-ops (Pub/Sub redelivery is expected),
+    // whereas job PATCH returns 409 because invalid transitions there indicate a
+    // real bug in the caller, not a retry scenario.
     if (state !== undefined) {
       const currentSim = await jobStore.getSimulationStatus(id, simId);
       if (currentSim) {
+        // Explicit terminal check before canSimTransition: while canSimTransition
+        // would also reject these (terminal states have no valid transitions), we
+        // check separately to return a distinct 'terminal_state' reason code that
+        // the worker uses to skip further processing for this simulation.
         if (isTerminalSimState(currentSim.state)) {
           return NextResponse.json({ updated: false, reason: 'terminal_state' });
         }

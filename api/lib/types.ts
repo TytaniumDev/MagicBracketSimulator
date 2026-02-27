@@ -39,6 +39,10 @@ export type { WorkerInfo } from '@shared/types/worker';
 // API-internal types (not shared with frontend)
 // ---------------------------------------------------------------------------
 
+// These imports duplicate the re-exports above, but are necessary:
+// `export type { X }` re-exports make X available to consumers of this module,
+// while `import type { X }` below makes X available within THIS file for use
+// in the interface definitions that follow (e.g., Job.status, Job.results).
 import type { JobStatus } from '@shared/types/job';
 import type { JobResults } from '@shared/types/job';
 
