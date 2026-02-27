@@ -21,6 +21,7 @@ interface Row {
   worker_name?: string | null;
   claimed_at?: string | null;
   retry_count?: number | null;
+  needs_aggregation?: number | null;
 }
 
 function rowToJob(row: Row): Job {
@@ -46,6 +47,7 @@ function rowToJob(row: Row): Job {
     ...(row.worker_name && { workerName: row.worker_name }),
     ...(row.claimed_at && { claimedAt: new Date(row.claimed_at) }),
     ...(row.retry_count != null && row.retry_count > 0 && { retryCount: row.retry_count }),
+    ...(row.needs_aggregation === 1 && { needsAggregation: true }),
     ...(row.result_json != null && { results: JSON.parse(row.result_json) as JobResults }),
   };
 }
@@ -113,6 +115,44 @@ export function setJobStartedAt(id: string, workerId?: string, workerName?: stri
   const now = new Date().toISOString();
   const result = db.prepare('UPDATE jobs SET started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ?').run(now, workerId ?? null, workerName ?? null, now, id);
   return result.changes > 0;
+}
+
+/**
+ * Conditionally update a job's status.
+ * Only applies the update if the job is currently in one of the expectedStatuses.
+ * Returns true if the update was applied.
+ */
+export function conditionalUpdateJobStatus(
+  id: string,
+  expectedStatuses: JobStatus[],
+  newStatus: JobStatus,
+  metadata?: { workerId?: string; workerName?: string }
+): boolean {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const placeholders = expectedStatuses.map(() => '?').join(', ');
+  const result = db
+    .prepare(
+      `UPDATE jobs SET status = ?, started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ? AND status IN (${placeholders})`
+    )
+    .run(
+      newStatus,
+      now,
+      metadata?.workerId ?? null,
+      metadata?.workerName ?? null,
+      now,
+      id,
+      ...expectedStatuses
+    );
+  return result.changes > 0;
+}
+
+/**
+ * Set or clear the needsAggregation flag on a job.
+ */
+export function setNeedsAggregation(id: string, value: boolean): void {
+  const db = getDb();
+  db.prepare('UPDATE jobs SET needs_aggregation = ? WHERE id = ?').run(value ? 1 : 0, id);
 }
 
 export interface SetJobCompletedOptions {

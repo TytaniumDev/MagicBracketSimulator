@@ -255,6 +255,52 @@ async function runTests() {
   });
 
   // =========================================================================
+  // conditionalUpdateJobStatus
+  // =========================================================================
+
+  await test('conditionalUpdateJobStatus applies when status matches', async () => {
+    // Create a fresh job for this test
+    const job = await jobStore.createJob(TEST_DECKS, 8);
+    const result = await jobStore.conditionalUpdateJobStatus(job.id, ['QUEUED'], 'RUNNING', { workerId: 'w1', workerName: 'Worker 1' });
+    assertEqual(result, true, 'should apply when QUEUED');
+    const updated = await jobStore.getJob(job.id);
+    assertEqual(updated!.status, 'RUNNING', 'status should be RUNNING');
+    // Cleanup
+    await jobStore.deleteJob(job.id);
+  });
+
+  await test('conditionalUpdateJobStatus rejects when status does not match', async () => {
+    const job = await jobStore.createJob(TEST_DECKS, 8);
+    // First transition to RUNNING
+    await jobStore.conditionalUpdateJobStatus(job.id, ['QUEUED'], 'RUNNING');
+    // Try again — should fail because no longer QUEUED
+    const result = await jobStore.conditionalUpdateJobStatus(job.id, ['QUEUED'], 'RUNNING');
+    assertEqual(result, false, 'should reject when not QUEUED');
+    await jobStore.deleteJob(job.id);
+  });
+
+  await test('conditionalUpdateJobStatus returns false for nonexistent job', async () => {
+    const result = await jobStore.conditionalUpdateJobStatus('nonexistent-id', ['QUEUED'], 'RUNNING');
+    assertEqual(result, false, 'should return false for missing job');
+  });
+
+  // =========================================================================
+  // needsAggregation flag
+  // =========================================================================
+
+  await test('setNeedsAggregation sets and clears the flag', async () => {
+    const job = await jobStore.createJob(TEST_DECKS, 8);
+    await jobStore.setNeedsAggregation(job.id, true);
+    let updated = await jobStore.getJob(job.id);
+    assertEqual(updated!.needsAggregation, true, 'should be true after set');
+
+    await jobStore.setNeedsAggregation(job.id, false);
+    updated = await jobStore.getJob(job.id);
+    assert(updated!.needsAggregation === undefined || updated!.needsAggregation === false, 'should be false/undefined after clear');
+    await jobStore.deleteJob(job.id);
+  });
+
+  // =========================================================================
   // Cleanup
   // =========================================================================
 
