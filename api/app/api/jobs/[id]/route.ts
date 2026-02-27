@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
+import { parseBody, updateJobSchema } from '@/lib/validation';
 import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
 import { canJobTransition } from '@shared/types/state-machine';
 
@@ -207,20 +208,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { status, errorMessage, dockerRunDurationsMs, workerId, workerName } = body;
+    const parsed = parseBody(updateJobSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const { status, errorMessage, dockerRunDurationsMs, workerId, workerName } = parsed.data;
 
     const job = await jobStore.getJob(id);
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-    }
-
-    // Validate status is a known JobStatus value before checking transitions
-    const VALID_JOB_STATUSES: JobStatus[] = ['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'];
-    if (typeof status === 'string' && !VALID_JOB_STATUSES.includes(status as JobStatus)) {
-      return NextResponse.json(
-        { error: `Invalid status. Must be one of: ${VALID_JOB_STATUSES.join(', ')}` },
-        { status: 400 }
-      );
     }
 
     // Validate job state transition using the state machine
