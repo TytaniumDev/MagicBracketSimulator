@@ -36,7 +36,7 @@ const VALID_SIM_TRANSITIONS: Record<SimulationState, readonly SimulationState[]>
  * @returns true if transitioning from `from` to `to` is allowed
  */
 export function canSimTransition(from: SimulationState, to: SimulationState): boolean {
-  return (VALID_SIM_TRANSITIONS[from] as readonly string[]).includes(to);
+  return VALID_SIM_TRANSITIONS[from].includes(to);
 }
 
 /** Terminal simulation states — no further transitions allowed. */
@@ -46,7 +46,7 @@ export const TERMINAL_SIM_STATES: readonly SimulationState[] = ['COMPLETED', 'CA
  * Check if a simulation state is terminal (no further transitions possible).
  */
 export function isTerminalSimState(state: SimulationState): boolean {
-  return (TERMINAL_SIM_STATES as readonly string[]).includes(state);
+  return TERMINAL_SIM_STATES.includes(state);
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ const VALID_JOB_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
  * @returns true if transitioning from `from` to `to` is allowed
  */
 export function canJobTransition(from: JobStatus, to: JobStatus): boolean {
-  return (VALID_JOB_TRANSITIONS[from] as readonly string[]).includes(to);
+  return VALID_JOB_TRANSITIONS[from].includes(to);
 }
 
 /**
@@ -80,5 +80,5 @@ export const TERMINAL_JOB_STATES: readonly JobStatus[] = ['COMPLETED', 'CANCELLE
  * Check if a job status is terminal (no further transitions possible).
  */
 export function isTerminalJobState(status: JobStatus): boolean {
-  return (TERMINAL_JOB_STATES as readonly string[]).includes(status);
+  return TERMINAL_JOB_STATES.includes(status);
 }
