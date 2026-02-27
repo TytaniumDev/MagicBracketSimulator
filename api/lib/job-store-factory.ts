@@ -387,24 +387,15 @@ async function recoverStaleSimulations(
       (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
     );
     if (allDone) {
-      aggregateJobResults(jobId).catch((err) => {
-        console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
-        Sentry.captureException(err, { tags: { component: 'recovery-aggregation', jobId } });
-      });
-    }
-  }
-
-  // Re-trigger aggregation if the flag is set (previous aggregation crashed) and all sims are done
-  if (job.needsAggregation) {
-    const allDone = sims.every(
-      (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
-    );
-    if (allDone) {
-      console.log(`[Recovery] Job ${jobId} has needsAggregation flag set, re-triggering aggregation`);
-      aggregateJobResults(jobId).catch((err) => {
-        console.error(`[Recovery] Re-triggered aggregation failed for job ${jobId}:`, err);
-        Sentry.captureException(err, { tags: { component: 'recovery-aggregation-retry', jobId } });
-      });
+      // Re-trigger aggregation if job is stuck (all sims done but still RUNNING)
+      // or if a previous aggregation failed (needsAggregation flag set)
+      const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
+      if (needsRetrigger) {
+        aggregateJobResults(jobId).catch((err) => {
+          console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
+          Sentry.captureException(err, { tags: { component: 'recovery-aggregation', jobId } });
+        });
+      }
     }
   }
 
