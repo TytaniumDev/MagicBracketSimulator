@@ -253,9 +253,9 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
 
 // ─── Per-Simulation Stale Detection ──────────────────────────────────────────
 
-const STALE_PENDING_THRESHOLD_MS = parseInt(process.env.STALE_PENDING_THRESHOLD_MS || String(5 * 60 * 1000), 10);  // Default: 5 min
+const STALE_PENDING_THRESHOLD_MS = parseInt(process.env.STALE_PENDING_THRESHOLD_MS || '300000', 10);  // Default: 5 min
 // Should exceed CONTAINER_TIMEOUT_MS (default 2h) to avoid false positives
-const STALE_RUNNING_THRESHOLD_MS = parseInt(process.env.STALE_RUNNING_THRESHOLD_MS || String(2.5 * 60 * 60 * 1000), 10);  // Default: 2.5 hours
+const STALE_RUNNING_THRESHOLD_MS = parseInt(process.env.STALE_RUNNING_THRESHOLD_MS || '9000000', 10);  // Default: 2.5 hours
 const REQUEUE_COOLDOWN_MS = parseInt(process.env.REQUEUE_COOLDOWN_MS || '120000', 10);
 
 /**

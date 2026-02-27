@@ -30,7 +30,7 @@ export interface SimulationResult {
 const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest';
 const RAM_PER_SIM_MB = parseInt(process.env.RAM_PER_SIM_MB || '1200', 10);
 const SYSTEM_RESERVE_MB = parseInt(process.env.SYSTEM_RESERVE_MB || '2048', 10);
-const CONTAINER_TIMEOUT_MS = parseInt(process.env.CONTAINER_TIMEOUT_MS || String(2 * 60 * 60 * 1000), 10);  // Default: 2 hours
+const CONTAINER_TIMEOUT_MS = parseInt(process.env.CONTAINER_TIMEOUT_MS || '7200000', 10);  // Default: 2 hours
 const MAX_CONCURRENT_SIMS = parseInt(process.env.MAX_CONCURRENT_SIMS || '6', 10);
 const CPUS_PER_SIM = parseInt(process.env.CPUS_PER_SIM || '2', 10);
 
