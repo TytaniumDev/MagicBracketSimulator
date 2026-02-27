@@ -52,7 +52,7 @@ import { GAMES_PER_CONTAINER } from './constants.js';
 
 
 const SECRET_NAME = 'simulation-worker-config';
-const API_TIMEOUT_MS = 10_000;
+const API_TIMEOUT_MS = parseInt(process.env.API_TIMEOUT_MS || '10000', 10);
 
 // Module-scoped worker ID and name, set in main() after initialization
 let currentWorkerId = '';
@@ -962,7 +962,8 @@ async function main(): Promise<void> {
 
   // Initial heartbeat (await to apply override before Pub/Sub starts)
   await sendHeartbeat();
-  heartbeatInterval = setInterval(() => sendHeartbeat(), 15_000);
+  const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '15000', 10);
+  heartbeatInterval = setInterval(() => sendHeartbeat(), HEARTBEAT_INTERVAL_MS);
 
   // Periodic Docker cleanup (every hour) to free disk space
   dockerCleanupInterval = setInterval(() => {
