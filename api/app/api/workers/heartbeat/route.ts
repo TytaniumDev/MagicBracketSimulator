@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest, unauthorizedResponse } from '@/lib/auth';
 import * as workerStore from '@/lib/worker-store-factory';
 import type { WorkerInfo } from '@/lib/types';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 /**
  * POST /api/workers/heartbeat — Worker heartbeat.
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     const { workerId, workerName, status, currentJobId, capacity, activeSimulations, uptimeMs, version, ownerEmail, workerApiUrl } = body;
 
     if (!workerId || !workerName) {
-      return NextResponse.json({ error: 'workerId and workerName are required' }, { status: 400 });
+      return badRequestResponse('workerId and workerName are required');
     }
 
     const info: WorkerInfo = {
@@ -44,9 +45,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('POST /api/workers/heartbeat error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Heartbeat failed' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Heartbeat failed', 500);
   }
 }

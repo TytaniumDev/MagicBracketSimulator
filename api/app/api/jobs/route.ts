@@ -12,6 +12,7 @@ import { updateJobProgress } from '@/lib/rtdb';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
 import { isJobStuck } from '@/lib/job-utils';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 // In-process dedup: track job IDs that already have recovery aggregation in flight.
 // Prevents redundant concurrent aggregation runs when Browse page is refreshed.
@@ -94,10 +95,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ jobs: summaries });
   } catch (error) {
     console.error('GET /api/jobs error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to list jobs' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to list jobs', 500);
   }
 }
 
@@ -119,24 +117,15 @@ export async function POST(request: NextRequest) {
     // Rate limiting
     const rateCheck = await checkRateLimit(user.uid, typeof simulations === 'number' ? simulations : 0);
     if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { error: rateCheck.reason },
-        { status: 429 }
-      );
+      return errorResponse(rateCheck.reason ?? 'Rate limit exceeded', 429);
     }
 
     if (!Array.isArray(deckIds) || deckIds.length !== 4) {
-      return NextResponse.json(
-        { error: 'Exactly 4 deckIds are required' },
-        { status: 400 }
-      );
+      return badRequestResponse('Exactly 4 deckIds are required');
     }
 
     if (typeof simulations !== 'number' || simulations < SIMULATIONS_MIN || simulations > SIMULATIONS_MAX) {
-      return NextResponse.json(
-        { error: `simulations must be between ${SIMULATIONS_MIN} and ${SIMULATIONS_MAX}` },
-        { status: 400 }
-      );
+      return badRequestResponse(`simulations must be between ${SIMULATIONS_MIN} and ${SIMULATIONS_MAX}`);
     }
 
     // parallelism is accepted but no longer required — worker auto-scales
@@ -144,12 +133,13 @@ export async function POST(request: NextRequest) {
       ? parallelism
       : undefined;
 
+    // Warn about duplicate decks (not an error, but produces meaningless results)
+    const uniqueDeckIds = new Set(deckIds);
+    const hasDuplicates = uniqueDeckIds.size < deckIds.length;
+
     const { decks, errors } = await resolveDeckIds(deckIds);
     if (errors.length > 0) {
-      return NextResponse.json(
-        { error: `Invalid deck IDs: ${errors.join(', ')}` },
-        { status: 400 }
-      );
+      return badRequestResponse(`Invalid deck IDs: ${errors.join(', ')}`);
     }
 
     const job = await jobStore.createJob(decks, simulations, {
@@ -195,14 +185,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { id: job.id, deckNames },
+      { id: job.id, deckNames, ...(hasDuplicates && { warning: 'Duplicate decks detected. Results may not be meaningful.' }) },
       { status: 201 }
     );
   } catch (error) {
     console.error('POST /api/jobs error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to create job', 500);
   }
 }

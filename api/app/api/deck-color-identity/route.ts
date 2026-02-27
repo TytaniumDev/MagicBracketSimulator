@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { listAllDecks } from '@/lib/deck-store-factory';
 import { getColorIdentityByKey } from '@/lib/deck-metadata';
+import { errorResponse } from '@/lib/api-response';
 
 /**
  * GET /api/deck-color-identity?names=Deck1,Deck2,...
@@ -49,9 +50,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Failed to get deck color identity:', error);
-    return NextResponse.json(
-      { error: 'Failed to get deck color identity' },
-      { status: 500 }
-    );
+    return errorResponse('Failed to get deck color identity', 500);
   }
 }

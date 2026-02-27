@@ -3,6 +3,7 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { sendAccessRequestEmail } from '@/lib/email-notification';
 import { createHmac } from 'node:crypto';
 import { Firestore } from '@google-cloud/firestore';
+import { errorResponse } from '@/lib/api-response';
 
 const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
 
@@ -99,10 +100,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('POST /api/access-requests error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to submit access request' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to submit access request', 500);
   }
 }
 
@@ -137,9 +135,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ hasRequest: true, status: doc.status });
   } catch (error) {
     console.error('GET /api/access-requests error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to check access request' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to check access request', 500);
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { optionalAllowedUser, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { ingestLogs } from '@/lib/log-store';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { gameLogs, deckNames, deckLists } = body;
 
     if (!gameLogs || !Array.isArray(gameLogs) || gameLogs.length === 0) {
-      return NextResponse.json({ error: 'gameLogs array is required and must not be empty' }, { status: 400 });
+      return badRequestResponse('gameLogs array is required and must not be empty');
     }
 
     const { gameCount } = await ingestLogs(id, gameLogs, deckNames, deckLists);
@@ -33,9 +34,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   } catch (error) {
     console.error('POST /api/jobs/[id]/logs error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to ingest logs' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to ingest logs', 500);
   }
 }
