@@ -6,15 +6,7 @@ export default function SentryExamplePage() {
   const [apiStatus, setApiStatus] = useState<string | null>(null);
 
   const handleThrowClientError = () => {
-    const transaction = Sentry.startInactiveSpan({
-      name: "Example Frontend Span",
-      op: "test",
-    });
-
     Sentry.captureException(new Error("Sentry Example Frontend Error"));
-
-    if (transaction) transaction.end();
-
     alert("Client error sent to Sentry! Check your Sentry dashboard.");
   };
 

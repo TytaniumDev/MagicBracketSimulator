@@ -15,10 +15,8 @@ def verify_sentry_page():
             print("Page loaded.")
 
             # Check buttons exist
-            if not page.is_visible("text=Throw Client Error"):
-                print("Client Error button not visible")
-            if not page.is_visible("text=Throw Server Error"):
-                print("Server Error button not visible")
+            assert page.is_visible("text=Throw Client Error"), "Client Error button not visible"
+            assert page.is_visible("text=Throw Server Error"), "Server Error button not visible"
 
             # Take screenshot of the page
             screenshot_path = "verification/sentry_page.png"
