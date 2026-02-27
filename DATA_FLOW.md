@@ -53,7 +53,9 @@ Order in code: status is reported first (PATCH), then raw log is uploaded
 - Persists the simulation status (state, winners, winningTurns, etc.) in the job
 store (SQLite or Firestore).
 - Writes simulation progress to **Firebase RTDB** (fire-and-forget) for
-real-time frontend streaming.
+real-time frontend streaming. The RTDB write includes the simulation `index`
+(resolved from the job store or parsed from the simId) so the frontend can
+build the simulation grid without waiting for a REST fallback.
 - Uses an **atomic counter** (`FieldValue.increment(1)` on
 `completedSimCount`) to detect when all sims are done — O(1) instead of
 scanning the entire subcollection. When `completedSimCount >= totalSimCount`,
@@ -129,6 +131,9 @@ unused by the current worker, which uploads per-simulation via
   - API writes to RTDB as a fire-and-forget side effect when updating Firestore.
   - RTDB data is **ephemeral** — deleted when jobs reach terminal state. Frontend falls back to REST for completed jobs.
   - The `useJobProgress` hook manages RTDB listeners with automatic cleanup.
+  - Frontend defensively parses `index` from the simId key (`sim_003` → `3`)
+    when RTDB data lacks it, and continues REST polling until valid indices
+    are available.
 
 - **LOCAL mode: SSE fallback** — **GET** `/api/jobs/:id/stream`
   - Server-side 2-second polling of SQLite with change detection.
@@ -218,6 +223,8 @@ second call exits immediately.
 | Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
 | Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, Pub/Sub redelivery scenario |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
+| RTDB sim parsing | `frontend/src/hooks/useJobProgress.test.ts` | `parseRtdbSimulations`: index fallback from simId, sorting, filtering, edge cases |
+| SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 
 ### Coverage gaps (future work)
 
