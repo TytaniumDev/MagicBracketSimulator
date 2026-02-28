@@ -7,6 +7,7 @@ import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
+import { Spinner } from '../components/Spinner';
 import { useJobStream } from '../hooks/useJobStream';
 import { useWinData } from '../hooks/useWinData';
 import { useJobLogs } from '../hooks/useJobLogs';
@@ -184,8 +185,9 @@ export default function JobStatusPage() {
             type="button"
             onClick={handleRunAgain}
             disabled={isResubmitting}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
+            {isResubmitting && <Spinner size="sm" />}
             {isResubmitting ? 'Submitting...' : 'Run Again'}
           </button>
         )}
@@ -237,8 +239,9 @@ export default function JobStatusPage() {
                 type="button"
                 onClick={handleCancel}
                 disabled={isCancelling}
-                className="ml-auto px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ml-auto px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
+                {isCancelling && <Spinner size="sm" />}
                 {isCancelling ? 'Cancelling...' : 'Cancel Job'}
               </button>
             </div>
@@ -324,8 +327,9 @@ export default function JobStatusPage() {
               type="button"
               onClick={handleCancel}
               disabled={isCancelling}
-              className="ml-4 px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ml-4 px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
+              {isCancelling && <Spinner size="sm" />}
               {isCancelling ? 'Cancelling...' : 'Cancel Job'}
             </button>
           )}
@@ -780,8 +784,9 @@ export default function JobStatusPage() {
             type="button"
             onClick={handleDelete}
             disabled={isDeletingJob}
-            className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
+            {isDeletingJob && <Spinner size="sm" />}
             {isDeletingJob ? 'Deleting...' : 'Delete Job'}
           </button>
         )}

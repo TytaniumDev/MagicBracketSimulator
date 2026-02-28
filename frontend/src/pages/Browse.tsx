@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
+import { Spinner } from '../components/Spinner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import type { JobStatus, JobSummary } from '@shared/types/job';
 
@@ -186,7 +187,8 @@ export default function Browse() {
 
       {/* Jobs List */}
       {isLoading && (
-        <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
+        <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center flex justify-center items-center gap-2">
+          <Spinner />
           Loading simulations...
         </div>
       )}
@@ -220,8 +222,9 @@ export default function Browse() {
                 type="button"
                 onClick={handleBulkDelete}
                 disabled={isDeleting}
-                className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
+                {isDeleting && <Spinner size="sm" />}
                 {isDeleting ? 'Deleting...' : `Delete Selected (${selectedJobs.size})`}
               </button>
             </>
