@@ -188,6 +188,10 @@ export async function getDeckById(id: string): Promise<DeckListItem | null> {
     return cached.item;
   }
 
+  // Set a placeholder before the async read so that a concurrent deleteDeck()
+  // can remove it, signaling that the result we're about to get is stale.
+  deckByIdCache.set(id, { item: null, ts: 0 });
+
   let item: DeckListItem | null;
 
   if (USE_FIRESTORE) {
@@ -215,8 +219,16 @@ export async function getDeckById(id: string): Promise<DeckListItem | null> {
     item = all.find((d) => d.id === id) ?? null;
   }
 
+  // If the placeholder was removed during the await (by a concurrent
+  // deleteDeck call), the result is stale — don't cache it.
+  if (!deckByIdCache.has(id)) {
+    return item;
+  }
+
+  // Evict oldest entry if at capacity (Map iteration order = insertion order)
   if (deckByIdCache.size >= DECK_CACHE_MAX_SIZE) {
-    deckByIdCache.clear();
+    const oldest = deckByIdCache.keys().next().value;
+    if (oldest !== undefined) deckByIdCache.delete(oldest);
   }
   deckByIdCache.set(id, { item, ts: Date.now() });
   return item;
