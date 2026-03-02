@@ -176,31 +176,66 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
   };
 }
 
+// In-memory cache for getDeckById — deck data rarely changes and is read on
+// every GET /api/jobs/:id, so caching eliminates repeated Firestore reads.
+const deckByIdCache = new Map<string, { item: DeckListItem | null; ts: number }>();
+const DECK_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const DECK_CACHE_MAX_SIZE = 500;
+
 export async function getDeckById(id: string): Promise<DeckListItem | null> {
-  if (USE_FIRESTORE) {
-    const deck = await firestoreDecks.getDeck(id);
-    if (!deck) return null;
-    return {
-      id: deck.id,
-      name: deck.name,
-      filename: deck.filename,
-      primaryCommander: deck.primaryCommander ?? null,
-      colorIdentity: deck.colorIdentity,
-      isPrecon: deck.isPrecon,
-      link: deck.link,
-      ownerId: deck.ownerId,
-      ownerEmail: deck.ownerEmail,
-      createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
-      setName: deck.setName ?? null,
-      archidektId: deck.archidektId ?? null,
-    };
+  const cached = deckByIdCache.get(id);
+  if (cached && Date.now() - cached.ts < DECK_CACHE_TTL_MS) {
+    return cached.item;
   }
 
-  const all = await listAllDecks();
-  return all.find((d) => d.id === id) ?? null;
+  // Set a placeholder before the async read so that a concurrent deleteDeck()
+  // can remove it, signaling that the result we're about to get is stale.
+  deckByIdCache.set(id, { item: null, ts: 0 });
+
+  let item: DeckListItem | null;
+
+  if (USE_FIRESTORE) {
+    const deck = await firestoreDecks.getDeck(id);
+    if (!deck) {
+      item = null;
+    } else {
+      item = {
+        id: deck.id,
+        name: deck.name,
+        filename: deck.filename,
+        primaryCommander: deck.primaryCommander ?? null,
+        colorIdentity: deck.colorIdentity,
+        isPrecon: deck.isPrecon,
+        link: deck.link,
+        ownerId: deck.ownerId,
+        ownerEmail: deck.ownerEmail,
+        createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
+        setName: deck.setName ?? null,
+        archidektId: deck.archidektId ?? null,
+      };
+    }
+  } else {
+    const all = await listAllDecks();
+    item = all.find((d) => d.id === id) ?? null;
+  }
+
+  // If the placeholder was removed during the await (by a concurrent
+  // deleteDeck call), the result is stale — don't cache it.
+  if (!deckByIdCache.has(id)) {
+    return item;
+  }
+
+  // Evict oldest entry if at capacity (Map iteration order = insertion order)
+  if (deckByIdCache.size >= DECK_CACHE_MAX_SIZE) {
+    const oldest = deckByIdCache.keys().next().value;
+    if (oldest !== undefined) deckByIdCache.delete(oldest);
+  }
+  deckByIdCache.set(id, { item, ts: Date.now() });
+  return item;
 }
 
 export async function deleteDeck(id: string, userId: string): Promise<boolean> {
+  deckByIdCache.delete(id);
   if (USE_FIRESTORE) {
     return firestoreDecks.deleteDeck(id, userId);
   }
