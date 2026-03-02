@@ -176,28 +176,46 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
   };
 }
 
+// In-memory cache for getDeckById — deck data rarely changes and is read on
+// every GET /api/jobs/:id, so caching eliminates repeated Firestore reads.
+const deckByIdCache = new Map<string, { item: DeckListItem | null; ts: number }>();
+const DECK_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 export async function getDeckById(id: string): Promise<DeckListItem | null> {
-  if (USE_FIRESTORE) {
-    const deck = await firestoreDecks.getDeck(id);
-    if (!deck) return null;
-    return {
-      id: deck.id,
-      name: deck.name,
-      filename: deck.filename,
-      primaryCommander: deck.primaryCommander ?? null,
-      colorIdentity: deck.colorIdentity,
-      isPrecon: deck.isPrecon,
-      link: deck.link,
-      ownerId: deck.ownerId,
-      ownerEmail: deck.ownerEmail,
-      createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
-      setName: deck.setName ?? null,
-      archidektId: deck.archidektId ?? null,
-    };
+  const cached = deckByIdCache.get(id);
+  if (cached && Date.now() - cached.ts < DECK_CACHE_TTL_MS) {
+    return cached.item;
   }
 
-  const all = await listAllDecks();
-  return all.find((d) => d.id === id) ?? null;
+  let item: DeckListItem | null;
+
+  if (USE_FIRESTORE) {
+    const deck = await firestoreDecks.getDeck(id);
+    if (!deck) {
+      item = null;
+    } else {
+      item = {
+        id: deck.id,
+        name: deck.name,
+        filename: deck.filename,
+        primaryCommander: deck.primaryCommander ?? null,
+        colorIdentity: deck.colorIdentity,
+        isPrecon: deck.isPrecon,
+        link: deck.link,
+        ownerId: deck.ownerId,
+        ownerEmail: deck.ownerEmail,
+        createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
+        setName: deck.setName ?? null,
+        archidektId: deck.archidektId ?? null,
+      };
+    }
+  } else {
+    const all = await listAllDecks();
+    item = all.find((d) => d.id === id) ?? null;
+  }
+
+  deckByIdCache.set(id, { item, ts: Date.now() });
+  return item;
 }
 
 export async function deleteDeck(id: string, userId: string): Promise<boolean> {

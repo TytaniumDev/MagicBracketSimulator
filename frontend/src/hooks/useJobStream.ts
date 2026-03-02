@@ -36,6 +36,12 @@ function mergeFirestoreJobUpdate(
 ): JobResponse | undefined {
   if (!prev) return prev;
 
+  // Don't overwrite complete REST data with potentially stale Firestore cache.
+  // Once a job is terminal, the REST API is the source of truth (it includes
+  // deckLinks, colorIdentity, results) and Firestore real-time updates are
+  // no longer needed.
+  if (isTerminal(prev.status)) return prev;
+
   const update: Partial<JobResponse> = {};
 
   if (firestoreData.status !== undefined) {
@@ -164,19 +170,28 @@ export function useJobStream(jobId: string | undefined) {
       (snapshot) => {
         if (!snapshot.exists()) return;
         const data = snapshot.data();
+
+        // Capture pre-merge state to detect transitions
+        const prev = queryClient.getQueryData<JobResponse>(['job', jobId]);
+        const wasAlreadyTerminal = prev != null && isTerminal(prev.status);
+
         queryClient.setQueryData<JobResponse>(
           ['job', jobId],
-          (prev) => mergeFirestoreJobUpdate(prev, data),
+          (prevData) => mergeFirestoreJobUpdate(prevData, data),
         );
 
         if (isTerminal(data.status as string) && !unsubscribed) {
           unsubscribed = true;
-          // Do a final REST fetch to get complete data (deckLinks, colorIdentity, etc.)
-          fetchJob(jobId).then((fullJob) => {
-            queryClient.setQueryData(['job', jobId], fullJob);
-          }).catch((err) => {
-            console.error('[useJobStream] Final REST fetch failed:', err);
-          });
+          // Only do final REST fetch if the job TRANSITIONED to terminal
+          // (user was watching a running job). Skip if the initial REST
+          // response already returned complete data for a terminal job.
+          if (!wasAlreadyTerminal) {
+            fetchJob(jobId).then((fullJob) => {
+              queryClient.setQueryData(['job', jobId], fullJob);
+            }).catch((err) => {
+              console.error('[useJobStream] Final REST fetch failed:', err);
+            });
+          }
           unsubscribe();
         }
       },
