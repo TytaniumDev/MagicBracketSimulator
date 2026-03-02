@@ -14,20 +14,26 @@ const bucket = storage.bucket(BUCKET_NAME);
  */
 function isRetryableGcsError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
+
+  const RETRYABLE_MESSAGES = [
+    'socket hang up',
+    'econnreset',
+    'etimedout',
+    'econnrefused',
+    'network error',
+  ];
+  const RETRYABLE_CODES = [429, 500, 502, 503, 504];
+
   const msg = error.message.toLowerCase();
-  if (
-    msg.includes('socket hang up') ||
-    msg.includes('econnreset') ||
-    msg.includes('etimedout') ||
-    msg.includes('econnrefused') ||
-    msg.includes('network error')
-  ) {
+  if (RETRYABLE_MESSAGES.some(retryableMsg => msg.includes(retryableMsg))) {
     return true;
   }
+
   const code = (error as { code?: number }).code;
-  if (typeof code === 'number' && [429, 500, 502, 503, 504].includes(code)) {
+  if (typeof code === 'number' && RETRYABLE_CODES.includes(code)) {
     return true;
   }
+
   return false;
 }
 
