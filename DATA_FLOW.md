@@ -134,7 +134,14 @@ unused by the current worker, which uploads per-simulation via
   - Firestore paths: `jobs/{jobId}` for job-level data, `jobs/{jobId}/simulations/{simId}` for per-sim data.
   - The `useJobStream` hook manages Firestore listeners with automatic cleanup.
   - Real-time field updates (status, gamesCompleted, results, etc.) are pushed into TanStack Query's cache via `queryClient.setQueryData()`.
-  - On terminal state, a final REST fetch retrieves complete data (deckLinks, colorIdentity, etc.).
+  - **Terminal state guard:** Once the cached job data has a terminal status,
+    `mergeFirestoreJobUpdate` returns early without applying the Firestore
+    snapshot. This prevents stale Firestore cache data from overwriting
+    complete REST API responses (which include deckLinks, colorIdentity, etc.).
+  - **Conditional final REST fetch:** When Firestore reports a terminal status,
+    a final REST fetch is only performed if the job *transitioned* to terminal
+    (i.e., the user was watching a running job). If the initial REST response
+    already returned a terminal job, the fetch is skipped to avoid redundancy.
 
 - **LOCAL mode: TanStack Query polling**
   - TanStack Query `refetchInterval` polls `GET /api/jobs/:id` and `GET /api/jobs/:id/simulations` every 2 seconds.
