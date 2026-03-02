@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage';
+import { withRetry } from './retry';
 
 // Initialize Cloud Storage client
 const storage = new Storage({
@@ -7,6 +8,28 @@ const storage = new Storage({
 
 const BUCKET_NAME = process.env.GCS_BUCKET || 'magic-bracket-simulator-artifacts';
 const bucket = storage.bucket(BUCKET_NAME);
+
+/**
+ * Returns true for transient network/server errors that are safe to retry.
+ */
+function isRetryableGcsError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message.toLowerCase();
+  if (
+    msg.includes('socket hang up') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('econnrefused') ||
+    msg.includes('network error')
+  ) {
+    return true;
+  }
+  const code = (error as { code?: number }).code;
+  if (typeof code === 'number' && [429, 500, 502, 503, 504].includes(code)) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Upload a job artifact to GCS
@@ -21,7 +44,6 @@ export async function uploadJobArtifact(
   data: string | Buffer
 ): Promise<string> {
   const objectPath = `jobs/${jobId}/${filename}`;
-  const file = bucket.file(objectPath);
 
   const contentType = filename.endsWith('.json')
     ? 'application/json'
@@ -29,12 +51,18 @@ export async function uploadJobArtifact(
     ? 'text/plain'
     : 'application/octet-stream';
 
-  await file.save(data, {
-    contentType,
-    metadata: {
-      jobId,
+  await withRetry(
+    async () => {
+      const file = bucket.file(objectPath);
+      await file.save(data, {
+        contentType,
+        metadata: { jobId },
+      });
     },
-  });
+    { maxAttempts: 3, delayMs: 1000, backoffMultiplier: 2 },
+    `GCS upload ${filename}`,
+    isRetryableGcsError
+  );
 
   return `gs://${BUCKET_NAME}/${objectPath}`;
 }
