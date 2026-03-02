@@ -72,6 +72,10 @@ export async function POST(request: NextRequest) {
       return badRequestResponse('Either deckUrl or deckText is required');
     }
 
+    if (link && !link.match(/^https?:\/\//i)) {
+      return badRequestResponse('Deck link must be a valid HTTP or HTTPS URL');
+    }
+
     const commander = parseCommanderFromContent(dck);
     let colorIdentity: string[] | undefined;
     if (commander) {
