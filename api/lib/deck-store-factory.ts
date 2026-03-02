@@ -180,6 +180,7 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
 // every GET /api/jobs/:id, so caching eliminates repeated Firestore reads.
 const deckByIdCache = new Map<string, { item: DeckListItem | null; ts: number }>();
 const DECK_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const DECK_CACHE_MAX_SIZE = 500;
 
 export async function getDeckById(id: string): Promise<DeckListItem | null> {
   const cached = deckByIdCache.get(id);
@@ -214,11 +215,15 @@ export async function getDeckById(id: string): Promise<DeckListItem | null> {
     item = all.find((d) => d.id === id) ?? null;
   }
 
+  if (deckByIdCache.size >= DECK_CACHE_MAX_SIZE) {
+    deckByIdCache.clear();
+  }
   deckByIdCache.set(id, { item, ts: Date.now() });
   return item;
 }
 
 export async function deleteDeck(id: string, userId: string): Promise<boolean> {
+  deckByIdCache.delete(id);
   if (USE_FIRESTORE) {
     return firestoreDecks.deleteDeck(id, userId);
   }
