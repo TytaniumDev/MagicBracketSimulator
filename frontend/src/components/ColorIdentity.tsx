@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 const WUBRG_ORDER = ['W', 'U', 'B', 'R', 'G'] as const;
 const MANA_SYMBOL_SVG: Record<string, string> = {
   W: 'https://svgs.scryfall.io/card-symbols/W.svg',
@@ -6,6 +8,7 @@ const MANA_SYMBOL_SVG: Record<string, string> = {
   R: 'https://svgs.scryfall.io/card-symbols/R.svg',
   G: 'https://svgs.scryfall.io/card-symbols/G.svg',
 };
+
 const MANA_LABELS: Record<string, string> = {
   W: 'White',
   U: 'Blue',
@@ -19,7 +22,7 @@ interface ColorIdentityProps {
   className?: string;
 }
 
-export function ColorIdentity({ colorIdentity, className = '' }: ColorIdentityProps) {
+export const ColorIdentity = memo(function ColorIdentity({ colorIdentity, className = '' }: ColorIdentityProps) {
   if (!colorIdentity?.length) return null;
   const present = WUBRG_ORDER.filter((c) => colorIdentity.includes(c));
   return (
@@ -39,4 +42,4 @@ export function ColorIdentity({ colorIdentity, className = '' }: ColorIdentityPr
       ))}
     </span>
   );
-}
+});
