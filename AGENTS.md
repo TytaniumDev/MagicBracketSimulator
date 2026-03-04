@@ -14,7 +14,7 @@
 - **Install Node Dependencies**: `npm run install:all`
 - **Start Dev Server**: `npm run dev`
 
-## Testing & Verification
+## Build & Lint
 ### Frontend
 - **Lint**: `npm run lint --prefix frontend`
 - **Build**: `npm run build --prefix frontend`
@@ -22,10 +22,12 @@
 ### API
 - **Lint**: `npm run lint --prefix api`
 - **Build**: `npm run build --prefix api`
-- **Test**: `npm run test:unit --prefix api`
 
 ### Simulation Worker
 - **Build**: `npm run build --prefix worker`
+
+## Testing & Verification
+- Testing is documented separately to maintain conciseness. See [`docs/TESTING.md`](docs/TESTING.md) for full commands and framework details.
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
