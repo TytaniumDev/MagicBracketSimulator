@@ -169,6 +169,18 @@ Uploads the raw log for a completed simulation.
 
 ## Workers
 
+### Worker Setup Token
+`POST /worker-setup/token`
+
+Generates a time-limited stateless HMAC token for worker authentication bootstrapping.
+
+**Response:**
+```json
+{
+  "token": "eyJhbG..."
+}
+```
+
 ### Worker Heartbeat
 `POST /workers/heartbeat`
 
@@ -244,3 +256,73 @@ OR
 `GET /precons`
 
 Legacy endpoint to list precon decks. Use `GET /decks` with client-side filtering instead.
+
+## Worker Push API (Port 9090)
+
+The worker exposes a lightweight HTTP control plane directly on port 9090 (by default). This allows the main API to push configurations or commands to the worker immediately, bypassing the polling interval or Pub/Sub delays.
+
+**Authentication:**
+- `GET /health` is public.
+- All `POST` endpoints require an `X-Worker-Secret` header that must match the worker's configured secret.
+
+### Update Configuration
+`POST /config`
+
+Updates the worker's active configuration (e.g., parallelism overrides).
+
+**Body:**
+```json
+{
+  "maxConcurrentOverride": 4 // Optional. Set to null to remove override.
+}
+```
+
+### Cancel Job
+`POST /cancel`
+
+Notifies the worker to cancel all running simulations for a specific job immediately.
+
+**Body:**
+```json
+{
+  "jobId": "job-id"
+}
+```
+
+### Notify Job
+`POST /notify`
+
+Notifies the worker that a new job is available. This immediately wakes up a worker in polling mode.
+
+**Body:** Empty.
+
+### Drain Worker
+`POST /drain`
+
+Commands the worker to stop accepting new work (active simulations will complete, then it becomes idle).
+
+**Body:**
+```json
+{
+  "drain": true
+}
+```
+
+### Pull Image
+`POST /pull-image`
+
+Triggers a fresh pull of the latest simulation Docker image.
+
+**Body:** Empty.
+
+### Health Check
+`GET /health`
+
+Returns the worker's health status. Does not require authentication.
+
+**Response:**
+```json
+{
+  "ok": true
+}
+```
