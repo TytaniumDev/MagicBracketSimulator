@@ -1,0 +1,20 @@
+name: Auto Approve
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  check_suite:
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  checks: read
+
+jobs:
+  auto-approve:
+    if: >-
+      github.event.pull_request.user.login == 'TytaniumDev' ||
+      github.event.sender.login == 'TytaniumDev'
+    uses: TytaniumDev/.github/.github/workflows/auto-approve.yml@main
+    with:
+      owner: TytaniumDev
