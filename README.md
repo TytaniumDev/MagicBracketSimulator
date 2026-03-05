@@ -40,6 +40,8 @@ Visit **http://localhost:5173** to start simulating.
 ## Documentation Map
 
 *   **[Architecture Overview](docs/ARCHITECTURE.md):** Deep dive into the system design, Docker worker, and data flow.
+*   **[API Documentation](docs/API.md):** Details about the REST API, endpoints, and data formats.
+*   **[Data Flow](docs/DATA_FLOW.md):** End-to-end data flow from simulation completion through worker reporting, API aggregation, and frontend consumption.
 *   **[Deployment Guide](docs/DEPLOYMENT.md):** Detailed setup instructions, prerequisites, and cloud deployment.
 *   **[Mode Setup](docs/MODE_SETUP.md):** Configure for Local vs GCP operation.
 *   **[Secrets Setup](docs/SECRETS_SETUP.md):** How to configure API keys and credentials.
