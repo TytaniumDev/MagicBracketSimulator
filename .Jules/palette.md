@@ -1,0 +1,3 @@
+## 2023-10-27 - Missing ARIA Labels on Placeholder Inputs and Custom Accordions
+**Learning:** Found a common pattern where inputs lacking visual labels (relying only on placeholders) were missing `aria-label` attributes (e.g., search fields, inline url inputs). Additionally, custom collapsible sections like `WorkerStatusBanner` omitted `aria-expanded` and `aria-controls` for screen reader semantic meaning.
+**Action:** Always ensure any input without a visible `<label>` uses `aria-label`. For custom accordion/toggle patterns, strictly add `aria-expanded` tied to the state and `aria-controls` linked to the `id` of the collapsible content block.

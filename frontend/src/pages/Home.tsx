@@ -309,6 +309,7 @@ function SimulationForm() {
             value={deckUrl}
             onChange={(e) => setDeckUrl(e.target.value)}
             placeholder="https://moxfield.com/decks/... or https://archidekt.com/decks/..."
+            aria-label="Deck URL"
             className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -346,6 +347,7 @@ function SimulationForm() {
                 value={deckName}
                 onChange={(e) => setDeckName(e.target.value)}
                 placeholder="Deck name (optional)"
+                aria-label="Deck name (optional)"
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -354,6 +356,7 @@ function SimulationForm() {
               value={deckText}
               onChange={(e) => setDeckText(e.target.value)}
               placeholder={`Paste your deck list here...\n\nExample:\n1 Sol Ring\n1 Command Tower\n1 Arcane Signet`}
+              aria-label="Paste your deck list here"
               rows={8}
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-y"
             />
@@ -419,6 +422,7 @@ function SimulationForm() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, set, or commander..."
+            aria-label="Search by name, set, or commander"
             className="w-full mb-2 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           />
 
