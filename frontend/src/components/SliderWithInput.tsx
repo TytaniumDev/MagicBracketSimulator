@@ -60,6 +60,7 @@ export const SliderWithInput = memo(function SliderWithInput({
         step={step}
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        aria-label={label}
         className="w-full accent-blue-500"
       />
       <div className="flex justify-between text-xs text-gray-500 mt-1">

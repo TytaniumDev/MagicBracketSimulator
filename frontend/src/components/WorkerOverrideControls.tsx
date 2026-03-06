@@ -67,6 +67,7 @@ export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOve
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         onClick={(e) => e.stopPropagation()}
+        aria-label="Worker capacity override"
         className="w-14 px-1.5 py-0.5 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs text-center"
         disabled={saving}
       />
