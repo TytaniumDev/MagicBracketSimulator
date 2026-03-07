@@ -146,6 +146,22 @@ DEPS_TO_INSTALL=()
 if ! command -v curl &>/dev/null; then DEPS_TO_INSTALL+=("curl"); fi
 if ! command -v openssl &>/dev/null; then DEPS_TO_INSTALL+=("openssl"); fi
 if ! command -v jq &>/dev/null; then DEPS_TO_INSTALL+=("jq"); fi
+# node is required for AES-256-GCM decryption of the worker config.
+# Try common locations first (nvm, homebrew symlinks) before flagging as missing.
+if ! command -v node &>/dev/null; then
+  for candidate in \
+    $(ls -1 "$HOME/.nvm/versions/node"/*/bin/node 2>/dev/null) \
+    /opt/homebrew/bin/node \
+    /usr/local/bin/node; do
+    if [ -x "$candidate" ]; then
+      PATH="$(dirname "$candidate"):$PATH"
+      break
+    fi
+  done
+  if ! command -v node &>/dev/null; then
+    DEPS_TO_INSTALL+=("node")
+  fi
+fi
 NEED_DOCKER=false
 if ! command -v docker &>/dev/null; then
   NEED_DOCKER=true
@@ -209,7 +225,10 @@ else
       # Install basic deps via apt
       BASIC_DEPS=()
       for dep in "${DEPS_TO_INSTALL[@]}"; do
-        [ "$dep" != "docker" ] && BASIC_DEPS+=("$dep")
+        [ "$dep" = "docker" ] && continue
+        # apt package for node is "nodejs"
+        [ "$dep" = "node" ] && dep="nodejs"
+        BASIC_DEPS+=("$dep")
       done
       if [ ${#BASIC_DEPS[@]} -gt 0 ]; then
         sudo apt-get update -qq
@@ -383,10 +402,15 @@ if [ -z "$ENC_IV" ] || [ "$ENC_IV" = "null" ]; then
   exit 1
 fi
 
-# Decrypt AES-256-GCM — try node first (cleanest), then python3 fallback
+# Decrypt AES-256-GCM using node (installed in step 2 if missing).
 detail "Decrypting configuration..."
-if command -v node &>/dev/null; then
-  HOST_CONFIG=$(node -e "
+if ! command -v node &>/dev/null; then
+  err "Node.js is required for decryption but was not found."
+  detail "Install Node.js (e.g. 'brew install node') and re-run."
+  exit 1
+fi
+
+HOST_CONFIG=$(node -e "
 const crypto = require('crypto');
 const iv = Buffer.from('$ENC_IV', 'base64');
 const ct = Buffer.from('$ENC_CIPHERTEXT', 'base64');
@@ -398,35 +422,6 @@ let dec = decipher.update(ct, undefined, 'utf-8');
 dec += decipher.final('utf-8');
 process.stdout.write(dec);
 " 2>/dev/null)
-elif command -v python3 &>/dev/null; then
-  HOST_CONFIG=$(python3 -c "
-import sys, base64, subprocess, tempfile, os
-iv = base64.b64decode('$ENC_IV')
-ct = base64.b64decode('$ENC_CIPHERTEXT')
-tag = base64.b64decode('$ENC_TAG')
-key = bytes.fromhex('$AES_KEY')
-combined = ct + tag
-with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as f:
-    f.write(combined)
-    combined_file = f.name
-try:
-    result = subprocess.run([
-        'openssl', 'enc', '-aes-256-gcm', '-d',
-        '-K', key.hex(), '-iv', iv.hex(),
-        '-in', combined_file, '-nosalt'
-    ], capture_output=True)
-    if result.returncode == 0:
-        sys.stdout.write(result.stdout.decode('utf-8'))
-    else:
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        sys.stdout.write(AESGCM(key).decrypt(iv, ct + tag, None).decode('utf-8'))
-finally:
-    os.unlink(combined_file)
-" 2>/dev/null)
-else
-  err "Neither node nor python3 found. Install one and re-run."
-  exit 1
-fi
 
 if [ -z "$HOST_CONFIG" ]; then
   err "Decryption produced empty output"
