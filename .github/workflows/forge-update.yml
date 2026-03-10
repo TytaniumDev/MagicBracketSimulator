@@ -82,11 +82,35 @@ jobs:
     if: needs.check-and-build.outputs.rebuilt == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Load Doppler secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          # Fetch only the secrets this job needs (least-privilege)
+          SECRETS_FILE=$(mktemp)
+          trap 'rm -f "$SECRETS_FILE"' EXIT
+          doppler secrets get API_URL WORKER_SECRET \
+            --no-file --format json > "$SECRETS_FILE"
+
+          # Mask all secret values so they don't leak in logs
+          jq -r '.[]' "$SECRETS_FILE" | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done
+
+          # Export to GITHUB_ENV with a random delimiter to prevent injection
+          EOF_MARKER="$(openssl rand -hex 16)"
+          jq -r --arg eof "$EOF_MARKER" '
+            to_entries[] | "\(.key)<<\($eof)\n\(.value)\n\($eof)"
+          ' "$SECRETS_FILE" >> "$GITHUB_ENV"
+
       - name: Notify workers
         continue-on-error: true
         env:
-          API_URL: ${{ secrets.API_URL }}
-          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          API_URL: ${{ env.API_URL }}
+          WORKER_SECRET: ${{ env.WORKER_SECRET }}
         run: |
           if [ -z "${API_URL}" ] || [ -z "${WORKER_SECRET}" ]; then
             echo "::warning::API_URL or WORKER_SECRET not set, skipping worker notification"

@@ -26,10 +26,37 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Load Doppler secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          # Fetch only the secrets this job needs (least-privilege)
+          SECRETS_FILE=$(mktemp)
+          trap 'rm -f "$SECRETS_FILE"' EXIT
+          doppler secrets get \
+            GCP_SA_KEY API_URL GCS_BUCKET \
+            PUBSUB_SUBSCRIPTION PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION \
+            WORKER_SECRET GHCR_USER GHCR_TOKEN \
+            --no-file --format json > "$SECRETS_FILE"
+
+          # Mask all secret values so they don't leak in logs
+          jq -r '.[]' "$SECRETS_FILE" | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done
+
+          # Export to GITHUB_ENV with a random delimiter to prevent injection
+          EOF_MARKER="$(openssl rand -hex 16)"
+          jq -r --arg eof "$EOF_MARKER" '
+            to_entries[] | "\(.key)<<\($eof)\n\(.value)\n\($eof)"
+          ' "$SECRETS_FILE" >> "$GITHUB_ENV"
+
       - name: Extract GCP project ID from SA key
         id: project
         env:
-          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          SA_KEY: ${{ env.GCP_SA_KEY }}
         run: |
           # Trim whitespace/newlines so multiline or single-line JSON both work
           SA_KEY_TRIMMED=$(echo "$SA_KEY" | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -47,7 +74,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ env.GCP_SA_KEY }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -68,11 +95,11 @@ jobs:
       - name: Populate simulation-worker-config in Secret Manager
         env:
           GOOGLE_CLOUD_PROJECT: ${{ steps.project.outputs.project_id }}
-          SECRET_API_URL: ${{ secrets.API_URL }}
-          SECRET_GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          SECRET_PUBSUB_SUBSCRIPTION: ${{ secrets.PUBSUB_SUBSCRIPTION }}
-          SECRET_PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: ${{ secrets.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION }}
-          SECRET_WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          SECRET_API_URL: ${{ env.API_URL }}
+          SECRET_GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          SECRET_PUBSUB_SUBSCRIPTION: ${{ env.PUBSUB_SUBSCRIPTION }}
+          SECRET_PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: ${{ env.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION }}
+          SECRET_WORKER_SECRET: ${{ env.WORKER_SECRET }}
         run: |
           node scripts/populate-worker-secret.js \
             --defaults \
@@ -85,9 +112,9 @@ jobs:
       - name: Populate worker-host-config in Secret Manager
         env:
           GOOGLE_CLOUD_PROJECT: ${{ steps.project.outputs.project_id }}
-          SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GHCR_USER: ${{ secrets.GHCR_USER }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          SA_KEY: ${{ env.GCP_SA_KEY }}
+          GHCR_USER: ${{ env.GHCR_USER }}
+          GHCR_TOKEN: ${{ env.GHCR_TOKEN }}
         run: |
           node -e "
             const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
