@@ -89,11 +89,22 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
-          # Export each Doppler secret to GITHUB_ENV using heredoc syntax
-          # to safely handle multiline values (SSH keys, JSON credentials)
-          doppler secrets download --no-file --format json | jq -r '
-            to_entries[] | "\(.key)<<DPLR_EOF\n\(.value)\nDPLR_EOF"
-          ' >> "$GITHUB_ENV"
+          # Fetch only the secrets this job needs (least-privilege)
+          SECRETS_FILE=$(mktemp)
+          trap 'rm -f "$SECRETS_FILE"' EXIT
+          doppler secrets get API_URL WORKER_SECRET \
+            --no-file --format json > "$SECRETS_FILE"
+
+          # Mask all secret values so they don't leak in logs
+          jq -r '.[]' "$SECRETS_FILE" | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done
+
+          # Export to GITHUB_ENV with a random delimiter to prevent injection
+          EOF_MARKER="$(openssl rand -hex 16)"
+          jq -r --arg eof "$EOF_MARKER" '
+            to_entries[] | "\(.key)<<\($eof)\n\(.value)\n\($eof)"
+          ' "$SECRETS_FILE" >> "$GITHUB_ENV"
 
       - name: Notify workers
         continue-on-error: true
