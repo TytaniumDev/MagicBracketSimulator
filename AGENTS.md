@@ -18,11 +18,13 @@
 ### Frontend
 - **Lint**: `npm run lint --prefix frontend`
 - **Build**: `npm run build --prefix frontend`
+- **Test**: `npm run test --prefix frontend`
 
 ### API
 - **Lint**: `npm run lint --prefix api`
 - **Build**: `npm run build --prefix api`
 - **Test**: `npm run test:unit --prefix api`
+- **Test (Ingestion)**: `npm run test:ingestion --prefix api`
 
 ### Simulation Worker
 - **Build**: `npm run build --prefix worker`
