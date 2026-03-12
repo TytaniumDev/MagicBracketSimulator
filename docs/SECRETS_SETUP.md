@@ -19,6 +19,7 @@ Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the worker
 | GCP credentials (ADC or key) | `gcloud auth application-default login` or key file | worker, scripts (Secret Manager access) |
 | Worker / API env (e.g. WORKER_SECRET) | API env (Cloud Run); worker: **Secret Manager** (or .env) | API, worker |
 | **worker config** (API_URL, GCS_BUCKET, etc.) | **Google Secret Manager** (`npm run populate-worker-secret`) or worker .env | worker |
+| **CI/CD Secrets** | **Doppler** (project: magic-bracket-simulator, config: dev) | GitHub Actions |
 | **Frontend API URL** | **Committed** in `frontend/public/config.json` (stable App Hosting URL). **Not a secret** — visible when the app loads. Always used as-is; no override. | Frontend (Firebase Hosting) |
 
 ---
@@ -92,9 +93,9 @@ Use this URL when running `npm run populate-worker-secret`. The frontend always 
 
 #### Option A: Automated via GitHub Actions (recommended)
 
-The **Provision Worker** workflow reads secrets from GitHub repo settings and syncs them into GCP Secret Manager. No interactive prompts, no gcloud on your dev machine.
+The **Provision Worker** workflow reads secrets from Doppler and syncs them into GCP Secret Manager. No interactive prompts, no gcloud on your dev machine.
 
-1. Add the following secrets to your GitHub repo (**Settings > Secrets > Actions**):
+1. Ensure your GitHub repo has the `DOPPLER_TOKEN` secret set (**Settings > Secrets > Actions**), which grants access to the Doppler project. The workflow will fetch the following automatically:
 
    | Secret | Description |
    |---|---|
@@ -149,8 +150,7 @@ npm run build --prefix frontend
 
 A GitHub Actions workflow (`.github/workflows/deploy.yml`) runs on **push to main** (after a PR is merged). It runs the same tests as CI (frontend lint/build, API lint/build/test); if all pass, it deploys the frontend to **Firebase Hosting**.
 
-**Required GitHub secrets:**
-- **FIREBASE_TOKEN** – Firebase CI token. Run `firebase login:ci` locally, then add as a secret.
+**Required Doppler secrets (fetched at runtime via `DOPPLER_TOKEN`):**
 - **VITE_FIREBASE_*** (all six) – Firebase web config for Google sign-in. Without these, the deployed app shows "Local User" instead of Google sign-in. Get them from [Firebase Console → Project Settings → Your apps](https://console.firebase.google.com/project/_/settings/general) (Web app config):
   - `VITE_FIREBASE_API_KEY`
   - `VITE_FIREBASE_AUTH_DOMAIN` (e.g. `magic-bracket-simulator.firebaseapp.com`)
@@ -158,6 +158,7 @@ A GitHub Actions workflow (`.github/workflows/deploy.yml`) runs on **push to mai
   - `VITE_FIREBASE_STORAGE_BUCKET` (e.g. `magic-bracket-simulator.appspot.com`)
   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
   - `VITE_FIREBASE_APP_ID`
+- **GCP_WORKLOAD_IDENTITY_PROVIDER** & **GCP_SERVICE_ACCOUNT** - Used for keyless Firebase deployment authentication.
 
 ### Local dev (no deploy)
 
@@ -165,7 +166,7 @@ Run `npm run frontend` (or `npm run dev`). The app uses **localhost** for the AP
 
 ### Firebase config (VITE_FIREBASE_*)
 
-Firebase client config (API key, project ID, etc.) is still set at **build time** via `frontend/.env` or CI env. These are not highly sensitive (they’re in the client) but should not be committed. For production builds in CI, set them from GitHub Secrets or from Secret Manager (you can extend `frontend-config` or use a separate secret).
+Firebase client config (API key, project ID, etc.) is still set at **build time** via `frontend/.env` or CI env. These are not highly sensitive (they’re in the client) but should not be committed. For production builds in CI, set them from Doppler.
 
 ---
 
@@ -205,8 +206,8 @@ The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secret
 ## 4. Checklist summary (no secrets on your machine)
 
 - [ ] **GCP project:** `gcloud config set project YOUR_PROJECT_ID` (or set `GOOGLE_CLOUD_PROJECT` in env). No .env required.
-- [ ] **GitHub Secrets:** Add all worker/GHCR secrets (see §1.3 Option A) to GitHub repo settings.
-- [ ] **Provision Worker:** Run the GitHub Actions workflow to sync secrets to GCP Secret Manager.
+- [ ] **GitHub Secrets:** Ensure `DOPPLER_TOKEN` is set in GitHub repo settings.
+- [ ] **Provision Worker:** Run the GitHub Actions workflow to sync secrets from Doppler to GCP Secret Manager.
 - [ ] **Worker machine:** Run `./scripts/setup-worker.sh` — reads from Secret Manager, no manual config.
 - [ ] **Frontend config:** Committed `config.json` has the stable App Hosting URL (always used as-is).
 - [ ] **API (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in worker config.
@@ -216,22 +217,15 @@ The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secret
 
 ## 5. GitHub Actions secrets
 
-**Required secrets** (repo **Settings → Secrets and variables → Actions**):
+**Required GitHub secrets** (repo **Settings → Secrets and variables → Actions**):
 
-### Firebase Hosting deploy (push to main)
+The CI pipelines have been migrated to use **Doppler** for secrets management. Most environment variables (Firebase config, GCP keys, etc.) are fetched at runtime via the Doppler CLI.
 
-1. **FIREBASE_TOKEN** – Run `firebase login:ci` locally, paste the token into a secret named `FIREBASE_TOKEN`.
-2. **VITE_FIREBASE_*** (all six) – Firebase web config. Without these, the deployed app uses mock "Local User" auth instead of Google sign-in. Copy from Firebase Console → Project Settings → Your apps → Web app:
-   - `VITE_FIREBASE_API_KEY`
-   - `VITE_FIREBASE_AUTH_DOMAIN`
-   - `VITE_FIREBASE_PROJECT_ID`
-   - `VITE_FIREBASE_STORAGE_BUCKET`
-   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
-   - `VITE_FIREBASE_APP_ID`
+1. **DOPPLER_TOKEN** – The single bootstrap token required for GitHub Actions to fetch the rest of the secrets.
+2. *(Auto-provided)* `GITHUB_TOKEN` is used implicitly by some actions.
+3. *(Optional)* `CLAUDE_CODE_OAUTH_TOKEN` if using AI code review actions.
 
-### Provision Worker (manual trigger)
-
-See §1.3 Option A for the full list: `GCP_SA_KEY`, `WORKER_SECRET`, `API_URL`, `GCS_BUCKET`, `PUBSUB_SUBSCRIPTION`, `PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION`, `GHCR_USER`, `GHCR_TOKEN`.
+See §1.3 Option A and §2 for the full list of variables that are securely injected from Doppler during CI.
 
 ---
 
