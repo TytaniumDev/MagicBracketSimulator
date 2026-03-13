@@ -45,6 +45,8 @@ export function WorkerStatusBanner({ workers, queueDepth, isLoading, onRefresh, 
         type="button"
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center justify-between text-sm"
+        aria-expanded={expanded}
+        aria-controls="worker-status-panel"
       >
         <div className="flex items-center gap-2">
           <span
@@ -69,7 +71,7 @@ export function WorkerStatusBanner({ workers, queueDepth, isLoading, onRefresh, 
       </button>
 
       {expanded && workers.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-700 space-y-3">
+        <div id="worker-status-panel" className="mt-3 pt-3 border-t border-gray-700 space-y-3">
           {workers.map((w) => {
             const isOwner = userEmail && w.ownerEmail && w.ownerEmail.toLowerCase() === userEmail.toLowerCase();
 
