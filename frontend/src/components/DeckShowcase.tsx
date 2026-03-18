@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { ColorIdentity } from './ColorIdentity';
 import type { JobStatus } from '@shared/types/job';
 
@@ -42,7 +43,7 @@ function ExternalLinkIcon() {
   );
 }
 
-export function DeckShowcase({
+export const DeckShowcase = memo(function DeckShowcase({
   deckNames,
   colorIdentityByDeckName,
   winTally,
@@ -56,15 +57,19 @@ export function DeckShowcase({
   const isTerminal = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
   const isPartial = (jobStatus === 'FAILED' || jobStatus === 'CANCELLED') && gamesPlayed < totalSimulations;
 
-  // Sort by wins descending when we have data, otherwise preserve original order
-  const sorted = [...deckNames].sort((a, b) => {
-    if (!winTally) return 0;
-    return (winTally[b] ?? 0) - (winTally[a] ?? 0);
-  });
+  // Memoize sorted deck names and maxWins so we don't recalculate on every render
+  const { sorted, maxWins } = useMemo(() => {
+    const s = [...deckNames].sort((a, b) => {
+      if (!winTally) return 0;
+      return (winTally[b] ?? 0) - (winTally[a] ?? 0);
+    });
 
-  const maxWins = winTally
-    ? Math.max(...Object.values(winTally), 0)
-    : 0;
+    const m = winTally
+      ? Math.max(...Object.values(winTally), 0)
+      : 0;
+
+    return { sorted: s, maxWins: m };
+  }, [deckNames, winTally]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -152,4 +157,4 @@ export function DeckShowcase({
       })}
     </div>
   );
-}
+});
