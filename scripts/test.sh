@@ -10,11 +10,11 @@ fi
 
 # Frontend tests
 echo "=== Frontend tests ==="
-cd frontend && npm ci && npm test && cd ..
+(cd frontend && npm ci && npm test)
 
 # API tests
 echo "=== API unit tests ==="
-cd api && npm ci && npm run test:unit
+(cd api && npm ci && npm run test:unit)
 
 echo "=== API ingestion tests ==="
-npm run test:ingestion && cd ..
+(cd api && npm run test:ingestion)
