@@ -19,7 +19,7 @@ pid_worker=$!
 
 # API build in foreground (longest-running, benefits from streaming output)
 echo "=== API build ==="
-cd api && npm ci && npm run build && cd ..
+(cd api && npm ci && npm run build)
 
 # Wait for parallel builds and propagate failures
 echo "=== Waiting for frontend build ==="
