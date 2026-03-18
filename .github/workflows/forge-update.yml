@@ -93,17 +93,17 @@ jobs:
           SECRETS_FILE=$(mktemp)
           trap 'rm -f "$SECRETS_FILE"' EXIT
           doppler secrets get API_URL WORKER_SECRET \
-            --no-file --format json > "$SECRETS_FILE"
+            --json > "$SECRETS_FILE"
 
           # Mask all secret values so they don't leak in logs
-          jq -r '.[]' "$SECRETS_FILE" | while IFS= read -r line; do
+          jq -r '.[].computed' "$SECRETS_FILE" | while IFS= read -r line; do
             [ -n "$line" ] && echo "::add-mask::$line"
           done
 
           # Export to GITHUB_ENV with a random delimiter to prevent injection
           EOF_MARKER="$(openssl rand -hex 16)"
           jq -r --arg eof "$EOF_MARKER" '
-            to_entries[] | "\(.key)<<\($eof)\n\(.value)\n\($eof)"
+            to_entries[] | "\(.key)<<\($eof)\n\(.value.computed)\n\($eof)"
           ' "$SECRETS_FILE" >> "$GITHUB_ENV"
 
       - name: Notify workers

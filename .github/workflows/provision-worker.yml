@@ -40,17 +40,17 @@ jobs:
             GCP_SA_KEY API_URL GCS_BUCKET \
             PUBSUB_SUBSCRIPTION PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION \
             WORKER_SECRET GHCR_USER GHCR_TOKEN \
-            --no-file --format json > "$SECRETS_FILE"
+            --json > "$SECRETS_FILE"
 
           # Mask all secret values so they don't leak in logs
-          jq -r '.[]' "$SECRETS_FILE" | while IFS= read -r line; do
+          jq -r '.[].computed' "$SECRETS_FILE" | while IFS= read -r line; do
             [ -n "$line" ] && echo "::add-mask::$line"
           done
 
           # Export to GITHUB_ENV with a random delimiter to prevent injection
           EOF_MARKER="$(openssl rand -hex 16)"
           jq -r --arg eof "$EOF_MARKER" '
-            to_entries[] | "\(.key)<<\($eof)\n\(.value)\n\($eof)"
+            to_entries[] | "\(.key)<<\($eof)\n\(.value.computed)\n\($eof)"
           ' "$SECRETS_FILE" >> "$GITHUB_ENV"
 
       - name: Extract GCP project ID from SA key
