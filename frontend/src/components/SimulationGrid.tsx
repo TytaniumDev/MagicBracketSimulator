@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useCallback } from 'react';
 import type { SimulationStatus, SimulationState } from '../types/simulation';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
 import type { WorkerInfo } from '../types/worker';
@@ -108,8 +108,45 @@ function expandContainerToGames(sim: SimulationStatus): GameCell[] {
  * Memoized to prevent re-renders when parent state changes (e.g. log navigation)
  * but simulation data remains stable.
  */
+
+/**
+ * A memoized display component for a single game cell to prevent
+ * re-rendering the entire grid when the hovered state changes.
+ */
+interface GameCellDisplayProps {
+  game: GameCell;
+  cellSize: string;
+  onMouseEnter: (game: GameCell) => void;
+  onMouseLeave: () => void;
+}
+
+const GameCellDisplay = memo(function GameCellDisplay({
+  game,
+  cellSize,
+  onMouseEnter,
+  onMouseLeave,
+}: GameCellDisplayProps) {
+  return (
+    <div
+      className={`${cellSize} rounded-sm cursor-default transition-transform hover:scale-125 ${STATE_COLORS[game.state]}`}
+      onMouseEnter={() => onMouseEnter(game)}
+      onMouseLeave={onMouseLeave}
+      title={`${game.containerSimId} game ${game.gameIndex + 1}: ${STATE_LABELS[game.state]}`}
+    />
+  );
+});
+
 export const SimulationGrid = memo(function SimulationGrid({ simulations, totalSimulations, workers, userEmail, onWorkerRefresh, isAuthenticated = false }: SimulationGridProps) {
   const [hoveredGame, setHoveredGame] = useState<GameCell | null>(null);
+
+  const handleMouseEnter = useCallback((game: GameCell) => {
+    setHoveredGame(game);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredGame(null);
+  }, []);
+
 
   // Build a lookup from workerId to WorkerInfo
   const workerMap = useMemo(() => {
@@ -263,12 +300,12 @@ export const SimulationGrid = memo(function SimulationGrid({ simulations, totalS
               {/* Grid */}
               <div className={`flex flex-wrap ${gapSize}`}>
                 {group.cells.map((game) => (
-                  <div
+                  <GameCellDisplay
                     key={`${game.containerSimId}-g${game.gameIndex}`}
-                    className={`${cellSize} rounded-sm cursor-default transition-transform hover:scale-125 ${STATE_COLORS[game.state]}`}
-                    onMouseEnter={() => setHoveredGame(game)}
-                    onMouseLeave={() => setHoveredGame(null)}
-                    title={`${game.containerSimId} game ${game.gameIndex + 1}: ${STATE_LABELS[game.state]}`}
+                    game={game}
+                    cellSize={cellSize}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
                   />
                 ))}
               </div>

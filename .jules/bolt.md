@@ -5,3 +5,7 @@
 ## 2024-06-12 - Missing Memoization Implementation
 **Learning:** An architectural guideline or memory explicitly specified that the `ColorIdentity` component was memoized to prevent unnecessary re-renders in list views. However, the actual code implementation simply exported a standard function without `React.memo()`. This is a classic example of documentation or "intended design" drifting from the actual codebase reality.
 **Action:** When optimizing, always verify that expected performance patterns (like memoization on frequently-rendered list items) are actually present in the source code, rather than assuming they exist based on documentation or prior knowledge.
+
+## 2024-06-21 - SimulationGrid Hover Re-render
+**Learning:** `SimulationGrid` in `frontend/src/components/SimulationGrid.tsx` contained an inline rendering loop for thousands of game cells, and inline `onMouseEnter` / `onMouseLeave` handlers that updated a top-level hovered state. This meant hovering over a single tiny pixel re-rendered the entire grid.
+**Action:** Used `React.memo` to memoize the rendering of each individual game cell, and extracted the state handlers via `useCallback` to stop a state change causing an unnecesary cascade of full child re-renders. Always ensure that fine-grained hovering state isn't driving a large list rendering update.
