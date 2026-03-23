@@ -72,8 +72,15 @@ export async function POST(request: NextRequest) {
       return badRequestResponse('Either deckUrl or deckText is required');
     }
 
-    if (link && !link.match(/^https?:\/\//i)) {
-      return badRequestResponse('Deck link must be a valid HTTP or HTTPS URL');
+    if (link) {
+      try {
+        const parsedUrl = new URL(link);
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+          return badRequestResponse('Deck link must be a valid HTTP or HTTPS URL');
+        }
+      } catch (err) {
+        return badRequestResponse('Deck link must be a valid URL');
+      }
     }
 
     const commander = parseCommanderFromContent(dck);
