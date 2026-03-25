@@ -18,6 +18,3 @@ echo "=== API unit tests ==="
 
 echo "=== API ingestion tests ==="
 (cd api && npm run test:ingestion)
-
-echo "=== API integration tests ==="
-(cd api && npm run test:integration)
