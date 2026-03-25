@@ -97,6 +97,35 @@ Used by the worker in polling mode to claim the next QUEUED job.
 - `200 OK`: Job object (same as `GET /jobs/:id`)
 - `204 No Content`: No jobs available
 
+### Cancel Job
+`POST /jobs/:id/cancel`
+
+Cancels a QUEUED or RUNNING job.
+**Auth:** Firebase Auth required.
+
+**Response:**
+```json
+{
+  "id": "job-id",
+  "status": "CANCELLED"
+}
+```
+
+### Recover Job
+`POST /jobs/:id/recover`
+
+One-shot recovery check for a stuck job. Called by Cloud Tasks after a scheduled delay.
+**Auth:** `X-Worker-Secret` header required.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "recovered": true,
+  "stillActive": false
+}
+```
+
 ## Simulations
 
 ### List Simulations
@@ -169,6 +198,52 @@ Uploads the raw log for a completed simulation.
 
 ## Workers
 
+### List Workers
+`GET /workers`
+
+Lists all active workers and the current queue depth.
+**Auth:** Firebase Auth required.
+
+**Response:**
+```json
+{
+  "workers": [
+    {
+      "workerId": "worker-1",
+      "workerName": "MyWorker",
+      "status": "busy",
+      "capacity": 8,
+      "activeSimulations": 4,
+      "uptimeMs": 3600000,
+      "lastHeartbeat": "2023-10-27T10:00:00.000Z"
+    }
+  ],
+  "queueDepth": 5
+}
+```
+
+### Update Worker Config
+`PATCH /workers/:id`
+
+Updates per-worker configuration. Only the worker's owner can modify its configuration.
+**Auth:** Firebase Auth required.
+
+**Body:**
+```json
+{
+  "maxConcurrentOverride": 4 // null to clear override
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "maxConcurrentOverride": 4,
+  "pushResult": "success" // 'success', 'failed', or 'no_url'
+}
+```
+
 ### Worker Heartbeat
 `POST /workers/heartbeat`
 
@@ -193,6 +268,74 @@ Reports worker status and retrieves dynamic configuration overrides.
 {
   "ok": true,
   "maxConcurrentOverride": 4 // Optional override from admin
+}
+```
+
+## Worker Setup
+
+### Generate Setup Token
+`POST /worker-setup/token`
+
+Generates a time-limited setup token for bootstrapping a remote worker.
+**Auth:** Firebase Auth required.
+
+**Response:**
+```json
+{
+  "token": "base64-encoded-token",
+  "expiresIn": "24 hours",
+  "apiUrl": "https://api...",
+  "scriptUrl": "https://raw.githubusercontent.com/..."
+}
+```
+
+### Get Worker Config
+`POST /worker-setup/config`
+
+Returns AES-256-GCM encrypted worker configuration.
+**Auth:** Validates `X-Setup-Token` header.
+**Headers:** Requires `X-Encryption-Key` header with 64-char hex string.
+
+**Response:**
+```json
+{
+  "iv": "base64-iv",
+  "ciphertext": "base64-ciphertext",
+  "tag": "base64-auth-tag"
+}
+```
+
+## System
+
+### Health Check
+`GET /health`
+
+Unauthenticated system health check. Evaluates stuck jobs, leaderboard ratings, and worker connectivity.
+**Auth:** None required.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "checks": {
+    "stuckJobs": { "ok": true, "detail": "0 active job(s), none stuck" },
+    "ratings": { "ok": true, "detail": "Leaderboard has entries" },
+    "worker": { "ok": true, "detail": "1 active worker(s)" }
+  }
+}
+```
+
+### Broadcast Pull Image
+`POST /admin/pull-image`
+
+Broadcasts a `pull-image` command to all active workers.
+**Auth:** `X-Worker-Secret` header required.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "message": "Pull-image broadcast sent"
 }
 ```
 
