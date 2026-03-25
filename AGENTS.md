@@ -11,23 +11,12 @@
 - **Package Manager**: `npm` (Node)
 
 ## Setup
-- **Install Node Dependencies**: `npm run install:all`
+- **Install Node Dependencies**: `npm run install:all` (Use this instead of standard `npm install`)
 - **Start Dev Server**: `npm run dev`
 
 ## Testing & Verification
-### Frontend
-- **Lint**: `npm run lint --prefix frontend`
-- **Build**: `npm run build --prefix frontend`
-- **Test**: `npm run test --prefix frontend`
-
-### API
-- **Lint**: `npm run lint --prefix api`
-- **Build**: `npm run build --prefix api`
-- **Test**: `npm run test:unit --prefix api`
-- **Test (Ingestion)**: `npm run test:ingestion --prefix api`
-
-### Simulation Worker
-- **Build**: `npm run build --prefix worker`
+For executing test, lint, and build commands (which require `cd` into the subdirectories), please refer to the comprehensive guide in:
+- **[Testing Documentation](docs/TESTING.md)**
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)

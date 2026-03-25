@@ -10,8 +10,8 @@ fi
 
 # Frontend
 echo "=== Frontend lint ==="
-cd frontend && npm ci && npm run lint && cd ..
+(cd frontend && npm ci && npm run lint)
 
 # API
 echo "=== API lint ==="
-cd api && npm ci && npm run lint && cd ..
+(cd api && npm ci && npm run lint)
