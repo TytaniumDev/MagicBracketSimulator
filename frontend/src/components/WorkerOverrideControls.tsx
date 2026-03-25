@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import type { WorkerInfo } from '../types/worker';
 import { updateWorkerOverride } from '../api';
 
@@ -8,7 +8,13 @@ interface WorkerOverrideControlsProps {
   compact?: boolean;
 }
 
-export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOverrideControlsProps) {
+/**
+ * ⚡ Bolt Performance Optimization:
+ * WorkerOverrideControls is frequently rendered in a list inside WorkerStatusBanner.
+ * Memoizing this component prevents unnecessary re-renders of all worker controls
+ * when the parent Banner toggles its expanded state or when unrelated workers update.
+ */
+export const WorkerOverrideControls = memo(function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOverrideControlsProps) {
   const effectiveCapacity = worker.maxConcurrentOverride ?? worker.capacity;
   const [inputValue, setInputValue] = useState(String(effectiveCapacity));
   const [saving, setSaving] = useState(false);
@@ -91,4 +97,4 @@ export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOve
       {error && <span className="text-red-400 text-xs">{error}</span>}
     </div>
   );
-}
+});
