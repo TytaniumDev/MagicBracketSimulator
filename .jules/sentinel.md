@@ -13,3 +13,10 @@
 **Learning:** File format generators must treat all inputs as untrusted, especially when the format relies on line breaks or delimiters. Even if the file isn't executed directly, injected content can lead to logic errors or parser exploits in downstream consumers (like Forge).
 
 **Prevention:** Sanitize all string inputs used in file generation. Remove control characters (including newlines) or properly escape them according to the target file format's specification.
+## 2025-02-18 - SSRF / URL Validation in Deck Links
+
+**Vulnerability:** The deck link validation in `api/app/api/decks/route.ts` used a simple regular expression `^https?:\/\//i` to validate manually provided URLs (`deckLink`). This was insufficient as it allowed malformed URLs, URLs with embedded credentials (e.g. `http://user:pass@evil.com`), and potentially bypassed strict URL parsing expected by other components or the frontend.
+
+**Learning:** Regular expressions are rarely sufficient for comprehensive URL validation. Attackers can craft tricky inputs that bypass regex checks but are interpreted as valid (and potentially malicious) URLs by the browser or HTTP clients.
+
+**Prevention:** Always use the built-in `URL` constructor to parse, validate, and extract components from user-provided URLs. Checking the `protocol` property of the parsed `URL` object is the most robust way to ensure safe schemes like `http:` or `https:`.
