@@ -366,6 +366,7 @@ Lists all decks (precons and user submissions).
 `POST /decks`
 
 Creates a new deck from a URL (Moxfield, Archidekt, ManaBox) or raw text.
+**Validation:** Deck links (`deckUrl` or `deckLink`) must be valid, well-formed URLs with `http:` or `https:` protocols. Malformed or non-HTTP URLs will be rejected with a `400 Bad Request` to prevent Server-Side Request Forgery (SSRF) and protocol injection.
 **Auth:** User auth required.
 
 **Body:**
