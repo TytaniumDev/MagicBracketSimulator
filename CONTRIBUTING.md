@@ -22,6 +22,10 @@ Thank you for your interest in contributing!
 4.  Push to the branch (`git push origin feature/amazing-feature`).
 5.  Open a Pull Request.
 
+## Security & Validation
+
+*   **URL Parsing:** When validating user-provided URLs or parsing them from payloads, always use the `new URL()` constructor to verify proper structure. Explicitly verify the protocol (`http:` or `https:`) to prevent Server-Side Request Forgery (SSRF) and protocol injection attacks (e.g. `file://`, `javascript:`). Do not rely on simple regex checks like `/^https?:\/\//i`.
+
 ## Testing
 
 Please ensure all tests pass before submitting your PR.
