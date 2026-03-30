@@ -82,7 +82,16 @@ function SimulationForm() {
   const [moxfieldEnabled, setMoxfieldEnabled] = useState<boolean | null>(null);
 
   // Detect if URL is from Moxfield
-  const isMoxfieldUrl = /^https?:\/\/(?:www\.)?moxfield\.com\/decks\//i.test(deckUrl.trim());
+  const isMoxfieldUrl = (() => {
+    try {
+      const parsed = new URL(deckUrl.trim());
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+      if (parsed.hostname !== 'moxfield.com' && parsed.hostname !== 'www.moxfield.com') return false;
+      return /^\/decks\//.test(parsed.pathname);
+    } catch {
+      return false;
+    }
+  })();
   // Only show manual paste UI if Moxfield API is NOT enabled
   const showManualPaste = isMoxfieldUrl && moxfieldEnabled === false;
 
