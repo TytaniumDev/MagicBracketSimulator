@@ -57,8 +57,11 @@ export const DeckShowcase = memo(function DeckShowcase({
   const isTerminal = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
   const isPartial = (jobStatus === 'FAILED' || jobStatus === 'CANCELLED') && gamesPlayed < totalSimulations;
 
-  // Memoize sorted deck names and maxWins so we don't recalculate on every render
-  const { sorted, maxWins } = useMemo(() => {
+  // ⚡ Bolt Performance Optimization:
+  // Memoize sorted deck names, maxWins, and computed statistics per deck
+  // so we don't recalculate on every render. This prevents O(N) array reductions
+  // (computing avgTurn) from executing inline during the render loop of each deck.
+  const { sorted, maxWins, deckStats } = useMemo(() => {
     const s = [...deckNames].sort((a, b) => {
       if (!winTally) return 0;
       return (winTally[b] ?? 0) - (winTally[a] ?? 0);
@@ -68,8 +71,18 @@ export const DeckShowcase = memo(function DeckShowcase({
       ? Math.max(...Object.values(winTally), 0)
       : 0;
 
-    return { sorted: s, maxWins: m };
-  }, [deckNames, winTally]);
+    const stats: Record<string, { winPct: string | null; avgTurn: string | null }> = {};
+    for (const name of deckNames) {
+      const wins = winTally?.[name] ?? 0;
+      const turns = winTurns?.[name] ?? [];
+      stats[name] = {
+        winPct: gamesPlayed > 0 ? ((wins / gamesPlayed) * 100).toFixed(0) : null,
+        avgTurn: turns.length > 0 ? (turns.reduce((acc, t) => acc + t, 0) / turns.length).toFixed(1) : null,
+      };
+    }
+
+    return { sorted: s, maxWins: m, deckStats: stats };
+  }, [deckNames, winTally, winTurns, gamesPlayed]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -80,10 +93,8 @@ export const DeckShowcase = memo(function DeckShowcase({
         const link = deckLinks?.[name];
         const accentColor = getAccentColor(colorIdentity);
         const isLeader = isTerminal && maxWins > 0 && wins === maxWins;
-        const winPct = gamesPlayed > 0 ? ((wins / gamesPlayed) * 100).toFixed(0) : null;
-        const avgTurn = turns.length > 0
-          ? (turns.reduce((s, t) => s + t, 0) / turns.length).toFixed(1)
-          : null;
+        const winPct = deckStats[name]?.winPct ?? null;
+        const avgTurn = deckStats[name]?.avgTurn ?? null;
 
         return (
           <div

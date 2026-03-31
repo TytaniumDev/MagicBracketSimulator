@@ -9,3 +9,7 @@
 ## 2024-06-21 - SimulationGrid Hover Re-render
 **Learning:** `SimulationGrid` in `frontend/src/components/SimulationGrid.tsx` contained an inline rendering loop for thousands of game cells, and inline `onMouseEnter` / `onMouseLeave` handlers that updated a top-level hovered state. This meant hovering over a single tiny pixel re-rendered the entire grid.
 **Action:** Used `React.memo` to memoize the rendering of each individual game cell, and extracted the state handlers via `useCallback` to stop a state change causing an unnecesary cascade of full child re-renders. Always ensure that fine-grained hovering state isn't driving a large list rendering update.
+
+## 2024-07-15 - Unnecessary Array Reductions in Map Loop
+**Learning:** In `frontend/src/components/DeckShowcase.tsx`, an O(N) array reduction (`turns.reduce`) was being calculated inline within a `Array.map` render loop for calculating `avgTurn` stats for each deck. This meant that on every re-render of `DeckShowcase` (even if stats didn't change), the iteration logic ran again for every item.
+**Action:** Always extract O(N) inline list computations (such as array reduction, mapping, or formatting data) into a `useMemo` block that runs *before* the render loop, especially when rendering lists or grids. This preserves the O(1) performance expectation of the render function itself.
