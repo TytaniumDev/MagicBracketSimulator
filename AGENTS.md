@@ -16,18 +16,18 @@
 
 ## Testing & Verification
 ### Frontend
-- **Lint**: `npm run lint --prefix frontend`
-- **Build**: `npm run build --prefix frontend`
-- **Test**: `npm run test --prefix frontend`
+- **Lint**: `cd frontend && npm run lint`
+- **Build**: `cd frontend && npm run build`
+- **Test**: `cd frontend && npm test`
 
 ### API
-- **Lint**: `npm run lint --prefix api`
-- **Build**: `npm run build --prefix api`
-- **Test**: `npm run test:unit --prefix api`
-- **Test (Ingestion)**: `npm run test:ingestion --prefix api`
+- **Lint**: `cd api && npm run lint`
+- **Build**: `cd api && npm run build`
+- **Test**: `cd api && npm run test:unit`
+- **Test (Ingestion)**: `cd api && npm run test:ingestion`
 
 ### Simulation Worker
-- **Build**: `npm run build --prefix worker`
+- **Build**: `cd worker && npm run build`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
