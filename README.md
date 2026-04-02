@@ -2,7 +2,7 @@
 
 # Magic Bracket Simulator
 
-[🚀 Launch App](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [📖 Documentation](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [🐞 Report Bug](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
+[ 🚀 Launch App ](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [ 📖 Documentation ](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
 <br>
 
@@ -51,9 +51,11 @@ Visit **http://localhost:5173** to start simulating.
 ## Documentation Map
 
 *   **[Architecture Overview](docs/ARCHITECTURE.md):** Deep dive into the system design, Docker worker, and data flow.
+*   **[Architecture Issues](docs/ARCHITECTURE_ISSUES.md):** Issues identified during architecture hardening.
 *   **[API Reference](API.md):** Authoritative reference for all system API endpoints (System, Jobs, Worker).
 *   **[Data Flow](DATA_FLOW.md):** Detailed explanation of data transitions through the application.
 *   **[Deployment Guide](docs/DEPLOYMENT.md):** Detailed setup instructions, prerequisites, and cloud deployment.
+*   **[Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md):** Plan for the Worker + Simulation Split Architecture.
 *   **[Mode Setup](docs/MODE_SETUP.md):** Configure for Local vs GCP operation.
 *   **[Secrets Setup](docs/SECRETS_SETUP.md):** How to configure API keys and credentials.
 *   **[Remote Worker Setup](docs/DEPLOYMENT.md#remote-worker-headless-machine):** Deploy the worker on a separate machine with auto-updates via Watchtower.
