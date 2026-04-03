@@ -4,8 +4,9 @@
  * Run with: npx tsx test/ingestion.test.ts
  */
 
-import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl, toDck } from '../lib/ingestion';
+import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl, isManaPoolUrl, toDck } from '../lib/ingestion';
 import { extractManaboxDeckId } from '../lib/ingestion/manabox';
+import { extractManaPoolListId } from '../lib/ingestion/manapool';
 
 interface TestResult {
   name: string;
@@ -82,6 +83,76 @@ async function runTests() {
 
   test('extractManaboxDeckId returns null for non-ManaBox URL', () => {
     assertEqual(extractManaboxDeckId('https://moxfield.com/decks/abc'), null, 'should be null');
+  });
+
+  // -------------------------------------------------------------------------
+  // ManaPool URL detection
+  // -------------------------------------------------------------------------
+
+  test('isManaPoolUrl accepts example URL from issue', () => {
+    assert(
+      isManaPoolUrl('https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5?ref=cah'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl accepts URL without query params', () => {
+    assert(
+      isManaPoolUrl('https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl accepts www.manapool.com', () => {
+    assert(
+      isManaPoolUrl('https://www.manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl accepts http', () => {
+    assert(
+      isManaPoolUrl('http://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl rejects non-UUID path', () => {
+    assert(!isManaPoolUrl('https://manapool.com/lists/not-a-uuid'), 'Expected false');
+  });
+
+  test('isManaPoolUrl rejects Moxfield URL', () => {
+    assert(!isManaPoolUrl('https://moxfield.com/decks/abc123'), 'Expected false');
+  });
+
+  test('isManaPoolUrl rejects ManaBox URL', () => {
+    assert(!isManaPoolUrl('https://manabox.app/decks/iB_rScEtT_6hnOlPUUQ-vA'), 'Expected false');
+  });
+
+  test('isManaPoolUrl rejects invalid URL', () => {
+    assert(!isManaPoolUrl('https://example.com/other'), 'Expected false');
+  });
+
+  // -------------------------------------------------------------------------
+  // ManaPool list ID extraction
+  // -------------------------------------------------------------------------
+
+  test('extractManaPoolListId extracts UUID from URL with ref param', () => {
+    const id = extractManaPoolListId(
+      'https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5?ref=cah'
+    );
+    assertEqual(id, '5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5', 'list ID');
+  });
+
+  test('extractManaPoolListId extracts UUID from clean URL', () => {
+    const id = extractManaPoolListId(
+      'https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'
+    );
+    assertEqual(id, '5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5', 'list ID');
+  });
+
+  test('extractManaPoolListId returns null for non-ManaPool URL', () => {
+    assertEqual(extractManaPoolListId('https://moxfield.com/decks/abc'), null, 'should be null');
   });
 
   // -------------------------------------------------------------------------
