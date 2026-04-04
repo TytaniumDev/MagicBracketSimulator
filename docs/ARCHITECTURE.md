@@ -141,25 +141,24 @@ sequenceDiagram
     User->>Frontend: Create job (4 decks)
     Frontend->>API: POST /api/jobs
     API->>Firestore: Store job (QUEUED)
-    API->>PubSub: Publish job-created
+    API->>Firestore: Initialize subcollection (PENDING)
+    API->>PubSub: Publish N simulation-task messages
     API-->>Frontend: 201 Created
 
-    PubSub->>Worker: Pull message
-    Worker->>API: GET /api/jobs/:id
-    Worker->>API: POST /api/jobs/:id/simulations (initialize)
-
     par Parallel simulation containers
+        PubSub->>Worker: Pull simulation-task (sim_000)
+        Worker->>API: GET /api/jobs/:id (deck data)
         Worker->>SimContainer: docker run simulation (game 1)
         Worker->>API: PATCH sim_000 → RUNNING
         SimContainer-->>Worker: Exit (log file)
         Worker->>API: PATCH sim_000 → COMPLETED
     and
+        PubSub->>Worker: Pull simulation-task (sim_001)
+        Worker->>API: GET /api/jobs/:id (deck data)
         Worker->>SimContainer: docker run simulation (game 2)
         Worker->>API: PATCH sim_001 → RUNNING
         SimContainer-->>Worker: Exit (log file)
         Worker->>API: PATCH sim_001 → COMPLETED
-    and
-        Worker->>SimContainer: docker run simulation (game N)
     end
 
     Note over Worker: Aggregate all game logs
@@ -237,8 +236,8 @@ The semaphore capacity can be dynamically overridden via the worker's push API (
 
 | Aspect | Container Mode | Monolithic Mode (legacy) |
 |--------|---------------|-------------------------|
-| Jobs in flight | Multiple (Pub/Sub maxMessages = capacity) | 1 at a time |
-| Sims per job | 1 container per game | N games per child process |
+| Tasks in flight | Multiple (Pub/Sub maxMessages = capacity) | 1 job at a time |
+| Sims per task | 1 container per game | N games per child process |
 | Isolation | Full (separate containers) | Shared filesystem |
 | Progress | Per-simulation API updates | Batch-level only |
 
@@ -317,7 +316,7 @@ flowchart LR
 | Simulation types | `api/lib/types.ts` — `SimulationState`, `SimulationStatus` |
 | Simulation CRUD (Firestore) | `api/lib/firestore-job-store.ts` — `initializeSimulations`, `updateSimulationStatus` |
 | Simulation CRUD (SQLite) | `api/lib/job-store.ts` — simulation table operations |
-| Simulation API endpoints | `api/app/api/jobs/[id]/simulations/` — GET, POST, PATCH |
+| Simulation API endpoints | `api/app/api/jobs/[id]/simulations/` — GET, PATCH |
 | SSE stream (with simulations) | `api/app/api/jobs/[id]/stream/route.ts` |
 | Frontend simulation grid | `frontend/src/components/SimulationGrid.tsx` |
 | Frontend SSE hook | `frontend/src/hooks/useJobStream.ts` |
