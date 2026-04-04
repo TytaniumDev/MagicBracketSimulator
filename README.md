@@ -19,6 +19,8 @@
 
 ![Magic Bracket Simulator UI](docs/images/hero-screenshot.png)
 
+</div>
+
 ## Quick Start
 
 Run the full stack locally.
