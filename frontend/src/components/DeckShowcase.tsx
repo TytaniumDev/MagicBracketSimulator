@@ -106,7 +106,6 @@ export const DeckShowcase = memo(function DeckShowcase({
                   rel="noopener noreferrer"
                   aria-label={`View ${name} decklist`}
                   className="text-blue-400 hover:text-blue-300 text-sm inline-flex items-center gap-1 transition-colors"
-                  aria-label={`Decklist for ${name}`}
                 >
                   <ExternalLinkIcon />
                   Decklist
