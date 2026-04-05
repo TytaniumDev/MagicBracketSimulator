@@ -5,15 +5,27 @@ const ARCHIDEKT_API_BASE = 'https://archidekt.com/api';
 // Archidekt URL patterns:
 // https://archidekt.com/decks/123456
 // https://www.archidekt.com/decks/123456/deck-name
-const ARCHIDEKT_URL_PATTERN = /^https?:\/\/(?:www\.)?archidekt\.com\/decks\/(\d+)/;
-
 export function isArchidektUrl(url: string): boolean {
-  return ARCHIDEKT_URL_PATTERN.test(url);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    if (parsed.hostname !== 'archidekt.com' && parsed.hostname !== 'www.archidekt.com') return false;
+    return /^\/decks\/(\d+)/.test(parsed.pathname);
+  } catch {
+    return false;
+  }
 }
 
 export function extractArchidektDeckId(url: string): string | null {
-  const match = url.match(ARCHIDEKT_URL_PATTERN);
-  return match ? match[1] : null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.hostname !== 'archidekt.com' && parsed.hostname !== 'www.archidekt.com') return null;
+    const match = parsed.pathname.match(/^\/decks\/(\d+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 interface ArchidektCard {
