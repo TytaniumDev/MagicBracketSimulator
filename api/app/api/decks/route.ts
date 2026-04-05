@@ -3,7 +3,7 @@ import { verifyAuth, verifyAllowedUser, unauthorizedResponse } from '@/lib/auth'
 import { listAllDecks, createDeck } from '@/lib/deck-store-factory';
 import { parseCommanderFromContent } from '@/lib/saved-decks';
 import { getColorIdentity } from '@/lib/scryfall';
-import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl } from '@/lib/ingestion';
+import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl, isManaPoolUrl } from '@/lib/ingestion';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 /**
@@ -50,8 +50,8 @@ export async function POST(request: NextRequest) {
 
     if (url) {
       // URL-based import
-      if (!isMoxfieldUrl(url) && !isArchidektUrl(url) && !isManaboxUrl(url)) {
-        return badRequestResponse('Invalid deck URL. Please use Moxfield, Archidekt, or ManaBox URLs.');
+      if (!isMoxfieldUrl(url) && !isArchidektUrl(url) && !isManaboxUrl(url) && !isManaPoolUrl(url)) {
+        return badRequestResponse('Invalid deck URL. Please use Moxfield, Archidekt, ManaBox, or ManaPool URLs.');
       }
 
       const result = await fetchDeckAsDck(url);

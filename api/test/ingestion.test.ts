@@ -4,8 +4,9 @@
  * Run with: npx tsx test/ingestion.test.ts
  */
 
-import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl, toDck } from '../lib/ingestion';
+import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl, isManaPoolUrl, toDck } from '../lib/ingestion';
 import { extractManaboxDeckId } from '../lib/ingestion/manabox';
+import { extractManaPoolListId, fetchDeckFromManaPoolUrl } from '../lib/ingestion/manapool';
 
 interface TestResult {
   name: string;
@@ -18,6 +19,19 @@ const results: TestResult[] = [];
 function test(name: string, fn: () => void) {
   try {
     fn();
+    results.push({ name, passed: true });
+    console.log(`✓ ${name}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    results.push({ name, passed: false, error: message });
+    console.log(`✗ ${name}`);
+    console.log(`  Error: ${message}`);
+  }
+}
+
+async function asyncTest(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
     results.push({ name, passed: true });
     console.log(`✓ ${name}`);
   } catch (error) {
@@ -82,6 +96,100 @@ async function runTests() {
 
   test('extractManaboxDeckId returns null for non-ManaBox URL', () => {
     assertEqual(extractManaboxDeckId('https://moxfield.com/decks/abc'), null, 'should be null');
+  });
+
+  // -------------------------------------------------------------------------
+  // ManaPool URL detection
+  // -------------------------------------------------------------------------
+
+  test('isManaPoolUrl accepts example URL from issue', () => {
+    assert(
+      isManaPoolUrl('https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5?ref=cah'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl accepts URL without query params', () => {
+    assert(
+      isManaPoolUrl('https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl accepts www.manapool.com', () => {
+    assert(
+      isManaPoolUrl('https://www.manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl accepts http', () => {
+    assert(
+      isManaPoolUrl('http://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'),
+      'Expected true'
+    );
+  });
+
+  test('isManaPoolUrl rejects non-UUID path', () => {
+    assert(!isManaPoolUrl('https://manapool.com/lists/not-a-uuid'), 'Expected false');
+  });
+
+  test('isManaPoolUrl rejects Moxfield URL', () => {
+    assert(!isManaPoolUrl('https://moxfield.com/decks/abc123'), 'Expected false');
+  });
+
+  test('isManaPoolUrl rejects ManaBox URL', () => {
+    assert(!isManaPoolUrl('https://manabox.app/decks/iB_rScEtT_6hnOlPUUQ-vA'), 'Expected false');
+  });
+
+  test('isManaPoolUrl rejects invalid URL', () => {
+    assert(!isManaPoolUrl('https://example.com/other'), 'Expected false');
+  });
+
+  // -------------------------------------------------------------------------
+  // ManaPool list ID extraction
+  // -------------------------------------------------------------------------
+
+  test('extractManaPoolListId extracts UUID from URL with ref param', () => {
+    const id = extractManaPoolListId(
+      'https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5?ref=cah'
+    );
+    assertEqual(id, '5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5', 'list ID');
+  });
+
+  test('extractManaPoolListId extracts UUID from clean URL', () => {
+    const id = extractManaPoolListId(
+      'https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5'
+    );
+    assertEqual(id, '5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5', 'list ID');
+  });
+
+  test('extractManaPoolListId returns null for non-ManaPool URL', () => {
+    assertEqual(extractManaPoolListId('https://moxfield.com/decks/abc'), null, 'should be null');
+  });
+
+  // -------------------------------------------------------------------------
+  // ManaPool live API test (hits manapool.com)
+  // -------------------------------------------------------------------------
+
+  await asyncTest('fetchDeckFromManaPoolUrl fetches real deck from ManaPool', async () => {
+    const deck = await fetchDeckFromManaPoolUrl(
+      'https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5?ref=cah'
+    );
+
+    assertEqual(deck.name, 'BMK Doran', 'deck name');
+    assert(deck.commanders.length >= 1, `Expected at least 1 commander, got ${deck.commanders.length}`);
+    assert(
+      deck.commanders.some(c => c.name.includes('Doran')),
+      `Expected a commander named Doran, got: ${deck.commanders.map(c => c.name).join(', ')}`
+    );
+    assert(deck.mainboard.length > 80, `Expected 80+ mainboard cards, got ${deck.mainboard.length}`);
+
+    // Verify total quantity sums to ~100 (standard Commander deck)
+    const totalQty =
+      deck.commanders.reduce((s, c) => s + c.quantity, 0) +
+      deck.mainboard.reduce((s, c) => s + c.quantity, 0);
+    assert(totalQty >= 99 && totalQty <= 101, `Expected ~100 total cards, got ${totalQty}`);
   });
 
   // -------------------------------------------------------------------------
