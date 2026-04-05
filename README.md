@@ -4,6 +4,8 @@
 
 [ 🚀 Launch App ](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [ 📖 Documentation ](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [ 🐞 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
+**Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.**
+
 <br>
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)
@@ -13,11 +15,11 @@
 
 <br>
 
-**Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.**
-
 </div>
 
 ![Magic Bracket Simulator UI](docs/images/hero-screenshot.png)
+
+</div>
 
 ## Quick Start
 
@@ -51,6 +53,7 @@ Visit **http://localhost:5173** to start simulating.
 ## Documentation Map
 
 *   **[Architecture Overview](docs/ARCHITECTURE.md):** Deep dive into the system design, Docker worker, and data flow.
+*   **[Architecture Issues](docs/ARCHITECTURE_ISSUES.md):** Identified architecture issues and future improvements.
 *   **[API Reference](API.md):** Authoritative reference for all system API endpoints (System, Jobs, Worker).
 *   **[Data Flow](DATA_FLOW.md):** Detailed explanation of data transitions through the application.
 *   **[Deployment Guide](docs/DEPLOYMENT.md):** Detailed setup instructions, prerequisites, and cloud deployment.
