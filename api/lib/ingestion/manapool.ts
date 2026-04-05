@@ -28,7 +28,8 @@ interface DevalueShape {
 }
 
 /** Resolve a field from a devalue shape + data array. */
-function dv(data: DevalueData, shape: DevalueShape, field: string): unknown {
+function dv(data: DevalueData, shape: DevalueShape | undefined, field: string): unknown {
+  if (!shape) return undefined;
   const idx = shape[field];
   return idx !== undefined ? data[idx] : undefined;
 }
@@ -63,7 +64,7 @@ export async function fetchDeckFromManaPoolUrl(url: string): Promise<ParsedDeck>
   }
 
   const json = await response.json() as { type: string; nodes: { type: string; data: DevalueData }[] };
-  if (json.type !== 'data' || !json.nodes?.[1]?.data) {
+  if (!json || json.type !== 'data' || !json.nodes?.[1]?.data) {
     throw new Error(`Unexpected response format from ManaPool for list ${listId}`);
   }
 
@@ -88,13 +89,14 @@ function parseSvelteKitDevalueData(data: DevalueData, listId: string): ParsedDec
   const mainboard: DeckCard[] = [];
 
   for (const cardEntryIdx of cardsArray) {
-    const entryShape = data[cardEntryIdx] as DevalueShape;
+    const entryShape = data[cardEntryIdx] as DevalueShape | undefined;
+    if (!entryShape || typeof entryShape !== 'object') continue;
 
     const quantity = (dv(data, entryShape, 'quantity') as number) ?? 1;
     const isCommander = dv(data, entryShape, 'is_commander') === true;
 
     // Card name is nested: entry.card.name
-    const cardObjShape = data[entryShape.card] as DevalueShape;
+    const cardObjShape = dv(data, entryShape, 'card') as DevalueShape | undefined;
     const cardName = dv(data, cardObjShape, 'name') as string | undefined;
     if (!cardName) continue;
 
