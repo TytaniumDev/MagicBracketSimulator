@@ -17,29 +17,24 @@ export function extractManaPoolListId(url: string): string | null {
 }
 
 /**
- * ManaPool JSON API response interfaces.
- * The API at https://manapool.com/api/lists/{id} returns a deck list.
+ * SvelteKit __data.json "devalue" format: a flat array where index 0 is a shape
+ * descriptor (mapping field names to indices) and subsequent indices hold values
+ * or nested shape descriptors.
  */
-interface ManaPoolApiCard {
-  quantity: number;
-  name?: string;
-  card?: { name: string };
-  isCommander?: boolean;
-  section?: string;
-  board?: string;
-  category?: string;
+type DevalueData = unknown[];
+
+interface DevalueShape {
+  [key: string]: number;
 }
 
-interface ManaPoolApiResponse {
-  name?: string;
-  title?: string;
-  cards?: ManaPoolApiCard[];
-  list?: { name?: string; cards?: ManaPoolApiCard[] };
+/** Resolve a field from a devalue shape + data array. */
+function dv(data: DevalueData, shape: DevalueShape, field: string): unknown {
+  const idx = shape[field];
+  return idx !== undefined ? data[idx] : undefined;
 }
 
 /**
- * Fetch a ManaPool deck list by UUID.
- * Tries the JSON API first, then falls back to HTML scraping.
+ * Fetch a ManaPool deck list by UUID via SvelteKit's __data.json endpoint.
  */
 export async function fetchDeckFromManaPoolUrl(url: string): Promise<ParsedDeck> {
   const listId = extractManaPoolListId(url);
@@ -47,87 +42,10 @@ export async function fetchDeckFromManaPoolUrl(url: string): Promise<ParsedDeck>
     throw new Error(`Invalid ManaPool URL: ${url}`);
   }
 
-  // Try the JSON API endpoint first
-  const apiUrl = `https://manapool.com/api/lists/${listId}`;
-  let apiResponse: Response | undefined;
-  try {
-    apiResponse = await fetch(apiUrl, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'MagicBracketSimulator/1.0',
-      },
-    });
-  } catch {
-    // Network error — fall through to HTML scraping
-  }
-
-  if (apiResponse && apiResponse.ok) {
-    const contentType = apiResponse.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
-      const data: ManaPoolApiResponse = await apiResponse.json();
-      const deck = parseManaPoolApiResponse(listId, data);
-      if (deck.commanders.length > 0 || deck.mainboard.length > 0) {
-        return deck;
-      }
-    }
-  }
-
-  // Fall back to HTML scraping
-  return fetchManaPoolDeckFromHtml(listId);
-}
-
-function parseManaPoolApiResponse(
-  listId: string,
-  data: ManaPoolApiResponse
-): ParsedDeck {
-  // Support both flat structure and nested { list: { name, cards } }
-  const rawName =
-    data.name ?? data.title ?? data.list?.name ?? `ManaPool List ${listId}`;
-  const rawCards = data.cards ?? data.list?.cards ?? [];
-
-  const commanders: DeckCard[] = [];
-  const mainboard: DeckCard[] = [];
-
-  for (const entry of rawCards) {
-    const cardName = entry.name ?? entry.card?.name;
-    if (!cardName) continue;
-
-    const quantity = Math.max(1, entry.quantity ?? 1);
-
-    const isCommander =
-      entry.isCommander === true ||
-      isCommanderSection(entry.section) ||
-      isCommanderSection(entry.board) ||
-      isCommanderSection(entry.category);
-
-    const deckCard: DeckCard = { name: cardName, quantity };
-    if (isCommander) {
-      deckCard.isCommander = true;
-      commanders.push(deckCard);
-    } else {
-      mainboard.push(deckCard);
-    }
-  }
-
-  return { name: rawName, commanders, mainboard };
-}
-
-function isCommanderSection(value: string | undefined): boolean {
-  if (!value) return false;
-  const lower = value.toLowerCase();
-  return lower === 'commander' || lower === 'commanders';
-}
-
-/**
- * HTML scraping fallback.
- * Modern web apps often embed page data in a <script id="__NEXT_DATA__"> tag
- * for SSR hydration.
- */
-async function fetchManaPoolDeckFromHtml(listId: string): Promise<ParsedDeck> {
-  const pageUrl = `https://manapool.com/lists/${listId}`;
-  const response = await fetch(pageUrl, {
+  const dataUrl = `https://manapool.com/lists/${listId}/__data.json`;
+  const response = await fetch(dataUrl, {
     headers: {
-      Accept: 'text/html',
+      Accept: 'application/json',
       'User-Agent': 'MagicBracketSimulator/1.0',
     },
   });
@@ -144,78 +62,64 @@ async function fetchManaPoolDeckFromHtml(listId: string): Promise<ParsedDeck> {
     );
   }
 
-  const html = await response.text();
+  const json = await response.json() as { type: string; nodes: { type: string; data: DevalueData }[] };
+  if (json.type !== 'data' || !json.nodes?.[1]?.data) {
+    throw new Error(`Unexpected response format from ManaPool for list ${listId}`);
+  }
 
-  // Try Next.js __NEXT_DATA__ embedded JSON
-  const nextDataMatch = html.match(
-    /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([^<]+)<\/script>/
-  );
-  if (nextDataMatch) {
-    try {
-      const nextData = JSON.parse(nextDataMatch[1]) as Record<string, unknown>;
-      const deck = extractDeckFromNextData(nextData, listId);
-      if (deck) return deck;
-    } catch {
-      // Continue to next parsing method
+  return parseSvelteKitDevalueData(json.nodes[1].data, listId);
+}
+
+function parseSvelteKitDevalueData(data: DevalueData, listId: string): ParsedDeck {
+  // data[0] is the top-level page shape: { deck, cards, title, ... }
+  const pageShape = data[0] as DevalueShape;
+
+  // Resolve deck name
+  const deckShape = data[pageShape.deck] as DevalueShape;
+  const deckName = (dv(data, deckShape, 'name') as string) ?? `ManaPool List ${listId}`;
+
+  // Resolve cards array
+  const cardsArray = data[pageShape.cards] as number[];
+  if (!Array.isArray(cardsArray)) {
+    throw new Error(`Could not parse card list from ManaPool list ${listId}`);
+  }
+
+  const commanders: DeckCard[] = [];
+  const mainboard: DeckCard[] = [];
+
+  for (const cardEntryIdx of cardsArray) {
+    const entryShape = data[cardEntryIdx] as DevalueShape;
+
+    const quantity = (dv(data, entryShape, 'quantity') as number) ?? 1;
+    const isCommander = dv(data, entryShape, 'is_commander') === true;
+
+    // Card name is nested: entry.card.name
+    const cardObjShape = data[entryShape.card] as DevalueShape;
+    const cardName = dv(data, cardObjShape, 'name') as string | undefined;
+    if (!cardName) continue;
+
+    // Set code for Forge matching
+    const setCode = dv(data, cardObjShape, 'setCode') as string | undefined;
+    const collectorNumber = dv(data, cardObjShape, 'number') as string | undefined;
+
+    const deckCard: DeckCard = {
+      name: cardName,
+      quantity,
+      ...(isCommander ? { isCommander: true } : {}),
+      ...(setCode ? { setCode } : {}),
+      ...(collectorNumber ? { collectorNumber } : {}),
+    };
+
+    if (isCommander) {
+      commanders.push(deckCard);
+    } else {
+      mainboard.push(deckCard);
     }
   }
 
-  throw new Error(
-    `Could not parse deck data from ManaPool list ${listId}. ` +
-      `The page structure may have changed. Please paste your deck list manually.`
-  );
-}
-
-/**
- * Extract deck data from Next.js __NEXT_DATA__ payload.
- * Tries common locations where a deck list might be embedded.
- */
-function extractDeckFromNextData(
-  nextData: Record<string, unknown>,
-  listId: string
-): ParsedDeck | null {
-  const propsObj = nextData.props as Record<string, unknown> | undefined;
-  const pageProps = propsObj
-    ? (propsObj.pageProps as Record<string, unknown> | undefined)
-    : undefined;
-
-  if (!pageProps) return null;
-
-  // Try common locations where deck data might live under pageProps
-  const candidates: (Record<string, unknown> | undefined)[] = [
-    pageProps,
-    pageProps.list as Record<string, unknown> | undefined,
-    pageProps.deck as Record<string, unknown> | undefined,
-    pageProps.data as Record<string, unknown> | undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') continue;
-
-    // Look for a cards array with known card fields
-    const cards =
-      candidate.cards ??
-      candidate.cardList ??
-      candidate.cardEntries;
-
-    if (!Array.isArray(cards) || cards.length === 0) continue;
-
-    const firstCard = cards[0] as Record<string, unknown>;
-    const hasCardName =
-      'name' in firstCard ||
-      ('card' in firstCard && typeof firstCard.card === 'object');
-    if (!hasCardName) continue;
-
-    const rawName =
-      (candidate.name as string | undefined) ??
-      (candidate.title as string | undefined) ??
-      `ManaPool List ${listId}`;
-
-    return parseManaPoolApiResponse(listId, {
-      name: rawName,
-      cards: cards as ManaPoolApiCard[],
-    });
+  if (commanders.length === 0 && mainboard.length === 0) {
+    throw new Error(`Could not parse any cards from ManaPool list ${listId}`);
   }
 
-  return null;
+  return { name: deckName, commanders, mainboard };
 }

@@ -6,7 +6,7 @@
 
 import { isManaboxUrl, isMoxfieldUrl, isArchidektUrl, isManaPoolUrl, toDck } from '../lib/ingestion';
 import { extractManaboxDeckId } from '../lib/ingestion/manabox';
-import { extractManaPoolListId } from '../lib/ingestion/manapool';
+import { extractManaPoolListId, fetchDeckFromManaPoolUrl } from '../lib/ingestion/manapool';
 
 interface TestResult {
   name: string;
@@ -19,6 +19,19 @@ const results: TestResult[] = [];
 function test(name: string, fn: () => void) {
   try {
     fn();
+    results.push({ name, passed: true });
+    console.log(`✓ ${name}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    results.push({ name, passed: false, error: message });
+    console.log(`✗ ${name}`);
+    console.log(`  Error: ${message}`);
+  }
+}
+
+async function asyncTest(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
     results.push({ name, passed: true });
     console.log(`✓ ${name}`);
   } catch (error) {
@@ -153,6 +166,30 @@ async function runTests() {
 
   test('extractManaPoolListId returns null for non-ManaPool URL', () => {
     assertEqual(extractManaPoolListId('https://moxfield.com/decks/abc'), null, 'should be null');
+  });
+
+  // -------------------------------------------------------------------------
+  // ManaPool live API test (hits manapool.com)
+  // -------------------------------------------------------------------------
+
+  await asyncTest('fetchDeckFromManaPoolUrl fetches real deck from ManaPool', async () => {
+    const deck = await fetchDeckFromManaPoolUrl(
+      'https://manapool.com/lists/5dc58054-55a8-4ca4-85c4-ae8e12d1b3d5?ref=cah'
+    );
+
+    assertEqual(deck.name, 'BMK Doran', 'deck name');
+    assert(deck.commanders.length >= 1, `Expected at least 1 commander, got ${deck.commanders.length}`);
+    assert(
+      deck.commanders.some(c => c.name.includes('Doran')),
+      `Expected a commander named Doran, got: ${deck.commanders.map(c => c.name).join(', ')}`
+    );
+    assert(deck.mainboard.length > 80, `Expected 80+ mainboard cards, got ${deck.mainboard.length}`);
+
+    // Verify total quantity sums to ~100 (standard Commander deck)
+    const totalQty =
+      deck.commanders.reduce((s, c) => s + c.quantity, 0) +
+      deck.mainboard.reduce((s, c) => s + c.quantity, 0);
+    assert(totalQty >= 99 && totalQty <= 101, `Expected ~100 total cards, got ${totalQty}`);
   });
 
   // -------------------------------------------------------------------------
