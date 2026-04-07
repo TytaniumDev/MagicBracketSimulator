@@ -170,7 +170,8 @@ function SimulationForm() {
 
     try {
       return await attempt();
-    } catch {
+    } catch (err) {
+      console.error('Community decks fetch failed, retrying...', err);
       // Auto-retry once after 2s (handles cold start)
       await new Promise(r => setTimeout(r, 2000));
       return await attempt(); // Let this throw if it also fails
@@ -195,6 +196,7 @@ function SimulationForm() {
       allApiDecks = apiResult.value;
       community = allApiDecks.filter(d => !d.isPrecon);
     } else {
+      console.error('Failed to load community decks:', apiResult.reason);
       setDeckError('Failed to load community decks. Please try again.');
     }
 

@@ -20,6 +20,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    if (!body || typeof body !== 'object') {
+      return badRequestResponse('Invalid request body');
+    }
     const { deckUrl, deckText, deckName, deckLink } = body;
 
     let name: string;
