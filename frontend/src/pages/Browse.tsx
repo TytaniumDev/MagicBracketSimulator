@@ -1,11 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import type { Timestamp } from 'firebase/firestore';
+import { db } from '../firebase';
 import { getApiBase, fetchWithAuth, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { Spinner } from '../components/Spinner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import type { JobStatus, JobSummary } from '@shared/types/job';
+import { GAMES_PER_CONTAINER } from '@shared/types/job';
 
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
@@ -55,13 +59,52 @@ function StatusBadge({ status }: { status: JobStatus }) {
   );
 }
 
+// Convert a Firestore job document to JobSummary
+function firestoreDocToJobSummary(id: string, data: Record<string, unknown>): JobSummary {
+  const decks = (data.decks as Array<{ name: string; dck: string }>) ?? [];
+  const deckNames = decks.map((d) => d.name);
+  const name = deckNames.join(' vs ');
+
+  const createdAt = data.createdAt as Timestamp | null;
+  const startedAt = data.startedAt as Timestamp | null;
+  const completedAt = data.completedAt as Timestamp | null;
+
+  let durationMs: number | null = null;
+  if (completedAt) {
+    const startTs = startedAt ?? createdAt;
+    if (startTs) {
+      durationMs = completedAt.toDate().getTime() - startTs.toDate().getTime();
+    }
+  }
+
+  const completedSimCount = data.completedSimCount as number | undefined;
+  const gamesCompleted =
+    completedSimCount !== undefined
+      ? completedSimCount * GAMES_PER_CONTAINER
+      : ((data.gamesCompleted as number | undefined) ?? 0);
+
+  return {
+    id,
+    name,
+    deckNames,
+    status: data.status as JobStatus,
+    simulations: (data.simulations as number) ?? 0,
+    gamesCompleted,
+    createdAt: createdAt ? createdAt.toDate().toISOString() : new Date(0).toISOString(),
+    durationMs,
+    parallelism: data.parallelism as number | undefined,
+    errorMessage: data.errorMessage as string | undefined,
+    startedAt: startedAt ? startedAt.toDate().toISOString() : undefined,
+    completedAt: completedAt ? completedAt.toDate().toISOString() : undefined,
+    dockerRunDurationsMs: data.dockerRunDurationsMs as number[] | undefined,
+  };
+}
+
 export default function Browse() {
   const { user, isAllowed, isAdmin, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Admin bulk-delete state
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
@@ -105,6 +148,31 @@ export default function Browse() {
   const apiBase = getApiBase();
   const { workers, queueDepth, isLoading: workersLoading, refresh: refreshWorkers } = useWorkerStatus(!!isAllowed);
 
+  // GCP mode: Firestore onSnapshot for real-time job list
+  useEffect(() => {
+    if (!db) return;
+
+    const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(100));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const jobList = snapshot.docs.map((doc) =>
+          firestoreDocToJobSummary(doc.id, doc.data() as Record<string, unknown>)
+        );
+        setJobs(jobList);
+        setError(null);
+        setIsLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // LOCAL mode: REST fetch + polling fallback
   const fetchJobs = useCallback(async () => {
     try {
       const res = await fetchWithAuth(`${apiBase}/api/jobs`);
@@ -122,28 +190,32 @@ export default function Browse() {
   }, [apiBase]);
 
   useEffect(() => {
+    if (db) return; // Handled by Firestore onSnapshot above
+
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
     fetchJobs().then((jobList) => {
       const hasInProgress = jobList.some(
         (job) => job.status === 'QUEUED' || job.status === 'RUNNING'
       );
-      if (hasInProgress && !pollIntervalRef.current) {
-        pollIntervalRef.current = setInterval(async () => {
+      if (hasInProgress && !pollInterval) {
+        pollInterval = setInterval(async () => {
           const updated = await fetchJobs();
           const stillInProgress = updated.some(
             (job) => job.status === 'QUEUED' || job.status === 'RUNNING'
           );
-          if (!stillInProgress && pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
+          if (!stillInProgress && pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
           }
         }, 10000);
       }
     });
 
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
       }
     };
   }, [fetchJobs]);
