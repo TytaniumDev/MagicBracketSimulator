@@ -5,6 +5,7 @@
 
 export interface RuntimeConfig {
   apiUrl?: string;
+  preconsUrl?: string;
   sentryDsn?: string;
 }
 
@@ -27,6 +28,7 @@ export function loadRuntimeConfig(): Promise<RuntimeConfig> {
         if (j && typeof j === 'object') {
           cached = {
             apiUrl: typeof j.apiUrl === 'string' ? j.apiUrl.replace(/\/$/, '') : undefined,
+            preconsUrl: typeof j.preconsUrl === 'string' ? j.preconsUrl : undefined,
             sentryDsn: typeof j.sentryDsn === 'string' ? j.sentryDsn : undefined,
           };
         }
