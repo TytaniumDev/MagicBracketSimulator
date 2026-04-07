@@ -1,3 +1,4 @@
 {
-  "apiUrl": "https://api--magic-bracket-simulator.us-central1.hosted.app"
+  "apiUrl": "https://api--magic-bracket-simulator.us-central1.hosted.app",
+  "preconsUrl": "https://storage.googleapis.com/magic-bracket-simulator-artifacts/precons.json"
 }
