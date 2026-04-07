@@ -170,7 +170,7 @@ function SimulationForm() {
 
     try {
       return await attempt();
-    } catch (firstErr) {
+    } catch {
       // Auto-retry once after 2s (handles cold start)
       await new Promise(r => setTimeout(r, 2000));
       return await attempt(); // Let this throw if it also fails
