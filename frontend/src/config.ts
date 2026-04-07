@@ -20,7 +20,7 @@ export function loadRuntimeConfig(): Promise<RuntimeConfig> {
   loadPromise = (async () => {
     try {
       const base = typeof window !== 'undefined' ? window.location.origin : '';
-      const r = await fetch(`${base}/config.json`, { cache: 'no-store' });
+      const r = await fetch(`${base}/config.json`);
       if (r.ok) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const j = (await r.json()) as any;
