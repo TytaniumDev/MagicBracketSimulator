@@ -24,11 +24,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return badRequestResponse('Job ID is required');
     }
 
-    const job = await jobStore.getJob(id);
-    if (!job) {
-      return notFoundResponse('Job');
-    }
-
     const simulations = await jobStore.getSimulationStatuses(id);
     return NextResponse.json({ simulations });
   } catch (error) {
