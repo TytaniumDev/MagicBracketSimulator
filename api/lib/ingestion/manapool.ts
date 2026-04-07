@@ -64,6 +64,7 @@ export async function fetchDeckFromManaPoolUrl(url: string): Promise<ParsedDeck>
         Accept: 'application/json',
         'User-Agent': 'MagicBracketSimulator/1.0',
       },
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (err) {
     throw new Error(
@@ -152,7 +153,7 @@ function parseSvelteKitDevalueData(data: DevalueData, listId: string): ParsedDec
     const entryShape = data[cardEntryIdx];
     if (!isDevalueShape(entryShape)) continue;
 
-    const quantity = (dv(data, entryShape, 'quantity') as number) ?? 1;
+    const quantity = Math.max(1, Number(dv(data, entryShape, 'quantity')) || 1);
     const isCommander = dv(data, entryShape, 'is_commander') === true;
 
     // Card name is nested: entry.card.name
