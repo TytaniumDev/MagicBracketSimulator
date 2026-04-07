@@ -7,7 +7,7 @@ import {
   onAuthStateChanged,
   getIdToken,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { auth, db, googleProvider, isFirebaseConfigured } from '../firebase';
 import { getApiBase, fetchWithAuth } from '../api';
 
@@ -78,13 +78,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [hasRequestedAccess, setHasRequestedAccess] = useState(false);
 
-  const checkAccessRequestStatus = async () => {
+  const checkAccessRequestStatus = async (uid?: string) => {
     try {
-      const apiBase = getApiBase();
-      const res = await fetchWithAuth(`${apiBase}/api/access-requests`);
-      if (res.ok) {
-        const data = await res.json();
-        setHasRequestedAccess(data.hasRequest && data.status === 'pending');
+      if (db && uid) {
+        // GCP mode: query Firestore directly
+        const q = query(
+          collection(db, 'accessRequests'),
+          where('uid', '==', uid),
+          orderBy('createdAt', 'desc'),
+          limit(1),
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const data = snap.docs[0].data();
+          setHasRequestedAccess(data.status === 'pending');
+        } else {
+          setHasRequestedAccess(false);
+        }
+      } else {
+        // LOCAL mode: fall back to REST endpoint
+        const apiBase = getApiBase();
+        const res = await fetchWithAuth(`${apiBase}/api/access-requests`);
+        if (res.ok) {
+          const data = await res.json();
+          setHasRequestedAccess(data.hasRequest && data.status === 'pending');
+        }
       }
     } catch {
       // Non-fatal
@@ -120,7 +138,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // If not allowed, check for pending access request
         if (!allowed) {
           // Defer to avoid blocking auth state resolution
-          checkAccessRequestStatus();
+          checkAccessRequestStatus(firebaseUser.uid);
         }
       } catch (err) {
         console.error('Error checking allowlist:', err);
@@ -197,7 +215,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAdmin,
     loading,
     hasRequestedAccess,
-    refreshAccessRequestStatus: checkAccessRequestStatus,
+    refreshAccessRequestStatus: () => checkAccessRequestStatus(user?.uid),
     signInWithGoogle,
     signInWithEmail,
     signOut,
