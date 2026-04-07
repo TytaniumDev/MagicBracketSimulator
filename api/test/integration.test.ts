@@ -191,7 +191,7 @@ async function runTests() {
 
   // Test: POST /api/decks - reject invalid deck URL
   await test('POST /api/decks rejects invalid deck URL', async () => {
-    const response = await fetch(`${BASE_URL}/api/decks`, {
+    const response = await fetch(`${BASE_URL}/api/decks/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -205,7 +205,7 @@ async function runTests() {
 
   // Test: POST /api/decks - save a deck from ManaBox URL (requires network)
   await test('POST /api/decks saves deck from ManaBox URL', async () => {
-    const response = await fetch(`${BASE_URL}/api/decks`, {
+    const response = await fetch(`${BASE_URL}/api/decks/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -220,7 +220,7 @@ async function runTests() {
 
   // Test: POST /api/decks - deckText is not accepted (URL only)
   await test('POST /api/decks rejects deck text', async () => {
-    const response = await fetch(`${BASE_URL}/api/decks`, {
+    const response = await fetch(`${BASE_URL}/api/decks/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

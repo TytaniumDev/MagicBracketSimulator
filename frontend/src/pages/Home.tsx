@@ -195,7 +195,7 @@ function SimulationForm() {
       }
 
       const doPost = async () => {
-        const res = await fetchWithAuth(`${apiBase}/api/decks`, {
+        const res = await fetchWithAuth(`${apiBase}/api/decks/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
