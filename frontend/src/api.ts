@@ -121,3 +121,51 @@ export async function deleteJobs(
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Coverage API
+// ---------------------------------------------------------------------------
+
+export interface CoverageConfig {
+  enabled: boolean;
+  targetGamesPerPair: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface CoverageStatus {
+  totalPairs: number;
+  coveredPairs: number;
+  underCoveredPairs: number;
+  targetGamesPerPair: number;
+  percentComplete: number;
+}
+
+export async function getCoverageConfig(): Promise<CoverageConfig> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/coverage/config`);
+  if (!res.ok) throw new Error('Failed to fetch coverage config');
+  return res.json();
+}
+
+export async function updateCoverageConfig(
+  update: Partial<Pick<CoverageConfig, 'enabled' | 'targetGamesPerPair'>>
+): Promise<CoverageConfig> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/coverage/config`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getCoverageStatus(): Promise<CoverageStatus> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/coverage/status`);
+  if (!res.ok) throw new Error('Failed to fetch coverage status');
+  return res.json();
+}
+

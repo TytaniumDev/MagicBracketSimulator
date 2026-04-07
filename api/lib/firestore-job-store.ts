@@ -1,5 +1,5 @@
 import { Firestore, Timestamp, FieldValue } from '@google-cloud/firestore';
-import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, JobSource } from './types';
 
 // Initialize Firestore client
 const firestore = new Firestore({
@@ -37,6 +37,7 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     ...(data.completedSimCount != null && { completedSimCount: data.completedSimCount }),
     ...(data.totalSimCount != null && { totalSimCount: data.totalSimCount }),
     ...(data.results != null && { results: data.results as JobResults }),
+    ...(data.source && data.source !== 'user' && { source: data.source }),
   };
 }
 
@@ -47,6 +48,7 @@ export interface CreateJobData {
   idempotencyKey?: string;
   createdBy: string;
   deckIds?: string[];
+  source?: JobSource;
 }
 
 /**
@@ -73,6 +75,7 @@ export async function createJob(data: CreateJobData): Promise<Job> {
     createdAt: now,
     createdBy: data.createdBy,
     idempotencyKey: data.idempotencyKey || null,
+    source: data.source ?? 'user',
   };
 
   // Use transaction if idempotency key is provided
@@ -108,6 +111,7 @@ export async function createJob(data: CreateJobData): Promise<Job> {
     simulations: data.simulations,
     parallelism: data.parallelism || 4,
     createdAt: now.toDate(),
+    ...(data.source && data.source !== 'user' && { source: data.source }),
   };
 }
 

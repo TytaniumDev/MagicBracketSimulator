@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER } from './types';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER, JobSource } from './types';
 import { isTerminalSimState } from '@shared/types/state-machine';
 import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
@@ -48,7 +48,7 @@ export async function getJobByIdempotencyKey(key: string): Promise<Job | null> {
 export async function createJob(
   decks: DeckSlot[],
   simulations: number,
-  options?: { idempotencyKey?: string; parallelism?: number; createdBy?: string; deckIds?: string[] }
+  options?: { idempotencyKey?: string; parallelism?: number; createdBy?: string; deckIds?: string[]; source?: JobSource }
 ): Promise<Job> {
   if (USE_FIRESTORE) {
     return firestoreStore.createJob({
@@ -58,6 +58,7 @@ export async function createJob(
       idempotencyKey: options?.idempotencyKey,
       createdBy: options?.createdBy ?? 'unknown',
       deckIds: options?.deckIds,
+      source: options?.source,
     });
   }
   return sqliteStore.createJob(
@@ -65,7 +66,8 @@ export async function createJob(
     simulations,
     options?.idempotencyKey,
     options?.parallelism,
-    options?.deckIds
+    options?.deckIds,
+    options?.source
   );
 }
 

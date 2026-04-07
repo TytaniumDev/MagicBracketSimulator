@@ -64,6 +64,8 @@ export interface JobResponse {
   workerName?: string;
   claimedAt?: string;
   retryCount: number;
+  /** Source of the job (user-submitted or auto-coverage). */
+  source?: JobSource;
   results: JobResults | null;
   /** Present when job has stored deck IDs that resolve to Moxfield/external links */
   deckLinks?: Record<string, string | null>;
@@ -93,6 +95,7 @@ export interface JobSummary {
   startedAt?: string;
   completedAt?: string;
   dockerRunDurationsMs?: number[];
+  source?: JobSource;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,3 +107,6 @@ export const GAMES_PER_CONTAINER = 4;
 
 /** Number of decks required per Commander simulation job (4-player Commander). */
 export const REQUIRED_DECK_COUNT = 4;
+
+/** Source of a job: user-created or auto-coverage system. */
+export type JobSource = 'user' | 'coverage';

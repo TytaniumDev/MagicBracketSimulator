@@ -810,6 +810,31 @@ function waitForNotifyOrTimeout(ms: number): Promise<void> {
   });
 }
 
+/**
+ * Request a coverage job from the API when idle.
+ * Returns true if a coverage job was created (will be picked up next poll cycle).
+ */
+async function requestCoverageJob(): Promise<boolean> {
+  try {
+    const res = await fetch(`${getApiUrl()}/api/coverage/next-job`, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+    if (res.status === 201) {
+      const data = await res.json();
+      console.log(`[Coverage] Requested coverage job: ${data.id}`);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    if (error instanceof Error && error.name !== 'TimeoutError') {
+      console.error('[Coverage] Error requesting coverage job:', error);
+    }
+    return false;
+  }
+}
+
 async function pollForJobs(): Promise<void> {
   const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
 
@@ -863,6 +888,11 @@ async function pollForJobs(): Promise<void> {
       if (error instanceof Error && error.name !== 'TimeoutError') {
         console.error('Polling error:', error);
       }
+    }
+    // No user jobs available — check for coverage work
+    const coverageCreated = await requestCoverageJob();
+    if (coverageCreated) {
+      continue;
     }
     await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
   }

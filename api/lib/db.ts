@@ -174,6 +174,11 @@ export function getDb(): Database.Database {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN source TEXT DEFAULT 'user'`);
+  } catch {
+    // Column already exists
+  }
 
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency_key ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL`);
 
@@ -309,6 +314,17 @@ export function getDb(): Database.Database {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_match_results_job_id ON match_results(job_id)`);
+
+  // Coverage config (singleton row)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS coverage_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled INTEGER NOT NULL DEFAULT 0,
+      target_games_per_pair INTEGER NOT NULL DEFAULT 400,
+      updated_at TEXT NOT NULL DEFAULT '',
+      updated_by TEXT NOT NULL DEFAULT ''
+    )
+  `);
 
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);

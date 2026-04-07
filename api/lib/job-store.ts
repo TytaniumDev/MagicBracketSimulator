@@ -1,5 +1,6 @@
 import { getDb } from './db';
 import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState } from './types';
+import type { JobSource } from '@shared/types/job';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Row {
@@ -22,6 +23,7 @@ interface Row {
   claimed_at?: string | null;
   retry_count?: number | null;
   needs_aggregation?: number | null;
+  source?: string | null;
 }
 
 function rowToJob(row: Row): Job {
@@ -48,6 +50,7 @@ function rowToJob(row: Row): Job {
     ...(row.claimed_at && { claimedAt: new Date(row.claimed_at) }),
     ...(row.retry_count != null && row.retry_count > 0 && { retryCount: row.retry_count }),
     ...(row.needs_aggregation === 1 && { needsAggregation: true }),
+    ...(row.source && row.source !== 'user' && { source: row.source as JobSource }),
     ...(row.result_json != null && { results: JSON.parse(row.result_json) as JobResults }),
   };
 }
@@ -65,7 +68,8 @@ export function createJob(
   simulations: number,
   idempotencyKey?: string,
   parallelism?: number,
-  deckIds?: string[]
+  deckIds?: string[],
+  source?: string
 ): Job {
   if (idempotencyKey) {
     const existing = getJobByIdempotencyKey(idempotencyKey);
@@ -76,8 +80,8 @@ export function createJob(
   const db = getDb();
 
   db.prepare(
-    `INSERT INTO jobs (id, decks_json, deck_ids_json, status, simulations, created_at, idempotency_key, parallelism)
-     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?)`
+    `INSERT INTO jobs (id, decks_json, deck_ids_json, status, simulations, created_at, idempotency_key, parallelism, source)
+     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?, ?)`
   ).run(
     id,
     JSON.stringify(decks),
@@ -85,7 +89,8 @@ export function createJob(
     simulations,
     createdAt,
     idempotencyKey ?? null,
-    parallelism ?? null
+    parallelism ?? null,
+    source ?? 'user'
   );
   return {
     id,
