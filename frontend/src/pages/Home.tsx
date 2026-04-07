@@ -163,7 +163,7 @@ function SimulationForm() {
   const fetchCommunityDecks = useCallback(async (): Promise<Deck[]> => {
     const attempt = async (): Promise<Deck[]> => {
       const res = await fetchWithAuth(`${apiBase}/api/decks`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
       const data = await res.json();
       return data.decks || [];
     };
@@ -171,10 +171,14 @@ function SimulationForm() {
     try {
       return await attempt();
     } catch (err) {
-      console.error('Community decks fetch failed, retrying...', err);
-      // Auto-retry once after 2s (handles cold start)
-      await new Promise(r => setTimeout(r, 2000));
-      return await attempt(); // Let this throw if it also fails
+      const status = (err as { status?: number }).status;
+      // Only retry on server-side transient errors (likely cold start)
+      if (typeof status === 'number' && status >= 500) {
+        console.error('Community decks fetch failed (5xx), retrying...', err);
+        await new Promise(r => setTimeout(r, 2000));
+        return await attempt(); // Let this throw if it also fails
+      }
+      throw err;
     }
   }, [apiBase]);
 
@@ -188,7 +192,7 @@ function SimulationForm() {
       fetchCommunityDecks(),
     ]);
 
-    const precons = gcsPrecons.status === 'fulfilled' ? gcsPrecons.value : [];
+    const gcsPreconList = gcsPrecons.status === 'fulfilled' ? gcsPrecons.value : [];
     let community: Deck[] = [];
     let allApiDecks: Deck[] = [];
 
@@ -201,10 +205,10 @@ function SimulationForm() {
     }
 
     // If GCS returned no precons, fall back to precons from API response
-    if (precons.length === 0 && allApiDecks.length > 0) {
+    if (gcsPreconList.length === 0 && allApiDecks.length > 0) {
       setPreconDecks(allApiDecks.filter(d => d.isPrecon));
     } else {
-      setPreconDecks(precons);
+      setPreconDecks(gcsPreconList);
     }
 
     setCommunityDeckList(community);
