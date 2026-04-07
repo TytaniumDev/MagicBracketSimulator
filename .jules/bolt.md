@@ -13,3 +13,7 @@
 ## 2024-07-15 - Unnecessary Array Reductions in Map Loop
 **Learning:** In `frontend/src/components/DeckShowcase.tsx`, an O(N) array reduction (`turns.reduce`) was being calculated inline within a `Array.map` render loop for calculating `avgTurn` stats for each deck. This meant that on every re-render of `DeckShowcase` (even if stats didn't change), the iteration logic ran again for every item.
 **Action:** Always extract O(N) inline list computations (such as array reduction, mapping, or formatting data) into a `useMemo` block that runs *before* the render loop, especially when rendering lists or grids. This preserves the O(1) performance expectation of the render function itself.
+
+## 2024-07-28 - Parallelizing Synchronous State
+**Learning:** In `api/lib/archidekt-sync.ts`, the Archidekt Precon synchronization was running completely sequentially, which created a significant N+1 bottleneck when making API calls and querying the database to upsert entries. While `Promise.all` allows parallel execution, we must take care when parallelizing code that involves synchronous state updates, such as ID generation (`usedIds`) and tracking set additions (`keepPreconIds`, `processedArchidektIds`), to prevent race conditions or collisions.
+**Action:** When converting sequential asynchronous loops into batched or parallel execution using `Promise.all`, always extract the necessary synchronous state mutations to execute sequentially *before* pushing the asynchronous promises to the execution array.
