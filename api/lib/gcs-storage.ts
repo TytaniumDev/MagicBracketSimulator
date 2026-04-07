@@ -205,4 +205,30 @@ export async function getSignedUrl(
   return url;
 }
 
+/**
+ * Upload the precons list as a public JSON file for direct frontend consumption.
+ * Sets Cache-Control for CDN/browser caching and makes the object publicly readable.
+ */
+export async function uploadPreconsJson(precons: unknown[]): Promise<string> {
+  const objectPath = 'precons.json';
+  const file = bucket.file(objectPath);
+
+  await withRetry(
+    async () => {
+      await file.save(JSON.stringify(precons), {
+        contentType: 'application/json',
+      });
+      await file.setMetadata({
+        cacheControl: 'public, max-age=3600',
+      });
+      await file.makePublic();
+    },
+    { maxAttempts: 3, delayMs: 1000, backoffMultiplier: 2 },
+    'GCS upload precons.json',
+    isRetryableGcsError
+  );
+
+  return `https://storage.googleapis.com/${BUCKET_NAME}/${objectPath}`;
+}
+
 export { storage, bucket, BUCKET_NAME };

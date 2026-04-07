@@ -8,6 +8,7 @@ import { fetchArchidektDeck } from './ingestion/archidekt';
 import { toDck } from './ingestion/to-dck';
 import { slugify } from './saved-decks';
 import { parseCommanderFromContent } from './saved-decks';
+import { uploadPreconsJson } from './gcs-storage';
 
 const ARCHIDEKT_LIST_URL = 'https://archidekt.com/api/decks/v3/';
 const ARCHIDEKT_OWNER = 'Archidekt_Precons';
@@ -326,6 +327,22 @@ export async function syncPrecons(): Promise<SyncResult> {
   }
 
   console.log(`[PreconSync] Sync complete: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.removed} removed, ${result.errors.length} errors`);
+
+  // 5. Write precons.json to GCS for direct frontend access
+  if (USE_FIRESTORE) {
+    try {
+      const firestoreDecks = await import('./firestore-decks');
+      const allDecks = await firestoreDecks.listAllDecks();
+      const preconItems = allDecks.filter(d => d.isPrecon);
+      const gcsUrl = await uploadPreconsJson(preconItems);
+      console.log(`[PreconSync] Uploaded precons.json to GCS (${preconItems.length} precons): ${gcsUrl}`);
+    } catch (err) {
+      // Non-fatal: precons still available via API fallback
+      console.error('[PreconSync] Failed to upload precons.json to GCS:', err);
+      result.errors.push(`GCS upload failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   return result;
 }
 
