@@ -16,6 +16,7 @@
 
 export type { JobStatus } from '@shared/types/job';
 export type { JobResults } from '@shared/types/job';
+export type { JobSource } from '@shared/types/job';
 export { GAMES_PER_CONTAINER } from '@shared/types/job';
 
 export type { SimulationState, SimulationStatus } from '@shared/types/simulation';
@@ -44,6 +45,7 @@ export type { WorkerInfo } from '@shared/types/worker';
 // in the interface definitions that follow (e.g., Job.status, Job.results).
 import type { JobStatus } from '@shared/types/job';
 import type { JobResults } from '@shared/types/job';
+import type { JobSource } from '@shared/types/job';
 
 export interface DeckSlot {
   name: string;
@@ -75,6 +77,7 @@ export interface Job {
   completedSimCount?: number;
   totalSimCount?: number;
   results?: JobResults;
+  source?: JobSource;
 }
 
 export interface CreateJobRequest {

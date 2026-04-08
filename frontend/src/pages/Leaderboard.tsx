@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getApiBase, fetchWithAuth } from '../api';
+import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
+import type { CoverageConfig, CoverageStatus } from '../api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LeaderboardEntry {
   deckId: string;
@@ -61,12 +63,58 @@ function SortHeader({
 }
 
 export default function Leaderboard() {
+  const { isAdmin } = useAuth();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [minGames, setMinGames] = useState(5);
   const [preconOnly, setPreconOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('rating');
+
+  const [coverageConfig, setCoverageConfig] = useState<CoverageConfig | null>(null);
+  const [coverageStatus, setCoverageStatus] = useState<CoverageStatus | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchCoverage = async () => {
+      try {
+        const [config, status] = await Promise.all([
+          getCoverageConfig(),
+          getCoverageStatus(),
+        ]);
+        setCoverageConfig(config);
+        setCoverageStatus(status);
+      } catch (err) {
+        console.error('Failed to fetch coverage data:', err);
+      }
+    };
+    fetchCoverage();
+  }, []);
+
+  const handleToggleCoverage = async () => {
+    if (!coverageConfig) return;
+    setCoverageLoading(true);
+    try {
+      const updated = await updateCoverageConfig({ enabled: !coverageConfig.enabled });
+      setCoverageConfig(updated);
+    } catch (err) {
+      console.error('Failed to toggle coverage:', err);
+    } finally {
+      setCoverageLoading(false);
+    }
+  };
+
+  const handleTargetChange = async (newTarget: number) => {
+    setCoverageLoading(true);
+    try {
+      const updated = await updateCoverageConfig({ targetGamesPerPair: newTarget });
+      setCoverageConfig(updated);
+    } catch (err) {
+      console.error('Failed to update target:', err);
+    } finally {
+      setCoverageLoading(false);
+    }
+  };
 
   const apiBase = getApiBase();
 
@@ -231,6 +279,65 @@ export default function Leaderboard() {
         TrueSkill ratings update automatically after each completed simulation job.
         More games played → lower σ → more reliable Rating.
       </p>
+
+      {/* Coverage System */}
+      {coverageStatus && (
+        <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium text-gray-300">Deck Coverage</h3>
+            {isAdmin && coverageConfig && (
+              <button
+                type="button"
+                onClick={handleToggleCoverage}
+                disabled={coverageLoading}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  coverageConfig.enabled ? 'bg-blue-600' : 'bg-gray-600'
+                } ${coverageLoading ? 'opacity-50' : ''}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    coverageConfig.enabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+
+          <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${coverageStatus.percentComplete}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>
+              {coverageStatus.coveredPairs} / {coverageStatus.totalPairs} pairs covered
+            </span>
+            <span>{coverageStatus.percentComplete}%</span>
+          </div>
+
+          {isAdmin && coverageConfig && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+              <span>Target games per pair:</span>
+              {[100, 200, 400, 800].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => handleTargetChange(n)}
+                  disabled={coverageLoading}
+                  className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                    coverageConfig.targetGamesPerPair === n
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
