@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
 import type { CoverageConfig, CoverageStatus } from '../api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LeaderboardEntry {
   deckId: string;
@@ -62,6 +63,7 @@ function SortHeader({
 }
 
 export default function Leaderboard() {
+  const { isAdmin } = useAuth();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,6 @@ export default function Leaderboard() {
   const [coverageConfig, setCoverageConfig] = useState<CoverageConfig | null>(null);
   const [coverageStatus, setCoverageStatus] = useState<CoverageStatus | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(false);
-  const [isAdminUser, setIsAdminUser] = useState(false);
 
   useEffect(() => {
     const fetchCoverage = async () => {
@@ -83,9 +84,8 @@ export default function Leaderboard() {
         ]);
         setCoverageConfig(config);
         setCoverageStatus(status);
-        setIsAdminUser(true);
-      } catch {
-        // Coverage endpoints may not exist or user not authenticated
+      } catch (err) {
+        console.error('Failed to fetch coverage data:', err);
       }
     };
     fetchCoverage();
@@ -99,7 +99,6 @@ export default function Leaderboard() {
       setCoverageConfig(updated);
     } catch (err) {
       console.error('Failed to toggle coverage:', err);
-      setIsAdminUser(false);
     } finally {
       setCoverageLoading(false);
     }
@@ -286,7 +285,7 @@ export default function Leaderboard() {
         <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium text-gray-300">Deck Coverage</h3>
-            {isAdminUser && coverageConfig && (
+            {isAdmin && coverageConfig && (
               <button
                 type="button"
                 onClick={handleToggleCoverage}
@@ -317,7 +316,7 @@ export default function Leaderboard() {
             <span>{coverageStatus.percentComplete}%</span>
           </div>
 
-          {isAdminUser && coverageConfig && (
+          {isAdmin && coverageConfig && (
             <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
               <span>Target games per pair:</span>
               {[100, 200, 400, 800].map((n) => (

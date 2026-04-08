@@ -34,7 +34,8 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body) return errorResponse('Invalid or missing JSON body', 400);
     const update: { enabled?: boolean; targetGamesPerPair?: number } = {};
 
     if (typeof body.enabled === 'boolean') {

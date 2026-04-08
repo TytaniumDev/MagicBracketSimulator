@@ -33,11 +33,20 @@ export interface PairCoverageMap {
   allDeckIds: string[];
 }
 
+// In-memory cache to avoid re-reading all match_results on every request
+let coverageCache: { data: PairCoverageMap; ts: number } | null = null;
+const COVERAGE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Compute pair coverage from match_results.
  * Returns a map of pair -> game count and the full list of deck IDs.
+ * Results are cached for 5 minutes to reduce database load.
  */
 export async function computePairCoverage(): Promise<PairCoverageMap> {
+  if (coverageCache && Date.now() - coverageCache.ts < COVERAGE_CACHE_TTL_MS) {
+    return coverageCache.data;
+  }
+
   const [allDecks, matchResults] = await Promise.all([
     listAllDecks(),
     getAllMatchResults(),
@@ -53,7 +62,9 @@ export async function computePairCoverage(): Promise<PairCoverageMap> {
     }
   }
 
-  return { counts, allDeckIds };
+  const data = { counts, allDeckIds };
+  coverageCache = { data, ts: Date.now() };
+  return data;
 }
 
 /**
@@ -158,6 +169,34 @@ export async function generateNextPod(targetGamesPerPair: number): Promise<strin
   pod.push(bestD);
 
   return pod;
+}
+
+/**
+ * Check if there is already a QUEUED or RUNNING coverage job.
+ * Used to prevent race conditions when multiple workers request coverage work.
+ */
+export async function hasActiveCoverageJob(): Promise<boolean> {
+  const USE_FIRESTORE =
+    typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
+    process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+
+  if (USE_FIRESTORE) {
+    const { getFirestore } = require('firebase-admin/firestore') as typeof import('firebase-admin/firestore');
+    const snapshot = await getFirestore()
+      .collection('jobs')
+      .where('source', '==', 'coverage')
+      .where('status', 'in', ['QUEUED', 'RUNNING'])
+      .limit(1)
+      .get();
+    return !snapshot.empty;
+  }
+
+  const { getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
+  const db = getDb();
+  const row = db
+    .prepare("SELECT 1 FROM jobs WHERE source = 'coverage' AND status IN ('QUEUED', 'RUNNING') LIMIT 1")
+    .get();
+  return row !== undefined;
 }
 
 /**

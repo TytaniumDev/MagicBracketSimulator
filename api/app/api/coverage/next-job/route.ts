@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest } from '@/lib/auth';
 import { getCoverageStore } from '@/lib/coverage-store-factory';
-import { generateNextPod } from '@/lib/coverage-service';
+import { generateNextPod, hasActiveCoverageJob } from '@/lib/coverage-service';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import * as jobStore from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
   try {
     const config = await getCoverageStore().getConfig();
     if (!config.enabled) {
+      return new NextResponse(null, { status: 204 });
+    }
+
+    // Prevent race condition: only one coverage job at a time
+    if (await hasActiveCoverageJob()) {
       return new NextResponse(null, { status: 204 });
     }
 
