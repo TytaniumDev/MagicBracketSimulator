@@ -47,27 +47,7 @@ jobs:
       - name: Load Doppler secrets
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-        run: |
-          # Fetch only the secrets this job needs (least-privilege)
-          SECRETS_FILE=$(mktemp)
-          trap 'rm -f "$SECRETS_FILE"' EXIT
-          doppler secrets get \
-            GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT \
-            VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN \
-            VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET \
-            VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID \
-            --json > "$SECRETS_FILE"
-
-          # Mask all secret values so they don't leak in logs
-          jq -r '.[].computed' "$SECRETS_FILE" | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::add-mask::$line"
-          done
-
-          # Export to GITHUB_ENV with a random delimiter to prevent injection
-          EOF_MARKER="$(openssl rand -hex 16)"
-          jq -r --arg eof "$EOF_MARKER" '
-            to_entries[] | "\(.key)<<\($eof)\n\(.value.computed)\n\($eof)"
-          ' "$SECRETS_FILE" >> "$GITHUB_ENV"
+        run: ./scripts/load-doppler-secrets.sh GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -86,9 +66,7 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
-        run: |
-          npm ci
-          npm run build
+        run: npm ci && npm run build
         env:
           VITE_FIREBASE_API_KEY: ${{ env.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ env.VITE_FIREBASE_AUTH_DOMAIN }}

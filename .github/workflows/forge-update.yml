@@ -18,12 +18,7 @@ jobs:
     steps:
       - name: Resolve latest Forge version
         id: resolve
-        run: |
-          FORGE_TAG=$(curl -fsSL https://api.github.com/repos/Card-Forge/forge/releases/latest \
-            | jq -r '.tag_name')
-          FORGE_VERSION=${FORGE_TAG#forge-}
-          echo "version=${FORGE_VERSION}" >> $GITHUB_OUTPUT
-          echo "Latest Forge version: ${FORGE_VERSION}"
+        run: ./scripts/resolve-forge-version.sh
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -88,42 +83,11 @@ jobs:
       - name: Load Doppler secrets
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-        run: |
-          # Fetch only the secrets this job needs (least-privilege)
-          SECRETS_FILE=$(mktemp)
-          trap 'rm -f "$SECRETS_FILE"' EXIT
-          doppler secrets get API_URL WORKER_SECRET \
-            --json > "$SECRETS_FILE"
-
-          # Mask all secret values so they don't leak in logs
-          jq -r '.[].computed' "$SECRETS_FILE" | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::add-mask::$line"
-          done
-
-          # Export to GITHUB_ENV with a random delimiter to prevent injection
-          EOF_MARKER="$(openssl rand -hex 16)"
-          jq -r --arg eof "$EOF_MARKER" '
-            to_entries[] | "\(.key)<<\($eof)\n\(.value.computed)\n\($eof)"
-          ' "$SECRETS_FILE" >> "$GITHUB_ENV"
+        run: ./scripts/load-doppler-secrets.sh API_URL WORKER_SECRET
 
       - name: Notify workers
         continue-on-error: true
         env:
           API_URL: ${{ env.API_URL }}
           WORKER_SECRET: ${{ env.WORKER_SECRET }}
-        run: |
-          if [ -z "${API_URL}" ] || [ -z "${WORKER_SECRET}" ]; then
-            echo "::warning::API_URL or WORKER_SECRET not set, skipping worker notification"
-            exit 0
-          fi
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "${API_URL}/api/admin/pull-image" \
-            -H "Content-Type: application/json" \
-            -H "X-Worker-Secret: ${WORKER_SECRET}" \
-            -d '{}')
-          echo "Worker notification response: HTTP ${STATUS}"
-          if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
-            echo "Workers notified successfully"
-          else
-            echo "::warning::Worker notification failed with HTTP ${STATUS}"
-          fi
+        run: ./scripts/notify-workers.sh

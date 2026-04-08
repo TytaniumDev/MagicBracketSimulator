@@ -32,26 +32,7 @@ jobs:
       - name: Load Doppler secrets
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-        run: |
-          # Fetch only the secrets this job needs (least-privilege)
-          SECRETS_FILE=$(mktemp)
-          trap 'rm -f "$SECRETS_FILE"' EXIT
-          doppler secrets get \
-            GCP_SA_KEY API_URL GCS_BUCKET \
-            PUBSUB_SUBSCRIPTION PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION \
-            WORKER_SECRET GHCR_USER GHCR_TOKEN \
-            --json > "$SECRETS_FILE"
-
-          # Mask all secret values so they don't leak in logs
-          jq -r '.[].computed' "$SECRETS_FILE" | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::add-mask::$line"
-          done
-
-          # Export to GITHUB_ENV with a random delimiter to prevent injection
-          EOF_MARKER="$(openssl rand -hex 16)"
-          jq -r --arg eof "$EOF_MARKER" '
-            to_entries[] | "\(.key)<<\($eof)\n\(.value.computed)\n\($eof)"
-          ' "$SECRETS_FILE" >> "$GITHUB_ENV"
+        run: ./scripts/load-doppler-secrets.sh GCP_SA_KEY API_URL GCS_BUCKET PUBSUB_SUBSCRIPTION PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION WORKER_SECRET GHCR_USER GHCR_TOKEN
 
       - name: Extract GCP project ID from SA key
         id: project
@@ -72,7 +53,7 @@ jobs:
           echo "Using GCP project: $PROJECT_ID"
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ env.GCP_SA_KEY }}
 
@@ -115,49 +96,4 @@ jobs:
           SA_KEY: ${{ env.GCP_SA_KEY }}
           GHCR_USER: ${{ env.GHCR_USER }}
           GHCR_TOKEN: ${{ env.GHCR_TOKEN }}
-        run: |
-          node -e "
-            const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
-
-            async function main() {
-              const projectId = process.env.GOOGLE_CLOUD_PROJECT;
-              const secretId = 'worker-host-config';
-              const parent = 'projects/' + projectId;
-              const fullName = parent + '/secrets/' + secretId;
-
-              const config = {
-                sa_key: JSON.parse(process.env.SA_KEY),
-                IMAGE_NAME: process.env.IMAGE_NAME,
-                GHCR_USER: process.env.GHCR_USER,
-                GHCR_TOKEN: process.env.GHCR_TOKEN,
-              };
-
-              const client = new SecretManagerServiceClient();
-              const payload = Buffer.from(JSON.stringify(config, null, 2), 'utf8');
-
-              // Create secret if it doesn't exist
-              try {
-                await client.getSecret({ name: fullName });
-              } catch (e) {
-                if (e.code === 5 || (e.message && e.message.includes('NOT_FOUND'))) {
-                  await client.createSecret({
-                    parent,
-                    secretId,
-                    secret: { replication: { automatic: {} } },
-                  });
-                  console.log('Created secret: ' + secretId);
-                } else {
-                  throw e;
-                }
-              }
-
-              const [version] = await client.addSecretVersion({
-                parent: fullName,
-                payload: { data: payload },
-              });
-              const versionNum = version.name?.split('/').pop() ?? 'latest';
-              console.log('Done. Secret \"' + secretId + '\" updated (version: ' + versionNum + ').');
-            }
-
-            main().catch(err => { console.error(err); process.exit(1); });
-          "
+        run: node scripts/populate-worker-host-config.js
