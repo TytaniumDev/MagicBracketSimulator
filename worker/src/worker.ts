@@ -1028,6 +1028,18 @@ async function main(): Promise<void> {
       console.error('Subscription error:', error);
     });
 
+    // Periodically check for coverage work when idle (Pub/Sub mode has no
+    // polling loop, so we need a separate timer to request coverage jobs).
+    const COVERAGE_CHECK_INTERVAL_MS = 30_000;
+    setInterval(async () => {
+      if (isShuttingDown || isDraining) return;
+      if (activeSimCount > 0) return; // Only request coverage when idle
+      const created = await requestCoverageJob();
+      if (created) {
+        console.log('[Coverage] Coverage job created, will arrive via Pub/Sub');
+      }
+    }, COVERAGE_CHECK_INTERVAL_MS);
+
     console.log('Worker is running. Waiting for simulation tasks...');
   } else {
     console.log('Worker is running in polling mode.');
