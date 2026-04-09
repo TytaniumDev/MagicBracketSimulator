@@ -1051,9 +1051,13 @@ async function main(): Promise<void> {
     setInterval(async () => {
       if (isShuttingDown || isDraining) return;
       if (activeSimCount > 0) return; // Only request coverage when idle
-      const created = await requestCoverageJob();
-      if (created) {
-        console.log('[Coverage] Coverage job created, will arrive via Pub/Sub');
+      try {
+        const created = await requestCoverageJob();
+        if (created) {
+          console.log('[Coverage] Coverage job created, will arrive via Pub/Sub');
+        }
+      } catch (err) {
+        console.error('[Coverage] Failed to request coverage job:', err);
       }
     }, COVERAGE_CHECK_INTERVAL_MS);
 
