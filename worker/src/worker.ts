@@ -47,7 +47,7 @@ import {
   extractWinner,
   extractWinningTurn,
 } from './condenser.js';
-import { startWorkerApi, stopWorkerApi } from './worker-api.js';
+import { startWorkerApi, stopWorkerApi, HealthStatus } from './worker-api.js';
 import { GAMES_PER_CONTAINER } from './constants.js';
 import { createLogger } from './logger.js';
 
@@ -82,6 +82,10 @@ let jobNotifyResolve: (() => void) | null = null;
 
 // Drain flag — when true, worker stops accepting new work
 let isDraining = false;
+
+// Pub/Sub health tracking — healthy until an error occurs, reset on message receipt
+let pubSubHealthy = true;
+let lastPubSubError: string | null = null;
 
 // ============================================================================
 // Worker Naming
@@ -990,6 +994,13 @@ async function main(): Promise<void> {
     onNotify: notifyJobAvailable,
     onDrain: setDraining,
     onPullImage: pullSimulationImage,
+    getHealth: (): HealthStatus => {
+      if (!usePubSub) return { ok: true };
+      return {
+        ok: pubSubHealthy,
+        pubsub: { connected: pubSubHealthy, ...(lastPubSubError ? { lastError: lastPubSubError } : {}) },
+      };
+    },
   });
 
   // Initial heartbeat (await to apply override before Pub/Sub starts)
@@ -1023,8 +1034,14 @@ async function main(): Promise<void> {
     console.log('Subscription:', SUBSCRIPTION_NAME);
     console.log(`Subscribing to Pub/Sub messages (maxMessages=${simSemaphore.maxSlots})...`);
 
-    subscription.on('message', handleMessage);
+    subscription.on('message', (msg: any) => {
+      pubSubHealthy = true;
+      lastPubSubError = null;
+      handleMessage(msg);
+    });
     subscription.on('error', (error: unknown) => {
+      pubSubHealthy = false;
+      lastPubSubError = error instanceof Error ? error.message : String(error);
       console.error('Subscription error:', error);
     });
 
