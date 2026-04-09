@@ -268,6 +268,15 @@ docker run --rm \
 
 ---
 
+## Auto-Coverage System
+
+The Auto-Coverage system automatically queues simulation jobs to ensure all decks have a minimum number of matches against each other (e.g., target 400 games per pair). This ensures robust, unbiased power rankings on the leaderboard.
+
+1. **Worker Idle Polling:** When the worker has no user-submitted jobs to process, it will send a `POST /api/coverage/next-job` request.
+2. **Pod Generation:** The coverage service uses a greedy algorithm based on `match_results` to form a 4-player pod prioritizing the most under-covered deck pairs.
+3. **Job Creation:** If an under-covered pod is found and no coverage job is currently active, a new job is created with `source: 'coverage'`.
+4. **Processing:** The worker immediately claims and processes this job just like any user-submitted job. User jobs always take priority over coverage jobs.
+
 ## CI/CD Pipeline
 
 ```mermaid

@@ -29,6 +29,7 @@ Returns a list of recent jobs with summary information.
       "hasResult": true,
       "durationMs": 120000,
       "parallelism": 4,
+      "source": "user",
       "resultJson": { ... }
     }
   ]
@@ -74,6 +75,7 @@ Returns detailed information about a specific job.
   "workerId": "worker-123",
   "workerName": "MyWorker",
   "errorMessage": null,
+  "source": "user",
   "resultJson": null
 }
 ```
@@ -338,6 +340,70 @@ Broadcasts a `pull-image` command to all active workers.
   "message": "Pull-image broadcast sent"
 }
 ```
+
+## Auto-Coverage
+
+### Get Coverage Config
+`GET /coverage/config`
+
+Reads the auto-coverage configuration.
+**Auth:** Any authenticated user.
+
+**Response:**
+```json
+{
+  "enabled": false,
+  "targetGamesPerPair": 400
+}
+```
+
+### Update Coverage Config
+`PATCH /coverage/config`
+
+Updates the auto-coverage configuration.
+**Auth:** Admin only.
+
+**Body:**
+```json
+{
+  "enabled": true,
+  "targetGamesPerPair": 800
+}
+```
+
+**Response:**
+```json
+{
+  "enabled": true,
+  "targetGamesPerPair": 800
+}
+```
+
+### Get Coverage Status
+`GET /coverage/status`
+
+Returns the current progress of the auto-coverage system.
+**Auth:** Any authenticated user.
+
+**Response:**
+```json
+{
+  "totalPairs": 1500,
+  "coveredPairs": 750,
+  "targetGamesPerPair": 400,
+  "coveragePercentage": 50
+}
+```
+
+### Request Next Coverage Job
+`POST /coverage/next-job`
+
+Used by the worker when idle to request a new auto-coverage job based on under-covered deck pairs.
+**Auth:** `X-Worker-Secret` header required.
+
+**Response:**
+- `201 Created`: Job created (returns job basic info, `source: "coverage"`).
+- `204 No Content`: Coverage disabled, no jobs available, or already an active coverage job.
 
 ## Decks
 
