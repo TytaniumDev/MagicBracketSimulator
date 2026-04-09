@@ -818,6 +818,8 @@ function waitForNotifyOrTimeout(ms: number): Promise<void> {
  * Request a coverage job from the API when idle.
  * Returns true if a coverage job was created (will be picked up next poll cycle).
  */
+let lastCoverageReason: string | null = null;
+
 async function requestCoverageJob(): Promise<boolean> {
   try {
     const res = await fetch(`${getApiUrl()}/api/coverage/next-job`, {
@@ -828,17 +830,15 @@ async function requestCoverageJob(): Promise<boolean> {
     if (res.status === 201) {
       const data = await res.json();
       console.log(`[Coverage] Requested coverage job: ${data.id}`);
+      lastCoverageReason = null;
       return true;
     }
-    if (res.status === 204) {
-      // Parse reason if available (API returns JSON with reason field)
-      try {
-        const data = await res.json();
-        if (data?.reason) {
-          console.log(`[Coverage] No work: ${data.reason}`);
-        }
-      } catch {
-        // No body or not JSON — that's fine
+    if (res.status === 200) {
+      const data = await res.json();
+      const reason = data?.reason;
+      if (reason && reason !== lastCoverageReason) {
+        console.log(`[Coverage] No work: ${reason}`);
+        lastCoverageReason = reason;
       }
     } else {
       console.warn(`[Coverage] Unexpected response: ${res.status}`);
