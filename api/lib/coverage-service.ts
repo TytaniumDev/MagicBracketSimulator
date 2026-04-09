@@ -209,7 +209,7 @@ async function getAllMatchResults(): Promise<{ deckIds: string[] }[]> {
 
   if (USE_FIRESTORE) {
     const { getFirestore } = require('firebase-admin/firestore') as typeof import('firebase-admin/firestore');
-    const snapshot = await getFirestore().collection('match_results').select('deckIds').get();
+    const snapshot = await getFirestore().collection('matchResults').select('deckIds').get();
     return snapshot.docs.map((doc) => ({
       deckIds: doc.data().deckIds as string[],
     }));

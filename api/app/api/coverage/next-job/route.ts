@@ -25,23 +25,23 @@ export async function POST(request: NextRequest) {
   try {
     const config = await getCoverageStore().getConfig();
     if (!config.enabled) {
-      return new NextResponse(null, { status: 204 });
+      return NextResponse.json({ reason: 'disabled' });
     }
 
     // Prevent race condition: only one coverage job at a time
     if (await hasActiveCoverageJob()) {
-      return new NextResponse(null, { status: 204 });
+      return NextResponse.json({ reason: 'active-job-exists' });
     }
 
     const pod = await generateNextPod(config.targetGamesPerPair);
     if (!pod) {
-      return new NextResponse(null, { status: 204 });
+      return NextResponse.json({ reason: 'all-pairs-covered' });
     }
 
     const { decks, errors } = await resolveDeckIds(pod);
     if (errors.length > 0) {
       console.error(`[Coverage] Failed to resolve decks: ${errors.join(', ')}`);
-      return new NextResponse(null, { status: 204 });
+      return NextResponse.json({ reason: 'deck-resolution-failed', errors });
     }
 
     const job = await jobStore.createJob(decks, COVERAGE_SIMULATIONS, {
