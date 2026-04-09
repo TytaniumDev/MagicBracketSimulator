@@ -19,12 +19,18 @@ import * as crypto from 'crypto';
 // Types
 // ---------------------------------------------------------------------------
 
+export interface HealthStatus {
+  ok: boolean;
+  pubsub?: { connected: boolean; lastError?: string };
+}
+
 export interface WorkerApiHandlers {
   onConfig: (maxConcurrentOverride: number | null) => void;
   onCancel: (jobId: string) => void;
   onNotify: () => void;
   onDrain: (drain: boolean) => void;
   onPullImage: () => void;
+  getHealth?: () => HealthStatus;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +94,8 @@ export function startWorkerApi(handlers: WorkerApiHandlers): Promise<void> {
 
       // GET /health — no auth
       if (method === 'GET' && url === '/health') {
-        jsonResponse(res, 200, { ok: true });
+        const health = handlers.getHealth?.() ?? { ok: true };
+        jsonResponse(res, health.ok ? 200 : 503, health);
         return;
       }
 

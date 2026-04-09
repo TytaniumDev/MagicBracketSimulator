@@ -76,19 +76,12 @@ export default function Leaderboard() {
   const [coverageLoading, setCoverageLoading] = useState(false);
 
   useEffect(() => {
-    const fetchCoverage = async () => {
-      try {
-        const [config, status] = await Promise.all([
-          getCoverageConfig(),
-          getCoverageStatus(),
-        ]);
-        setCoverageConfig(config);
-        setCoverageStatus(status);
-      } catch (err) {
-        console.error('Failed to fetch coverage data:', err);
-      }
-    };
-    fetchCoverage();
+    getCoverageConfig()
+      .then(setCoverageConfig)
+      .catch((err) => console.error('Failed to fetch coverage config:', err));
+    getCoverageStatus()
+      .then(setCoverageStatus)
+      .catch((err) => console.error('Failed to fetch coverage status:', err));
   }, []);
 
   const handleToggleCoverage = async () => {
