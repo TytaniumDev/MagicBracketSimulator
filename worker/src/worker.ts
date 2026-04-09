@@ -830,6 +830,19 @@ async function requestCoverageJob(): Promise<boolean> {
       console.log(`[Coverage] Requested coverage job: ${data.id}`);
       return true;
     }
+    if (res.status === 204) {
+      // Parse reason if available (API returns JSON with reason field)
+      try {
+        const data = await res.json();
+        if (data?.reason) {
+          console.log(`[Coverage] No work: ${data.reason}`);
+        }
+      } catch {
+        // No body or not JSON — that's fine
+      }
+    } else {
+      console.warn(`[Coverage] Unexpected response: ${res.status}`);
+    }
     return false;
   } catch (error) {
     if (error instanceof Error && error.name !== 'TimeoutError') {
