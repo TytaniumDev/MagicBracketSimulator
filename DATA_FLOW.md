@@ -231,8 +231,8 @@ pairs have sufficient game data for reliable TrueSkill rankings.
 **Job creation flow (`POST /api/coverage/next-job`):**
 
 - Auth: worker secret only (no Firebase auth)
-- Guard: returns 204 if disabled, all pairs covered, fewer than 4 decks, or
-  an active coverage job already exists (race condition prevention)
+- Guard: returns 200 with `{ reason }` if no work available. Possible reasons:
+  `disabled`, `active-job-exists`, `all-pairs-covered`, `deck-resolution-failed`
 - Creates a job with `simulations: 100`, `parallelism: 1`,
   `source: 'coverage'`
 - Job enters the normal queue — same pipeline as user-created jobs
