@@ -1,10 +1,8 @@
-import { Firestore, Timestamp, FieldValue } from '@google-cloud/firestore';
+import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, JobSource } from './types';
+import { getFirestore } from './firestore-client';
 
-// Initialize Firestore client
-const firestore = new Firestore({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-});
+const firestore = getFirestore();
 
 // Collection references
 const jobsCollection = firestore.collection('jobs');
@@ -670,6 +668,4 @@ export async function deleteSimulations(jobId: string): Promise<void> {
     await batch.commit();
   }
 }
-
-export { firestore };
 

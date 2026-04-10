@@ -1,7 +1,8 @@
 import { Timestamp } from '@google-cloud/firestore';
-import { firestore } from './firestore-job-store';
+import { getFirestore } from './firestore-client';
 import type { WorkerInfo } from './types';
 
+const firestore = getFirestore();
 const workersCollection = firestore.collection('workers');
 const jobsCollection = firestore.collection('jobs');
 

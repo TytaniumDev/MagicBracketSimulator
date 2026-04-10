@@ -2,20 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { sendAccessRequestEmail } from '@/lib/email-notification';
 import { createHmac } from 'node:crypto';
-import { Firestore } from '@google-cloud/firestore';
+import { getFirestore } from '@/lib/firestore-client';
 import { errorResponse } from '@/lib/api-response';
 
 const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
 
-let _firestore: Firestore | null = null;
-function getDb(): Firestore {
-  if (!_firestore) {
-    _firestore = new Firestore({
-      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-    });
-  }
-  return _firestore;
-}
+const getDb = getFirestore;
 
 function generateApprovalToken(uid: string, requestId: string): string {
   const secret = process.env.WORKER_SECRET;
