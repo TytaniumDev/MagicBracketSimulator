@@ -33,8 +33,11 @@ export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
  * Get workers whose last heartbeat is within the stale threshold.
  * Workers with status 'updating' get a longer threshold (5 min) to remain
  * visible during Watchtower image pulls and container restarts.
+ *
+ * Default threshold is 3 minutes to give 3x headroom over the 60-second
+ * heartbeat cadence (see HEARTBEAT_INTERVAL_MS in worker/src/worker.ts).
  */
-export async function getActiveWorkers(staleThresholdMs = 60_000): Promise<WorkerInfo[]> {
+export async function getActiveWorkers(staleThresholdMs = 180_000): Promise<WorkerInfo[]> {
   const UPDATING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes for updating workers
   const maxThreshold = Math.max(staleThresholdMs, UPDATING_THRESHOLD_MS);
   const cutoff = new Date(Date.now() - maxThreshold).toISOString();

@@ -42,7 +42,7 @@ export function upsertHeartbeat(info: WorkerInfo): void {
  * Workers with status 'updating' get a longer threshold (5 min) to remain
  * visible during Watchtower image pulls and container restarts.
  */
-export function getActiveWorkers(staleThresholdMs = 60_000): WorkerInfo[] {
+export function getActiveWorkers(staleThresholdMs = 180_000): WorkerInfo[] {
   const db = getDb();
   const UPDATING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes for updating workers
   const maxThreshold = Math.max(staleThresholdMs, UPDATING_THRESHOLD_MS);

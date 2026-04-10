@@ -25,7 +25,7 @@ export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
   (await sqliteStore()).upsertHeartbeat(info);
 }
 
-export async function getActiveWorkers(staleThresholdMs = 60_000): Promise<WorkerInfo[]> {
+export async function getActiveWorkers(staleThresholdMs = 180_000): Promise<WorkerInfo[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.getActiveWorkers(staleThresholdMs);
   }
