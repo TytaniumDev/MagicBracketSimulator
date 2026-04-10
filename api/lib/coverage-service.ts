@@ -181,8 +181,11 @@ export async function hasActiveCoverageJob(): Promise<boolean> {
     process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
   if (USE_FIRESTORE) {
-    const { getFirestore } = require('firebase-admin/firestore') as typeof import('firebase-admin/firestore');
-    const snapshot = await getFirestore()
+    const { Firestore } = await import('@google-cloud/firestore');
+    const firestore = new Firestore({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
+    });
+    const snapshot = await firestore
       .collection('jobs')
       .where('source', '==', 'coverage')
       .where('status', 'in', ['QUEUED', 'RUNNING'])
@@ -208,8 +211,11 @@ async function getAllMatchResults(): Promise<{ deckIds: string[] }[]> {
     process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
   if (USE_FIRESTORE) {
-    const { getFirestore } = require('firebase-admin/firestore') as typeof import('firebase-admin/firestore');
-    const snapshot = await getFirestore().collection('matchResults').select('deckIds').get();
+    const { Firestore } = await import('@google-cloud/firestore');
+    const firestore = new Firestore({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
+    });
+    const snapshot = await firestore.collection('matchResults').select('deckIds').get();
     return snapshot.docs.map((doc) => ({
       deckIds: doc.data().deckIds as string[],
     }));
