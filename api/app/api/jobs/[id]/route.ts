@@ -114,21 +114,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return badRequestResponse('Job ID is required');
     }
 
-    let job = await jobStore.getJob(id);
+    const job = await jobStore.getJob(id);
     if (!job) {
       return notFoundResponse('Job');
     }
 
-    // Attempt stale job recovery for RUNNING or stuck QUEUED jobs
-    if (job.status === 'RUNNING' || job.status === 'QUEUED') {
-      const recovered = await jobStore.recoverStaleJob(id);
-      if (recovered) {
-        job = await jobStore.getJob(id);
-        if (!job) {
-          return notFoundResponse('Job');
-        }
-      }
-    }
+    // Recovery of stuck jobs is handled out-of-band by the scheduled
+    // stale-sweeper (/api/admin/sweep-stale-jobs via Cloud Scheduler, see
+    // docs/STALE_SWEEPER.md). Keeping it out of the GET hot path: a frontend
+    // poll against a 20-sim job used to fan out to ~22 Firestore reads per
+    // call (job + active workers + every sim doc), which burned through the
+    // 50k/day Firestore free tier in minutes of watching a running job.
 
     const response = await jobToApiResponse(job, isWorker);
     return NextResponse.json(response);
