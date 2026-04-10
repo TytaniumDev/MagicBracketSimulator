@@ -1,18 +1,10 @@
 import { NextRequest } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Firestore } from '@google-cloud/firestore';
+import { getFirestore } from '@/lib/firestore-client';
 
 const TOKEN_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 
-let _firestore: Firestore | null = null;
-function getDb(): Firestore {
-  if (!_firestore) {
-    _firestore = new Firestore({
-      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-    });
-  }
-  return _firestore;
-}
+const getDb = getFirestore;
 
 function htmlResponse(statusCode: number, title: string, body: string): Response {
   return new Response(

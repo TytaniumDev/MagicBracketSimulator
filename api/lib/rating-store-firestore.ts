@@ -5,13 +5,12 @@
  *   ratings/{deckId}       — DeckRating document
  *   matchResults/{id}      — MatchResult document
  */
-import { Firestore, Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from '@google-cloud/firestore';
 import type { RatingStore, LeaderboardOptions } from './rating-store';
 import type { DeckRating, MatchResult } from './types';
+import { getFirestore } from './firestore-client';
 
-const firestore = new Firestore({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-});
+const firestore = getFirestore();
 
 const ratingsCol = firestore.collection('ratings');
 const matchResultsCol = firestore.collection('matchResults');

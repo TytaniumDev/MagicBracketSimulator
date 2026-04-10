@@ -4,11 +4,9 @@
  * so it works without Firebase Admin initialization.
  */
 import type { CoverageStore, CoverageConfig } from './coverage-store';
-import { Firestore } from '@google-cloud/firestore';
+import { getFirestore } from './firestore-client';
 
-const firestore = new Firestore({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-});
+const firestore = getFirestore();
 
 const configDoc = firestore.collection('config').doc('coverage');
 

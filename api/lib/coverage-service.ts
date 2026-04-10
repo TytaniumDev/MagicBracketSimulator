@@ -2,22 +2,14 @@
  * Coverage service: computes pair coverage from match_results and generates
  * optimal 4-player pods using a greedy algorithm.
  */
-import { Firestore } from '@google-cloud/firestore';
 import { listAllDecks } from './deck-store-factory';
+import { getFirestore } from './firestore-client';
 
 const USE_FIRESTORE =
   typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
   process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
-let _firestore: Firestore | null = null;
-function getFirestoreClient(): Firestore {
-  if (!_firestore) {
-    _firestore = new Firestore({
-      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-    });
-  }
-  return _firestore;
-}
+const getFirestoreClient = getFirestore;
 
 /** Canonical key for a pair of deck IDs (alphabetically sorted). */
 function pairKey(a: string, b: string): string {

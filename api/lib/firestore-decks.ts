@@ -2,11 +2,10 @@
  * Firestore-backed unified deck store (precons + user decks).
  * Same schema for all decks; isPrecon and ownerId distinguish them.
  */
-import { Firestore, Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from '@google-cloud/firestore';
+import { getFirestore } from './firestore-client';
 
-const firestore = new Firestore({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-});
+const firestore = getFirestore();
 
 const decksCollection = firestore.collection('decks');
 

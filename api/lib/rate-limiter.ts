@@ -18,8 +18,8 @@ export async function checkRateLimit(
   }
 
   try {
-    const { firestore } = await import('./firestore-job-store');
-    const jobsRef = firestore.collection('jobs');
+    const { getFirestore } = await import('./firestore-client');
+    const jobsRef = getFirestore().collection('jobs');
 
     // Check active jobs (QUEUED + RUNNING)
     const activeSnap = await jobsRef
