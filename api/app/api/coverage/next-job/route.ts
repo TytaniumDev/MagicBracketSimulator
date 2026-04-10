@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const config = await getCoverageStore().getConfig();
+    const config = await (await getCoverageStore()).getConfig();
     if (!config.enabled) {
       return NextResponse.json({ reason: 'disabled' });
     }
