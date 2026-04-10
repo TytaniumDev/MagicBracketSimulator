@@ -2,7 +2,22 @@
  * Coverage service: computes pair coverage from match_results and generates
  * optimal 4-player pods using a greedy algorithm.
  */
+import { Firestore } from '@google-cloud/firestore';
 import { listAllDecks } from './deck-store-factory';
+
+const USE_FIRESTORE =
+  typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
+  process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+
+let _firestore: Firestore | null = null;
+function getFirestoreClient(): Firestore {
+  if (!_firestore) {
+    _firestore = new Firestore({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
+    });
+  }
+  return _firestore;
+}
 
 /** Canonical key for a pair of deck IDs (alphabetically sorted). */
 function pairKey(a: string, b: string): string {
@@ -176,13 +191,8 @@ export async function generateNextPod(targetGamesPerPair: number): Promise<strin
  * Used to prevent race conditions when multiple workers request coverage work.
  */
 export async function hasActiveCoverageJob(): Promise<boolean> {
-  const USE_FIRESTORE =
-    typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
-    process.env.GOOGLE_CLOUD_PROJECT.length > 0;
-
   if (USE_FIRESTORE) {
-    const { getFirestore } = require('firebase-admin/firestore') as typeof import('firebase-admin/firestore');
-    const snapshot = await getFirestore()
+    const snapshot = await getFirestoreClient()
       .collection('jobs')
       .where('source', '==', 'coverage')
       .where('status', 'in', ['QUEUED', 'RUNNING'])
@@ -203,13 +213,8 @@ export async function hasActiveCoverageJob(): Promise<boolean> {
  * Get all match results (deck_ids arrays) from the database.
  */
 async function getAllMatchResults(): Promise<{ deckIds: string[] }[]> {
-  const USE_FIRESTORE =
-    typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
-    process.env.GOOGLE_CLOUD_PROJECT.length > 0;
-
   if (USE_FIRESTORE) {
-    const { getFirestore } = require('firebase-admin/firestore') as typeof import('firebase-admin/firestore');
-    const snapshot = await getFirestore().collection('matchResults').select('deckIds').get();
+    const snapshot = await getFirestoreClient().collection('matchResults').select('deckIds').get();
     return snapshot.docs.map((doc) => ({
       deckIds: doc.data().deckIds as string[],
     }));

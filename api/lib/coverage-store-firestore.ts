@@ -1,11 +1,16 @@
 /**
  * Firestore implementation of CoverageStore (GCP mode).
+ * Uses @google-cloud/firestore directly (same pattern as firestore-job-store)
+ * so it works without Firebase Admin initialization.
  */
 import type { CoverageStore, CoverageConfig } from './coverage-store';
-import { getFirestore } from 'firebase-admin/firestore';
+import { Firestore } from '@google-cloud/firestore';
 
-const COLLECTION = 'config';
-const DOC_ID = 'coverage';
+const firestore = new Firestore({
+  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
+});
+
+const configDoc = firestore.collection('config').doc('coverage');
 
 const DEFAULT_CONFIG: CoverageConfig = {
   enabled: false,
@@ -16,7 +21,7 @@ const DEFAULT_CONFIG: CoverageConfig = {
 
 export const firestoreCoverageStore: CoverageStore = {
   async getConfig(): Promise<CoverageConfig> {
-    const doc = await getFirestore().collection(COLLECTION).doc(DOC_ID).get();
+    const doc = await configDoc.get();
     if (!doc.exists) return DEFAULT_CONFIG;
     const data = doc.data()!;
     return {
@@ -35,7 +40,7 @@ export const firestoreCoverageStore: CoverageStore = {
       updatedAt: new Date().toISOString(),
       updatedBy,
     };
-    await getFirestore().collection(COLLECTION).doc(DOC_ID).set(config);
+    await configDoc.set(config);
     return config;
   },
 };
