@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const config = await getCoverageStore().getConfig();
+    const config = await (await getCoverageStore()).getConfig();
     const status = await getCoverageStatus(config.targetGamesPerPair);
     return NextResponse.json(status);
   } catch (error) {

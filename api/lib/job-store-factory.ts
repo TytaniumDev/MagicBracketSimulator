@@ -4,7 +4,6 @@
  */
 import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER, JobSource } from './types';
 import { isTerminalSimState } from '@shared/types/state-machine';
-import * as sqliteStore from './job-store';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
 import { cancelRecoveryCheck } from './cloud-tasks';
@@ -15,6 +14,20 @@ const log = createLogger('JobStore');
 const recoveryLog = createLogger('Recovery');
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+
+// Lazy dynamic import of the SQLite-backed store. Using `await import()` (not
+// `require()`) so webpack can statically analyze the dependency and emit it
+// as a separate chunk that is only loaded when first accessed. This keeps
+// better-sqlite3 and the full SQLite schema in db.ts out of the production
+// container startup path entirely when running in GCP mode.
+type SqliteJobStore = typeof import('./job-store');
+let _sqliteStore: SqliteJobStore | null = null;
+async function sqliteStore(): Promise<SqliteJobStore> {
+  if (!_sqliteStore) {
+    _sqliteStore = await import('./job-store');
+  }
+  return _sqliteStore;
+}
 
 // Log mode detection at startup
 log.info('Running in mode', { mode: USE_FIRESTORE ? 'GCP' : 'LOCAL' });
@@ -33,7 +46,7 @@ export async function getJob(id: string): Promise<Job | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getJob(id);
   }
-  const job = sqliteStore.getJob(id);
+  const job = (await sqliteStore()).getJob(id);
   return job ?? null;
 }
 
@@ -41,7 +54,7 @@ export async function getJobByIdempotencyKey(key: string): Promise<Job | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getJobByIdempotencyKey(key);
   }
-  const job = sqliteStore.getJobByIdempotencyKey(key);
+  const job = (await sqliteStore()).getJobByIdempotencyKey(key);
   return job ?? null;
 }
 
@@ -61,7 +74,7 @@ export async function createJob(
       source: options?.source,
     });
   }
-  return sqliteStore.createJob(
+  return (await sqliteStore()).createJob(
     decks,
     simulations,
     options?.idempotencyKey,
@@ -75,14 +88,14 @@ export async function listJobs(userId?: string): Promise<Job[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.listJobs(userId);
   }
-  return sqliteStore.listJobs();
+  return (await sqliteStore()).listJobs();
 }
 
 export async function listActiveJobs(): Promise<Job[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.listActiveJobs();
   }
-  return sqliteStore.listActiveJobs();
+  return (await sqliteStore()).listActiveJobs();
 }
 
 export async function updateJobStatus(id: string, status: JobStatus): Promise<void> {
@@ -90,7 +103,7 @@ export async function updateJobStatus(id: string, status: JobStatus): Promise<vo
     await firestoreStore.updateJobStatus(id, status);
     return;
   }
-  sqliteStore.updateJobStatus(id, status);
+  (await sqliteStore()).updateJobStatus(id, status);
 }
 
 export async function setJobStartedAt(id: string, workerId?: string, workerName?: string): Promise<void> {
@@ -98,7 +111,7 @@ export async function setJobStartedAt(id: string, workerId?: string, workerName?
     await firestoreStore.setJobStartedAt(id, workerId, workerName);
     return;
   }
-  sqliteStore.setJobStartedAt(id, workerId, workerName);
+  (await sqliteStore()).setJobStartedAt(id, workerId, workerName);
 }
 
 export async function conditionalUpdateJobStatus(
@@ -110,7 +123,7 @@ export async function conditionalUpdateJobStatus(
   if (USE_FIRESTORE) {
     return firestoreStore.conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
   }
-  return sqliteStore.conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
+  return (await sqliteStore()).conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
 }
 
 export async function setNeedsAggregation(id: string, value: boolean): Promise<void> {
@@ -118,7 +131,7 @@ export async function setNeedsAggregation(id: string, value: boolean): Promise<v
     await firestoreStore.setNeedsAggregation(id, value);
     return;
   }
-  sqliteStore.setNeedsAggregation(id, value);
+  (await sqliteStore()).setNeedsAggregation(id, value);
 }
 
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
@@ -126,7 +139,7 @@ export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[
     await firestoreStore.setJobCompleted(id, dockerRunDurationsMs);
     return;
   }
-  sqliteStore.setJobCompleted(id, { dockerRunDurationsMs });
+  (await sqliteStore()).setJobCompleted(id, { dockerRunDurationsMs });
 }
 
 export async function setJobFailed(id: string, errorMessage: string, dockerRunDurationsMs?: number[]): Promise<void> {
@@ -134,7 +147,7 @@ export async function setJobFailed(id: string, errorMessage: string, dockerRunDu
     await firestoreStore.setJobFailed(id, errorMessage);
     return;
   }
-  sqliteStore.setJobFailed(id, errorMessage, { dockerRunDurationsMs });
+  (await sqliteStore()).setJobFailed(id, errorMessage, { dockerRunDurationsMs });
 }
 
 export async function setJobResults(jobId: string, results: JobResults): Promise<void> {
@@ -142,14 +155,14 @@ export async function setJobResults(jobId: string, results: JobResults): Promise
     await firestoreStore.setJobResults(jobId, results);
     return;
   }
-  sqliteStore.setJobResults(jobId, results);
+  (await sqliteStore()).setJobResults(jobId, results);
 }
 
 export async function claimNextJob(): Promise<Job | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.claimNextJob();
   }
-  const job = sqliteStore.claimNextJob();
+  const job = (await sqliteStore()).claimNextJob();
   return job ?? null;
 }
 
@@ -157,7 +170,7 @@ export async function cancelJob(id: string): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreStore.cancelJob(id);
   }
-  return sqliteStore.cancelJob(id);
+  return (await sqliteStore()).cancelJob(id);
 }
 
 export async function deleteJob(id: string): Promise<void> {
@@ -165,7 +178,7 @@ export async function deleteJob(id: string): Promise<void> {
     await firestoreStore.deleteJob(id);
     return;
   }
-  sqliteStore.deleteJob(id);
+  (await sqliteStore()).deleteJob(id);
 }
 
 // ─── Per-Simulation Tracking ─────────────────────────────────────────────────
@@ -175,7 +188,7 @@ export async function initializeSimulations(jobId: string, count: number): Promi
     await firestoreStore.initializeSimulations(jobId, count);
     return;
   }
-  sqliteStore.initializeSimulations(jobId, count);
+  (await sqliteStore()).initializeSimulations(jobId, count);
 }
 
 export async function updateSimulationStatus(
@@ -187,28 +200,28 @@ export async function updateSimulationStatus(
     await firestoreStore.updateSimulationStatus(jobId, simId, update);
     return;
   }
-  sqliteStore.updateSimulationStatus(jobId, simId, update);
+  (await sqliteStore()).updateSimulationStatus(jobId, simId, update);
 }
 
 export async function getSimulationStatus(jobId: string, simId: string): Promise<SimulationStatus | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getSimulationStatus(jobId, simId);
   }
-  return sqliteStore.getSimulationStatus(jobId, simId);
+  return (await sqliteStore()).getSimulationStatus(jobId, simId);
 }
 
 export async function getSimulationStatuses(jobId: string): Promise<SimulationStatus[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.getSimulationStatuses(jobId);
   }
-  return sqliteStore.getSimulationStatuses(jobId);
+  return (await sqliteStore()).getSimulationStatuses(jobId);
 }
 
 export async function resetJobForRetry(id: string): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreStore.resetJobForRetry(id);
   }
-  return sqliteStore.resetJobForRetry(id);
+  return (await sqliteStore()).resetJobForRetry(id);
 }
 
 export async function deleteSimulations(jobId: string): Promise<void> {
@@ -216,7 +229,7 @@ export async function deleteSimulations(jobId: string): Promise<void> {
     await firestoreStore.deleteSimulations(jobId);
     return;
   }
-  sqliteStore.deleteSimulations(jobId);
+  (await sqliteStore()).deleteSimulations(jobId);
 }
 
 /**
@@ -231,7 +244,7 @@ export async function incrementCompletedSimCount(
     return firestoreStore.incrementCompletedSimCount(jobId);
   }
   // Local mode fallback: count from simulation statuses
-  const sims = sqliteStore.getSimulationStatuses(jobId);
+  const sims = (await sqliteStore()).getSimulationStatuses(jobId);
   const completedSimCount = sims.filter(s => s.state === 'COMPLETED' || s.state === 'CANCELLED').length;
   return { completedSimCount, totalSimCount: sims.length };
 }
@@ -247,7 +260,7 @@ export async function conditionalUpdateSimulationStatus(
   if (USE_FIRESTORE) {
     return firestoreStore.conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
   }
-  return sqliteStore.conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
+  return (await sqliteStore()).conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
 }
 
 /**
