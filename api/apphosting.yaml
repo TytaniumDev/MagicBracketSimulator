@@ -2,7 +2,10 @@
 runConfig:
   minInstances: 0
   maxInstances: 1
-  memory: 512MiB
+  # Bumped from 512MiB → 1GiB: container was OOM-killing at ~520-535 MiB under
+  # normal load, causing Envoy to return 503 "upstream connect error" which
+  # surfaces in the browser as "Failed to fetch" on routes like /leaderboard.
+  memory: 1GiB
   cpu: 1
   concurrency: 80
 
