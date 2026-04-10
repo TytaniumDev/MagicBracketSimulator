@@ -540,12 +540,22 @@ function setDraining(drain: boolean): void {
   console.log(drain ? 'Drain mode enabled: no new work will be accepted' : 'Drain mode disabled: accepting work');
 }
 
+// Has this worker already done its startup `?initial=1` heartbeat?
+// Runtime concurrency overrides are delivered via the push API (POST /config
+// on the worker's own HTTP server), so every subsequent heartbeat is a
+// one-way status write and does NOT re-read the override from Firestore.
+// We only do the read on the very first beat after startup so a worker that
+// was offline while an override was set still picks it up.
+let initialHeartbeatDone = false;
+
 /**
  * Send a heartbeat to the API so the frontend knows this worker is online.
- * Parses the response for dynamic concurrency overrides.
+ * On the first call (after startup), requests the stored concurrency
+ * override via `?initial=1`. Subsequent calls skip the override read.
  */
 async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: number): Promise<void> {
-  const url = `${getApiUrl()}/api/workers/heartbeat`;
+  const isInitial = !initialHeartbeatDone;
+  const url = `${getApiUrl()}/api/workers/heartbeat${isInitial ? '?initial=1' : ''}`;
   const resolvedStatus = status ?? (activeSimCount > 0 ? 'busy' : 'idle');
   try {
     const res = await fetch(url, {
@@ -568,10 +578,14 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
       return;
     }
 
-    // Parse response for concurrency override
-    const data = await res.json() as { ok: boolean; maxConcurrentOverride?: number };
-    if (status !== 'updating') {
+    // Only the initial sync response carries an override; apply it exactly
+    // once. After that, runtime changes arrive via the push /config path.
+    if (isInitial && status !== 'updating') {
+      const data = await res.json() as { ok: boolean; maxConcurrentOverride?: number };
       applyOverride(data.maxConcurrentOverride ?? null);
+      initialHeartbeatDone = true;
+    } else {
+      initialHeartbeatDone = true;
     }
   } catch (err) {
     log.warn('Heartbeat error', { error: err instanceof Error ? err.message : err });
@@ -1018,7 +1032,11 @@ async function main(): Promise<void> {
 
   // Initial heartbeat (await to apply override before Pub/Sub starts)
   await sendHeartbeat();
-  const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '15000', 10);
+  // 60s default: the heartbeat exists only so the frontend can show "worker
+  // online" within ~1-2 minutes. More frequent beats burned Firestore writes
+  // and kept the API container warm 24/7 (defeating minInstances: 0) with
+  // 2 workers beating every 15s → 11,520 writes/day.
+  const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '60000', 10);
   heartbeatInterval = setInterval(() => sendHeartbeat(), HEARTBEAT_INTERVAL_MS);
 
   // Periodic Docker cleanup (every hour) to free disk space
