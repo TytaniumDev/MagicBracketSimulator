@@ -14,21 +14,34 @@ const nextConfig: NextConfig = {
 
   outputFileTracingRoot: path.join(__dirname),
 
-  // Prevent webpack from bundling @google-cloud/tasks. The library loads its
-  // gapic client config via `getJSON(path.join(dirname, 'cloud_tasks_client_config.json'))`
-  // — a dynamic require() that webpack can't statically analyze, so the bundle
+  // Treat the entire @google-cloud/* suite as runtime externals rather than
+  // letting webpack bundle them into the server chunks.
+  //
+  // Why: @google-cloud/tasks is definitively broken under webpack — it loads
+  // its gapic client config via `getJSON(path.join(dirname, 'cloud_tasks_client_config.json'))`,
+  // a dynamic require() that webpack can't statically analyze, so the bundle
   // ends up with a broken reference like
   // '/workspace/api/.next/standalone/.next/server/chunks/cloud_tasks_client_config.json'
   // and `new CloudTasksClient()` throws MODULE_NOT_FOUND at runtime.
   //
-  // Externalizing it tells Next.js to leave the package alone so Node's native
-  // require() resolves the JSON sidecar from node_modules/ at runtime. The NFT
-  // tracer still copies the package into the standalone output.
+  // The other libraries (firestore, pubsub, secret-manager, storage) currently
+  // use static literal `require("./foo_client_config.json")` which webpack
+  // DOES handle correctly — but they sit on the same google-gax runtime and
+  // share the same architectural pattern, so a minor-version bump that
+  // switches any of them to the dynamic-require helper would silently break
+  // them the same way. Externalizing them preemptively is safer than
+  // discovering the regression in production.
   //
-  // The other @google-cloud/* libraries we use (firestore, pubsub,
-  // secret-manager, storage) use static literal `require("./file.json")`
-  // calls that webpack CAN bundle, so they don't need this.
-  serverExternalPackages: ["@google-cloud/tasks"],
+  // Next.js 15 leaves each `require("@google-cloud/...")` as a literal runtime
+  // import, and the NFT tracer still copies the full packages into the
+  // standalone output so Node's native resolver finds every sidecar JSON.
+  serverExternalPackages: [
+    "@google-cloud/firestore",
+    "@google-cloud/pubsub",
+    "@google-cloud/secret-manager",
+    "@google-cloud/storage",
+    "@google-cloud/tasks",
+  ],
 };
 
 export default withSentryConfig(nextConfig, {
