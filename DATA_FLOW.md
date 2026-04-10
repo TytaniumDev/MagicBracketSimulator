@@ -69,6 +69,20 @@ former background polling scanner.
 - **Job cancellation** (`POST /api/jobs/:id/cancel`): triggers aggregation so
 `structured.json` gets created from whatever sims completed before
 cancellation.
+- **Stale-job sweeper** (`POST /api/admin/sweep-stale-jobs`, see
+`api/lib/stale-sweeper.ts` and `docs/STALE_SWEEPER.md`): fired by Cloud
+Scheduler every 15 minutes. For each active job it (a) hard-fails any
+job that has sat QUEUED for >2h, (b) hard-cancels any sim whose baseline
+age exceeds the 2h cap, (c) calls `recoverStaleJob`, and (d) explicitly
+calls `aggregateJobResults(jobId)` when the cancel-and-recover pass
+leaves the job with every sim in a terminal state (COMPLETED or
+CANCELLED). This last step is the safety-net aggregation trigger that
+unsticks jobs where a worker has died mid-sim or a re-published Pub/Sub
+message was starved by higher-volume traffic. Runs in both GCP and
+LOCAL mode; in GCP mode the Firestore/Pub/Sub recovery inside
+`recoverStaleJob` already handles the re-trigger, and step (d) is the
+catch-all for LOCAL mode (SQLite, no Pub/Sub) where that path is a
+no-op.
 
 **When raw log is uploaded (POST logs/simulation):**
 
