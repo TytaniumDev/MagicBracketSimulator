@@ -583,10 +583,12 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
     if (isInitial && status !== 'updating') {
       const data = await res.json() as { ok: boolean; maxConcurrentOverride?: number };
       applyOverride(data.maxConcurrentOverride ?? null);
-      initialHeartbeatDone = true;
     } else {
-      initialHeartbeatDone = true;
+      // Drain the response body so fetch doesn't leak the underlying
+      // connection / stream when we don't care about the payload.
+      await res.body?.cancel();
     }
+    initialHeartbeatDone = true;
   } catch (err) {
     log.warn('Heartbeat error', { error: err instanceof Error ? err.message : err });
   }
