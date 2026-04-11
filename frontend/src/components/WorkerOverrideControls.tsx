@@ -73,6 +73,7 @@ export const WorkerOverrideControls = memo(function WorkerOverrideControls({ wor
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         onClick={(e) => e.stopPropagation()}
+        aria-label={`Override capacity for worker ${worker.workerName || worker.workerId}`}
         className="w-14 px-1.5 py-0.5 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs text-center"
         disabled={saving}
       />
@@ -80,6 +81,7 @@ export const WorkerOverrideControls = memo(function WorkerOverrideControls({ wor
         type="button"
         onClick={(e) => { e.stopPropagation(); handleSet(); }}
         disabled={saving}
+        aria-label={`Set override capacity for worker ${worker.workerName || worker.workerId}`}
         className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-xs text-white"
       >
         Set
@@ -89,6 +91,7 @@ export const WorkerOverrideControls = memo(function WorkerOverrideControls({ wor
           type="button"
           onClick={(e) => { e.stopPropagation(); handleClear(); }}
           disabled={saving}
+          aria-label={`Clear override capacity for worker ${worker.workerName || worker.workerId}`}
           className="px-2 py-0.5 bg-gray-600 hover:bg-gray-500 disabled:opacity-50 rounded text-xs text-gray-200"
         >
           Clear

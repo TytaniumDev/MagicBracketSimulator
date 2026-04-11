@@ -68,6 +68,7 @@ export function LoginButton() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
+          aria-label="Email address"
           className="px-3 py-2 text-sm bg-gray-700 text-white rounded-md border border-gray-600 focus:outline-none focus:border-purple-500 w-40"
           disabled={isSubmitting}
           required
@@ -77,6 +78,7 @@ export function LoginButton() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
+          aria-label="Password"
           className="px-3 py-2 text-sm bg-gray-700 text-white rounded-md border border-gray-600 focus:outline-none focus:border-purple-500 w-32"
           disabled={isSubmitting}
           required
