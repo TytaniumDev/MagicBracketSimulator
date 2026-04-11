@@ -16,6 +16,9 @@ jobs:
       rebuilt: ${{ steps.check.outputs.rebuilt }}
       forge_version: ${{ steps.resolve.outputs.version }}
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Resolve latest Forge version
         id: resolve
         run: ./scripts/resolve-forge-version.sh
@@ -45,10 +48,6 @@ jobs:
             echo "rebuilt=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Checkout repo
-        if: steps.check.outputs.rebuilt == 'true'
-        uses: actions/checkout@v4
-
       - name: Set up QEMU
         if: steps.check.outputs.rebuilt == 'true'
         uses: docker/setup-qemu-action@v3
@@ -77,6 +76,9 @@ jobs:
     if: needs.check-and-build.outputs.rebuilt == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
 
