@@ -244,7 +244,6 @@ async function runTests() {
       const result = await sweep(farFuture);
 
       assert(result.simsCancelled === 1, `one sim should be cancelled, got ${result.simsCancelled}`);
-      assert(result.aggregationsTriggered === 1, `aggregation should fire, got ${result.aggregationsTriggered}`);
 
       const sims = jobStoreSqlite.getSimulationStatuses(jobId);
       const stuckSim = sims.find((s) => s.simId === 'sim_001');
@@ -252,7 +251,12 @@ async function runTests() {
 
       const finalJob = jobStoreSqlite.getJob(jobId);
       // After aggregateJobResults on an all-terminal job, status should
-      // transition to COMPLETED (in local mode the aggregation runs inline).
+      // transition to COMPLETED (in local mode the aggregation runs inline
+      // inside recoverStaleSimulationsLocal since the gemini review fix).
+      // The observable outcome is what matters — `aggregationsTriggered`
+      // is implementation detail that depends on which internal code path
+      // fired the trigger (recovery vs sweeper catch-up), so we don't
+      // assert on the counter here.
       assert(finalJob!.status === 'COMPLETED', `job should be COMPLETED, got ${finalJob!.status}`);
     } finally {
       cleanupJob(jobId);

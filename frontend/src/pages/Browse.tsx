@@ -202,9 +202,10 @@ export default function Browse() {
    * Load the next page of older jobs. Works in both GCP and LOCAL mode:
    * - LOCAL: nextCursor came from the initial REST fetch.
    * - GCP: the initial list is live via Firestore onSnapshot, so we derive
-   *   the cursor from the createdAt of the oldest currently-visible job.
-   *   The backend cursor format is base64(createdAt ISO string), which
-   *   matches what `/api/jobs` returns in `nextCursor`.
+   *   the cursor from the oldest currently-visible job using a composite
+   *   (createdAt, id) cursor that matches the server's wire format.
+   *   Without the id tie-breaker, two jobs created in the same millisecond
+   *   could be skipped or duplicated on page boundaries.
    */
   const loadMore = useCallback(async () => {
     if (loadingMore) return;
@@ -213,11 +214,12 @@ export default function Browse() {
     try {
       let cursor = nextCursor;
       if (!cursor) {
-        // GCP mode first Load More: derive from oldest visible job.
+        // GCP mode first Load More: build a composite cursor from the
+        // oldest visible job. Wire format: base64(JSON({ts, id})).
         const visible = [...jobs, ...extraJobs];
         const oldest = visible[visible.length - 1];
         if (!oldest) return;
-        cursor = btoa(oldest.createdAt);
+        cursor = btoa(JSON.stringify({ ts: oldest.createdAt, id: oldest.id }));
       }
       const url = `${apiBase}/api/jobs?limit=100&cursor=${encodeURIComponent(cursor)}`;
       const res = await fetchWithAuth(url);

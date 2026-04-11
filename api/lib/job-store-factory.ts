@@ -482,10 +482,16 @@ async function recoverStaleSimulationsLocal(
     const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
     if (needsRetrigger) {
       recoveryLog.info('LOCAL: all sims terminal, retriggering aggregation', { jobId });
-      aggregateJobResults(jobId).catch((err) => {
+      // Awaited (not fire-and-forget) so the caller — typically the
+      // stale-sweeper HTTP handler — doesn't return before the aggregation
+      // finishes. On serverless runtimes (Cloud Run), unawaited background
+      // work can be throttled or killed the moment the response is sent.
+      try {
+        await aggregateJobResults(jobId);
+      } catch (err) {
         recoveryLog.error('LOCAL aggregation failed', { jobId, error: err instanceof Error ? err.message : String(err) });
         Sentry.captureException(err, { tags: { component: 'recovery-aggregation-local', jobId } });
-      });
+      }
       return true;
     }
     return false;

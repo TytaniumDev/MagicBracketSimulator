@@ -38,11 +38,34 @@ parsing:
 | Step | Endpoint                                     | Data sent                                                                                                                                               |
 | ---- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | **PATCH** `/api/jobs/:id/simulations/:simId` | Status update: `state`, `workerId`, `workerName`, `durationMs`, `winners[]`, `winningTurns[]` (and on failure: `errorMessage`). Small JSON; no raw log. |
-| 2    | **POST** `/api/jobs/:id/logs/simulation`     | Raw log upload: `{ filename, logText }`. `logText` is the full raw log string (can be large).                                                           |
+| 2    | **POST** `/api/jobs/:id/logs/simulation`     | Raw log upload: `{ filename, logText }`. `logText` is bounded to **10 MB** (`MAX_LOG_BYTES` in `api/lib/log-store.ts`); oversize uploads are rejected with HTTP 413.                                                          |
 
 
 Order in code: status is reported first (PATCH), then raw log is uploaded
 (POST).
+
+**Log upload size cap:** `POST /api/jobs/:id/logs/simulation` enforces the
+10 MB `MAX_LOG_BYTES` cap in three places:
+
+1. **Content-Length header check** — rejects early with HTTP 413 before
+   buffering the body into memory.
+2. **Streaming byte counter** — reads the request body as a `ReadableStream`,
+   accumulates chunks, and aborts with HTTP 413 as soon as the running total
+   exceeds the cap plus JSON envelope overhead. This closes the
+   `Transfer-Encoding: chunked` bypass where the Content-Length header is
+   absent.
+3. **Library defense-in-depth** — `uploadSingleSimulationLog()` in
+   `api/lib/log-store.ts` re-checks `Buffer.byteLength(logText)` and throws
+   before writing to GCS / the local filesystem.
+
+**Worker behavior on 413:** the worker logs a warning and continues — it does
+NOT retry the upload or fail the simulation. The simulation's status update
+(step 1) has already been persisted, so the sim is reported as COMPLETED
+without its raw log. The aggregation pipeline tolerates missing per-sim logs
+(it falls back to whatever logs did upload). Operators: if you see
+`[sim_NNN] Log upload failed: HTTP 413` in the worker logs, a Forge run
+produced an unexpectedly large log — investigate the game (infinite loop?
+runaway card interaction?) rather than raising the cap.
 
 ---
 

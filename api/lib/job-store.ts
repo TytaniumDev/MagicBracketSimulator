@@ -274,34 +274,84 @@ export interface ListJobsResult {
 const DEFAULT_LIST_LIMIT = 100;
 const MAX_LIST_LIMIT = 200;
 
+/**
+ * Composite cursor (matches firestore-job-store.ts). Timestamp + job id,
+ * encoded as base64(JSON). Legacy timestamp-only cursors still accepted.
+ */
+interface ListJobsCursor {
+  ts: string;
+  id: string;
+}
+
+function encodeCursor(cursor: ListJobsCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf-8').toString('base64');
+}
+
+function decodeCursor(raw: string): ListJobsCursor | null {
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+    if (decoded.startsWith('{')) {
+      const parsed = JSON.parse(decoded) as Partial<ListJobsCursor>;
+      if (parsed && typeof parsed.ts === 'string' && typeof parsed.id === 'string') {
+        if (isNaN(new Date(parsed.ts).getTime())) return null;
+        return { ts: parsed.ts, id: parsed.id };
+      }
+      return null;
+    }
+    if (!isNaN(new Date(decoded).getTime())) {
+      return { ts: decoded, id: '' };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function listJobs(options: ListJobsOptions = {}): ListJobsResult {
   const db = getDb();
   const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT));
 
-  let cursorTs: string | null = null;
-  if (options.cursor) {
-    try {
-      cursorTs = Buffer.from(options.cursor, 'base64').toString('utf-8');
-      if (isNaN(new Date(cursorTs).getTime())) cursorTs = null;
-    } catch {
-      cursorTs = null;
-    }
-  }
+  const parsedCursor = options.cursor ? decodeCursor(options.cursor) : null;
 
-  // Fetch limit+1 to detect a next page
-  const rows = cursorTs
-    ? (db
-        .prepare('SELECT * FROM jobs WHERE created_at < ? ORDER BY created_at DESC LIMIT ?')
-        .all(cursorTs, limit + 1) as Row[])
-    : (db
-        .prepare('SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?')
-        .all(limit + 1) as Row[]);
+  // Fetch limit+1 to detect a next page. Tie-break on id DESC so two
+  // jobs at the same millisecond are never skipped or duplicated across
+  // page boundaries.
+  let rows: Row[];
+  if (parsedCursor && parsedCursor.id) {
+    rows = db
+      .prepare(
+        `SELECT * FROM jobs
+         WHERE created_at < ? OR (created_at = ? AND id < ?)
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
+      )
+      .all(parsedCursor.ts, parsedCursor.ts, parsedCursor.id, limit + 1) as Row[];
+  } else if (parsedCursor) {
+    // Legacy timestamp-only cursor — best-effort, may lose ties
+    rows = db
+      .prepare(
+        `SELECT * FROM jobs
+         WHERE created_at < ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
+      )
+      .all(parsedCursor.ts, limit + 1) as Row[];
+  } else {
+    rows = db
+      .prepare(
+        `SELECT * FROM jobs
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
+      )
+      .all(limit + 1) as Row[];
+  }
 
   const allJobs = rows.map(rowToJob);
   const hasMore = allJobs.length > limit;
   const jobs = hasMore ? allJobs.slice(0, limit) : allJobs;
-  const nextCursor = hasMore && jobs.length > 0
-    ? Buffer.from(jobs[jobs.length - 1].createdAt.toISOString(), 'utf-8').toString('base64')
+  const last = jobs[jobs.length - 1];
+  const nextCursor = hasMore && last
+    ? encodeCursor({ ts: last.createdAt.toISOString(), id: last.id })
     : null;
 
   return { jobs, nextCursor };
@@ -318,15 +368,6 @@ export function listActiveJobs(): Job[] {
 export function clearJobs(): void {
   const db = getDb();
   db.prepare('DELETE FROM jobs').run();
-}
-
-export function getJobsMap(): Map<string, Job> {
-  const { jobs } = listJobs({ limit: MAX_LIST_LIMIT });
-  const map = new Map<string, Job>();
-  for (const job of jobs) {
-    map.set(job.id, job);
-  }
-  return map;
 }
 
 // ─── Per-Simulation Tracking ─────────────────────────────────────────────────
