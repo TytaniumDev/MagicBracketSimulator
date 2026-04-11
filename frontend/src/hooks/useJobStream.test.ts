@@ -246,6 +246,7 @@ describe('mergeFirestoreJobUpdate', () => {
     parallelism: 4,
     createdAt: '2026-04-10T12:00:00.000Z',
     startedAt: '2026-04-10T12:00:05.000Z',
+    durationMs: null,
     retryCount: 0,
     results: null,
   };
