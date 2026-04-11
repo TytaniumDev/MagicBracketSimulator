@@ -56,12 +56,7 @@ jobs:
       # Resolve current Forge release version for tagging
       - name: Resolve Forge version
         id: forge-version
-        run: |
-          FORGE_TAG=$(curl -fsSL https://api.github.com/repos/Card-Forge/forge/releases/latest \
-            | jq -r '.tag_name')
-          FORGE_VERSION=${FORGE_TAG#forge-}
-          echo "version=${FORGE_VERSION}" >> $GITHUB_OUTPUT
-          echo "Forge version: ${FORGE_VERSION}"
+        run: ./scripts/resolve-forge-version.sh
 
       # Build and push simulation image (Java + Forge + xvfb)
       # Context is repo root because Dockerfile references worker/forge-engine/
