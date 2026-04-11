@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
+import { getRuntimeConfig } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
 import { RequestAccessCard } from '../components/RequestAccessCard';
+import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
+import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
 
 interface Deck {
@@ -47,7 +50,6 @@ export default function Home() {
         <h2 className="text-2xl font-bold text-gray-300">Sign in to submit simulations</h2>
         <p className="text-gray-400 text-center max-w-md">
           Sign in with your Google account to submit Commander bracket simulations.
-          You can <Link to="/" className="text-blue-400 hover:underline">browse past results</Link> without signing in.
         </p>
         <LoginButton />
       </div>
@@ -83,7 +85,16 @@ function SimulationForm() {
   const [moxfieldEnabled, setMoxfieldEnabled] = useState<boolean | null>(null);
 
   // Detect if URL is from Moxfield
-  const isMoxfieldUrl = /^https?:\/\/(?:www\.)?moxfield\.com\/decks\//i.test(deckUrl.trim());
+  const isMoxfieldUrl = (() => {
+    try {
+      const parsed = new URL(deckUrl.trim());
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+      if (parsed.hostname !== 'moxfield.com' && parsed.hostname !== 'www.moxfield.com') return false;
+      return /^\/decks\//.test(parsed.pathname);
+    } catch {
+      return false;
+    }
+  })();
   // Only show manual paste UI if Moxfield API is NOT enabled
   const showManualPaste = isMoxfieldUrl && moxfieldEnabled === false;
 
@@ -94,58 +105,125 @@ function SimulationForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
-  // Data state - unified deck list
-  const [decks, setDecks] = useState<Deck[]>([]);
+  // Data state - separate precon and community deck lists
+  const [preconDecks, setPreconDecks] = useState<Deck[]>([]);
+  const [communityDeckList, setCommunityDeckList] = useState<Deck[]>([]);
+  const [decksLoading, setDecksLoading] = useState(true);
+  const [deckError, setDeckError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const apiBase = getApiBase();
 
+  // Combine for filtering and selection
+  const allDecks = useMemo(() => [...preconDecks, ...communityDeckList], [preconDecks, communityDeckList]);
+
   const filteredDecks = useMemo(() => {
-    if (!searchQuery.trim()) return decks;
+    if (!searchQuery.trim()) return allDecks;
     const q = searchQuery.toLowerCase();
-    return decks.filter(
+    return allDecks.filter(
       (d) =>
         d.name.toLowerCase().includes(q) ||
         (d.setName && d.setName.toLowerCase().includes(q)) ||
         (d.primaryCommander && d.primaryCommander.toLowerCase().includes(q)) ||
         (d.ownerEmail && d.ownerEmail.toLowerCase().includes(q))
     );
-  }, [decks, searchQuery]);
+  }, [allDecks, searchQuery]);
 
   const precons = useMemo(() => filteredDecks.filter((d) => d.isPrecon), [filteredDecks]);
   const communityDecks = useMemo(() => filteredDecks.filter((d) => !d.isPrecon), [filteredDecks]);
 
-  // Build combined deck options
+  // Build combined deck options (used for selection display)
   const deckOptions: DeckOption[] = useMemo(
     () =>
-      decks.map((d) => ({
+      allDecks.map((d) => ({
         id: d.id,
         name: d.name,
         type: d.isPrecon ? ('precon' as const) : ('saved' as const),
         deck: d,
       })),
-    [decks]
+    [allDecks]
   );
 
-  // Fetch all decks (unified API)
-  const fetchDecks = useCallback(async () => {
+  // Fetch precons from GCS (no auth needed) with API fallback
+  const fetchPrecons = useCallback(async (): Promise<Deck[]> => {
+    const { preconsUrl } = getRuntimeConfig();
+    if (!preconsUrl) return []; // local mode — precons come from API
+
     try {
-      const res = await fetchWithAuth(`${apiBase}/api/decks`);
+      const res = await fetch(preconsUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setDecks(data.decks || []);
+      return Array.isArray(data) ? data : [];
     } catch (err) {
-      console.error('Failed to load decks:', err);
+      console.warn('GCS precon fetch failed, will use API fallback:', err);
+      return [];
+    }
+  }, []);
+
+  // Fetch community decks from API (auth required), with one auto-retry for cold starts
+  const fetchCommunityDecks = useCallback(async (): Promise<Deck[]> => {
+    const attempt = async (): Promise<Deck[]> => {
+      const res = await fetchWithAuth(`${apiBase}/api/decks`);
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+      const data = await res.json();
+      return data.decks || [];
+    };
+
+    try {
+      return await attempt();
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      // Only retry on server-side transient errors (likely cold start)
+      if (typeof status === 'number' && status >= 500) {
+        console.error('Community decks fetch failed (5xx), retrying...', err);
+        await new Promise(r => setTimeout(r, 2000));
+        return await attempt(); // Let this throw if it also fails
+      }
+      throw err;
     }
   }, [apiBase]);
 
+  // Load all decks on mount
+  const loadDecks = useCallback(async () => {
+    setDecksLoading(true);
+    setDeckError(null);
+
+    const [gcsPrecons, apiResult] = await Promise.allSettled([
+      fetchPrecons(),
+      fetchCommunityDecks(),
+    ]);
+
+    const gcsPreconList = gcsPrecons.status === 'fulfilled' ? gcsPrecons.value : [];
+    let community: Deck[] = [];
+    let allApiDecks: Deck[] = [];
+
+    if (apiResult.status === 'fulfilled') {
+      allApiDecks = apiResult.value;
+      community = allApiDecks.filter(d => !d.isPrecon);
+    } else {
+      console.error('Failed to load community decks:', apiResult.reason);
+      setDeckError('Failed to load community decks. Please try again.');
+    }
+
+    // If GCS returned no precons, fall back to precons from API response
+    if (gcsPreconList.length === 0 && allApiDecks.length > 0) {
+      setPreconDecks(allApiDecks.filter(d => d.isPrecon));
+    } else {
+      setPreconDecks(gcsPreconList);
+    }
+
+    setCommunityDeckList(community);
+    setDecksLoading(false);
+  }, [fetchPrecons, fetchCommunityDecks]);
+
   useEffect(() => {
-    fetchDecks();
-  }, [fetchDecks]);
+    loadDecks();
+  }, [loadDecks]);
 
   // Check if Moxfield direct import is available
   useEffect(() => {
-    fetch(`${apiBase}/api/moxfield-status`)
+    fetchWithAuth(`${apiBase}/api/moxfield-status`)
       .then((res) => res.json())
       .then((data) => setMoxfieldEnabled(data.enabled))
       .catch(() => setMoxfieldEnabled(false));
@@ -187,7 +265,7 @@ function SimulationForm() {
       }
 
       const doPost = async () => {
-        const res = await fetchWithAuth(`${apiBase}/api/decks`, {
+        const res = await fetchWithAuth(`${apiBase}/api/decks/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -214,7 +292,7 @@ function SimulationForm() {
       }
 
       setSaveMessage(`Deck saved: "${result.data.name}"`);
-      await fetchDecks();
+      await loadDecks();
       setDeckUrl('');
       setDeckText('');
       setDeckName('');
@@ -246,7 +324,7 @@ function SimulationForm() {
         setSelectedDeckIds((prev) => prev.filter((id) => id !== deck.id));
       }
 
-      await fetchDecks();
+      await loadDecks();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to delete deck');
     } finally {
@@ -297,6 +375,10 @@ function SimulationForm() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Worker pool health banner: shows when no workers are online so
+          users understand why newly-created jobs will sit in QUEUED. */}
+      <HomeWorkerStatus />
+
       {/* Add Deck Section */}
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Add a Deck</h2>
@@ -400,7 +482,7 @@ function SimulationForm() {
               Pick 4 Decks ({selectedDeckIds.length}/4)
               {searchQuery.trim() && (
                 <span className="ml-2 text-gray-400 font-normal">
-                  Showing {filteredDecks.length} of {decks.length}
+                  Showing {filteredDecks.length} of {allDecks.length}
                 </span>
               )}
             </label>
@@ -424,6 +506,28 @@ function SimulationForm() {
           />
 
           <div className="max-h-80 overflow-y-auto bg-gray-700 rounded-md p-3">
+            {decksLoading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full mr-3" />
+                <span className="text-sm text-gray-400">Loading decks...</span>
+              </div>
+            )}
+
+            {deckError && !decksLoading && (
+              <div className="bg-red-900/30 border border-red-600 rounded-md p-3 mb-3">
+                <p className="text-sm text-red-200">{deckError}</p>
+                <button
+                  type="button"
+                  onClick={() => loadDecks()}
+                  className="mt-2 text-sm text-red-300 hover:text-white underline"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!decksLoading && (
+              <>
             {/* Community Decks Group */}
             {communityDecks.length > 0 && (
               <div className="mb-4">
@@ -549,6 +653,8 @@ function SimulationForm() {
                 ))}
               </div>
             </div>
+            </>
+            )}
           </div>
 
           {/* Selected decks summary */}
@@ -592,5 +698,24 @@ function SimulationForm() {
         </button>
       </form>
     </div>
+  );
+}
+
+/**
+ * Thin wrapper so the simulation form doesn't need to know about the
+ * worker-status hook. Rendered above the form on Home so users see
+ * "No workers online" before they spend time building a job.
+ */
+function HomeWorkerStatus() {
+  const { user } = useAuth();
+  const { workers, queueDepth, isLoading, refresh } = useWorkerStatus(!!user);
+  return (
+    <WorkerStatusBanner
+      workers={workers}
+      queueDepth={queueDepth}
+      isLoading={isLoading}
+      onRefresh={refresh}
+      userEmail={user?.email}
+    />
   );
 }

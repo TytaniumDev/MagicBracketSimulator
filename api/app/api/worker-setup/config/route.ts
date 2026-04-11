@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 const WORKER_SECRET = process.env.WORKER_SECRET;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
@@ -85,26 +86,20 @@ async function readWorkerConfig(): Promise<string> {
 export async function POST(req: NextRequest) {
   const token = req.headers.get('X-Setup-Token');
   if (!token) {
-    return NextResponse.json({ error: 'Missing X-Setup-Token header' }, { status: 401 });
+    return errorResponse('Missing X-Setup-Token header', 401);
   }
 
   if (!WORKER_SECRET) {
-    return NextResponse.json({ error: 'Worker setup not configured' }, { status: 500 });
+    return errorResponse('Worker setup not configured', 500);
   }
 
   if (!validateToken(token)) {
-    return NextResponse.json(
-      { error: 'Token expired or invalid. Generate a new one from the Worker Setup page.' },
-      { status: 401 },
-    );
+    return errorResponse('Token expired or invalid. Generate a new one from the Worker Setup page.', 401);
   }
 
   const encryptionKey = req.headers.get('X-Encryption-Key');
   if (!encryptionKey || !/^[0-9a-f]{64}$/i.test(encryptionKey)) {
-    return NextResponse.json(
-      { error: 'Missing or invalid X-Encryption-Key header (expected 64-char hex string)' },
-      { status: 400 },
-    );
+    return badRequestResponse('Missing or invalid X-Encryption-Key header (expected 64-char hex string)');
   }
 
   try {
@@ -116,9 +111,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(encrypted);
   } catch (err) {
     console.error('Failed to read worker config:', err);
-    return NextResponse.json(
-      { error: 'Failed to read worker configuration' },
-      { status: 500 },
-    );
+    return errorResponse('Failed to read worker configuration', 500);
   }
 }

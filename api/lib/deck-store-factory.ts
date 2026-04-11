@@ -6,6 +6,7 @@ import { listSavedDecks, readSavedDeckContent, saveDeck, deleteSavedDeck } from 
 import { slugify } from './saved-decks';
 import { getColorIdentityByKey } from './deck-metadata';
 import * as firestoreDecks from './firestore-decks';
+import { lruTouch, lruEvictIfFull } from './lru';
 
 const USE_FIRESTORE =
   typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
@@ -176,29 +177,65 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
   };
 }
 
+// In-memory cache for getDeckById — deck data rarely changes and is read on
+// every GET /api/jobs/:id, so caching eliminates repeated Firestore reads.
+const deckByIdCache = new Map<string, { item: DeckListItem | null; ts: number }>();
+const DECK_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const DECK_CACHE_MAX_SIZE = 500;
+
 export async function getDeckById(id: string): Promise<DeckListItem | null> {
-  if (USE_FIRESTORE) {
-    const deck = await firestoreDecks.getDeck(id);
-    if (!deck) return null;
-    return {
-      id: deck.id,
-      name: deck.name,
-      filename: deck.filename,
-      primaryCommander: deck.primaryCommander ?? null,
-      colorIdentity: deck.colorIdentity,
-      isPrecon: deck.isPrecon,
-      link: deck.link,
-      ownerId: deck.ownerId,
-      ownerEmail: deck.ownerEmail,
-      createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
-    };
+  const cached = lruTouch(deckByIdCache, id);
+  if (cached && Date.now() - cached.ts < DECK_CACHE_TTL_MS) {
+    return cached.item;
   }
 
-  const all = await listAllDecks();
-  return all.find((d) => d.id === id) ?? null;
+  // Set a placeholder before the async read so that a concurrent deleteDeck()
+  // can remove it, signaling that the result we're about to get is stale.
+  deckByIdCache.set(id, { item: null, ts: 0 });
+
+  let item: DeckListItem | null;
+
+  if (USE_FIRESTORE) {
+    const deck = await firestoreDecks.getDeck(id);
+    if (!deck) {
+      item = null;
+    } else {
+      item = {
+        id: deck.id,
+        name: deck.name,
+        filename: deck.filename,
+        primaryCommander: deck.primaryCommander ?? null,
+        colorIdentity: deck.colorIdentity,
+        isPrecon: deck.isPrecon,
+        link: deck.link,
+        ownerId: deck.ownerId,
+        ownerEmail: deck.ownerEmail,
+        createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
+        setName: deck.setName ?? null,
+        archidektId: deck.archidektId ?? null,
+      };
+    }
+  } else {
+    const all = await listAllDecks();
+    item = all.find((d) => d.id === id) ?? null;
+  }
+
+  // If the placeholder was removed during the await (by a concurrent
+  // deleteDeck call), the result is stale — don't cache it.
+  if (!deckByIdCache.has(id)) {
+    return item;
+  }
+
+  // Evict least-recently-used entries if at capacity. lruTouch above
+  // ensures that frequently-read decks bubble to the end and are not
+  // evicted before never-read entries.
+  lruEvictIfFull(deckByIdCache, DECK_CACHE_MAX_SIZE);
+  deckByIdCache.set(id, { item, ts: Date.now() });
+  return item;
 }
 
 export async function deleteDeck(id: string, userId: string): Promise<boolean> {
+  deckByIdCache.delete(id);
   if (USE_FIRESTORE) {
     return firestoreDecks.deleteDeck(id, userId);
   }

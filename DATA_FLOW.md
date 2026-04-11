@@ -27,8 +27,8 @@ container exits.
 - `**worker.ts`** uses `**worker/src/condenser.ts**` only for lightweight
 parsing:
   - `splitConcatenatedGames(logText)` → one string per game
-  - `extractWinner(game)` / `extractWinningTurn(game)` per game  
-  → produces `winners[]` and `winningTurns[]` for status updates.  
+  - `extractWinner(game)` / `extractWinningTurn(game)` per game
+  → produces `winners[]` and `winningTurns[]` for status updates.
   The worker does **not** run the full condense/structure pipeline; that
   happens in the API.
 
@@ -38,11 +38,34 @@ parsing:
 | Step | Endpoint                                     | Data sent                                                                                                                                               |
 | ---- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | **PATCH** `/api/jobs/:id/simulations/:simId` | Status update: `state`, `workerId`, `workerName`, `durationMs`, `winners[]`, `winningTurns[]` (and on failure: `errorMessage`). Small JSON; no raw log. |
-| 2    | **POST** `/api/jobs/:id/logs/simulation`     | Raw log upload: `{ filename, logText }`. `logText` is the full raw log string (can be large).                                                           |
+| 2    | **POST** `/api/jobs/:id/logs/simulation`     | Raw log upload: `{ filename, logText }`. `logText` is bounded to **10 MB** (`MAX_LOG_BYTES` in `api/lib/log-store.ts`); oversize uploads are rejected with HTTP 413.                                                          |
 
 
 Order in code: status is reported first (PATCH), then raw log is uploaded
 (POST).
+
+**Log upload size cap:** `POST /api/jobs/:id/logs/simulation` enforces the
+10 MB `MAX_LOG_BYTES` cap in three places:
+
+1. **Content-Length header check** — rejects early with HTTP 413 before
+   buffering the body into memory.
+2. **Streaming byte counter** — reads the request body as a `ReadableStream`,
+   accumulates chunks, and aborts with HTTP 413 as soon as the running total
+   exceeds the cap plus JSON envelope overhead. This closes the
+   `Transfer-Encoding: chunked` bypass where the Content-Length header is
+   absent.
+3. **Library defense-in-depth** — `uploadSingleSimulationLog()` in
+   `api/lib/log-store.ts` re-checks `Buffer.byteLength(logText)` and throws
+   before writing to GCS / the local filesystem.
+
+**Worker behavior on 413:** the worker logs a warning and continues — it does
+NOT retry the upload or fail the simulation. The simulation's status update
+(step 1) has already been persisted, so the sim is reported as COMPLETED
+without its raw log. The aggregation pipeline tolerates missing per-sim logs
+(it falls back to whatever logs did upload). Operators: if you see
+`[sim_NNN] Log upload failed: HTTP 413` in the worker logs, a Forge run
+produced an unexpectedly large log — investigate the game (infinite loop?
+runaway card interaction?) rather than raising the cap.
 
 ---
 
@@ -52,22 +75,37 @@ Order in code: status is reported first (PATCH), then raw log is uploaded
 
 - Persists the simulation status (state, winners, winningTurns, etc.) in the job
 store (SQLite or Firestore).
-- If this is a transition to COMPLETED/CANCELLED and **all** simulations for the
-job are COMPLETED or CANCELLED, it triggers `**aggregateJobResults(jobId)`**
-in the background (does not block the PATCH response).
+- Uses an **atomic counter** (`FieldValue.increment(1)` on
+`completedSimCount`) to detect when all sims are done — O(1) instead of
+scanning the entire subcollection. When `completedSimCount >= totalSimCount`,
+triggers `**aggregateJobResults(jobId)`** in the background.
 - FAILED sims are **not** terminal for aggregation — they get retried by the
-recovery scanner (`recoverStaleSimulations`). Only COMPLETED/CANCELLED count
-as "done".
+worker locally (up to 2 retries) or by Cloud Tasks recovery. Only
+COMPLETED/CANCELLED count as "done".
 
 **Other aggregation triggers:**
 
-- **Recovery scanner** (`recoverStaleSimulations`, GCP mode only): if no
-simulations need recovery and all are COMPLETED/CANCELLED, it fires
-`aggregateJobResults`. Also retries FAILED sims by resetting them to PENDING
-and re-publishing to Pub/Sub.
+- **Cloud Tasks recovery** (`POST /api/jobs/:id/recover`): scheduled at job
+creation (T+10min). If the job is still active when the task fires, runs
+`recoverStaleJob` once and reschedules for 5 more minutes. Replaces the
+former background polling scanner.
 - **Job cancellation** (`POST /api/jobs/:id/cancel`): triggers aggregation so
 `structured.json` gets created from whatever sims completed before
 cancellation.
+- **Stale-job sweeper** (`POST /api/admin/sweep-stale-jobs`, see
+`api/lib/stale-sweeper.ts` and `docs/STALE_SWEEPER.md`): fired by Cloud
+Scheduler every 15 minutes. For each active job it (a) hard-fails any
+job that has sat QUEUED for >2h, (b) hard-cancels any sim whose baseline
+age exceeds the 2h cap, (c) calls `recoverStaleJob`, and (d) explicitly
+calls `aggregateJobResults(jobId)` when the cancel-and-recover pass
+leaves the job with every sim in a terminal state (COMPLETED or
+CANCELLED). This last step is the safety-net aggregation trigger that
+unsticks jobs where a worker has died mid-sim or a re-published Pub/Sub
+message was starved by higher-volume traffic. Runs in both GCP and
+LOCAL mode; in GCP mode the Firestore/Pub/Sub recovery inside
+`recoverStaleJob` already handles the re-trigger, and step (d) is the
+catch-all for LOCAL mode (SQLite, no Pub/Sub) where that path is a
+no-op.
 
 **When raw log is uploaded (POST logs/simulation):**
 
@@ -98,6 +136,14 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
 So: **condensing and structuring** of logs happens **only in the API**, during
 aggregation, using the raw logs that workers previously uploaded.
 
+**Life total tracking:** `calculateLifePerTurn()` in `api/lib/condenser/turns.ts`
+parses Forge's native `[LIFE] Life: PlayerName oldValue -> newValue` log entries
+(added in the Forge version after 2.0.10, via Card-Forge/forge#9845). This gives
+absolute life totals directly from the game engine — no heuristic inference
+needed. For logs from older Forge versions (without `[LIFE]` entries), the
+function returns an empty object `{}` so the frontend can detect that life data
+is unavailable rather than showing misleading defaults.
+
 **Deck name matching:** `matchesDeckName()` from `api/lib/condenser/deck-match.ts`
 is the canonical function for matching Forge log player names (e.g.
 `"Ai(2)-Blood Rites - The Lost Caverns of Ixalan Commander"`) against short
@@ -109,7 +155,7 @@ stripping the Ai prefix). A frontend copy lives at
 **Legacy route (unused):**
 
 - `**POST /api/jobs/:id/logs`** — bulk log ingest: accepts `{ gameLogs,
-deckNames, deckLists }` all at once. Still exists in the codebase but is
+ deckNames, deckLists }` all at once. Still exists in the codebase but is
 unused by the current worker, which uploads per-simulation via
 `/logs/simulation` instead.
 
@@ -117,26 +163,35 @@ unused by the current worker, which uploads per-simulation via
 
 ## 4. Frontend
 
-**Real-time (SSE):**
+**Real-time streaming (Firestore onSnapshot + TanStack Query):**
 
-- **GET** `/api/jobs/:id/stream`
-  - **Event types:**
-    - **Default (unnamed) event** — job snapshot: `id`, `name`, `deckNames`,
-    `status`, `simulations` (count), `gamesCompleted`, `parallelism`,
-    `createdAt`, `startedAt`, `completedAt`, `durationMs`,
-    `dockerRunDurationsMs`, `workerId`, `workerName`, `claimedAt`,
-    `retryCount`, `errorMessage`. Conditionally: `queuePosition` and
-    `workers` (only for QUEUED jobs), `deckLinks` (when deck IDs are set).
-    - **Named `simulations` event** — `{ simulations: SimStatus[] }`: array
-    of per-sim status (state, winners, winningTurns, durationMs, etc.).
-  - `gamesCompleted` is **derived** from simulation statuses
-  (`COMPLETED sims * GAMES_PER_CONTAINER`), not read from a stored counter.
-  The stored `job.gamesCompleted` field is only a fallback.
-  - No raw, condensed, or structured logs on the stream.
-  - **LOCAL mode** uses server-side **2-second polling** with change
-  detection (SQLite). **GCP mode** uses **Firestore `onSnapshot`** listeners
-  for real-time push on both the job document and the simulations
-  subcollection.
+- **GCP mode: Firestore `onSnapshot` direct streaming**
+  - Frontend listens directly to Firestore via `onSnapshot` (WebSocket-based).
+  - Cloud Run is **not** in the real-time path — zero persistent connections.
+  - Firestore paths: `jobs/{jobId}` for job-level data, `jobs/{jobId}/simulations/{simId}` for per-sim data.
+  - The `useJobStream` hook manages Firestore listeners with automatic cleanup.
+  - Real-time field updates (status, gamesCompleted, results, etc.) are pushed into TanStack Query's cache via `queryClient.setQueryData()`.
+  - **Terminal state guard:** Once the cached job data has a terminal status,
+    `mergeFirestoreJobUpdate` returns early without applying the Firestore
+    snapshot. This prevents stale Firestore cache data from overwriting
+    complete REST API responses (which include deckLinks, colorIdentity, etc.).
+  - **Conditional final REST fetch:** When Firestore reports a terminal status,
+    a final REST fetch is only performed if the job *transitioned* to terminal
+    (i.e., the user was watching a running job). If the initial REST response
+    already returned a terminal job, the fetch is skipped to avoid redundancy.
+
+- **LOCAL mode: TanStack Query polling**
+  - TanStack Query `refetchInterval` polls `GET /api/jobs/:id` and `GET /api/jobs/:id/simulations` every 2 seconds.
+  - Polling stops automatically when the job reaches a terminal state.
+
+- **Strategy: "REST base + real-time overlay"**
+  - Initial data comes from REST (`GET /api/jobs/:id`) which provides the complete formatted `JobResponse` with computed fields (name, durationMs, deckLinks, colorIdentity).
+  - In GCP mode, Firestore `onSnapshot` overlays real-time field updates on top of the cached REST data.
+  - Both modes share the same TanStack Query cache — components are mode-agnostic.
+
+- `gamesCompleted` is **derived** from the atomic `completedSimCount` counter
+  (COMPLETED sims * GAMES_PER_CONTAINER). The stored `job.gamesCompleted`
+  field is only a fallback.
 
 **One-off job fetch:**
 
@@ -155,9 +210,10 @@ unused by the current worker, which uploads per-simulation via
 `structured.json`) don't exist (e.g. for FAILED jobs where aggregation
 never ran), logs are recomputed on-the-fly from raw logs in `log-store.ts`.
 
-So the frontend only receives **job + sim status** on the stream and via GET
-job; **raw/condensed/structured** are separate GETs that hit the artifacts
-produced during API-side aggregation (or recomputed on demand).
+So the frontend only receives **job + sim status** via Firestore onSnapshot
+(GCP) or REST polling (local); **raw/condensed/structured** are separate GETs
+that hit the artifacts produced during API-side aggregation (or recomputed on
+demand).
 
 ---
 
@@ -186,15 +242,77 @@ second call exits immediately.
 
 ---
 
+## 6. Auto-coverage system
+
+The coverage system automatically queues simulation jobs to ensure all deck
+pairs have sufficient game data for reliable TrueSkill rankings.
+
+**Configuration (stored in `coverage_config` table/Firestore doc):**
+
+- `enabled` (boolean, default false) — toggle for the system
+- `targetGamesPerPair` (number, default 400) — minimum games required per pair
+
+**Coverage computation (`coverage-service.ts`):**
+
+- Reads all `match_results` and extracts C(4,2) = 6 deck pairs per game
+- Builds a pair → game count map (cached for 5 minutes)
+- Compares against all possible pairs from `listAllDecks()`
+
+**Pod generation (greedy algorithm):**
+
+1. Pick the pair (A, B) with the fewest games played
+2. Greedily add deck C that maximizes under-covered pairs with {A, B, C}
+3. Greedily add deck D that maximizes under-covered pairs with {A, B, C, D}
+4. Result: a 4-player pod covering up to 6 under-covered pairs
+
+**Job creation flow (`POST /api/coverage/next-job`):**
+
+- Auth: worker secret only (no Firebase auth)
+- Guard: returns 200 with `{ reason }` if no work available. Possible reasons:
+  `disabled`, `active-job-exists`, `all-pairs-covered`, `deck-resolution-failed`
+- Creates a job with `simulations: 100`, `parallelism: 1`,
+  `source: 'coverage'`
+- Job enters the normal queue — same pipeline as user-created jobs
+
+**Worker integration (`worker.ts` polling loop):**
+
+- When no user jobs are queued, worker calls `POST /api/coverage/next-job`
+- If a coverage job is created, worker immediately polls to pick it up
+- User jobs always take priority — coverage only runs when idle
+
+**Job `source` field:**
+
+- `'user'` (default) — user-created via `POST /api/jobs`
+- `'coverage'` — system-generated by the coverage system
+- Stored in `jobs` table (SQLite) / Firestore doc
+- Coverage jobs skip user rate limiting
+
+**API endpoints:**
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /api/coverage/config` | Any authenticated user | Read coverage config |
+| `PATCH /api/coverage/config` | Admin only | Toggle enabled, set target |
+| `GET /api/coverage/status` | Any authenticated user | Pair coverage progress |
+| `POST /api/coverage/next-job` | Worker secret | Generate and queue next pod |
+
+**Frontend (Leaderboard page):**
+
+- Progress bar: shows covered/total pairs and percentage
+- Admin toggle: enables/disables the coverage system
+- Target selector: configurable target games per pair (100, 200, 400, 800)
+
+---
+
 ## End-to-end summary
 
 
 | Layer                    | Processing                                                                                                                                                         | Network (data)                                                                                                                               |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Simulation container** | Writes raw Forge log to stdout                                                                                                                                     | None                                                                                                                                         |
-| **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory                                                                                          | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
-| **API**                  | Stores raw logs; on “all sims done” runs **aggregation**: read raw logs, **condense + structure** (api condenser), write condensed/structured + mark job COMPLETED | ← PATCH (status), ← POST (raw log); → **GET** job/stream (status only); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
-| **Frontend**             | Displays job + sim status from stream/GET; fetches structured/raw/condensed only when needed                                                                       | ← SSE job + simulations; ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                                          |
+| **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory; retries failed containers locally (2 attempts, 30s backoff)                             | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
+| **API**                  | Stores raw logs in Firestore/SQLite; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED; cancels Cloud Tasks | ← PATCH (status), ← POST (raw log); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
+| **Frontend**             | Listens to Firestore `onSnapshot` (GCP) or polls REST via TanStack Query (local); fetches structured/raw/condensed only when needed                                                                   | ← **Firestore** onSnapshot (GCP) or REST polling (local); ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                         |
 
 
 ---
@@ -213,10 +331,11 @@ second call exits immediately.
 | Derive job status | `api/lib/condenser/derive-job-status.test.ts` | `deriveJobStatus` from sim states |
 | Game log files | `api/test/game-logs.test.ts` | Local filesystem log utilities |
 | Simulation wins | `api/test/simulation-wins.test.ts` | Simulation win extraction |
-| SSE stream construction | `api/lib/stream-utils.test.ts` | `jobToStreamEvent` field mapping, `durationMs` computation, `gamesCompleted` fallback, conditional fields (queuePosition, workers, deckLinks) |
 | Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
 | Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, Pub/Sub redelivery scenario |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
+| SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
+| JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |
 
 ### Coverage gaps (future work)
 

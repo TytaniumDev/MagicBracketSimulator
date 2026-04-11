@@ -6,15 +6,27 @@ const MOXFIELD_API_BASE = 'https://api2.moxfield.com/v3';
 // Moxfield URL patterns:
 // https://moxfield.com/decks/ABC123
 // https://www.moxfield.com/decks/ABC123
-const MOXFIELD_URL_PATTERN = /^https?:\/\/(?:www\.)?moxfield\.com\/decks\/([a-zA-Z0-9_-]+)/;
-
 export function isMoxfieldUrl(url: string): boolean {
-  return MOXFIELD_URL_PATTERN.test(url);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    if (parsed.hostname !== 'moxfield.com' && parsed.hostname !== 'www.moxfield.com') return false;
+    return /^\/decks\/([a-zA-Z0-9_-]+)/.test(parsed.pathname);
+  } catch {
+    return false;
+  }
 }
 
 export function extractMoxfieldDeckId(url: string): string | null {
-  const match = url.match(MOXFIELD_URL_PATTERN);
-  return match ? match[1] : null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.hostname !== 'moxfield.com' && parsed.hostname !== 'www.moxfield.com') return null;
+    const match = parsed.pathname.match(/^\/decks\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 interface MoxfieldCard {

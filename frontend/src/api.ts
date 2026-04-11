@@ -1,4 +1,5 @@
-import { auth } from './firebase';
+import { getToken } from 'firebase/app-check';
+import { auth, appCheck } from './firebase';
 import { getRuntimeConfig } from './config';
 
 function resolveApiBase(): string {
@@ -50,6 +51,16 @@ export async function fetchWithAuth(
 
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Attach App Check token (skip in local mode when appCheck is null)
+  if (appCheck) {
+    try {
+      const appCheckToken = await getToken(appCheck, /* forceRefresh */ false);
+      (headers as Record<string, string>)['X-Firebase-AppCheck'] = appCheckToken.token;
+    } catch {
+      // Don't block the request — API will reject if enforcement is on
+    }
   }
 
   return fetch(url, {
@@ -110,18 +121,51 @@ export async function deleteJobs(
   return res.json();
 }
 
-/**
- * Fetch without authentication — for public read-only endpoints
- */
-export function fetchPublic(
-  url: string,
-  options: RequestInit = {}
-): Promise<Response> {
-  return fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+// ---------------------------------------------------------------------------
+// Coverage API
+// ---------------------------------------------------------------------------
+
+export interface CoverageConfig {
+  enabled: boolean;
+  targetGamesPerPair: number;
+  updatedAt: string;
+  updatedBy: string;
 }
+
+export interface CoverageStatus {
+  totalPairs: number;
+  coveredPairs: number;
+  underCoveredPairs: number;
+  targetGamesPerPair: number;
+  percentComplete: number;
+}
+
+export async function getCoverageConfig(): Promise<CoverageConfig> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/coverage/config`);
+  if (!res.ok) throw new Error('Failed to fetch coverage config');
+  return res.json();
+}
+
+export async function updateCoverageConfig(
+  update: Partial<Pick<CoverageConfig, 'enabled' | 'targetGamesPerPair'>>
+): Promise<CoverageConfig> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/coverage/config`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getCoverageStatus(): Promise<CoverageStatus> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/coverage/status`);
+  if (!res.ok) throw new Error('Failed to fetch coverage status');
+  return res.json();
+}
+

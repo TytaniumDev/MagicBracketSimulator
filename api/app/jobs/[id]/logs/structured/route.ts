@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { optionalAuth, unauthorizedResponse } from '@/lib/auth';
+import { optionalAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { getRawLogs } from '@/lib/gcs-storage';
 import { getJob } from '@/lib/job-store-factory';
 import { isGcpMode } from '@/lib/job-store-factory';
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const user = await optionalAuth(request);
+    const user = await optionalAllowedUser(request);
     if (!user) {
       return unauthorizedResponse();
     }

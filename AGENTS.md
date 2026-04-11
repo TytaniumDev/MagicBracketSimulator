@@ -15,17 +15,16 @@
 - **Start Dev Server**: `npm run dev`
 
 ## Testing & Verification
-### Frontend
-- **Lint**: `npm run lint --prefix frontend`
-- **Build**: `npm run build --prefix frontend`
+### Global Commands (CI Parity)
+- **Lint All**: `./scripts/lint.sh`
+- **Build All**: `./scripts/build.sh`
+- **Test All**: `./scripts/test.sh`
 
-### API
-- **Lint**: `npm run lint --prefix api`
-- **Build**: `npm run build --prefix api`
-- **Test**: `npm run test:unit --prefix api`
-
-### Simulation Worker
-- **Build**: `npm run build --prefix worker`
+### Targeted Commands
+- **Frontend Test**: `cd frontend && npm test`
+- **API Unit Test**: `cd api && npm run test:unit`
+- **API Ingestion Test**: `cd api && npm run test:ingestion`
+- **Worker Build**: `cd worker && npm run build`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)

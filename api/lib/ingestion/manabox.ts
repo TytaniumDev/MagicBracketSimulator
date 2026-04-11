@@ -3,15 +3,27 @@ import { ParsedDeck, DeckCard } from './to-dck';
 // ManaBox URL patterns:
 // https://manabox.app/decks/iB_rScEtT_6hnOlPUUQ-vA
 // https://www.manabox.app/decks/...
-const MANABOX_URL_PATTERN = /^https?:\/\/(?:www\.)?manabox\.app\/decks\/([a-zA-Z0-9_-]+)/;
-
 export function isManaboxUrl(url: string): boolean {
-  return MANABOX_URL_PATTERN.test(url);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    if (parsed.hostname !== 'manabox.app' && parsed.hostname !== 'www.manabox.app') return false;
+    return /^\/decks\/([a-zA-Z0-9_-]+)/.test(parsed.pathname);
+  } catch {
+    return false;
+  }
 }
 
 export function extractManaboxDeckId(url: string): string | null {
-  const match = url.match(MANABOX_URL_PATTERN);
-  return match ? match[1] : null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.hostname !== 'manabox.app' && parsed.hostname !== 'www.manabox.app') return null;
+    const match = parsed.pathname.match(/^\/decks\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

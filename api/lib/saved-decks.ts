@@ -240,6 +240,6 @@ export function deleteSavedDeck(filename: string): boolean {
     return true;
   } catch (err) {
     console.error(`Failed to delete deck ${filename}:`, err);
-    throw new Error('Failed to delete deck');
+    throw new Error('Failed to delete deck', { cause: err });
   }
 }

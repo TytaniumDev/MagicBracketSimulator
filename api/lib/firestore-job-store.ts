@@ -1,10 +1,8 @@
-import { Firestore, Timestamp, FieldValue } from '@google-cloud/firestore';
-import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState } from './types';
+import { Timestamp, FieldValue, FieldPath } from '@google-cloud/firestore';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, JobSource } from './types';
+import { getFirestore } from './firestore-client';
 
-// Initialize Firestore client
-const firestore = new Firestore({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-});
+const firestore = getFirestore();
 
 // Collection references
 const jobsCollection = firestore.collection('jobs');
@@ -33,6 +31,11 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     ...(data.workerName && { workerName: data.workerName }),
     ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
     ...(data.retryCount != null && data.retryCount > 0 && { retryCount: data.retryCount }),
+    ...(data.needsAggregation === true && { needsAggregation: true }),
+    ...(data.completedSimCount != null && { completedSimCount: data.completedSimCount }),
+    ...(data.totalSimCount != null && { totalSimCount: data.totalSimCount }),
+    ...(data.results != null && { results: data.results as JobResults }),
+    ...(data.source && data.source !== 'user' && { source: data.source }),
   };
 }
 
@@ -43,6 +46,15 @@ export interface CreateJobData {
   idempotencyKey?: string;
   createdBy: string;
   deckIds?: string[];
+  source?: JobSource;
+  /**
+   * Denormalized deck metadata, keyed by deck NAME (matches deckNames[]).
+   * Writing these into the job doc at creation time eliminates 4 Firestore
+   * deck reads per job view (Browse + detail pages) and massively reduces
+   * the leaderboard's read fan-out.
+   */
+  deckLinks?: Record<string, string | null>;
+  colorIdentity?: Record<string, string[]>;
 }
 
 /**
@@ -63,12 +75,15 @@ export async function createJob(data: CreateJobData): Promise<Job> {
   const jobData = {
     decks: data.decks,
     ...(data.deckIds != null && data.deckIds.length === 4 && { deckIds: data.deckIds }),
+    ...(data.deckLinks && Object.keys(data.deckLinks).length > 0 && { deckLinks: data.deckLinks }),
+    ...(data.colorIdentity && Object.keys(data.colorIdentity).length > 0 && { colorIdentity: data.colorIdentity }),
     status: 'QUEUED' as JobStatus,
     simulations: data.simulations,
     parallelism: data.parallelism || 4,
     createdAt: now,
     createdBy: data.createdBy,
     idempotencyKey: data.idempotencyKey || null,
+    source: data.source ?? 'user',
   };
 
   // Use transaction if idempotency key is provided
@@ -83,10 +98,13 @@ export async function createJob(data: CreateJobData): Promise<Job> {
       }
 
       // Create the job and idempotency key atomically
+      // TTL: auto-delete idempotency keys after 7 days (requires Firestore TTL policy on 'ttl' field)
+      const idempotencyTtl = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
       transaction.set(jobRef, jobData);
       transaction.set(idempotencyRef, {
         jobId: jobRef.id,
         createdAt: now,
+        ttl: idempotencyTtl,
       });
     });
   } else {
@@ -101,6 +119,7 @@ export async function createJob(data: CreateJobData): Promise<Job> {
     simulations: data.simulations,
     parallelism: data.parallelism || 4,
     createdAt: now.toDate(),
+    ...(data.source && data.source !== 'user' && { source: data.source }),
   };
 }
 
@@ -153,6 +172,54 @@ export async function setJobStartedAt(id: string, workerId?: string, workerName?
 }
 
 /**
+ * Conditionally update a job's status using a Firestore transaction.
+ * Only applies the update if the job is currently in one of the expectedStatuses.
+ * Returns true if the update was applied, false if the status had already changed.
+ */
+export async function conditionalUpdateJobStatus(
+  id: string,
+  expectedStatuses: JobStatus[],
+  newStatus: JobStatus,
+  metadata?: { workerId?: string; workerName?: string }
+): Promise<boolean> {
+  const jobRef = jobsCollection.doc(id);
+
+  return firestore.runTransaction(async (transaction) => {
+    const doc = await transaction.get(jobRef);
+    if (!doc.exists) return false;
+
+    const currentStatus = doc.data()!.status as JobStatus;
+    if (!expectedStatuses.includes(currentStatus)) return false;
+
+    const updateData: Record<string, unknown> = {
+      status: newStatus,
+      startedAt: FieldValue.serverTimestamp(),
+      claimedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (metadata?.workerId) {
+      updateData.workerId = metadata.workerId;
+    }
+    if (metadata?.workerName) {
+      updateData.workerName = metadata.workerName;
+    }
+
+    transaction.update(jobRef, updateData);
+    return true;
+  });
+}
+
+/**
+ * Set or clear the needsAggregation flag on a job.
+ */
+export async function setNeedsAggregation(id: string, value: boolean): Promise<void> {
+  await jobsCollection.doc(id).update({
+    needsAggregation: value,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/**
  * Mark job as completed
  */
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
@@ -182,6 +249,13 @@ export async function setJobFailed(id: string, errorMessage: string): Promise<vo
 }
 
 /**
+ * Store aggregated results on the job document.
+ */
+export async function setJobResults(jobId: string, results: JobResults): Promise<void> {
+  await jobsCollection.doc(jobId).update({ results });
+}
+
+/**
  * Get the next queued job (for local worker fallback)
  * Uses composite index: status ASC, createdAt ASC
  */
@@ -196,18 +270,106 @@ export async function getNextQueuedJob(): Promise<Job | null> {
   return docToJob(snapshot.docs[0]);
 }
 
+export interface ListJobsOptions {
+  userId?: string;
+  limit?: number;
+  /** Opaque cursor returned from a previous call's `nextCursor`. */
+  cursor?: string;
+}
+
+export interface ListJobsResult {
+  jobs: Job[];
+  nextCursor: string | null;
+}
+
+const DEFAULT_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 200;
+
 /**
- * List jobs, optionally filtered by user
+ * Composite pagination cursor: ISO createdAt + document id. The id is
+ * the tie-breaker for the rare case where two jobs share the exact same
+ * `createdAt` millisecond (e.g. batch imports), ensuring no job is ever
+ * skipped or duplicated across page boundaries. Wire format is
+ * base64(JSON({ts, id})). Legacy timestamp-only cursors (from the first
+ * cut of this endpoint) are still accepted for backward compat.
  */
-export async function listJobs(userId?: string): Promise<Job[]> {
-  let query: FirebaseFirestore.Query = jobsCollection.orderBy('createdAt', 'desc');
-  
-  if (userId) {
-    query = query.where('createdBy', '==', userId);
+interface ListJobsCursor {
+  ts: string;
+  id: string;
+}
+
+function encodeCursor(cursor: ListJobsCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf-8').toString('base64');
+}
+
+function decodeCursor(raw: string): ListJobsCursor | null {
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+    if (decoded.startsWith('{')) {
+      const parsed = JSON.parse(decoded) as Partial<ListJobsCursor>;
+      if (parsed && typeof parsed.ts === 'string' && typeof parsed.id === 'string') {
+        if (isNaN(new Date(parsed.ts).getTime())) return null;
+        return { ts: parsed.ts, id: parsed.id };
+      }
+      return null;
+    }
+    // Legacy timestamp-only cursor
+    if (!isNaN(new Date(decoded).getTime())) {
+      return { ts: decoded, id: '' };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * List jobs, optionally filtered by user. Results are cursor-paginated in
+ * descending (createdAt, id) order. Pass `options.cursor` from a previous
+ * result's `nextCursor` to fetch the next page; `nextCursor === null`
+ * means no more results.
+ */
+export async function listJobs(options: ListJobsOptions = {}): Promise<ListJobsResult> {
+  const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT));
+
+  // Order by (createdAt DESC, __name__ DESC) so document id is a stable
+  // tie-breaker within the same millisecond.
+  let query: FirebaseFirestore.Query = jobsCollection
+    .orderBy('createdAt', 'desc')
+    .orderBy(FieldPath.documentId(), 'desc');
+
+  if (options.userId) {
+    query = query.where('createdBy', '==', options.userId);
   }
 
-  const snapshot = await query.limit(100).get();
-  return snapshot.docs.map(doc => docToJob(doc)).filter((job): job is Job => job !== null);
+  if (options.cursor) {
+    const parsed = decodeCursor(options.cursor);
+    if (parsed) {
+      const ts = Timestamp.fromDate(new Date(parsed.ts));
+      if (parsed.id) {
+        query = query.startAfter(ts, parsed.id);
+      } else {
+        // Legacy cursor — best-effort, may lose ties on the boundary
+        query = query.startAfter(ts);
+      }
+    }
+  }
+
+  const snapshot = await query.limit(limit + 1).get();
+  const rawJobs = snapshot.docs
+    .map(doc => docToJob(doc))
+    .filter((job): job is Job => job !== null);
+
+  const hasMore = rawJobs.length > limit;
+  const jobs = hasMore ? rawJobs.slice(0, limit) : rawJobs;
+  const nextCursor = hasMore && jobs.length > 0
+    ? encodeCursor({
+        ts: jobs[jobs.length - 1].createdAt.toISOString(),
+        id: jobs[jobs.length - 1].id,
+      })
+    : null;
+
+  return { jobs, nextCursor };
 }
 
 export async function listActiveJobs(): Promise<Job[]> {
@@ -378,11 +540,18 @@ function simulationsCollection(jobId: string) {
 /**
  * Initialize simulation status documents for a job.
  * Creates `count` documents with state PENDING using batched writes.
+ * Also sets atomic counters on the job document for O(1) completion checks.
  */
 export async function initializeSimulations(
   jobId: string,
   count: number
 ): Promise<void> {
+  // Set atomic counters on the job document
+  await jobsCollection.doc(jobId).update({
+    completedSimCount: 0,
+    totalSimCount: count,
+  });
+
   const simCol = simulationsCollection(jobId);
 
   // Firestore batches are limited to 500 operations
@@ -401,6 +570,29 @@ export async function initializeSimulations(
     }
     await batch.commit();
   }
+}
+
+/**
+ * Atomically increment the completed simulation counter.
+ * Returns the updated job data (including the new counter value).
+ */
+export async function incrementCompletedSimCount(
+  jobId: string,
+): Promise<{ completedSimCount: number; totalSimCount: number }> {
+  const jobRef = jobsCollection.doc(jobId);
+
+  // Increment the counter atomically
+  await jobRef.update({
+    completedSimCount: FieldValue.increment(1),
+  });
+
+  // Read the updated document to get the new counter value
+  const doc = await jobRef.get();
+  const data = doc.data()!;
+  return {
+    completedSimCount: data.completedSimCount ?? 0,
+    totalSimCount: data.totalSimCount ?? 0,
+  };
 }
 
 /**
@@ -574,6 +766,4 @@ export async function deleteSimulations(jobId: string): Promise<void> {
     await batch.commit();
   }
 }
-
-export { firestore };
 

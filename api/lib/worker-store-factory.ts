@@ -3,57 +3,66 @@
  * otherwise to SQLite (worker-store).
  */
 import type { WorkerInfo } from './types';
-import * as sqliteStore from './worker-store';
 import * as firestoreStore from './firestore-worker-store';
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+
+// Lazy dynamic import — see job-store-factory.ts for rationale.
+type SqliteWorkerStore = typeof import('./worker-store');
+let _sqliteStore: SqliteWorkerStore | null = null;
+async function sqliteStore(): Promise<SqliteWorkerStore> {
+  if (!_sqliteStore) {
+    _sqliteStore = await import('./worker-store');
+  }
+  return _sqliteStore;
+}
 
 export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.upsertHeartbeat(info);
     return;
   }
-  sqliteStore.upsertHeartbeat(info);
+  (await sqliteStore()).upsertHeartbeat(info);
 }
 
-export async function getActiveWorkers(staleThresholdMs = 60_000): Promise<WorkerInfo[]> {
+export async function getActiveWorkers(staleThresholdMs = 180_000): Promise<WorkerInfo[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.getActiveWorkers(staleThresholdMs);
   }
-  return sqliteStore.getActiveWorkers(staleThresholdMs);
+  return (await sqliteStore()).getActiveWorkers(staleThresholdMs);
 }
 
 export async function getMaxConcurrentOverride(workerId: string): Promise<number | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getMaxConcurrentOverride(workerId);
   }
-  return sqliteStore.getMaxConcurrentOverride(workerId);
+  return (await sqliteStore()).getMaxConcurrentOverride(workerId);
 }
 
 export async function setMaxConcurrentOverride(workerId: string, override: number | null): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreStore.setMaxConcurrentOverride(workerId, override);
   }
-  return sqliteStore.setMaxConcurrentOverride(workerId, override);
+  return (await sqliteStore()).setMaxConcurrentOverride(workerId, override);
 }
 
 export async function getWorkerApiUrl(workerId: string): Promise<string | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getWorkerApiUrl(workerId);
   }
-  return sqliteStore.getWorkerApiUrl(workerId);
+  return (await sqliteStore()).getWorkerApiUrl(workerId);
 }
 
 export async function getOwnerEmail(workerId: string): Promise<string | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getOwnerEmail(workerId);
   }
-  return sqliteStore.getOwnerEmail(workerId);
+  return (await sqliteStore()).getOwnerEmail(workerId);
 }
 
 export async function getQueueDepth(): Promise<number> {
   if (USE_FIRESTORE) {
     return firestoreStore.getQueueDepth();
   }
-  return sqliteStore.getQueueDepth();
+  return (await sqliteStore()).getQueueDepth();
 }

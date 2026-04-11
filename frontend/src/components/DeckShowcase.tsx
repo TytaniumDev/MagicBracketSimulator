@@ -1,6 +1,8 @@
+import { memo, useMemo } from 'react';
 import { ColorIdentity } from './ColorIdentity';
+import type { JobStatus } from '@shared/types/job';
 
-type JobStatusValue = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+type JobStatusValue = JobStatus;
 
 interface DeckShowcaseProps {
   deckNames: string[];
@@ -41,7 +43,7 @@ function ExternalLinkIcon() {
   );
 }
 
-export function DeckShowcase({
+export const DeckShowcase = memo(function DeckShowcase({
   deckNames,
   colorIdentityByDeckName,
   winTally,
@@ -55,15 +57,32 @@ export function DeckShowcase({
   const isTerminal = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
   const isPartial = (jobStatus === 'FAILED' || jobStatus === 'CANCELLED') && gamesPlayed < totalSimulations;
 
-  // Sort by wins descending when we have data, otherwise preserve original order
-  const sorted = [...deckNames].sort((a, b) => {
-    if (!winTally) return 0;
-    return (winTally[b] ?? 0) - (winTally[a] ?? 0);
-  });
+  // ⚡ Bolt Performance Optimization:
+  // Memoize sorted deck names, maxWins, and computed statistics per deck
+  // so we don't recalculate on every render. This prevents O(N) array reductions
+  // (computing avgTurn) from executing inline during the render loop of each deck.
+  const { sorted, maxWins, deckStats } = useMemo(() => {
+    const s = [...deckNames].sort((a, b) => {
+      if (!winTally) return 0;
+      return (winTally[b] ?? 0) - (winTally[a] ?? 0);
+    });
 
-  const maxWins = winTally
-    ? Math.max(...Object.values(winTally), 0)
-    : 0;
+    const m = winTally
+      ? Math.max(...Object.values(winTally), 0)
+      : 0;
+
+    const stats: Record<string, { winPct: string | null; avgTurn: string | null }> = {};
+    for (const name of deckNames) {
+      const wins = winTally?.[name] ?? 0;
+      const turns = winTurns?.[name] ?? [];
+      stats[name] = {
+        winPct: gamesPlayed > 0 ? ((wins / gamesPlayed) * 100).toFixed(0) : null,
+        avgTurn: turns.length > 0 ? (turns.reduce((acc, t) => acc + t, 0) / turns.length).toFixed(1) : null,
+      };
+    }
+
+    return { sorted: s, maxWins: m, deckStats: stats };
+  }, [deckNames, winTally, winTurns, gamesPlayed]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -74,10 +93,8 @@ export function DeckShowcase({
         const link = deckLinks?.[name];
         const accentColor = getAccentColor(colorIdentity);
         const isLeader = isTerminal && maxWins > 0 && wins === maxWins;
-        const winPct = gamesPlayed > 0 ? ((wins / gamesPlayed) * 100).toFixed(0) : null;
-        const avgTurn = turns.length > 0
-          ? (turns.reduce((s, t) => s + t, 0) / turns.length).toFixed(1)
-          : null;
+        const winPct = deckStats[name]?.winPct ?? null;
+        const avgTurn = deckStats[name]?.avgTurn ?? null;
 
         return (
           <div
@@ -99,6 +116,7 @@ export function DeckShowcase({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-400 hover:text-blue-300 text-sm inline-flex items-center gap-1 transition-colors"
+                  aria-label={`Decklist for ${name}`}
                 >
                   <ExternalLinkIcon />
                   Decklist
@@ -151,4 +169,4 @@ export function DeckShowcase({
       })}
     </div>
   );
-}
+});

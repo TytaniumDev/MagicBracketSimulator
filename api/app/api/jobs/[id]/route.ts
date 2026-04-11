@@ -1,45 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAuth, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
+import { parseBody, updateJobSchema } from '@/lib/validation';
+import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
+import { canJobTransition } from '@shared/types/state-machine';
+import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-async function resolveDeckLinks(
+async function resolveDeckLinksAndColors(
   deckIds: string[],
   deckNames: string[]
-): Promise<Record<string, string | null>> {
-  const entries = await Promise.all(
+): Promise<{ links: Record<string, string | null>; colors: Record<string, string[]> }> {
+  const links: Record<string, string | null> = {};
+  const colors: Record<string, string[]> = {};
+  await Promise.all(
     deckIds.map(async (id, i) => {
       try {
         const deck = await getDeckById(id);
-        return [deckNames[i], deck?.link ?? null] as [string, string | null];
+        links[deckNames[i]] = deck?.link ?? null;
+        if (deck?.colorIdentity?.length) colors[deckNames[i]] = deck.colorIdentity;
       } catch {
-        return [deckNames[i], null] as [string, string | null];
+        links[deckNames[i]] = null;
       }
     })
   );
-  return Object.fromEntries(entries);
+  return { links, colors };
 }
 
 async function jobToApiResponse(
   job: Awaited<ReturnType<typeof jobStore.getJob>>,
   isWorker: boolean
-) {
+): Promise<JobResponse | null> {
   if (!job) return null;
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
 
-  // Derive gamesCompleted from simulation statuses (source of truth)
-  const sims = await jobStore.getSimulationStatuses(job.id);
-  const gamesCompleted = sims.length > 0
-    ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+  // Derive gamesCompleted from atomic counters (O(1) — no subcollection reads)
+  const gamesCompleted = (job.completedSimCount != null && job.completedSimCount > 0)
+    ? job.completedSimCount * GAMES_PER_CONTAINER
     : (job.gamesCompleted ?? 0);
 
   const base = {
@@ -60,60 +66,71 @@ async function jobToApiResponse(
     workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
     retryCount: job.retryCount ?? 0,
+    results: job.results ?? null,
   };
   // Worker needs decks and/or deckIds to run the job
   if (isWorker) {
     return {
       ...base,
-      ...(job.decks.length === 4 && { decks: job.decks }),
-      ...(job.deckIds && job.deckIds.length === 4 && { deckIds: job.deckIds }),
+      ...(job.decks.length === REQUIRED_DECK_COUNT && { decks: job.decks }),
+      ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
     };
   }
 
-  // Resolve deck links for frontend consumers
+  // Resolve deck links and color identity for frontend consumers
   let deckLinks: Record<string, string | null> | undefined;
-  if (job.deckIds && job.deckIds.length === 4) {
-    deckLinks = await resolveDeckLinks(job.deckIds, deckNames);
+  let colorIdentity: Record<string, string[]> | undefined;
+  if (job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT) {
+    const resolved = await resolveDeckLinksAndColors(job.deckIds, deckNames);
+    deckLinks = resolved.links;
+    if (Object.keys(resolved.colors).length > 0) colorIdentity = resolved.colors;
   }
 
-  return { ...base, ...(deckLinks && { deckLinks }) };
+  return {
+    ...base,
+    ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
+    ...(deckLinks && { deckLinks }),
+    ...(colorIdentity && { colorIdentity }),
+  };
 }
 
 /**
- * GET /api/jobs/[id] - Get job details (public, no auth required)
+ * GET /api/jobs/[id] - Get job details
+ * Dual auth: workers authenticate via X-Worker-Secret, users via Firebase token.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const isWorker = isWorkerRequest(request);
+  if (!isWorker) {
+    try {
+      await verifyAuth(request);
+    } catch {
+      return unauthorizedResponse();
+    }
+  }
+
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
-    let job = await jobStore.getJob(id);
+    const job = await jobStore.getJob(id);
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      return notFoundResponse('Job');
     }
 
-    // Attempt stale job recovery for RUNNING or stuck QUEUED jobs
-    if (job.status === 'RUNNING' || job.status === 'QUEUED') {
-      const recovered = await jobStore.recoverStaleJob(id);
-      if (recovered) {
-        job = await jobStore.getJob(id);
-        if (!job) {
-          return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-        }
-      }
-    }
+    // Recovery of stuck jobs is handled out-of-band by the scheduled
+    // stale-sweeper (/api/admin/sweep-stale-jobs via Cloud Scheduler, see
+    // docs/STALE_SWEEPER.md). Keeping it out of the GET hot path: a frontend
+    // poll against a 20-sim job used to fan out to ~22 Firestore reads per
+    // call (job + active workers + every sim doc), which burned through the
+    // 50k/day Firestore free tier in minutes of watching a running job.
 
-    const isWorker = isWorkerRequest(request);
     const response = await jobToApiResponse(job, isWorker);
     return NextResponse.json(response);
   } catch (error) {
     console.error('GET /api/jobs/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to get job', 500);
   }
 }
 
@@ -134,12 +151,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
     const job = await jobStore.getJob(id);
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      return notFoundResponse('Job');
     }
 
     // Cancel the job first if it's still active, so the worker can detect it
@@ -162,10 +179,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error('DELETE /api/jobs/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to delete job', 500);
   }
 }
 
@@ -181,15 +195,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: 'Job ID is required' }, { status: 400 });
+      return badRequestResponse('Job ID is required');
     }
 
     const body = await request.json();
-    const { status, errorMessage, dockerRunDurationsMs, workerId, workerName } = body;
+    const parsed = parseBody(updateJobSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const { status, errorMessage, dockerRunDurationsMs, workerId, workerName } = parsed.data;
 
     const job = await jobStore.getJob(id);
     if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      return notFoundResponse('Job');
+    }
+
+    // Validate job state transition using the state machine
+    if (typeof status === 'string' && !canJobTransition(job.status, status as JobStatus)) {
+      return errorResponse(`Invalid status transition: ${job.status} → ${status}`, 409);
     }
 
     if (status === 'RUNNING') {
@@ -208,9 +231,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(response);
   } catch (error) {
     console.error('PATCH /api/jobs/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to update job', 500);
   }
 }

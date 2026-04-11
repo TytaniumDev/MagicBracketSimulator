@@ -9,6 +9,9 @@ import * as os from 'os';
 import { execFile } from 'child_process';
 import { spawn } from 'child_process';
 import { GAMES_PER_CONTAINER } from './constants.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('DockerRunner');
 
 // ============================================================================
 // Types
@@ -30,10 +33,10 @@ export interface SimulationResult {
 const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest';
 const JOBS_DIR = process.env.JOBS_DIR || '/tmp/mbs-jobs';
 const RAM_PER_SIM_MB = parseInt(process.env.RAM_PER_SIM_MB || '1200', 10);
-const SYSTEM_RESERVE_MB = 2048;
-const CONTAINER_TIMEOUT_MS = 2 * 60 * 60 * 1000;  // 2 hours (4 sequential games per container)
+const SYSTEM_RESERVE_MB = parseInt(process.env.SYSTEM_RESERVE_MB || '2048', 10);
+const CONTAINER_TIMEOUT_MS = parseInt(process.env.CONTAINER_TIMEOUT_MS || '7200000', 10);  // Default: 2 hours
 const MAX_CONCURRENT_SIMS = parseInt(process.env.MAX_CONCURRENT_SIMS || '6', 10);
-const CPUS_PER_SIM = 2;  // Forge + Java JIT + xvfb needs ~2 CPUs per sim
+const CPUS_PER_SIM = parseInt(process.env.CPUS_PER_SIM || '2', 10);
 
 // ============================================================================
 // Docker helpers
@@ -64,11 +67,11 @@ export async function cleanupOrphanedContainers(): Promise<void> {
       'ps', '-a', '--filter', 'name=sim-', '--format', '{{.Names}}',
     ]);
     if (!output) {
-      console.log('Startup cleanup: no orphaned sim containers found');
+      log.info('Startup cleanup: no orphaned sim containers found');
       return;
     }
     const names = output.split('\n').filter(Boolean);
-    console.log(`Startup cleanup: removing ${names.length} orphaned sim container(s)...`);
+    log.info('Startup cleanup: removing orphaned sim containers', { count: names.length });
     for (const name of names) {
       try {
         await execDockerCommand(['rm', '-f', name]);
@@ -89,13 +92,13 @@ export async function cleanupOrphanedContainers(): Promise<void> {
 export async function pruneDockerResources(): Promise<void> {
   try {
     const containerOutput = await execDockerCommand(['container', 'prune', '-f']);
-    console.log('Docker container prune:', containerOutput || '(nothing to prune)');
+    log.info('Docker container prune', { result: containerOutput || '(nothing to prune)' });
   } catch (err) {
     console.warn('Docker container prune failed:', err instanceof Error ? err.message : err);
   }
   try {
     const imageOutput = await execDockerCommand(['image', 'prune', '-f']);
-    console.log('Docker image prune:', imageOutput || '(nothing to prune)');
+    log.info('Docker image prune', { result: imageOutput || '(nothing to prune)' });
   } catch (err) {
     console.warn('Docker image prune failed:', err instanceof Error ? err.message : err);
   }
@@ -154,12 +157,60 @@ export async function runSimulationContainer(
     deckEnvVars.push('-e', `DECK_${i}_B64=${b64}`);
   }
 
+  // Hardening: simulation containers run untrusted user input (deck lists
+  // drive the Forge engine). These flags reduce blast radius if Forge or
+  // a dependency has a bug that lets user input escalate:
+  //   --cap-drop=ALL             no Linux capabilities (deny raw sockets etc.)
+  //   --security-opt=no-new-privileges
+  //                              suid/setgid binaries can't escalate
+  //   --pids-limit=256           fork bomb protection
+  //
+  // Opt-in via SIMULATION_READONLY=1:
+  //   --read-only                root filesystem is read-only, writable
+  //                              areas are tmpfs mounts covering every
+  //                              path Forge and our shell script write to:
+  //                                - /tmp              bash mktemp, JRE io.tmpdir
+  //                                - /home/simulator/.forge
+  //                                                    decks + user config
+  //                                - /home/simulator/.cache
+  //                                                    card database cache
+  //                                - /app/logs         per-game log files
+  //
+  //                              uid/gid=999 match the `simulator` user
+  //                              created in simulation/Dockerfile. Without
+  //                              these, tmpfs defaults to root-owned and
+  //                              the unprivileged simulator user can't
+  //                              write (mode=700/755 is too strict for
+  //                              the default world-writable 1777 fallback).
+  //                              If the Dockerfile's user/UID ever changes,
+  //                              update these values too.
+  //
+  //                              Verified end-to-end against a real Forge
+  //                              4-player Commander game before rolling out.
+  // Not applied:
+  //   --network=none             skipped per user: Forge/xvfb may need net
+  //                              access for card data downloads.
+  const readonly = process.env.SIMULATION_READONLY === '1';
+  const readonlyArgs = readonly
+    ? [
+        '--read-only',
+        '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,mode=1777',
+        '--tmpfs', '/home/simulator/.forge:rw,nosuid,size=64m,uid=999,gid=999,mode=700',
+        '--tmpfs', '/home/simulator/.cache:rw,nosuid,size=256m,uid=999,gid=999,mode=700',
+        '--tmpfs', '/app/logs:rw,noexec,nosuid,size=128m,uid=999,gid=999,mode=755',
+      ]
+    : [];
+
   const args = [
     'run', '--rm',
     '--name', containerName,
     '--memory', `${RAM_PER_SIM_MB}m`,
     '--cpus', String(CPUS_PER_SIM),
     '-v', `${JOBS_DIR}:${JOBS_DIR}`,
+    '--cap-drop=ALL',
+    '--security-opt=no-new-privileges',
+    '--pids-limit=256',
+    ...readonlyArgs,
     ...deckEnvVars,
     '-e', 'FORGE_PATH=/app/forge',
     '-e', 'LOGS_DIR=/app/logs',
@@ -186,7 +237,7 @@ export async function runSimulationContainer(
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
-      console.error(`[${simId}] Container timed out after ${CONTAINER_TIMEOUT_MS / 1000}s, killing...`);
+      log.error('Container timed out', { simId, timeoutMs: CONTAINER_TIMEOUT_MS });
       // Kill the docker run process
       proc.kill('SIGTERM');
       // Also force-remove the container in case SIGTERM doesn't propagate
@@ -263,10 +314,7 @@ export function calculateLocalCapacity(): number {
 
   const capacity = Math.max(1, Math.min(memSlots, cpuSlots, MAX_CONCURRENT_SIMS));
 
-  console.log(
-    `Local capacity: ${totalMemMB}MB RAM, ${cpuCount} CPUs → ` +
-    `memSlots=${memSlots}, cpuSlots=${cpuSlots}, cap=${MAX_CONCURRENT_SIMS}, using=${capacity}`,
-  );
+  log.info('Local capacity', { totalMemMB, cpuCount, memSlots, cpuSlots, cap: MAX_CONCURRENT_SIMS, using: capacity });
 
   return capacity;
 }

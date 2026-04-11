@@ -1,23 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { getApiBase, fetchPublic, deleteJobs } from '../api';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import type { Timestamp } from 'firebase/firestore';
+import { db } from '../firebase';
+import { getApiBase, fetchWithAuth, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
+import { Spinner } from '../components/Spinner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
-
-type JobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-interface JobSummary {
-  id: string;
-  name: string;
-  deckNames: string[];
-  status: JobStatus;
-  simulations: number;
-  gamesCompleted: number;
-  createdAt: string;
-  hasResult: boolean;
-  durationMs?: number | null;
-}
+import type { JobStatus, JobSummary } from '@shared/types/job';
+import { GAMES_PER_CONTAINER } from '@shared/types/job';
 
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
@@ -67,13 +59,60 @@ function StatusBadge({ status }: { status: JobStatus }) {
   );
 }
 
+// Convert a Firestore job document to JobSummary
+function firestoreDocToJobSummary(id: string, data: Record<string, unknown>): JobSummary {
+  const decks = (data.decks as Array<{ name: string; dck: string }>) ?? [];
+  const deckNames = decks.map((d) => d.name);
+  const name = deckNames.join(' vs ');
+
+  const createdAt = data.createdAt as Timestamp | null;
+  const startedAt = data.startedAt as Timestamp | null;
+  const completedAt = data.completedAt as Timestamp | null;
+
+  let durationMs: number | null = null;
+  if (completedAt) {
+    const startTs = startedAt ?? createdAt;
+    if (startTs) {
+      durationMs = completedAt.toDate().getTime() - startTs.toDate().getTime();
+    }
+  }
+
+  const completedSimCount = data.completedSimCount as number | undefined;
+  const gamesCompleted =
+    completedSimCount !== undefined
+      ? completedSimCount * GAMES_PER_CONTAINER
+      : ((data.gamesCompleted as number | undefined) ?? 0);
+
+  return {
+    id,
+    name,
+    deckNames,
+    status: data.status as JobStatus,
+    simulations: (data.simulations as number) ?? 0,
+    gamesCompleted,
+    createdAt: createdAt ? createdAt.toDate().toISOString() : new Date(0).toISOString(),
+    durationMs,
+    parallelism: data.parallelism as number | undefined,
+    errorMessage: data.errorMessage as string | undefined,
+    startedAt: startedAt ? startedAt.toDate().toISOString() : undefined,
+    completedAt: completedAt ? completedAt.toDate().toISOString() : undefined,
+    dockerRunDurationsMs: data.dockerRunDurationsMs as number[] | undefined,
+  };
+}
+
 export default function Browse() {
   const { user, isAllowed, isAdmin, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  // Pagination (M2): `jobs` holds the live first page. `extraJobs` holds
+  // older pages appended via "Load More". `nextCursor` is the REST cursor
+  // for the next page beyond what's currently visible; null means we've
+  // reached the end.
+  const [extraJobs, setExtraJobs] = useState<JobSummary[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   // Admin bulk-delete state
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
@@ -90,7 +129,7 @@ export default function Browse() {
     });
   };
 
-  const selectAll = () => setSelectedJobs(new Set(jobs.map((j) => j.id)));
+  const selectAll = () => setSelectedJobs(new Set([...jobs, ...extraJobs].map((j) => j.id)));
   const deselectAll = () => setSelectedJobs(new Set());
 
   const handleBulkDelete = async () => {
@@ -117,12 +156,38 @@ export default function Browse() {
   const apiBase = getApiBase();
   const { workers, queueDepth, isLoading: workersLoading, refresh: refreshWorkers } = useWorkerStatus(!!isAllowed);
 
+  // GCP mode: Firestore onSnapshot for real-time job list
+  useEffect(() => {
+    if (!db) return;
+
+    const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(100));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const jobList = snapshot.docs.map((doc) =>
+          firestoreDocToJobSummary(doc.id, doc.data() as Record<string, unknown>)
+        );
+        setJobs(jobList);
+        setError(null);
+        setIsLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // LOCAL mode: REST fetch + polling fallback
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await fetchPublic(`${apiBase}/api/jobs`);
+      const res = await fetchWithAuth(`${apiBase}/api/jobs`);
       if (!res.ok) throw new Error('Failed to fetch jobs');
       const data = await res.json();
       setJobs(data.jobs || []);
+      setNextCursor((data.nextCursor as string | null) ?? null);
       setError(null);
       return data.jobs as JobSummary[];
     } catch (err) {
@@ -133,29 +198,83 @@ export default function Browse() {
     }
   }, [apiBase]);
 
+  /**
+   * Load the next page of older jobs. Works in both GCP and LOCAL mode:
+   * - LOCAL: nextCursor came from the initial REST fetch.
+   * - GCP: the initial list is live via Firestore onSnapshot, so we derive
+   *   the cursor from the oldest currently-visible job using a composite
+   *   (createdAt, id) cursor that matches the server's wire format.
+   *   Without the id tie-breaker, two jobs created in the same millisecond
+   *   could be skipped or duplicated on page boundaries.
+   */
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      let cursor = nextCursor;
+      if (!cursor) {
+        // GCP mode first Load More: build a composite cursor from the
+        // oldest visible job. Wire format: base64(JSON({ts, id})).
+        const visible = [...jobs, ...extraJobs];
+        const oldest = visible[visible.length - 1];
+        if (!oldest) return;
+        cursor = btoa(JSON.stringify({ ts: oldest.createdAt, id: oldest.id }));
+      }
+      const url = `${apiBase}/api/jobs?limit=100&cursor=${encodeURIComponent(cursor)}`;
+      const res = await fetchWithAuth(url);
+      if (!res.ok) throw new Error(`Failed to load more jobs (HTTP ${res.status})`);
+      const data = await res.json();
+      const newJobs = (data.jobs as JobSummary[] | undefined) ?? [];
+      // Dedupe: if a job is already in the live list, drop it from the new
+      // page (can happen if Firestore onSnapshot and REST overlap at the
+      // boundary).
+      const existingIds = new Set([...jobs, ...extraJobs].map((j) => j.id));
+      const deduped = newJobs.filter((j) => !existingIds.has(j.id));
+      setExtraJobs((prev) => [...prev, ...deduped]);
+      setNextCursor((data.nextCursor as string | null) ?? null);
+    } catch (err) {
+      setLoadMoreError(err instanceof Error ? err.message : 'Failed to load more jobs');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [apiBase, jobs, extraJobs, nextCursor, loadingMore]);
+
+  // Combined visible list: live first page + appended older pages.
+  const visibleJobs = useMemo(() => [...jobs, ...extraJobs], [jobs, extraJobs]);
+
+  // Whether more history is available. Unknown in GCP mode until the user
+  // clicks Load More once, so we optimistically show the button as long
+  // as the live list has the full 100 items (suggesting there may be more).
+  const hasMoreHistory = nextCursor != null || (extraJobs.length === 0 && jobs.length >= 100);
+
   useEffect(() => {
+    if (db) return; // Handled by Firestore onSnapshot above
+
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
     fetchJobs().then((jobList) => {
       const hasInProgress = jobList.some(
         (job) => job.status === 'QUEUED' || job.status === 'RUNNING'
       );
-      if (hasInProgress && !pollIntervalRef.current) {
-        pollIntervalRef.current = setInterval(async () => {
+      if (hasInProgress && !pollInterval) {
+        pollInterval = setInterval(async () => {
           const updated = await fetchJobs();
           const stillInProgress = updated.some(
             (job) => job.status === 'QUEUED' || job.status === 'RUNNING'
           );
-          if (!stillInProgress && pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
+          if (!stillInProgress && pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
           }
         }, 10000);
       }
     });
 
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
       }
     };
   }, [fetchJobs]);
@@ -199,7 +318,8 @@ export default function Browse() {
 
       {/* Jobs List */}
       {isLoading && (
-        <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
+        <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center flex justify-center items-center gap-2">
+          <Spinner />
           Loading simulations...
         </div>
       )}
@@ -210,21 +330,21 @@ export default function Browse() {
         </div>
       )}
 
-      {!isLoading && !error && jobs.length === 0 && (
+      {!isLoading && !error && visibleJobs.length === 0 && (
         <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
           No simulations yet.
         </div>
       )}
 
       {/* Admin bulk-delete toolbar */}
-      {isAdmin && !isLoading && jobs.length > 0 && (
+      {isAdmin && !isLoading && visibleJobs.length > 0 && (
         <div className="mb-3 flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2 border border-gray-700">
           <button
             type="button"
-            onClick={selectedJobs.size === jobs.length ? deselectAll : selectAll}
+            onClick={selectedJobs.size === visibleJobs.length ? deselectAll : selectAll}
             className="text-sm text-blue-400 hover:text-blue-300"
           >
-            {selectedJobs.size === jobs.length ? 'Deselect All' : 'Select All'}
+            {selectedJobs.size === visibleJobs.length ? 'Deselect All' : 'Select All'}
           </button>
           {selectedJobs.size > 0 && (
             <>
@@ -233,8 +353,9 @@ export default function Browse() {
                 type="button"
                 onClick={handleBulkDelete}
                 disabled={isDeleting}
-                className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
+                {isDeleting && <Spinner size="sm" />}
                 {isDeleting ? 'Deleting...' : `Delete Selected (${selectedJobs.size})`}
               </button>
             </>
@@ -248,9 +369,9 @@ export default function Browse() {
         </div>
       )}
 
-      {!isLoading && !error && jobs.length > 0 && (
+      {!isLoading && !error && visibleJobs.length > 0 && (
         <div className="space-y-3">
-          {jobs.map((run) => (
+          {visibleJobs.map((run) => (
             <Link
               key={run.id}
               to={`/jobs/${run.id}`}
@@ -317,6 +438,27 @@ export default function Browse() {
               )}
             </Link>
           ))}
+
+          {/* Load More / end-of-history */}
+          {hasMoreHistory && (
+            <div className="pt-2 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-5 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
+              >
+                {loadingMore && <Spinner size="sm" />}
+                {loadingMore ? 'Loading...' : 'Load more'}
+              </button>
+              {loadMoreError && (
+                <p className="text-xs text-red-400">{loadMoreError}</p>
+              )}
+            </div>
+          )}
+          {!hasMoreHistory && visibleJobs.length >= 100 && (
+            <p className="pt-2 text-center text-xs text-gray-500">End of history.</p>
+          )}
         </div>
       )}
     </div>

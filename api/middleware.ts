@@ -6,45 +6,58 @@ const ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:5
   .split(',')
   .map(origin => origin.trim());
 
-function getAllowedOrigin(request: NextRequest): string | null {
+function getAllowedOrigin(request: NextRequest): { origin: string; credentials: boolean } | null {
   const origin = request.headers.get('origin');
   if (!origin) return null;
 
-  // Check if origin matches any allowed origin
+  // Check if origin matches any allowed origin explicitly
   if (ALLOWED_ORIGINS.includes(origin)) {
-    return origin;
+    return { origin, credentials: true };
   }
 
   // Check for wildcard
+  // Security: Do not dynamically reflect the origin. Return literal '*' and disable credentials.
   if (ALLOWED_ORIGINS.includes('*')) {
-    return origin;
+    return { origin: '*', credentials: false };
   }
 
   return null;
 }
 
 export function middleware(request: NextRequest) {
-  const allowedOrigin = getAllowedOrigin(request);
+  const corsConfig = getAllowedOrigin(request);
 
   if (request.method === 'OPTIONS') {
+    const headers = new Headers({
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Firebase-AppCheck',
+      'Access-Control-Max-Age': '86400',
+    });
+
+    if (corsConfig) {
+      headers.set('Access-Control-Allow-Origin', corsConfig.origin);
+      if (corsConfig.credentials) {
+        headers.set('Access-Control-Allow-Credentials', 'true');
+      }
+    } else {
+      headers.set('Access-Control-Allow-Origin', '');
+      headers.set('Access-Control-Allow-Credentials', 'true');
+    }
+
     return new NextResponse(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': allowedOrigin || '',
-        'Access-Control-Allow-Methods': 'GET, POST, DELETE, PATCH, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Max-Age': '86400',
-      },
+      headers,
     });
   }
 
   const response = NextResponse.next();
-  if (request.nextUrl.pathname.startsWith('/api/') && allowedOrigin) {
-    response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+  if (request.nextUrl.pathname.startsWith('/api/') && corsConfig) {
+    response.headers.set('Access-Control-Allow-Origin', corsConfig.origin);
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, PATCH, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Firebase-AppCheck');
+    if (corsConfig.credentials) {
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    }
   }
   return response;
 }

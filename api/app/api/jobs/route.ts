@@ -1,29 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
+import { getDeckById } from '@/lib/deck-store-factory';
 import { publishSimulationTasks } from '@/lib/pubsub';
-import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX, GAMES_PER_CONTAINER, type CreateJobRequest } from '@/lib/types';
+import { GAMES_PER_CONTAINER } from '@/lib/types';
+import { parseBody, createJobSchema } from '@/lib/validation';
+import type { JobSummary } from '@shared/types/job';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { pushToAllWorkers } from '@/lib/worker-push';
+import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
+import * as Sentry from '@sentry/nextjs';
+import { isJobStuck } from '@/lib/job-utils';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
+
+// In-process dedup: track job IDs that already have recovery aggregation in flight.
+// Prevents redundant concurrent aggregation runs when Browse page is refreshed.
+const pendingRecoveryAggregations = new Set<string>();
 
 /**
  * Convert Job to API summary format.
  * Accepts pre-computed gamesCompleted derived from simulation statuses.
+ *
+ * Derives effective status from sim counts: if all sims are done but
+ * Firestore status is still RUNNING (aggregation failed), show COMPLETED
+ * to the Browse page and trigger background recovery aggregation.
  */
-function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCompleted: number) {
+function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCompleted: number): JobSummary | null {
   if (!job) return null;
   const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
 
+  // Derive effective status: if all sims done but Firestore still says RUNNING,
+  // show COMPLETED and trigger recovery aggregation in the background.
+  let effectiveStatus = job.status;
+  if (isJobStuck(job)) {
+    effectiveStatus = 'COMPLETED';
+    // Trigger background recovery aggregation for stuck job (deduped per job ID)
+    if (!pendingRecoveryAggregations.has(job.id)) {
+      pendingRecoveryAggregations.add(job.id);
+      jobStore.aggregateJobResults(job.id)
+        .catch((err) => {
+          console.error(`[Browse Recovery] Aggregation failed for stuck job ${job.id}:`, err);
+          Sentry.captureException(err, { tags: { component: 'browse-recovery', jobId: job.id } });
+        })
+        .finally(() => {
+          pendingRecoveryAggregations.delete(job.id);
+        });
+    }
+  }
+
   return {
     id: job.id,
     name: deckNames.join(' vs '),
     deckNames,
-    status: job.status,
+    status: effectiveStatus,
     simulations: job.simulations,
     gamesCompleted,
     createdAt: job.createdAt.toISOString(),
@@ -37,31 +71,46 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
 }
 
 /**
- * GET /api/jobs - List jobs
+ * GET /api/jobs - List jobs (paginated)
+ * Query params: ?limit=N (default 100, max 200), ?cursor=<opaque>
+ * Returns: { jobs: JobSummary[], nextCursor: string | null }
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const jobs = await jobStore.listJobs();
-    const summaries = await Promise.all(
-      jobs.map(async (j) => {
-        if (!j) return null;
-        // Derive gamesCompleted from simulation statuses (source of truth)
-        const sims = await jobStore.getSimulationStatuses(j.id);
-        const gamesCompleted = sims.length > 0
-          ? sims.filter((s) => s.state === 'COMPLETED').length * GAMES_PER_CONTAINER
+    await verifyAuth(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
+  try {
+    const url = new URL(request.url);
+    const limitParam = url.searchParams.get('limit');
+    const cursorParam = url.searchParams.get('cursor');
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      return badRequestResponse('limit must be a positive integer');
+    }
+
+    const { jobs, nextCursor } = await jobStore.listJobs({
+      limit,
+      cursor: cursorParam ?? undefined,
+    });
+
+    // Derive gamesCompleted from atomic counters (O(1) — no subcollection reads)
+    const summaries = jobs
+      .filter((j): j is NonNullable<typeof j> => j !== null)
+      .map((j) => {
+        const gamesCompleted = (j.completedSimCount != null && j.completedSimCount > 0)
+          ? j.completedSimCount * GAMES_PER_CONTAINER
           : (j.gamesCompleted ?? 0);
         return jobToSummary(j, gamesCompleted);
       })
-    );
-    const filtered = summaries.filter((s): s is NonNullable<typeof s> => s !== null);
+      .filter((s): s is NonNullable<typeof s> => s !== null);
 
-    return NextResponse.json({ jobs: filtered });
+    return NextResponse.json({ jobs: summaries, nextCursor });
   } catch (error) {
     console.error('GET /api/jobs error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to list jobs' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to list jobs', 500);
   }
 }
 
@@ -71,56 +120,67 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   let user;
   try {
-    user = await verifyAuth(request);
+    user = await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }
 
   try {
-    const body = (await request.json()) as CreateJobRequest;
-    const { deckIds, simulations, parallelism, idempotencyKey } = body;
+    const body = await request.json();
+    const parsed = parseBody(createJobSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const { deckIds, simulations, parallelism, idempotencyKey } = parsed.data;
 
     // Rate limiting
-    const rateCheck = await checkRateLimit(user.uid, typeof simulations === 'number' ? simulations : 0);
+    const rateCheck = await checkRateLimit(user.uid, simulations);
     if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { error: rateCheck.reason },
-        { status: 429 }
-      );
+      return errorResponse(rateCheck.reason ?? 'Rate limit exceeded', 429);
     }
 
-    if (!Array.isArray(deckIds) || deckIds.length !== 4) {
-      return NextResponse.json(
-        { error: 'Exactly 4 deckIds are required' },
-        { status: 400 }
-      );
-    }
-
-    if (typeof simulations !== 'number' || simulations < SIMULATIONS_MIN || simulations > SIMULATIONS_MAX) {
-      return NextResponse.json(
-        { error: `simulations must be between ${SIMULATIONS_MIN} and ${SIMULATIONS_MAX}` },
-        { status: 400 }
-      );
-    }
-
-    // parallelism is accepted but no longer required — worker auto-scales
-    const par = (typeof parallelism === 'number' && parallelism >= PARALLELISM_MIN && parallelism <= PARALLELISM_MAX)
-      ? parallelism
-      : undefined;
+    // Warn about duplicate decks (not an error, but produces meaningless results)
+    const uniqueDeckIds = new Set(deckIds);
+    const hasDuplicates = uniqueDeckIds.size < deckIds.length;
 
     const { decks, errors } = await resolveDeckIds(deckIds);
     if (errors.length > 0) {
-      return NextResponse.json(
-        { error: `Invalid deck IDs: ${errors.join(', ')}` },
-        { status: 400 }
+      return badRequestResponse(`Invalid deck IDs: ${errors.join(', ')}`);
+    }
+
+    // Denormalize deck metadata into the job doc at creation time so every
+    // downstream job view (Browse list, detail page, leaderboard) doesn't
+    // have to re-fetch 4 deck docs per job. In GCP mode this is a ~4x
+    // Firestore read reduction on the hot path. LOCAL mode is unaffected:
+    // the job-store factory only passes these fields to Firestore.
+    const deckLinks: Record<string, string | null> = {};
+    const colorIdentity: Record<string, string[]> = {};
+    if (isGcpMode()) {
+      const resolved = await Promise.all(
+        deckIds.map(async (id, i) => {
+          try {
+            const deck = await getDeckById(id);
+            return { name: decks[i].name, deck };
+          } catch {
+            return { name: decks[i].name, deck: null };
+          }
+        }),
       );
+      for (const { name, deck } of resolved) {
+        deckLinks[name] = deck?.link ?? null;
+        if (deck?.colorIdentity && deck.colorIdentity.length > 0) {
+          colorIdentity[name] = deck.colorIdentity;
+        }
+      }
     }
 
     const job = await jobStore.createJob(decks, simulations, {
       idempotencyKey,
-      parallelism: par,
+      parallelism,
       createdBy: user.uid,
       deckIds,
+      ...(Object.keys(deckLinks).length > 0 && { deckLinks }),
+      ...(Object.keys(colorIdentity).length > 0 && { colorIdentity }),
     });
 
     // Each container runs GAMES_PER_CONTAINER games, so we need fewer containers
@@ -129,28 +189,29 @@ export async function POST(request: NextRequest) {
     // Initialize per-simulation tracking and publish messages (1 sim record = 1 container)
     await jobStore.initializeSimulations(job.id, containerCount);
 
+    const deckNames = job.decks.map((d) => d.name);
+
     if (isGcpMode()) {
       try {
         await publishSimulationTasks(job.id, containerCount);
       } catch (pubsubError) {
         // Log but don't fail — the job is already persisted in Firestore.
-        // Stale job recovery will re-publish messages if needed.
+        // Recovery Cloud Task will re-publish messages if needed.
         console.error(`Failed to publish simulation tasks for job ${job.id}:`, pubsubError);
       }
+      // Schedule a recovery check at T+10min in case something goes wrong
+      scheduleRecoveryCheck(job.id, 600).catch(err => console.warn('[Recovery] Failed to schedule check:', err instanceof Error ? err.message : err));
     } else {
       // Local mode: notify workers that a new job is available (best-effort)
-      pushToAllWorkers('/notify', {}).catch(() => {});
+      pushToAllWorkers('/notify', {}).catch(err => console.warn('[Worker Push] Notify failed:', err instanceof Error ? err.message : err));
     }
 
     return NextResponse.json(
-      { id: job.id, deckNames: job.decks.map((d) => d.name) },
+      { id: job.id, deckNames, ...(hasDuplicates && { warning: 'Duplicate decks detected. Results may not be meaningful.' }) },
       { status: 201 }
     );
   } catch (error) {
     console.error('POST /api/jobs error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to create job', 500);
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest, unauthorizedResponse } from '@/lib/auth';
 import { readDeckContent } from '@/lib/deck-store-factory';
+import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,27 +20,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     if (!id) {
-      return NextResponse.json(
-        { error: 'Deck ID is required' },
-        { status: 400 }
-      );
+      return badRequestResponse('Deck ID is required');
     }
 
     const content = await readDeckContent(id);
 
     if (!content) {
-      return NextResponse.json(
-        { error: 'Deck not found' },
-        { status: 404 }
-      );
+      return notFoundResponse('Deck');
     }
 
     return NextResponse.json(content);
   } catch (error) {
     console.error('Failed to get deck content:', error);
-    return NextResponse.json(
-      { error: 'Failed to get deck content' },
-      { status: 500 }
-    );
+    return errorResponse('Failed to get deck content', 500);
   }
 }

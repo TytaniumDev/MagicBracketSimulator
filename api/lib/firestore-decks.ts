@@ -2,11 +2,10 @@
  * Firestore-backed unified deck store (precons + user decks).
  * Same schema for all decks; isPrecon and ownerId distinguish them.
  */
-import { Firestore, Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from '@google-cloud/firestore';
+import { getFirestore } from './firestore-client';
 
-const firestore = new Firestore({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-});
+const firestore = getFirestore();
 
 const decksCollection = firestore.collection('decks');
 
@@ -75,32 +74,35 @@ function docToDeck(doc: FirebaseFirestore.DocumentSnapshot): DeckDoc | null {
   };
 }
 
-function deckToListItem(doc: DeckDoc): DeckListItem {
-  return {
-    id: doc.id,
-    name: doc.name,
-    filename: doc.filename,
-    primaryCommander: doc.primaryCommander ?? null,
-    colorIdentity: doc.colorIdentity,
-    isPrecon: doc.isPrecon,
-    link: doc.link,
-    ownerId: doc.ownerId,
-    ownerEmail: doc.ownerEmail,
-    createdAt: doc.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
-    setName: doc.setName ?? null,
-    archidektId: doc.archidektId ?? null,
-  };
-}
-
 /**
  * List all decks (precons + every user's submissions)
  */
 export async function listAllDecks(): Promise<DeckListItem[]> {
-  const snapshot = await decksCollection.orderBy('isPrecon', 'desc').orderBy('name').get();
-  const decks = snapshot.docs
-    .map((doc) => docToDeck(doc))
-    .filter((d): d is DeckDoc => d !== null);
-  return decks.map(deckToListItem);
+  const snapshot = await decksCollection
+    .orderBy('isPrecon', 'desc')
+    .orderBy('name')
+    .select('name', 'filename', 'primaryCommander', 'colorIdentity', 'isPrecon', 'link', 'ownerId', 'ownerEmail', 'createdAt', 'setName', 'archidektId')
+    .get();
+
+  return snapshot.docs
+    .filter((doc) => doc.exists)
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name,
+        filename: data.filename,
+        primaryCommander: data.primaryCommander ?? null,
+        colorIdentity: data.colorIdentity,
+        isPrecon: data.isPrecon === true,
+        link: data.link ?? null,
+        ownerId: data.ownerId ?? null,
+        ownerEmail: data.ownerEmail ?? null,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+        setName: data.setName ?? null,
+        archidektId: data.archidektId ?? null,
+      };
+    });
 }
 
 /**

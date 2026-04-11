@@ -189,9 +189,9 @@ async function runTests() {
     assert(getResponse.status === 404, 'Expected job to be gone (404)');
   });
 
-  // Test: POST /api/decks - reject invalid deck URL
-  await test('POST /api/decks rejects invalid deck URL', async () => {
-    const response = await fetch(`${BASE_URL}/api/decks`, {
+  // Test: POST /api/decks/create - reject invalid deck URL
+  await test('POST /api/decks/create rejects invalid deck URL', async () => {
+    const response = await fetch(`${BASE_URL}/api/decks/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -203,9 +203,9 @@ async function runTests() {
     assert(data.error?.includes('ManaBox') || data.error?.includes('Moxfield'), 'Expected supported URLs in error');
   });
 
-  // Test: POST /api/decks - save a deck from ManaBox URL (requires network)
-  await test('POST /api/decks saves deck from ManaBox URL', async () => {
-    const response = await fetch(`${BASE_URL}/api/decks`, {
+  // Test: POST /api/decks/create - save a deck from ManaBox URL (requires network)
+  await test('POST /api/decks/create saves deck from ManaBox URL', async () => {
+    const response = await fetch(`${BASE_URL}/api/decks/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -218,18 +218,16 @@ async function runTests() {
     assert(data.name === 'Temur Roar Upgraded', `Expected deck name, got ${data.name}`);
   });
 
-  // Test: POST /api/decks - deckText is not accepted (URL only)
-  await test('POST /api/decks rejects deck text', async () => {
-    const response = await fetch(`${BASE_URL}/api/decks`, {
+  // Test: POST /api/decks/create - rejects empty body
+  await test('POST /api/decks/create rejects empty body', async () => {
+    const response = await fetch(`${BASE_URL}/api/decks/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        deckText: '[Commander]\n1 Ashling\n\n[Main]\n99 Mountain',
-      }),
+      body: JSON.stringify({}),
     });
     assert(response.status === 400, `Expected 400, got ${response.status}`);
     const data = await response.json();
-    assert(data.error?.includes('deckUrl') || data.error?.toLowerCase().includes('url'), 'Expected error about deckUrl');
+    assert(data.error?.includes('deckUrl') || data.error?.includes('deckText'), 'Expected error about deckUrl or deckText');
   });
 
   // Test: GET /api/decks - list saved decks

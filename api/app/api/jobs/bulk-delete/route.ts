@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorizedResponse, forbiddenResponse } from '@/lib/auth
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode } from '@/lib/deck-store-factory';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
 /**
  * POST /api/jobs/bulk-delete - Bulk delete jobs (admin only)
@@ -24,11 +25,11 @@ export async function POST(request: NextRequest) {
     const { jobIds } = body;
 
     if (!Array.isArray(jobIds) || jobIds.length === 0) {
-      return NextResponse.json({ error: 'jobIds must be a non-empty array' }, { status: 400 });
+      return badRequestResponse('jobIds must be a non-empty array');
     }
 
     if (jobIds.length > 50) {
-      return NextResponse.json({ error: 'Maximum 50 jobs per request' }, { status: 400 });
+      return badRequestResponse('Maximum 50 jobs per request');
     }
 
     const results: { id: string; deleted: boolean; error?: string }[] = [];
@@ -72,9 +73,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ deletedCount, results });
   } catch (error) {
     console.error('POST /api/jobs/bulk-delete error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete jobs' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to delete jobs', 500);
   }
 }

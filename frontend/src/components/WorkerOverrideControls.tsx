@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import type { WorkerInfo } from '../types/worker';
 import { updateWorkerOverride } from '../api';
 
@@ -8,7 +8,13 @@ interface WorkerOverrideControlsProps {
   compact?: boolean;
 }
 
-export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOverrideControlsProps) {
+/**
+ * ⚡ Bolt Performance Optimization:
+ * WorkerOverrideControls is frequently rendered in a list inside WorkerStatusBanner.
+ * Memoizing this component prevents unnecessary re-renders of all worker controls
+ * when the parent Banner toggles its expanded state or when unrelated workers update.
+ */
+export const WorkerOverrideControls = memo(function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOverrideControlsProps) {
   const effectiveCapacity = worker.maxConcurrentOverride ?? worker.capacity;
   const [inputValue, setInputValue] = useState(String(effectiveCapacity));
   const [saving, setSaving] = useState(false);
@@ -67,6 +73,7 @@ export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOve
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         onClick={(e) => e.stopPropagation()}
+        aria-label={`Override capacity for worker ${worker.workerName || worker.workerId}`}
         className="w-14 px-1.5 py-0.5 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs text-center"
         disabled={saving}
       />
@@ -74,6 +81,7 @@ export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOve
         type="button"
         onClick={(e) => { e.stopPropagation(); handleSet(); }}
         disabled={saving}
+        aria-label={`Set override capacity for worker ${worker.workerName || worker.workerId}`}
         className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-xs text-white"
       >
         Set
@@ -83,6 +91,7 @@ export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOve
           type="button"
           onClick={(e) => { e.stopPropagation(); handleClear(); }}
           disabled={saving}
+          aria-label={`Clear override capacity for worker ${worker.workerName || worker.workerId}`}
           className="px-2 py-0.5 bg-gray-600 hover:bg-gray-500 disabled:opacity-50 rounded text-xs text-gray-200"
         >
           Clear
@@ -91,4 +100,4 @@ export function WorkerOverrideControls({ worker, onRefresh, compact }: WorkerOve
       {error && <span className="text-red-400 text-xs">{error}</span>}
     </div>
   );
-}
+});

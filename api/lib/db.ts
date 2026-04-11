@@ -169,6 +169,16 @@ export function getDb(): Database.Database {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN needs_aggregation INTEGER DEFAULT 0`);
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN source TEXT DEFAULT 'user'`);
+  } catch {
+    // Column already exists
+  }
 
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency_key ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL`);
 
@@ -278,6 +288,43 @@ export function getDb(): Database.Database {
   } catch {
     // Column already exists
   }
+
+  // TrueSkill ratings per deck
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ratings (
+      deck_id TEXT PRIMARY KEY,
+      mu REAL NOT NULL DEFAULT 25.0,
+      sigma REAL NOT NULL DEFAULT 8.3333,
+      games_played INTEGER NOT NULL DEFAULT 0,
+      wins INTEGER NOT NULL DEFAULT 0,
+      last_updated TEXT NOT NULL
+    )
+  `);
+
+  // Per-game match results for idempotency tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS match_results (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL,
+      game_index INTEGER NOT NULL,
+      deck_ids TEXT NOT NULL,
+      winner_deck_id TEXT,
+      turn_count INTEGER,
+      played_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_match_results_job_id ON match_results(job_id)`);
+
+  // Coverage config (singleton row)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS coverage_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled INTEGER NOT NULL DEFAULT 0,
+      target_games_per_pair INTEGER NOT NULL DEFAULT 400,
+      updated_at TEXT NOT NULL DEFAULT '',
+      updated_by TEXT NOT NULL DEFAULT ''
+    )
+  `);
 
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);

@@ -47,12 +47,16 @@ import {
   extractWinner,
   extractWinningTurn,
 } from './condenser.js';
-import { startWorkerApi, stopWorkerApi } from './worker-api.js';
+import { startWorkerApi, stopWorkerApi, HealthStatus } from './worker-api.js';
 import { GAMES_PER_CONTAINER } from './constants.js';
+import { createLogger } from './logger.js';
+import { captureWorkerException, addWorkerBreadcrumb, flushSentry } from './sentry.js';
+
+const log = createLogger('Worker');
 
 
 const SECRET_NAME = 'simulation-worker-config';
-const API_TIMEOUT_MS = 10_000;
+const API_TIMEOUT_MS = parseInt(process.env.API_TIMEOUT_MS || '10000', 10);
 
 // Module-scoped worker ID and name, set in main() after initialization
 let currentWorkerId = '';
@@ -79,6 +83,10 @@ let jobNotifyResolve: (() => void) | null = null;
 
 // Drain flag — when true, worker stops accepting new work
 let isDraining = false;
+
+// Pub/Sub health tracking — healthy until an error occurs, reset on message receipt
+let pubSubHealthy = true;
+let lastPubSubError: string | null = null;
 
 // ============================================================================
 // Worker Naming
@@ -272,11 +280,21 @@ async function uploadSingleSimulationLog(
     });
     if (!res.ok) {
       console.warn(`[sim_${String(simIndex).padStart(3, '0')}] Log upload failed: HTTP ${res.status}`);
+      captureWorkerException(
+        new Error(`Log upload failed: HTTP ${res.status}`),
+        { component: 'log-upload', jobId, simIndex, workerId: currentWorkerId }
+      );
     } else {
       console.log(`[sim_${String(simIndex).padStart(3, '0')}] Log uploaded (${(logText.length / 1024).toFixed(1)}KB)`);
     }
   } catch (err) {
     console.warn(`[sim_${String(simIndex).padStart(3, '0')}] Log upload error:`, err instanceof Error ? err.message : err);
+    captureWorkerException(err, {
+      component: 'log-upload',
+      jobId,
+      simIndex,
+      workerId: currentWorkerId,
+    });
   }
 }
 
@@ -295,6 +313,31 @@ async function processSimulation(
 ): Promise<void> {
   const simLabel = `[${simId}]`;
   console.log(`${simLabel} Processing simulation for job ${jobId}`);
+  addWorkerBreadcrumb('processSimulation:start', { jobId, simId, simIndex });
+
+  try {
+    await processSimulationInternal(jobId, simId, simIndex);
+  } catch (err) {
+    // Any uncaught error from container orchestration, reporting, etc.
+    // lands here. Capture with full context before re-throwing so the
+    // caller's error handling (semaphore release, abort cleanup) still runs.
+    captureWorkerException(err, {
+      component: 'process-simulation',
+      jobId,
+      simId,
+      simIndex,
+      workerId: currentWorkerId,
+    });
+    throw err;
+  }
+}
+
+async function processSimulationInternal(
+  jobId: string,
+  simId: string,
+  simIndex: number
+): Promise<void> {
+  const simLabel = `[${simId}]`;
 
   // Fetch job for deck data
   const job = await fetchJob(jobId);
@@ -356,53 +399,78 @@ async function processSimulation(
   allActiveAbortControllers.push(abortController);
 
   try {
-    // Run the simulation container with cancellation signal
-    const result = await runSimulationContainer(jobId, simId, simIndex, deckContents, abortController.signal);
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 30_000;
 
-    if (result.error === 'AlreadyRunning') {
-      // Container is already running from a previous attempt — don't report status
-      return;
-    } else if (result.error === 'Cancelled') {
-      console.log(`${simLabel} CANCELLED in ${formatDuration(result.durationMs)}`);
-      await reportSimulationStatus(jobId, simId, {
-        state: 'CANCELLED',
-        durationMs: result.durationMs,
-      });
-    } else if (result.exitCode === 0) {
-      // Split concatenated 4-game log and extract per-game winners/turns
-      const games = splitConcatenatedGames(result.logText);
-      const winners: string[] = [];
-      const winningTurns: number[] = [];
-      for (const game of games) {
-        const w = extractWinner(game);
-        if (w) winners.push(w);
-        const t = extractWinningTurn(game);
-        if (t > 0) winningTurns.push(t);
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      // Run the simulation container with cancellation signal
+      const result = await runSimulationContainer(jobId, simId, simIndex, deckContents, abortController.signal);
+
+      if (result.error === 'AlreadyRunning') {
+        // Container is already running from a previous attempt — don't report status
+        return;
+      } else if (result.error === 'Cancelled') {
+        console.log(`${simLabel} CANCELLED in ${formatDuration(result.durationMs)}`);
+        await reportSimulationStatus(jobId, simId, {
+          state: 'CANCELLED',
+          durationMs: result.durationMs,
+        });
+        return;
+      } else if (result.exitCode === 0) {
+        // Split concatenated 4-game log and extract per-game winners/turns
+        const games = splitConcatenatedGames(result.logText);
+        const winners: string[] = [];
+        const winningTurns: number[] = [];
+        for (const game of games) {
+          const w = extractWinner(game);
+          if (w) winners.push(w);
+          const t = extractWinningTurn(game);
+          if (t > 0) winningTurns.push(t);
+        }
+        console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB, games=${games.length}, winners=${winners.length}`);
+
+        await reportSimulationStatus(jobId, simId, {
+          state: 'COMPLETED',
+          durationMs: result.durationMs,
+          winners,
+          winningTurns,
+        });
+
+        // Upload log incrementally (non-fatal)
+        if (result.logText.trim()) {
+          await uploadSingleSimulationLog(jobId, simIndex, result.logText);
+        }
+        return;
+      } else {
+        // Container failed — retry locally before reporting FAILED
+        const errorMsg = result.error || `Exit code ${result.exitCode}`;
+
+        if (attempt < MAX_RETRIES && !abortController.signal.aborted) {
+          console.log(`${simLabel} FAILED (attempt ${attempt + 1}/${MAX_RETRIES + 1}) in ${formatDuration(result.durationMs)}: ${errorMsg}, retrying in ${RETRY_DELAY_MS / 1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+
+          // Check if job was cancelled during backoff
+          if (abortController.signal.aborted) {
+            console.log(`${simLabel} Cancelled during retry backoff`);
+            await reportSimulationStatus(jobId, simId, { state: 'CANCELLED' });
+            return;
+          }
+          continue; // Retry
+        }
+
+        // All retries exhausted — report FAILED
+        console.log(`${simLabel} FAILED in ${formatDuration(result.durationMs)} after ${attempt + 1} attempt(s): ${errorMsg}`);
+        if (result.logText) {
+          console.log(`${simLabel} Log preview (first 500 chars): ${result.logText.slice(0, 500)}`);
+        }
+
+        await reportSimulationStatus(jobId, simId, {
+          state: 'FAILED',
+          durationMs: result.durationMs,
+          errorMessage: errorMsg,
+        });
+        return;
       }
-      console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB, games=${games.length}, winners=${winners.length}`);
-
-      await reportSimulationStatus(jobId, simId, {
-        state: 'COMPLETED',
-        durationMs: result.durationMs,
-        winners,
-        winningTurns,
-      });
-
-      // Upload log incrementally (non-fatal)
-      if (result.logText.trim()) {
-        await uploadSingleSimulationLog(jobId, simIndex, result.logText);
-      }
-    } else {
-      console.log(`${simLabel} FAILED in ${formatDuration(result.durationMs)}: ${result.error || `Exit code ${result.exitCode}`}`);
-      if (result.logText) {
-        console.log(`${simLabel} Log preview (first 500 chars): ${result.logText.slice(0, 500)}`);
-      }
-
-      await reportSimulationStatus(jobId, simId, {
-        state: 'FAILED',
-        durationMs: result.durationMs,
-        errorMessage: result.error || `Exit code ${result.exitCode}`,
-      });
     }
   } finally {
     // Unregister abort controller from both per-job and global lists
@@ -508,12 +576,22 @@ function setDraining(drain: boolean): void {
   console.log(drain ? 'Drain mode enabled: no new work will be accepted' : 'Drain mode disabled: accepting work');
 }
 
+// Has this worker already done its startup `?initial=1` heartbeat?
+// Runtime concurrency overrides are delivered via the push API (POST /config
+// on the worker's own HTTP server), so every subsequent heartbeat is a
+// one-way status write and does NOT re-read the override from Firestore.
+// We only do the read on the very first beat after startup so a worker that
+// was offline while an override was set still picks it up.
+let initialHeartbeatDone = false;
+
 /**
  * Send a heartbeat to the API so the frontend knows this worker is online.
- * Parses the response for dynamic concurrency overrides.
+ * On the first call (after startup), requests the stored concurrency
+ * override via `?initial=1`. Subsequent calls skip the override read.
  */
 async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: number): Promise<void> {
-  const url = `${getApiUrl()}/api/workers/heartbeat`;
+  const isInitial = !initialHeartbeatDone;
+  const url = `${getApiUrl()}/api/workers/heartbeat${isInitial ? '?initial=1' : ''}`;
   const resolvedStatus = status ?? (activeSimCount > 0 ? 'busy' : 'idle');
   try {
     const res = await fetch(url, {
@@ -532,17 +610,23 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
       signal: AbortSignal.timeout(timeoutMs ?? API_TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.warn(`Heartbeat failed: HTTP ${res.status} ${res.statusText}`);
+      log.warn('Heartbeat failed', { status: res.status, statusText: res.statusText });
       return;
     }
 
-    // Parse response for concurrency override
-    const data = await res.json() as { ok: boolean; maxConcurrentOverride?: number };
-    if (status !== 'updating') {
+    // Only the initial sync response carries an override; apply it exactly
+    // once. After that, runtime changes arrive via the push /config path.
+    if (isInitial && status !== 'updating') {
+      const data = await res.json() as { ok: boolean; maxConcurrentOverride?: number };
       applyOverride(data.maxConcurrentOverride ?? null);
+    } else {
+      // Drain the response body so fetch doesn't leak the underlying
+      // connection / stream when we don't care about the payload.
+      await res.body?.cancel();
     }
+    initialHeartbeatDone = true;
   } catch (err) {
-    console.warn('Heartbeat error:', err instanceof Error ? err.message : err);
+    log.warn('Heartbeat error', { error: err instanceof Error ? err.message : err });
   }
 }
 
@@ -707,6 +791,7 @@ async function handleMessage(message: any): Promise<void> {
     messageData = JSON.parse(message.data.toString());
   } catch (error) {
     console.error('Failed to parse message:', error);
+    captureWorkerException(error, { component: 'pubsub-parse' });
     message.ack(); // Ack invalid messages to prevent redelivery
     return;
   }
@@ -741,6 +826,8 @@ async function handleMessage(message: any): Promise<void> {
       await processSimulation(jobId, simId, simIndex);
     } catch (error) {
       console.error(`Error processing simulation ${simId} for job ${jobId}:`, error);
+      // processSimulation already captured the exception with context;
+      // this outer catch is just the API-reporting safety net.
       await reportSimulationStatus(jobId, simId, {
         state: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -780,6 +867,44 @@ function waitForNotifyOrTimeout(ms: number): Promise<void> {
       resolve();
     };
   });
+}
+
+/**
+ * Request a coverage job from the API when idle.
+ * Returns true if a coverage job was created (will be picked up next poll cycle).
+ */
+let lastCoverageReason: string | null = null;
+
+async function requestCoverageJob(): Promise<boolean> {
+  try {
+    const res = await fetch(`${getApiUrl()}/api/coverage/next-job`, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+    if (res.status === 201) {
+      const data = await res.json();
+      console.log(`[Coverage] Requested coverage job: ${data.id}`);
+      lastCoverageReason = null;
+      return true;
+    }
+    if (res.status === 200) {
+      const data = await res.json();
+      const reason = data?.reason;
+      if (reason && reason !== lastCoverageReason) {
+        console.log(`[Coverage] No work: ${reason}`);
+        lastCoverageReason = reason;
+      }
+    } else {
+      console.warn(`[Coverage] Unexpected response: ${res.status}`);
+    }
+    return false;
+  } catch (error) {
+    if (error instanceof Error && error.name !== 'TimeoutError') {
+      console.error('[Coverage] Error requesting coverage job:', error);
+    }
+    return false;
+  }
 }
 
 async function pollForJobs(): Promise<void> {
@@ -834,7 +959,16 @@ async function pollForJobs(): Promise<void> {
     } catch (error) {
       if (error instanceof Error && error.name !== 'TimeoutError') {
         console.error('Polling error:', error);
+        captureWorkerException(error, {
+          component: 'polling-loop',
+          workerId: currentWorkerId,
+        });
       }
+    }
+    // No user jobs available — check for coverage work
+    const coverageCreated = await requestCoverageJob();
+    if (coverageCreated) {
+      continue;
     }
     await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
   }
@@ -903,14 +1037,13 @@ async function main(): Promise<void> {
 
   currentWorkerName = getWorkerName();
   currentWorkerId = getWorkerId();
-  console.log('Worker ID:', currentWorkerId);
-  console.log('Worker Name:', currentWorkerName);
+  log.info('Worker identity', { workerId: currentWorkerId, workerName: currentWorkerName });
 
-  console.log('Worker starting...');
-  console.log('Mode: Per-Simulation (docker run --rm)');
-  console.log('Transport:', usePubSub ? 'Pub/Sub' : 'Polling');
-  console.log('API URL:', getApiUrl());
-  console.log('Simulation image:', SIMULATION_IMAGE);
+  log.info('Worker starting');
+  log.info('Mode', { mode: 'Per-Simulation (docker run --rm)' });
+  log.info('Transport', { transport: usePubSub ? 'Pub/Sub' : 'Polling' });
+  log.info('API URL', { url: getApiUrl() });
+  log.info('Simulation image', { image: SIMULATION_IMAGE });
 
   // Verify Docker is accessible
   await verifyDockerAvailable();
@@ -933,11 +1066,23 @@ async function main(): Promise<void> {
     onNotify: notifyJobAvailable,
     onDrain: setDraining,
     onPullImage: pullSimulationImage,
+    getHealth: (): HealthStatus => {
+      if (!usePubSub) return { ok: true };
+      return {
+        ok: pubSubHealthy,
+        pubsub: { connected: pubSubHealthy, ...(lastPubSubError ? { lastError: lastPubSubError } : {}) },
+      };
+    },
   });
 
   // Initial heartbeat (await to apply override before Pub/Sub starts)
   await sendHeartbeat();
-  heartbeatInterval = setInterval(() => sendHeartbeat(), 15_000);
+  // 60s default: the heartbeat exists only so the frontend can show "worker
+  // online" within ~1-2 minutes. More frequent beats burned Firestore writes
+  // and kept the API container warm 24/7 (defeating minInstances: 0) with
+  // 2 workers beating every 15s → 11,520 writes/day.
+  const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '60000', 10);
+  heartbeatInterval = setInterval(() => sendHeartbeat(), HEARTBEAT_INTERVAL_MS);
 
   // Periodic Docker cleanup (every hour) to free disk space
   dockerCleanupInterval = setInterval(() => {
@@ -965,10 +1110,32 @@ async function main(): Promise<void> {
     console.log('Subscription:', SUBSCRIPTION_NAME);
     console.log(`Subscribing to Pub/Sub messages (maxMessages=${simSemaphore.maxSlots})...`);
 
-    subscription.on('message', handleMessage);
+    subscription.on('message', (msg: any) => {
+      pubSubHealthy = true;
+      lastPubSubError = null;
+      handleMessage(msg);
+    });
     subscription.on('error', (error: unknown) => {
+      pubSubHealthy = false;
+      lastPubSubError = error instanceof Error ? error.message : String(error);
       console.error('Subscription error:', error);
     });
+
+    // Periodically check for coverage work when idle (Pub/Sub mode has no
+    // polling loop, so we need a separate timer to request coverage jobs).
+    const COVERAGE_CHECK_INTERVAL_MS = 30_000;
+    setInterval(async () => {
+      if (isShuttingDown || isDraining) return;
+      if (activeSimCount > 0) return; // Only request coverage when idle
+      try {
+        const created = await requestCoverageJob();
+        if (created) {
+          console.log('[Coverage] Coverage job created, will arrive via Pub/Sub');
+        }
+      } catch (err) {
+        console.error('[Coverage] Failed to request coverage job:', err);
+      }
+    }, COVERAGE_CHECK_INTERVAL_MS);
 
     console.log('Worker is running. Waiting for simulation tasks...');
   } else {
@@ -977,7 +1144,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  console.error('Worker failed to start:', error);
+main().catch(async (error) => {
+  log.error('Failed to start', { error: error instanceof Error ? error.message : String(error) });
+  captureWorkerException(error, { component: 'worker-startup' });
+  await flushSentry();
   process.exit(1);
 });

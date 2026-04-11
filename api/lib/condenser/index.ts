@@ -75,7 +75,6 @@ import {
   calculateCardsDrawnPerTurn,
   calculatePerDeckTurns,
   extractWinner,
-  extractWinningTurn,
 } from './turns';
 import { buildStructuredGame } from './structured';
 import { matchesDeckName } from './deck-match';

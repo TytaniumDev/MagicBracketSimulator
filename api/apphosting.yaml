@@ -16,12 +16,19 @@ env:
     value: job-created
   - variable: NODE_ENV
     value: production
+  # Cloud Tasks recovery endpoint URL (used by api/lib/cloud-tasks.ts)
+  - variable: API_BASE_URL
+    value: https://api--magic-bracket-simulator.us-central1.hosted.app
+  - variable: CLOUD_TASKS_LOCATION
+    value: us-central1
   # CORS: allow the deployed frontend (middleware sends one origin per request)
   - variable: CORS_ALLOWED_ORIGINS
     value: https://magic-bracket-simulator.web.app
   # Secrets from Cloud Secret Manager (variable + secret per docs)
   - variable: WORKER_SECRET
     secret: worker-secret
+  - variable: WORKER_HOST_CONFIG
+    secret: worker-host-config
   - variable: MOXFIELD_USER_AGENT
     secret: moxfield-user-agent
   - variable: RESEND_API_KEY
@@ -30,3 +37,13 @@ env:
     secret: admin-email
   - variable: ADMIN_EMAILS
     secret: admin-emails
+  - variable: SENTRY_DSN
+    secret: sentry-dsn
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_SENTRY_DSN
+    secret: sentry-dsn
+    availability:
+      - BUILD
+      - RUNTIME

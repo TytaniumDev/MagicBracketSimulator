@@ -2,20 +2,40 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER } from './types';
-import * as sqliteStore from './job-store';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER, JobSource } from './types';
+import { isTerminalSimState } from '@shared/types/state-machine';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
+import { cancelRecoveryCheck } from './cloud-tasks';
+import * as Sentry from '@sentry/nextjs';
+import { createLogger } from './logger';
+
+const log = createLogger('JobStore');
+const recoveryLog = createLogger('Recovery');
 
 const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
+// Lazy dynamic import of the SQLite-backed store. Using `await import()` (not
+// `require()`) so webpack can statically analyze the dependency and emit it
+// as a separate chunk that is only loaded when first accessed. This keeps
+// better-sqlite3 and the full SQLite schema in db.ts out of the production
+// container startup path entirely when running in GCP mode.
+type SqliteJobStore = typeof import('./job-store');
+let _sqliteStore: SqliteJobStore | null = null;
+async function sqliteStore(): Promise<SqliteJobStore> {
+  if (!_sqliteStore) {
+    _sqliteStore = await import('./job-store');
+  }
+  return _sqliteStore;
+}
+
 // Log mode detection at startup
-console.log(`[Job Store] Running in ${USE_FIRESTORE ? 'GCP' : 'LOCAL'} mode`);
+log.info('Running in mode', { mode: USE_FIRESTORE ? 'GCP' : 'LOCAL' });
 if (USE_FIRESTORE) {
-  console.log(`[Job Store] Project: ${process.env.GOOGLE_CLOUD_PROJECT}`);
-  console.log(`[Job Store] Using: Firestore + Cloud Storage + Pub/Sub`);
+  log.info('Project', { project: process.env.GOOGLE_CLOUD_PROJECT });
+  log.info('Using Firestore + Cloud Storage + Pub/Sub');
 } else {
-  console.log(`[Job Store] Using: SQLite + local filesystem`);
+  log.info('Using SQLite + local filesystem');
 }
 
 export function isGcpMode(): boolean {
@@ -26,7 +46,7 @@ export async function getJob(id: string): Promise<Job | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getJob(id);
   }
-  const job = sqliteStore.getJob(id);
+  const job = (await sqliteStore()).getJob(id);
   return job ?? null;
 }
 
@@ -34,14 +54,23 @@ export async function getJobByIdempotencyKey(key: string): Promise<Job | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getJobByIdempotencyKey(key);
   }
-  const job = sqliteStore.getJobByIdempotencyKey(key);
+  const job = (await sqliteStore()).getJobByIdempotencyKey(key);
   return job ?? null;
 }
 
 export async function createJob(
   decks: DeckSlot[],
   simulations: number,
-  options?: { idempotencyKey?: string; parallelism?: number; createdBy?: string; deckIds?: string[] }
+  options?: {
+    idempotencyKey?: string;
+    parallelism?: number;
+    createdBy?: string;
+    deckIds?: string[];
+    source?: JobSource;
+    /** Denormalized deck metadata, Firestore-only. See CreateJobData. */
+    deckLinks?: Record<string, string | null>;
+    colorIdentity?: Record<string, string[]>;
+  }
 ): Promise<Job> {
   if (USE_FIRESTORE) {
     return firestoreStore.createJob({
@@ -51,29 +80,45 @@ export async function createJob(
       idempotencyKey: options?.idempotencyKey,
       createdBy: options?.createdBy ?? 'unknown',
       deckIds: options?.deckIds,
+      source: options?.source,
+      deckLinks: options?.deckLinks,
+      colorIdentity: options?.colorIdentity,
     });
   }
-  return sqliteStore.createJob(
+  return (await sqliteStore()).createJob(
     decks,
     simulations,
     options?.idempotencyKey,
     options?.parallelism,
-    options?.deckIds
+    options?.deckIds,
+    options?.source
   );
 }
 
-export async function listJobs(userId?: string): Promise<Job[]> {
+export interface ListJobsOptions {
+  userId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListJobsResult {
+  jobs: Job[];
+  nextCursor: string | null;
+}
+
+export async function listJobs(options: ListJobsOptions = {}): Promise<ListJobsResult> {
   if (USE_FIRESTORE) {
-    return firestoreStore.listJobs(userId);
+    return firestoreStore.listJobs(options);
   }
-  return sqliteStore.listJobs();
+  const { userId: _userId, ...rest } = options;
+  return (await sqliteStore()).listJobs(rest);
 }
 
 export async function listActiveJobs(): Promise<Job[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.listActiveJobs();
   }
-  return sqliteStore.listActiveJobs();
+  return (await sqliteStore()).listActiveJobs();
 }
 
 export async function updateJobStatus(id: string, status: JobStatus): Promise<void> {
@@ -81,7 +126,7 @@ export async function updateJobStatus(id: string, status: JobStatus): Promise<vo
     await firestoreStore.updateJobStatus(id, status);
     return;
   }
-  sqliteStore.updateJobStatus(id, status);
+  (await sqliteStore()).updateJobStatus(id, status);
 }
 
 export async function setJobStartedAt(id: string, workerId?: string, workerName?: string): Promise<void> {
@@ -89,7 +134,27 @@ export async function setJobStartedAt(id: string, workerId?: string, workerName?
     await firestoreStore.setJobStartedAt(id, workerId, workerName);
     return;
   }
-  sqliteStore.setJobStartedAt(id, workerId, workerName);
+  (await sqliteStore()).setJobStartedAt(id, workerId, workerName);
+}
+
+export async function conditionalUpdateJobStatus(
+  id: string,
+  expectedStatuses: JobStatus[],
+  newStatus: JobStatus,
+  metadata?: { workerId?: string; workerName?: string }
+): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
+  }
+  return (await sqliteStore()).conditionalUpdateJobStatus(id, expectedStatuses, newStatus, metadata);
+}
+
+export async function setNeedsAggregation(id: string, value: boolean): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.setNeedsAggregation(id, value);
+    return;
+  }
+  (await sqliteStore()).setNeedsAggregation(id, value);
 }
 
 export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
@@ -97,7 +162,7 @@ export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[
     await firestoreStore.setJobCompleted(id, dockerRunDurationsMs);
     return;
   }
-  sqliteStore.setJobCompleted(id, { dockerRunDurationsMs });
+  (await sqliteStore()).setJobCompleted(id, { dockerRunDurationsMs });
 }
 
 export async function setJobFailed(id: string, errorMessage: string, dockerRunDurationsMs?: number[]): Promise<void> {
@@ -105,14 +170,22 @@ export async function setJobFailed(id: string, errorMessage: string, dockerRunDu
     await firestoreStore.setJobFailed(id, errorMessage);
     return;
   }
-  sqliteStore.setJobFailed(id, errorMessage, { dockerRunDurationsMs });
+  (await sqliteStore()).setJobFailed(id, errorMessage, { dockerRunDurationsMs });
+}
+
+export async function setJobResults(jobId: string, results: JobResults): Promise<void> {
+  if (USE_FIRESTORE) {
+    await firestoreStore.setJobResults(jobId, results);
+    return;
+  }
+  (await sqliteStore()).setJobResults(jobId, results);
 }
 
 export async function claimNextJob(): Promise<Job | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.claimNextJob();
   }
-  const job = sqliteStore.claimNextJob();
+  const job = (await sqliteStore()).claimNextJob();
   return job ?? null;
 }
 
@@ -120,7 +193,7 @@ export async function cancelJob(id: string): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreStore.cancelJob(id);
   }
-  return sqliteStore.cancelJob(id);
+  return (await sqliteStore()).cancelJob(id);
 }
 
 export async function deleteJob(id: string): Promise<void> {
@@ -128,7 +201,7 @@ export async function deleteJob(id: string): Promise<void> {
     await firestoreStore.deleteJob(id);
     return;
   }
-  sqliteStore.deleteJob(id);
+  (await sqliteStore()).deleteJob(id);
 }
 
 // ─── Per-Simulation Tracking ─────────────────────────────────────────────────
@@ -138,7 +211,7 @@ export async function initializeSimulations(jobId: string, count: number): Promi
     await firestoreStore.initializeSimulations(jobId, count);
     return;
   }
-  sqliteStore.initializeSimulations(jobId, count);
+  (await sqliteStore()).initializeSimulations(jobId, count);
 }
 
 export async function updateSimulationStatus(
@@ -150,28 +223,28 @@ export async function updateSimulationStatus(
     await firestoreStore.updateSimulationStatus(jobId, simId, update);
     return;
   }
-  sqliteStore.updateSimulationStatus(jobId, simId, update);
+  (await sqliteStore()).updateSimulationStatus(jobId, simId, update);
 }
 
 export async function getSimulationStatus(jobId: string, simId: string): Promise<SimulationStatus | null> {
   if (USE_FIRESTORE) {
     return firestoreStore.getSimulationStatus(jobId, simId);
   }
-  return sqliteStore.getSimulationStatus(jobId, simId);
+  return (await sqliteStore()).getSimulationStatus(jobId, simId);
 }
 
 export async function getSimulationStatuses(jobId: string): Promise<SimulationStatus[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.getSimulationStatuses(jobId);
   }
-  return sqliteStore.getSimulationStatuses(jobId);
+  return (await sqliteStore()).getSimulationStatuses(jobId);
 }
 
 export async function resetJobForRetry(id: string): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreStore.resetJobForRetry(id);
   }
-  return sqliteStore.resetJobForRetry(id);
+  return (await sqliteStore()).resetJobForRetry(id);
 }
 
 export async function deleteSimulations(jobId: string): Promise<void> {
@@ -179,7 +252,24 @@ export async function deleteSimulations(jobId: string): Promise<void> {
     await firestoreStore.deleteSimulations(jobId);
     return;
   }
-  sqliteStore.deleteSimulations(jobId);
+  (await sqliteStore()).deleteSimulations(jobId);
+}
+
+/**
+ * Atomically increment the completed simulation counter.
+ * Returns the updated counter values. GCP mode only (uses Firestore FieldValue.increment).
+ * In local mode, falls back to counting simulation statuses.
+ */
+export async function incrementCompletedSimCount(
+  jobId: string,
+): Promise<{ completedSimCount: number; totalSimCount: number }> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.incrementCompletedSimCount(jobId);
+  }
+  // Local mode fallback: count from simulation statuses
+  const sims = (await sqliteStore()).getSimulationStatuses(jobId);
+  const completedSimCount = sims.filter(s => s.state === 'COMPLETED' || s.state === 'CANCELLED').length;
+  return { completedSimCount, totalSimCount: sims.length };
 }
 
 // ─── Stale Job Recovery ──────────────────────────────────────────────────────
@@ -193,7 +283,7 @@ export async function conditionalUpdateSimulationStatus(
   if (USE_FIRESTORE) {
     return firestoreStore.conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
   }
-  return sqliteStore.conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
+  return (await sqliteStore()).conditionalUpdateSimulationStatus(jobId, simId, expectedStates, update);
 }
 
 /**
@@ -224,8 +314,10 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
 
 // ─── Per-Simulation Stale Detection ──────────────────────────────────────────
 
-const STALE_PENDING_THRESHOLD_MS = 5 * 60 * 1000;       // 5 minutes
-const STALE_RUNNING_THRESHOLD_MS = 2.5 * 60 * 60 * 1000; // 2.5 hours (container timeout + buffer)
+const STALE_PENDING_THRESHOLD_MS = parseInt(process.env.STALE_PENDING_THRESHOLD_MS || '300000', 10);  // Default: 5 min
+// Should exceed CONTAINER_TIMEOUT_MS (default 2h) to avoid false positives
+const STALE_RUNNING_THRESHOLD_MS = parseInt(process.env.STALE_RUNNING_THRESHOLD_MS || '9000000', 10);  // Default: 2.5 hours
+const REQUEUE_COOLDOWN_MS = parseInt(process.env.REQUEUE_COOLDOWN_MS || '120000', 10);
 
 /**
  * Detect and recover individual stuck simulations within a RUNNING job.
@@ -244,7 +336,9 @@ async function recoverStaleSimulations(
   job: Job,
   activeWorkers: WorkerInfo[],
 ): Promise<boolean> {
-  if (!USE_FIRESTORE) return false; // Only applies in GCP mode with Pub/Sub
+  if (!USE_FIRESTORE) {
+    return recoverStaleSimulationsLocal(jobId, job, activeWorkers);
+  }
 
   const sims = await getSimulationStatuses(jobId);
   if (sims.length === 0) return false;
@@ -261,7 +355,7 @@ async function recoverStaleSimulations(
       const jobStartedMs = job.startedAt ? job.startedAt.getTime() : job.createdAt.getTime();
       const pendingForMs = now - jobStartedMs;
       if (pendingForMs > STALE_PENDING_THRESHOLD_MS) {
-        console.log(`[Recovery] Job ${jobId} sim ${sim.simId} stuck PENDING for ${Math.round(pendingForMs / 1000)}s, republishing`);
+        recoveryLog.info('Sim stuck PENDING, republishing', { jobId, simId: sim.simId, pendingSec: Math.round(pendingForMs / 1000) });
         simsToRepublish.push(sim);
         recovered = true;
       }
@@ -271,7 +365,7 @@ async function recoverStaleSimulations(
     if (sim.state === 'RUNNING' && sim.startedAt) {
       const runningForMs = now - new Date(sim.startedAt).getTime();
       if (runningForMs > STALE_RUNNING_THRESHOLD_MS) {
-        console.log(`[Recovery] Job ${jobId} sim ${sim.simId} stuck RUNNING for ${Math.round(runningForMs / 60000)}min, marking FAILED for retry`);
+        recoveryLog.info('Sim stuck RUNNING, marking FAILED for retry', { jobId, simId: sim.simId, runningMin: Math.round(runningForMs / 60000) });
         const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
           state: 'FAILED',
           errorMessage: `Simulation timed out after ${Math.round(runningForMs / 60000)} minutes`,
@@ -286,7 +380,7 @@ async function recoverStaleSimulations(
 
     // Case 3: RUNNING sim whose specific worker is dead
     if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
-      console.log(`[Recovery] Job ${jobId} sim ${sim.simId} worker ${sim.workerId} is dead, marking FAILED for retry`);
+      recoveryLog.info('Sim worker is dead, marking FAILED for retry', { jobId, simId: sim.simId, workerId: sim.workerId });
       const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
         state: 'FAILED',
         errorMessage: 'Worker lost connection',
@@ -300,7 +394,7 @@ async function recoverStaleSimulations(
 
     // Case 4: FAILED sim — retry by resetting to PENDING + republish
     if (sim.state === 'FAILED' && activeWorkers.length > 0) {
-      console.log(`[Recovery] Job ${jobId} sim ${sim.simId} is FAILED, retrying`);
+      recoveryLog.info('Sim is FAILED, retrying', { jobId, simId: sim.simId });
       simsToRepublish.push(sim);
       recovered = true;
     }
@@ -326,9 +420,9 @@ async function recoverStaleSimulations(
           });
       });
       await Promise.all(promises);
-      console.log(`[Recovery] Republished ${simsToRepublish.length} simulation messages for job ${jobId}`);
+      recoveryLog.info('Republished simulation messages', { jobId, count: simsToRepublish.length });
     } catch (err) {
-      console.warn(`[Recovery] Failed to republish sims for job ${jobId}:`, err);
+      recoveryLog.warn('Failed to republish sims', { jobId, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -338,13 +432,101 @@ async function recoverStaleSimulations(
       (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
     );
     if (allDone) {
-      aggregateJobResults(jobId).catch((err) => {
-        console.error(`[Recovery] Aggregation failed for job ${jobId}:`, err);
-      });
+      // Re-trigger aggregation if job is stuck (all sims done but still RUNNING)
+      // or if a previous aggregation failed (needsAggregation flag set)
+      const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
+      if (needsRetrigger) {
+        aggregateJobResults(jobId).catch((err) => {
+          recoveryLog.error('Aggregation failed', { jobId, error: err instanceof Error ? err.message : String(err) });
+          Sentry.captureException(err, { tags: { component: 'recovery-aggregation', jobId } });
+        });
+      }
     }
   }
 
   return recovered;
+}
+
+/**
+ * LOCAL-mode recovery. The architecture is different from GCP:
+ *   - Workers claim entire jobs (atomic QUEUED → RUNNING in claimNextJob).
+ *   - There is no Pub/Sub to republish individual sims to.
+ *   - If the worker holding a RUNNING job dies, the job stays RUNNING with
+ *     a stale workerId and the remaining PENDING sims never progress.
+ *
+ * Strategy:
+ *   1. If the job is RUNNING but its worker is not in the active-workers
+ *      list (and at least one other worker IS active), reset the job back
+ *      to QUEUED and reset any RUNNING/FAILED sims to PENDING. The next
+ *      call to claimNextJob() will pick it up; the worker will then resume
+ *      by processing only PENDING sims.
+ *   2. If all sims are already terminal (COMPLETED/CANCELLED) but the job
+ *      status is still RUNNING, trigger aggregation to finalize it — this
+ *      matches the GCP path and is what the stale-sweeper relies on.
+ *   3. If no active workers exist, do nothing — resetting would just thrash.
+ */
+async function recoverStaleSimulationsLocal(
+  jobId: string,
+  job: Job,
+  activeWorkers: WorkerInfo[],
+): Promise<boolean> {
+  const sims = await getSimulationStatuses(jobId);
+  if (sims.length === 0) return false;
+
+  const allTerminal = sims.every(
+    (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
+  );
+
+  // Fast path: all sims terminal but job still RUNNING → aggregate to finalize.
+  if (allTerminal) {
+    const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
+    if (needsRetrigger) {
+      recoveryLog.info('LOCAL: all sims terminal, retriggering aggregation', { jobId });
+      // Awaited (not fire-and-forget) so the caller — typically the
+      // stale-sweeper HTTP handler — doesn't return before the aggregation
+      // finishes. On serverless runtimes (Cloud Run), unawaited background
+      // work can be throttled or killed the moment the response is sent.
+      try {
+        await aggregateJobResults(jobId);
+      } catch (err) {
+        recoveryLog.error('LOCAL aggregation failed', { jobId, error: err instanceof Error ? err.message : String(err) });
+        Sentry.captureException(err, { tags: { component: 'recovery-aggregation-local', jobId } });
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Only attempt re-claim if there's another worker to take over.
+  if (activeWorkers.length === 0) return false;
+
+  const activeWorkerIds = new Set(activeWorkers.map((w) => w.workerId));
+  const workerStillAlive = job.workerId != null && activeWorkerIds.has(job.workerId);
+  if (workerStillAlive) return false;
+
+  // Worker is dead. Reset in-flight sims so the re-claim has clean state.
+  let resetCount = 0;
+  for (const sim of sims) {
+    if (sim.state === 'RUNNING' || sim.state === 'FAILED') {
+      const updated = await conditionalUpdateSimulationStatus(
+        jobId,
+        sim.simId,
+        [sim.state],
+        { state: 'PENDING' }
+      );
+      if (updated) resetCount++;
+    }
+  }
+
+  const jobReset = await resetJobForRetry(jobId);
+  recoveryLog.info('LOCAL: reset stuck RUNNING job for re-claim', {
+    jobId,
+    deadWorkerId: job.workerId,
+    resetSims: resetCount,
+    jobReset,
+  });
+
+  return jobReset || resetCount > 0;
 }
 
 /**
@@ -360,17 +542,17 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
   if (!USE_FIRESTORE) return false; // Polling mode picks up QUEUED jobs automatically
 
   const queuedForMs = Date.now() - job.createdAt.getTime();
-  if (queuedForMs < 120_000) return false; // Not stuck yet
+  if (queuedForMs < REQUEUE_COOLDOWN_MS) return false; // Not stuck yet
 
   // Cooldown: don't re-publish more often than every 2 minutes per job
   const lastRequeue = requeueCooldowns.get(jobId) ?? 0;
-  if (Date.now() - lastRequeue < 120_000) return false;
+  if (Date.now() - lastRequeue < REQUEUE_COOLDOWN_MS) return false;
 
   // Only re-publish if there's at least one active worker to receive it
   const activeWorkers = await workerStore.getActiveWorkers();
   if (activeWorkers.length === 0) return false;
 
-  console.log(`[Recovery] Job ${jobId} stuck in QUEUED for ${Math.round(queuedForMs / 1000)}s, re-publishing to Pub/Sub`);
+  recoveryLog.info('Job stuck in QUEUED, re-publishing to Pub/Sub', { jobId, queuedSec: Math.round(queuedForMs / 1000) });
   requeueCooldowns.set(jobId, Date.now());
 
   try {
@@ -386,8 +568,8 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
       // Re-publish only for PENDING sims
       const pendingSims = sims.filter(s => s.state === 'PENDING');
       if (pendingSims.length > 0) {
-        const { publishSimulationTasks: publish } = await import('./pubsub');
-        const topic = (await import('./pubsub')).pubsub.topic((await import('./pubsub')).TOPIC_NAME);
+        const { pubsub, TOPIC_NAME } = await import('./pubsub');
+        const topic = pubsub.topic(TOPIC_NAME);
         const promises = pendingSims.map(s => {
           const msg = {
             type: 'simulation' as const,
@@ -399,12 +581,12 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
           return topic.publishMessage({ json: msg });
         });
         await Promise.all(promises);
-        console.log(`[Recovery] Re-published ${pendingSims.length} pending simulation messages for job ${jobId}`);
+        recoveryLog.info('Re-published pending simulation messages', { jobId, count: pendingSims.length });
       }
     }
     return true;
   } catch (err) {
-    console.warn(`[Recovery] Failed to re-publish queued job ${jobId}:`, err);
+    recoveryLog.warn('Failed to re-publish queued job', { jobId, error: err instanceof Error ? err.message : String(err) });
     return false;
   }
 }
@@ -417,10 +599,11 @@ export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | nu
   if (simulations.length === 0) return null;
 
   const states = simulations.map((s) => s.state);
-  const terminal = (s: string) => s === 'COMPLETED' || s === 'FAILED' || s === 'CANCELLED';
+  // A sim is "done" if it's in a terminal state OR FAILED (which will be retried but counts as done for derivation)
+  const isDone = (s: SimulationState) => isTerminalSimState(s) || s === 'FAILED';
   const allPending = states.every((s) => s === 'PENDING');
   const anyRunning = states.some((s) => s === 'RUNNING');
-  const allDone = states.every(terminal);
+  const allDone = states.every(isDone);
   const allFailed = states.every((s) => s === 'FAILED');
   const allCancelled = states.every((s) => s === 'CANCELLED');
   const anyCancelled = states.some((s) => s === 'CANCELLED');
@@ -447,30 +630,87 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   const sims = await getSimulationStatuses(jobId);
   if (sims.length === 0) return;
 
-  // Only aggregate when all sims are COMPLETED or CANCELLED.
+  // Only aggregate when all sims are in terminal states (COMPLETED or CANCELLED).
   // FAILED sims will be retried by the stale job scanner.
-  const allDone = sims.every(s => s.state === 'COMPLETED' || s.state === 'CANCELLED');
+  const allDone = sims.every(s => isTerminalSimState(s.state));
   if (!allDone) return;
 
   const job = await getJob(jobId);
   if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') return; // Already aggregated
 
+  // Mark that aggregation is in progress — recovery can detect and retry if this crashes
+  await setNeedsAggregation(jobId, true);
+
   // Read raw logs uploaded incrementally by workers
-  const { getRawLogs, ingestLogs } = await import('./log-store');
+  const { getRawLogs, ingestLogs, getStructuredLogs } = await import('./log-store');
   const rawLogs = await getRawLogs(jobId);
 
+  const deckNames = job.decks.map(d => d.name);
   if (rawLogs && rawLogs.length > 0) {
-    const deckNames = job.decks.map(d => d.name);
     const deckLists = job.decks.map(d => d.dck ?? '');
     await ingestLogs(jobId, rawLogs, deckNames, deckLists);
   }
 
+  // Load structured games for results computation and TrueSkill
+  const structuredData = await getStructuredLogs(jobId);
+
+  // Compute aggregated results from structured games
+  if (structuredData?.games?.length) {
+    const { matchesDeckName } = await import('./condenser/deck-match');
+    const results: JobResults = { wins: {}, avgWinTurn: {}, gamesPlayed: structuredData.games.length };
+    const turnSums: Record<string, number[]> = {};
+    for (const name of deckNames) {
+      results.wins[name] = 0;
+      results.avgWinTurn[name] = 0;
+      turnSums[name] = [];
+    }
+
+    for (const game of structuredData.games) {
+      if (game.winner) {
+        const matched = deckNames.find(n => matchesDeckName(game.winner!, n)) ?? game.winner;
+        results.wins[matched] = (results.wins[matched] ?? 0) + 1;
+        if (game.winningTurn) {
+          if (!turnSums[matched]) turnSums[matched] = [];
+          turnSums[matched].push(game.winningTurn);
+        }
+      }
+    }
+    for (const [name, turns] of Object.entries(turnSums)) {
+      results.avgWinTurn[name] = turns.length > 0
+        ? Math.round((turns.reduce((a, b) => a + b, 0) / turns.length) * 10) / 10
+        : 0;
+    }
+
+    await setJobResults(jobId, results);
+  }
+
+  // Update TrueSkill ratings for jobs with 4 resolved deck IDs
+  if (Array.isArray(job.deckIds) && job.deckIds.length === 4 && structuredData?.games?.length) {
+    const { processJobForRatings } = await import('./trueskill-service');
+    processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
+      log.error('TrueSkill rating update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
+      Sentry.captureException(err, { tags: { component: 'trueskill', jobId } });
+    });
+  }
+
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
-  if (job.status === 'CANCELLED') return;
+  if (job.status === 'CANCELLED') {
+    await setNeedsAggregation(jobId, false);
+    return;
+  }
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
-  if (allCancelled) return; // Already handled by cancel flow
+  if (allCancelled) {
+    await setNeedsAggregation(jobId, false);
+    return; // Already handled by cancel flow
+  }
 
   await setJobCompleted(jobId);
+
+  // Clear the flag — aggregation completed successfully
+  await setNeedsAggregation(jobId, false);
+
+  // Cancel recovery task
+  cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
 }
 

@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuthOnly, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { sendAccessRequestEmail } from '@/lib/email-notification';
 import { createHmac } from 'node:crypto';
-import { Firestore } from '@google-cloud/firestore';
+import { getFirestore } from '@/lib/firestore-client';
+import { errorResponse } from '@/lib/api-response';
 
 const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
 
-let _firestore: Firestore | null = null;
-function getDb(): Firestore {
-  if (!_firestore) {
-    _firestore = new Firestore({
-      projectId: process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator',
-    });
-  }
-  return _firestore;
-}
+const getDb = getFirestore;
 
 function generateApprovalToken(uid: string, requestId: string): string {
   const secret = process.env.WORKER_SECRET;
@@ -33,7 +26,7 @@ function generateApprovalToken(uid: string, requestId: string): string {
 export async function POST(request: NextRequest) {
   let user;
   try {
-    user = await verifyAuthOnly(request);
+    user = await verifyAuth(request);
   } catch {
     return unauthorizedResponse();
   }
@@ -99,10 +92,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('POST /api/access-requests error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to submit access request' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to submit access request', 500);
   }
 }
 
@@ -112,7 +102,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   let user;
   try {
-    user = await verifyAuthOnly(request);
+    user = await verifyAuth(request);
   } catch {
     return unauthorizedResponse();
   }
@@ -137,9 +127,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ hasRequest: true, status: doc.status });
   } catch (error) {
     console.error('GET /api/access-requests error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to check access request' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to check access request', 500);
   }
 }

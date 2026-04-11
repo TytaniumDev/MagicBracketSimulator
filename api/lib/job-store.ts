@@ -1,5 +1,6 @@
 import { getDb } from './db';
-import { Job, JobStatus, DeckSlot, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState } from './types';
+import type { JobSource } from '@shared/types/job';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Row {
@@ -21,6 +22,8 @@ interface Row {
   worker_name?: string | null;
   claimed_at?: string | null;
   retry_count?: number | null;
+  needs_aggregation?: number | null;
+  source?: string | null;
 }
 
 function rowToJob(row: Row): Job {
@@ -46,6 +49,9 @@ function rowToJob(row: Row): Job {
     ...(row.worker_name && { workerName: row.worker_name }),
     ...(row.claimed_at && { claimedAt: new Date(row.claimed_at) }),
     ...(row.retry_count != null && row.retry_count > 0 && { retryCount: row.retry_count }),
+    ...(row.needs_aggregation === 1 && { needsAggregation: true }),
+    ...(row.source && row.source !== 'user' && { source: row.source as JobSource }),
+    ...(row.result_json != null && { results: JSON.parse(row.result_json) as JobResults }),
   };
 }
 
@@ -62,7 +68,8 @@ export function createJob(
   simulations: number,
   idempotencyKey?: string,
   parallelism?: number,
-  deckIds?: string[]
+  deckIds?: string[],
+  source?: string
 ): Job {
   if (idempotencyKey) {
     const existing = getJobByIdempotencyKey(idempotencyKey);
@@ -73,8 +80,8 @@ export function createJob(
   const db = getDb();
 
   db.prepare(
-    `INSERT INTO jobs (id, decks_json, deck_ids_json, status, simulations, created_at, idempotency_key, parallelism)
-     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?)`
+    `INSERT INTO jobs (id, decks_json, deck_ids_json, status, simulations, created_at, idempotency_key, parallelism, source)
+     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?, ?)`
   ).run(
     id,
     JSON.stringify(decks),
@@ -82,7 +89,8 @@ export function createJob(
     simulations,
     createdAt,
     idempotencyKey ?? null,
-    parallelism ?? null
+    parallelism ?? null,
+    source ?? 'user'
   );
   return {
     id,
@@ -112,6 +120,44 @@ export function setJobStartedAt(id: string, workerId?: string, workerName?: stri
   const now = new Date().toISOString();
   const result = db.prepare('UPDATE jobs SET started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ?').run(now, workerId ?? null, workerName ?? null, now, id);
   return result.changes > 0;
+}
+
+/**
+ * Conditionally update a job's status.
+ * Only applies the update if the job is currently in one of the expectedStatuses.
+ * Returns true if the update was applied.
+ */
+export function conditionalUpdateJobStatus(
+  id: string,
+  expectedStatuses: JobStatus[],
+  newStatus: JobStatus,
+  metadata?: { workerId?: string; workerName?: string }
+): boolean {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const placeholders = expectedStatuses.map(() => '?').join(', ');
+  const result = db
+    .prepare(
+      `UPDATE jobs SET status = ?, started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ? AND status IN (${placeholders})`
+    )
+    .run(
+      newStatus,
+      now,
+      metadata?.workerId ?? null,
+      metadata?.workerName ?? null,
+      now,
+      id,
+      ...expectedStatuses
+    );
+  return result.changes > 0;
+}
+
+/**
+ * Set or clear the needsAggregation flag on a job.
+ */
+export function setNeedsAggregation(id: string, value: boolean): void {
+  const db = getDb();
+  db.prepare('UPDATE jobs SET needs_aggregation = ? WHERE id = ?').run(value ? 1 : 0, id);
 }
 
 export interface SetJobCompletedOptions {
@@ -146,6 +192,15 @@ export function setJobFailed(id: string, errorMessage: string, options?: SetJobF
     .prepare('UPDATE jobs SET status = ?, error_message = ?, completed_at = ?, docker_run_durations_ms = ? WHERE id = ?')
     .run('FAILED', errorMessage, completedAt.toISOString(), dockerRunDurationsJson, id);
   return result.changes > 0;
+}
+
+/**
+ * Store aggregated results on the job document.
+ */
+export function setJobResults(id: string, results: JobResults): void {
+  const db = getDb();
+  db.prepare('UPDATE jobs SET result_json = ? WHERE id = ?')
+    .run(JSON.stringify(results), id);
 }
 
 /**
@@ -206,10 +261,100 @@ export function claimNextJob(workerId?: string, workerName?: string): Job | unde
   return row ? rowToJob(row) : undefined;
 }
 
-export function listJobs(): Job[] {
+export interface ListJobsOptions {
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListJobsResult {
+  jobs: Job[];
+  nextCursor: string | null;
+}
+
+const DEFAULT_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 200;
+
+/**
+ * Composite cursor (matches firestore-job-store.ts). Timestamp + job id,
+ * encoded as base64(JSON). Legacy timestamp-only cursors still accepted.
+ */
+interface ListJobsCursor {
+  ts: string;
+  id: string;
+}
+
+function encodeCursor(cursor: ListJobsCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf-8').toString('base64');
+}
+
+function decodeCursor(raw: string): ListJobsCursor | null {
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+    if (decoded.startsWith('{')) {
+      const parsed = JSON.parse(decoded) as Partial<ListJobsCursor>;
+      if (parsed && typeof parsed.ts === 'string' && typeof parsed.id === 'string') {
+        if (isNaN(new Date(parsed.ts).getTime())) return null;
+        return { ts: parsed.ts, id: parsed.id };
+      }
+      return null;
+    }
+    if (!isNaN(new Date(decoded).getTime())) {
+      return { ts: decoded, id: '' };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function listJobs(options: ListJobsOptions = {}): ListJobsResult {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as Row[];
-  return rows.map(rowToJob);
+  const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT));
+
+  const parsedCursor = options.cursor ? decodeCursor(options.cursor) : null;
+
+  // Fetch limit+1 to detect a next page. Tie-break on id DESC so two
+  // jobs at the same millisecond are never skipped or duplicated across
+  // page boundaries.
+  let rows: Row[];
+  if (parsedCursor && parsedCursor.id) {
+    rows = db
+      .prepare(
+        `SELECT * FROM jobs
+         WHERE created_at < ? OR (created_at = ? AND id < ?)
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
+      )
+      .all(parsedCursor.ts, parsedCursor.ts, parsedCursor.id, limit + 1) as Row[];
+  } else if (parsedCursor) {
+    // Legacy timestamp-only cursor — best-effort, may lose ties
+    rows = db
+      .prepare(
+        `SELECT * FROM jobs
+         WHERE created_at < ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
+      )
+      .all(parsedCursor.ts, limit + 1) as Row[];
+  } else {
+    rows = db
+      .prepare(
+        `SELECT * FROM jobs
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
+      )
+      .all(limit + 1) as Row[];
+  }
+
+  const allJobs = rows.map(rowToJob);
+  const hasMore = allJobs.length > limit;
+  const jobs = hasMore ? allJobs.slice(0, limit) : allJobs;
+  const last = jobs[jobs.length - 1];
+  const nextCursor = hasMore && last
+    ? encodeCursor({ ts: last.createdAt.toISOString(), id: last.id })
+    : null;
+
+  return { jobs, nextCursor };
 }
 
 export function listActiveJobs(): Job[] {
@@ -223,15 +368,6 @@ export function listActiveJobs(): Job[] {
 export function clearJobs(): void {
   const db = getDb();
   db.prepare('DELETE FROM jobs').run();
-}
-
-export function getJobsMap(): Map<string, Job> {
-  const jobs = listJobs();
-  const map = new Map<string, Job>();
-  for (const job of jobs) {
-    map.set(job.id, job);
-  }
-  return map;
 }
 
 // ─── Per-Simulation Tracking ─────────────────────────────────────────────────

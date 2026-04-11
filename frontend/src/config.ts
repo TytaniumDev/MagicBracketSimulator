@@ -5,6 +5,8 @@
 
 export interface RuntimeConfig {
   apiUrl?: string;
+  preconsUrl?: string;
+  sentryDsn?: string;
 }
 
 let cached: RuntimeConfig = {};
@@ -19,12 +21,15 @@ export function loadRuntimeConfig(): Promise<RuntimeConfig> {
   loadPromise = (async () => {
     try {
       const base = typeof window !== 'undefined' ? window.location.origin : '';
-      const r = await fetch(`${base}/config.json`, { cache: 'no-store' });
+      const r = await fetch(`${base}/config.json`);
       if (r.ok) {
-        const j = (await r.json()) as RuntimeConfig;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const j = (await r.json()) as any;
         if (j && typeof j === 'object') {
           cached = {
             apiUrl: typeof j.apiUrl === 'string' ? j.apiUrl.replace(/\/$/, '') : undefined,
+            preconsUrl: typeof j.preconsUrl === 'string' ? j.preconsUrl : undefined,
+            sentryDsn: typeof j.sentryDsn === 'string' ? j.sentryDsn : undefined,
           };
         }
       }

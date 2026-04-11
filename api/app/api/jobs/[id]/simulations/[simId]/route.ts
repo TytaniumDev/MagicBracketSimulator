@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import type { SimulationState } from '@/lib/types';
+import { parseBody, updateSimulationSchema } from '@/lib/validation';
+import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
+import * as Sentry from '@sentry/nextjs';
+import { createLogger } from '@/lib/logger';
+import { errorResponse, badRequestResponse } from '@/lib/api-response';
+
+const log = createLogger('SimPatch');
 
 interface RouteParams {
   params: Promise<{ id: string; simId: string }>;
 }
-
-const VALID_STATES: SimulationState[] = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'];
 
 /**
  * PATCH /api/jobs/[id]/simulations/[simId] — Update a single simulation's status.
@@ -22,19 +26,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id, simId } = await params;
     if (!id || !simId) {
-      return NextResponse.json({ error: 'Job ID and simulation ID are required' }, { status: 400 });
+      return badRequestResponse('Job ID and simulation ID are required');
     }
 
     const body = await request.json();
-    const { state, workerId, workerName, durationMs, errorMessage, winner, winningTurn, winners, winningTurns } = body;
-
-    // Validate state if provided
-    if (state !== undefined && !VALID_STATES.includes(state)) {
-      return NextResponse.json(
-        { error: `Invalid state. Must be one of: ${VALID_STATES.join(', ')}` },
-        { status: 400 }
-      );
+    const parsed = parseBody(updateSimulationSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
+    const { state, workerId, workerName, durationMs, errorMessage, winner, winningTurn, winners, winningTurns } = parsed.data;
 
     // Build update object, only including defined fields
     const update: Record<string, unknown> = {};
@@ -48,12 +48,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (winners !== undefined) update.winners = winners;
     if (winningTurns !== undefined) update.winningTurns = winningTurns;
 
-    // Guard: reject any state transition if the sim is already in a terminal state.
-    // This prevents stale Pub/Sub redeliveries from regressing COMPLETED→RUNNING.
+    // Guard: validate state transitions using the simulation state machine.
+    // Rejects invalid transitions (e.g., COMPLETED→RUNNING from stale Pub/Sub redeliveries).
+    //
+    // NOTE: Returns 200 with { updated: false } instead of 409, intentionally.
+    // The worker treats these as idempotent no-ops (Pub/Sub redelivery is expected),
+    // whereas job PATCH returns 409 because invalid transitions there indicate a
+    // real bug in the caller, not a retry scenario.
     if (state !== undefined) {
       const currentSim = await jobStore.getSimulationStatus(id, simId);
-      if (currentSim && (currentSim.state === 'COMPLETED' || currentSim.state === 'CANCELLED')) {
-        return NextResponse.json({ updated: false, reason: 'terminal_state' });
+      if (currentSim) {
+        // Explicit terminal check before canSimTransition: while canSimTransition
+        // would also reject these (terminal states have no valid transitions), we
+        // check separately to return a distinct 'terminal_state' reason code that
+        // the worker uses to skip further processing for this simulation.
+        if (isTerminalSimState(currentSim.state)) {
+          return NextResponse.json({ updated: false, reason: 'terminal_state' });
+        }
+        if (!canSimTransition(currentSim.state, state)) {
+          return NextResponse.json(
+            { updated: false, reason: 'invalid_transition', from: currentSim.state, to: state },
+          );
+        }
       }
     }
 
@@ -77,34 +93,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Auto-detect job lifecycle transitions
     if (state === 'RUNNING') {
-      const job = await jobStore.getJob(id);
-      if (job?.status === 'QUEUED') {
-        await jobStore.setJobStartedAt(id, workerId, workerName);
-        await jobStore.updateJobStatus(id, 'RUNNING');
-      }
+      // Atomically transition QUEUED → RUNNING (prevents duplicate writes from concurrent sims)
+      await jobStore.conditionalUpdateJobStatus(id, ['QUEUED'], 'RUNNING', { workerId, workerName });
     }
 
     // Check if all sims are done → trigger aggregation.
-    // Only COMPLETED/CANCELLED count as done — FAILED sims will be retried by the scanner.
+    // Uses atomic counter (O(1)) instead of full sim subcollection scan (O(N)).
     if (transitioned && (state === 'COMPLETED' || state === 'CANCELLED')) {
-      const allSims = await jobStore.getSimulationStatuses(id);
-      const allDone = allSims.every(s =>
-        s.state === 'COMPLETED' || s.state === 'CANCELLED'
-      );
-      if (allDone) {
-        // Run aggregation in background — don't block the response
+      const { completedSimCount, totalSimCount } = await jobStore.incrementCompletedSimCount(id);
+
+      if (completedSimCount >= totalSimCount && totalSimCount > 0) {
+        // Set flag before fire-and-forget aggregation
+        await jobStore.setNeedsAggregation(id, true);
+
         jobStore.aggregateJobResults(id).catch(err => {
-          console.error(`[Aggregation] Failed for job ${id}:`, err);
+          log.error('Aggregation failed', { jobId: id, error: err instanceof Error ? err.message : String(err) });
+          Sentry.captureException(err, { tags: { component: 'sim-aggregation', jobId: id } });
         });
       }
     }
 
     return NextResponse.json({ updated: true });
   } catch (error) {
-    console.error('PATCH /api/jobs/[id]/simulations/[simId] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update simulation' },
-      { status: 500 }
-    );
+    log.error('PATCH error', { error: error instanceof Error ? error.message : String(error) });
+    return errorResponse(error instanceof Error ? error.message : 'Failed to update simulation', 500);
   }
 }

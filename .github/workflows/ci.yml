@@ -6,80 +6,60 @@ on:
   workflow_call:
 
 jobs:
-  frontend:
-    name: Frontend
+  lint:
+    name: CI / Lint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            api/package-lock.json
+            worker/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
+      - run: ./scripts/lint.sh
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Build
-        run: npm run build
-
-  api:
-    name: API
+  build:
+    name: CI / Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: api/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            api/package-lock.json
+            worker/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: api/.next/cache
+          key: nextjs-${{ hashFiles('api/package-lock.json') }}-${{ hashFiles('api/**/*.ts', 'api/**/*.tsx') }}
+          restore-keys: |
+            nextjs-${{ hashFiles('api/package-lock.json') }}-
 
-      - name: Lint
-        run: npm run lint
+      - run: ./scripts/build.sh
 
-      - name: Build
-        run: npm run build
-
-      - name: Run unit tests
-        run: npm run test:unit
-
-      - name: Run condenser tests
-        run: npm run test:condenser
-
-  worker:
-    name: Worker
+  test:
+    name: CI / Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: worker
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: worker/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            api/package-lock.json
+            worker/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
+      - run: ./scripts/test.sh

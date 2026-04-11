@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest } from '@/lib/auth';
 import { claimNextJob } from '@/lib/job-store-factory';
+import { errorResponse } from '@/lib/api-response';
 
 /**
  * GET /api/jobs/next — Atomically claim the next QUEUED job.
@@ -9,7 +10,7 @@ import { claimNextJob } from '@/lib/job-store-factory';
  */
 export async function GET(request: NextRequest) {
   if (!isWorkerRequest(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return errorResponse('Unauthorized', 401);
   }
 
   try {
@@ -20,9 +21,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(job);
   } catch (error) {
     console.error('GET /api/jobs/next error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to claim next job' },
-      { status: 500 }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Failed to claim next job', 500);
   }
 }

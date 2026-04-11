@@ -1,10 +1,13 @@
 import { Routes, Route, Link } from 'react-router-dom';
+import * as Sentry from '@sentry/react';
+import { LoginButton } from './components/LoginButton';
+import { useAuth } from './contexts/AuthContext';
 import Browse from './pages/Browse';
 import Home from './pages/Home';
 import JobStatus from './pages/JobStatus';
 import WorkerSetup from './pages/WorkerSetup';
-import { LoginButton } from './components/LoginButton';
-import { useAuth } from './contexts/AuthContext';
+import Leaderboard from './pages/Leaderboard';
+import SentryExamplePage from './pages/SentryExamplePage';
 
 function Header() {
   const { user, isAllowed, loading } = useAuth();
@@ -30,6 +33,12 @@ function Header() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            to="/leaderboard"
+            className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
+          >
+            Rankings
+          </Link>
           {!loading && user && isAllowed && (
             <>
               <Link
@@ -62,19 +71,54 @@ function Header() {
 }
 
 export default function App() {
+  const { user, loading } = useAuth();
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 antialiased">
-      <Header />
-
-      {/* Main content */}
-      <main className="container mx-auto px-4 py-8">
-        <Routes>
-          <Route path="/" element={<Browse />} />
-          <Route path="/submit" element={<Home />} />
-          <Route path="/jobs/:id" element={<JobStatus />} />
-          <Route path="/worker-setup" element={<WorkerSetup />} />
-        </Routes>
-      </main>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full" />
+        </div>
+      ) : !user ? (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-6 px-4">
+          <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+            Magic Bracket Simulator
+          </span>
+          <p className="text-gray-400 text-center max-w-md">
+            Evaluate Magic: The Gathering Commander deck performance through automated Forge simulations, tracking win rates and game statistics.
+          </p>
+          <LoginButton />
+        </div>
+      ) : (
+        <>
+          <Header />
+          <main className="container mx-auto px-4 py-8">
+            <Sentry.ErrorBoundary
+              fallback={
+                <div className="flex flex-col items-center justify-center py-20 gap-4 text-gray-400">
+                  <p>Something went wrong.</p>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                  >
+                    Reload page
+                  </button>
+                </div>
+              }
+            >
+              <Routes>
+                <Route path="/" element={<Browse />} />
+                <Route path="/submit" element={<Home />} />
+                <Route path="/jobs/:id" element={<JobStatus />} />
+                <Route path="/worker-setup" element={<WorkerSetup />} />
+                <Route path="/leaderboard" element={<Leaderboard />} />
+                <Route path="/sentry-example-page" element={<SentryExamplePage />} />
+              </Routes>
+            </Sentry.ErrorBoundary>
+          </main>
+        </>
+      )}
     </div>
   );
 }

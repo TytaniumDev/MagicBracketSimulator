@@ -1,14 +1,2 @@
-export interface WorkerInfo {
-  workerId: string;
-  workerName: string;
-  status: 'idle' | 'busy' | 'updating';
-  currentJobId?: string;
-  capacity: number;
-  activeSimulations: number;
-  uptimeMs: number;
-  lastHeartbeat: string;
-  version?: string;
-  maxConcurrentOverride?: number | null;
-  ownerEmail?: string | null;
-  workerApiUrl?: string | null;
-}
+/** Re-export from shared types — single source of truth. */
+export type { WorkerInfo } from '@shared/types/worker';

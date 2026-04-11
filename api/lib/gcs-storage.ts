@@ -1,4 +1,6 @@
 import { Storage } from '@google-cloud/storage';
+import { isRetryableGcsError } from './gcs-retry';
+import { withRetry } from './retry';
 
 // Initialize Cloud Storage client
 const storage = new Storage({
@@ -21,7 +23,6 @@ export async function uploadJobArtifact(
   data: string | Buffer
 ): Promise<string> {
   const objectPath = `jobs/${jobId}/${filename}`;
-  const file = bucket.file(objectPath);
 
   const contentType = filename.endsWith('.json')
     ? 'application/json'
@@ -29,12 +30,18 @@ export async function uploadJobArtifact(
     ? 'text/plain'
     : 'application/octet-stream';
 
-  await file.save(data, {
-    contentType,
-    metadata: {
-      jobId,
+  await withRetry(
+    async () => {
+      const file = bucket.file(objectPath);
+      await file.save(data, {
+        contentType,
+        metadata: { jobId },
+      });
     },
-  });
+    { maxAttempts: 3, delayMs: 1000, backoffMultiplier: 2 },
+    `GCS upload ${filename}`,
+    isRetryableGcsError
+  );
 
   return `gs://${BUCKET_NAME}/${objectPath}`;
 }
@@ -169,6 +176,36 @@ export async function getSignedUrl(
   });
 
   return url;
+}
+
+// Separate public bucket for static assets (the artifacts bucket has public access prevention).
+const PUBLIC_BUCKET_NAME = 'magic-bracket-simulator-public';
+const publicBucket = storage.bucket(PUBLIC_BUCKET_NAME);
+
+/**
+ * Upload the precons list as a public JSON file for direct frontend consumption.
+ * Uses a dedicated public bucket (IAM grants allUsers objectViewer).
+ * Sets Cache-Control for browser caching.
+ */
+export async function uploadPreconsJson(precons: unknown[]): Promise<string> {
+  const objectPath = 'precons.json';
+  const file = publicBucket.file(objectPath);
+
+  await withRetry(
+    async () => {
+      await file.save(JSON.stringify(precons), {
+        contentType: 'application/json',
+      });
+      await file.setMetadata({
+        cacheControl: 'public, max-age=3600',
+      });
+    },
+    { maxAttempts: 3, delayMs: 1000, backoffMultiplier: 2 },
+    'GCS upload precons.json',
+    isRetryableGcsError
+  );
+
+  return `https://storage.googleapis.com/${PUBLIC_BUCKET_NAME}/${objectPath}`;
 }
 
 export { storage, bucket, BUCKET_NAME };

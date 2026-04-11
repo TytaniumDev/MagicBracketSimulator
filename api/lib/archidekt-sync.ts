@@ -8,6 +8,7 @@ import { fetchArchidektDeck } from './ingestion/archidekt';
 import { toDck } from './ingestion/to-dck';
 import { slugify } from './saved-decks';
 import { parseCommanderFromContent } from './saved-decks';
+import { uploadPreconsJson } from './gcs-storage';
 
 const ARCHIDEKT_LIST_URL = 'https://archidekt.com/api/decks/v3/';
 const ARCHIDEKT_OWNER = 'Archidekt_Precons';
@@ -198,10 +199,15 @@ export async function syncPrecons(): Promise<SyncResult> {
   // running, we re-check the store before creating a new doc.
   const processedArchidektIds = new Set<number>();
 
-  // 3. Process each Archidekt deck
-  for (const adeck of archidektDecks) {
-    try {
-      let existing = existingByArchidektId.get(adeck.id);
+  // 3. Process each Archidekt deck in batches to avoid N+1 bottleneck
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < archidektDecks.length; i += BATCH_SIZE) {
+    const batch = archidektDecks.slice(i, i + BATCH_SIZE);
+    const tasks: Promise<void>[] = [];
+
+    // Extract synchronous state changes (like ID generation) before async ops
+    for (const adeck of batch) {
+      const existing = existingByArchidektId.get(adeck.id);
 
       // If we haven't seen this archidektId in the initial load but another
       // concurrent sync may have inserted it, do a fresh lookup.
@@ -225,77 +231,87 @@ export async function syncPrecons(): Promise<SyncResult> {
       const id = existing?.id ?? generatePreconId(parsedName, usedIds);
       usedIds.add(id);
       keepPreconIds.add(id);
+      processedArchidektIds.add(adeck.id);
 
       console.log(`[PreconSync] ${existing ? 'Updating' : 'Adding'}: ${parsedName} (archidekt:${adeck.id})`);
 
-      // Fetch full deck from Archidekt
-      const parsedDeck = await fetchArchidektDeck(String(adeck.id));
-      const dck = toDck(parsedDeck);
-      const primaryCommander = parseCommanderFromContent(dck) ?? (parsedDeck.commanders[0]?.name || null);
-      const link = `https://archidekt.com/decks/${adeck.id}`;
-      const filename = `${id}.dck`;
+      // Push an async task into the current batch
+      const task = (async () => {
+        try {
+          // Fetch full deck from Archidekt
+          const parsedDeck = await fetchArchidektDeck(String(adeck.id));
+          const dck = toDck(parsedDeck);
+          const primaryCommander = parseCommanderFromContent(dck) ?? (parsedDeck.commanders[0]?.name || null);
+          const link = `https://archidekt.com/decks/${adeck.id}`;
+          const filename = `${id}.dck`;
 
-      // Upsert into store
-      if (USE_FIRESTORE) {
-        const firestoreDecks = await import('./firestore-decks');
-        await firestoreDecks.upsertPrecon({
-          id,
-          name: parsedName,
-          filename,
-          dck,
-          primaryCommander,
-          colorIdentity,
-          link,
-          setName,
-          archidektId: adeck.id,
-          archidektUpdatedAt: adeck.updatedAt,
-        });
-      } else {
-        const { getDb } = await import('./db');
-        const db = getDb();
-        db.prepare(`
-          INSERT INTO precons (id, archidekt_id, name, set_name, filename, primary_commander, color_identity, dck, link, archidekt_updated_at, synced_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            archidekt_id = excluded.archidekt_id,
-            name = excluded.name,
-            set_name = excluded.set_name,
-            filename = excluded.filename,
-            primary_commander = excluded.primary_commander,
-            color_identity = excluded.color_identity,
-            dck = excluded.dck,
-            link = excluded.link,
-            archidekt_updated_at = excluded.archidekt_updated_at,
-            synced_at = excluded.synced_at
-        `).run(
-          id,
-          adeck.id,
-          parsedName,
-          setName,
-          filename,
-          primaryCommander,
-          JSON.stringify(colorIdentity),
-          dck,
-          link,
-          adeck.updatedAt,
-          new Date().toISOString(),
-        );
-      }
+          // Upsert into store
+          if (USE_FIRESTORE) {
+            const firestoreDecks = await import('./firestore-decks');
+            await firestoreDecks.upsertPrecon({
+              id,
+              name: parsedName,
+              filename,
+              dck,
+              primaryCommander,
+              colorIdentity,
+              link,
+              setName,
+              archidektId: adeck.id,
+              archidektUpdatedAt: adeck.updatedAt,
+            });
+          } else {
+            const { getDb } = await import('./db');
+            const db = getDb();
+            db.prepare(`
+              INSERT INTO precons (id, archidekt_id, name, set_name, filename, primary_commander, color_identity, dck, link, archidekt_updated_at, synced_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                archidekt_id = excluded.archidekt_id,
+                name = excluded.name,
+                set_name = excluded.set_name,
+                filename = excluded.filename,
+                primary_commander = excluded.primary_commander,
+                color_identity = excluded.color_identity,
+                dck = excluded.dck,
+                link = excluded.link,
+                archidekt_updated_at = excluded.archidekt_updated_at,
+                synced_at = excluded.synced_at
+            `).run(
+              id,
+              adeck.id,
+              parsedName,
+              setName,
+              filename,
+              primaryCommander,
+              JSON.stringify(colorIdentity),
+              dck,
+              link,
+              adeck.updatedAt,
+              new Date().toISOString(),
+            );
+          }
 
-      processedArchidektIds.add(adeck.id);
+          if (existing) {
+            result.updated++;
+          } else {
+            result.added++;
+          }
+        } catch (err) {
+          const msg = `Failed to sync "${adeck.name}" (${adeck.id}): ${err instanceof Error ? err.message : err}`;
+          console.error(`[PreconSync] ${msg}`);
+          result.errors.push(msg);
+        }
+      })();
 
-      if (existing) {
-        result.updated++;
-      } else {
-        result.added++;
-      }
+      tasks.push(task);
+    }
 
-      // Rate limit between deck detail fetches
+    // Wait for the entire batch to finish
+    if (tasks.length > 0) {
+      await Promise.all(tasks);
+      // Rate limit between batch fetches
       await sleep(RATE_LIMIT_MS);
-    } catch (err) {
-      const msg = `Failed to sync "${adeck.name}" (${adeck.id}): ${err instanceof Error ? err.message : err}`;
-      console.error(`[PreconSync] ${msg}`);
-      result.errors.push(msg);
     }
   }
 
@@ -326,6 +342,22 @@ export async function syncPrecons(): Promise<SyncResult> {
   }
 
   console.log(`[PreconSync] Sync complete: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.removed} removed, ${result.errors.length} errors`);
+
+  // 5. Write precons.json to GCS for direct frontend access
+  if (USE_FIRESTORE) {
+    try {
+      const firestoreDecks = await import('./firestore-decks');
+      const allDecks = await firestoreDecks.listAllDecks();
+      const preconItems = allDecks.filter(d => d.isPrecon);
+      const gcsUrl = await uploadPreconsJson(preconItems);
+      console.log(`[PreconSync] Uploaded precons.json to GCS (${preconItems.length} precons): ${gcsUrl}`);
+    } catch (err) {
+      // Non-fatal: precons still available via API fallback
+      console.error('[PreconSync] Failed to upload precons.json to GCS:', err);
+      result.errors.push(`GCS upload failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   return result;
 }
 

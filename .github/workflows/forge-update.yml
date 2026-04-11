@@ -16,14 +16,12 @@ jobs:
       rebuilt: ${{ steps.check.outputs.rebuilt }}
       forge_version: ${{ steps.resolve.outputs.version }}
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Resolve latest Forge version
         id: resolve
-        run: |
-          FORGE_TAG=$(curl -fsSL https://api.github.com/repos/Card-Forge/forge/releases/latest \
-            | jq -r '.tag_name')
-          FORGE_VERSION=${FORGE_TAG#forge-}
-          echo "version=${FORGE_VERSION}" >> $GITHUB_OUTPUT
-          echo "Latest Forge version: ${FORGE_VERSION}"
+        run: ./scripts/resolve-forge-version.sh
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -49,10 +47,6 @@ jobs:
             echo "Tag forge-${FORGE_VERSION} not found, rebuild needed"
             echo "rebuilt=true" >> $GITHUB_OUTPUT
           fi
-
-      - name: Checkout repo
-        if: steps.check.outputs.rebuilt == 'true'
-        uses: actions/checkout@v4
 
       - name: Set up QEMU
         if: steps.check.outputs.rebuilt == 'true'
@@ -82,24 +76,20 @@ jobs:
     if: needs.check-and-build.outputs.rebuilt == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Load Doppler secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: ./scripts/load-doppler-secrets.sh API_URL WORKER_SECRET
+
       - name: Notify workers
         continue-on-error: true
         env:
-          API_URL: ${{ secrets.API_URL }}
-          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
-        run: |
-          if [ -z "${API_URL}" ] || [ -z "${WORKER_SECRET}" ]; then
-            echo "::warning::API_URL or WORKER_SECRET not set, skipping worker notification"
-            exit 0
-          fi
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "${API_URL}/api/admin/pull-image" \
-            -H "Content-Type: application/json" \
-            -H "X-Worker-Secret: ${WORKER_SECRET}" \
-            -d '{}')
-          echo "Worker notification response: HTTP ${STATUS}"
-          if [ "${STATUS}" -ge 200 ] && [ "${STATUS}" -lt 300 ]; then
-            echo "Workers notified successfully"
-          else
-            echo "::warning::Worker notification failed with HTTP ${STATUS}"
-          fi
+          API_URL: ${{ env.API_URL }}
+          WORKER_SECRET: ${{ env.WORKER_SECRET }}
+        run: ./scripts/notify-workers.sh

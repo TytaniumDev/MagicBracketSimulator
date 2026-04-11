@@ -1,78 +1,19 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getApiBase, fetchWithAuth, fetchPublic, deleteJob } from '../api';
+import { useQueryClient } from '@tanstack/react-query';
+import { REQUIRED_DECK_COUNT } from '@shared/types/job';
+import type { JobResponse } from '@shared/types/job';
+import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
 import { SimulationGrid } from '../components/SimulationGrid';
+import { Spinner } from '../components/Spinner';
 import { useJobStream } from '../hooks/useJobStream';
+import { useWinData } from '../hooks/useWinData';
+import { useJobLogs } from '../hooks/useJobLogs';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { matchesDeckName } from '../utils/deck-match';
-
-type JobStatusValue = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-interface Job {
-  id: string;
-  name: string;
-  deckNames: string[];
-  status: JobStatusValue;
-  simulations: number;
-  createdAt: string;
-  errorMessage?: string;
-  gamesCompleted?: number;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  durationMs?: number | null;
-  dockerRunDurationsMs?: number[] | null;
-  workerId?: string;
-  workerName?: string;
-  claimedAt?: string | null;
-  queuePosition?: number;
-  workers?: { online: number; idle: number; busy: number; updating?: number };
-  retryCount?: number;
-  deckLinks?: Record<string, string | null>;
-}
-
-// Types for Log Analyzer responses
-interface GameEvent {
-  type: string;
-  line: string;
-  turn?: number;
-  player?: string;
-}
-
-interface CondensedGame {
-  keptEvents: GameEvent[];
-  manaPerTurn: Record<string, { manaEvents: number }>;
-  cardsDrawnPerTurn: Record<string, number>;
-  turnCount: number;
-  winner?: string;
-  winningTurn?: number;
-}
-
-interface DeckAction {
-  line: string;
-  eventType?: string;
-}
-
-interface DeckTurnActions {
-  turnNumber: number;
-  actions: DeckAction[];
-}
-
-interface DeckHistory {
-  deckLabel: string;
-  turns: DeckTurnActions[];
-}
-
-interface StructuredGame {
-  totalTurns: number;
-  players: string[];
-  decks: DeckHistory[];
-  lifePerTurn?: Record<number, Record<string, number>>;
-  winner?: string;
-  winningTurn?: number;
-}
 
 type LogViewTab = 'raw' | 'condensed';
 
@@ -99,322 +40,35 @@ function formatDurationMs(ms: number): string {
 
 export default function JobStatusPage() {
   const { id } = useParams<{ id: string }>();
-  const [job, setJob] = useState<Job | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showLogPanel, setShowLogPanel] = useState(false);
-  const [logViewTab, setLogViewTab] = useState<LogViewTab>('condensed');
-  
-  // Log data states
-  const [rawLogs, setRawLogs] = useState<string[] | null>(null);
-  const [rawLogsError, setRawLogsError] = useState<string | null>(null);
-  const [condensedLogs, setCondensedLogs] = useState<CondensedGame[] | null>(null);
-  const [condensedError, setCondensedError] = useState<string | null>(null);
-  const [structuredGames, setStructuredGames] = useState<StructuredGame[] | null>(null);
-  const [structuredError, setStructuredError] = useState<string | null>(null);
-  const [deckNames, setDeckNames] = useState<string[] | null>(null);
-  const [colorIdentityByDeckName, setColorIdentityByDeckName] = useState<Record<string, string[]>>({});
-  
-  // Turn viewer state
-  const [selectedGame, setSelectedGame] = useState(0);
-  const [selectedTurn, setSelectedTurn] = useState(1);
-  
-  // Event type filter state - empty set means show all
-  const [eventFilters, setEventFilters] = useState<Set<string>>(new Set());
-  
-  const [isCancelling, setIsCancelling] = useState(false);
-  const [isDeletingJob, setIsDeletingJob] = useState(false);
-
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { workers, refresh: refreshWorkers } = useWorkerStatus(!!user);
   const apiBase = getApiBase();
-  const fallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fallback simulation statuses (REST fetch for terminal jobs)
-  const [fallbackSimulations, setFallbackSimulations] = useState<import('../types/simulation').SimulationStatus[]>([]);
+  // UI-only state
+  const [showLogPanel, setShowLogPanel] = useState(false);
+  const [logViewTab, setLogViewTab] = useState<LogViewTab>('condensed');
+  const [selectedGame, setSelectedGame] = useState(0);
+  const [selectedTurn, setSelectedTurn] = useState(1);
+  const [eventFilters, setEventFilters] = useState<Set<string>>(new Set());
+  const [loadStructuredLogs, setLoadStructuredLogs] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isDeletingJob, setIsDeletingJob] = useState(false);
+  const [isResubmitting, setIsResubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // Primary: SSE stream for real-time job updates
-  const { job: streamJob, simulations: rawStreamSimulations, error: streamError, connected: sseConnected } = useJobStream<Job>(id);
+  // Data hooks
+  const { job, simulations, error: streamError } = useJobStream(id);
+  const logs = useJobLogs(id, job, { showLogPanel, loadStructured: loadStructuredLogs });
+  const { winTally, winTurns, gamesPlayed, simGamesCompleted } = useWinData(
+    job, simulations, logs.structuredGames, logs.deckNames,
+  );
 
-  // Merge SSE simulations with REST fallback
-  const streamSimulations = rawStreamSimulations.length > 0 ? rawStreamSimulations : fallbackSimulations;
-
-  // Sync SSE data into component state
-  useEffect(() => {
-    if (streamJob) setJob(streamJob);
-  }, [streamJob]);
-
-  useEffect(() => {
-    if (streamError) setError(streamError);
-  }, [streamError]);
-
-  // Fallback: Poll if SSE hasn't connected within 5 seconds
-  useEffect(() => {
-    if (!id || sseConnected) return;
-
-    const controller = new AbortController();
-    let fallbackActive = false;
-
-    const timeoutId = setTimeout(() => {
-      // SSE didn't connect in time, start polling as fallback
-      fallbackActive = true;
-      const fetchJob = () => {
-        fetchPublic(`${apiBase}/api/jobs/${id}`, { signal: controller.signal })
-          .then((res) => {
-            if (!res.ok) {
-              if (res.status === 404) throw new Error('Job not found');
-              throw new Error('Failed to load job');
-            }
-            return res.json();
-          })
-          .then((data) => {
-            setJob(data);
-            if (data.status === 'COMPLETED' || data.status === 'FAILED' || data.status === 'CANCELLED') {
-              if (fallbackIntervalRef.current) {
-                clearInterval(fallbackIntervalRef.current);
-                fallbackIntervalRef.current = null;
-              }
-            }
-          })
-          .catch((err) => {
-            if (err.name !== 'AbortError') setError(err.message);
-          });
-      };
-      fetchJob();
-      fallbackIntervalRef.current = setInterval(fetchJob, 5000);
-    }, 5000);
-
-    return () => {
-      clearTimeout(timeoutId);
-      if (fallbackActive && fallbackIntervalRef.current) {
-        clearInterval(fallbackIntervalRef.current);
-        fallbackIntervalRef.current = null;
-      }
-      controller.abort();
-    };
-  }, [id, apiBase, sseConnected]);
-
-  // Fetch simulation statuses via REST for terminal jobs (fallback when SSE doesn't deliver them)
-  useEffect(() => {
-    if (!id || !job) return;
-    if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
-    if (streamSimulations.length > 0) return; // SSE already delivered them
-
-    fetchPublic(`${apiBase}/api/jobs/${id}/simulations`)
-      .then((res) => {
-        if (!res.ok) return { simulations: [] };
-        return res.json();
-      })
-      .then((data) => {
-        // useJobStream doesn't expose a setter, but we can use the streamSimulations
-        // via the hook. Since we can't set it from outside, we'll store in local state.
-        // Actually streamSimulations is from the hook, we need a separate state.
-        if (Array.isArray(data.simulations) && data.simulations.length > 0) {
-          setFallbackSimulations(data.simulations);
-        }
-      })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, apiBase, job?.status]);
-
-  // Fetch structured logs for Deck Actions when job is completed/failed
-  useEffect(() => {
-    if (!id || !job) return;
-    if (job.status !== 'COMPLETED' && job.status !== 'FAILED' && job.status !== 'CANCELLED') return;
-    if (structuredGames !== null) return; // Already fetched
-
-    setStructuredError(null);
-    fetchPublic(`${apiBase}/api/jobs/${id}/logs/structured`)
-      .then((res) => {
-        if (!res.ok) {
-          if (res.status === 404) return { games: [], deckNames: [] };
-          throw new Error('Failed to load structured logs');
-        }
-        return res.json();
-      })
-      .then((data) => {
-        setStructuredGames(data.games ?? []);
-        setDeckNames(data.deckNames ?? null);
-      })
-      .catch((err) => setStructuredError(err instanceof Error ? err.message : 'Unknown error'));
-  }, [id, apiBase, job, structuredGames]);
-
-  // Stable keys for color identity dependencies (avoid re-fetching on every poll cycle)
-  const deckNamesKey = job?.deckNames?.join(',') ?? '';
-  const logDeckNamesKey = deckNames?.join(',') ?? '';
-
-  // Fetch color identity for deck names (job.deckNames, deckNames from logs)
-  useEffect(() => {
-    if (!job) return;
-    const names = new Set<string>();
-    job.deckNames?.forEach((n) => names.add(n));
-    deckNames?.forEach((n) => names.add(n));
-    const list = Array.from(names);
-    if (list.length === 0) return;
-    const params = new URLSearchParams({ names: list.join(',') });
-    fetchPublic(`${apiBase}/api/deck-color-identity?${params}`)
-      .then((res) => (res.ok ? res.json() : {}))
-      .then((data: Record<string, string[]>) => setColorIdentityByDeckName(data))
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- using serialized keys to avoid refetching when object references change but values don't
-  }, [apiBase, job?.id, deckNamesKey, logDeckNamesKey]);
-
-  // Fetch raw and condensed logs when log panel is opened
-  useEffect(() => {
-    if (!id || !showLogPanel) return;
-    
-    // Fetch raw logs
-    if (rawLogs === null) {
-      setRawLogsError(null);
-      fetchPublic(`${apiBase}/api/jobs/${id}/logs/raw`)
-        .then((res) => {
-          if (!res.ok) {
-            if (res.status === 404) return { gameLogs: [] };
-            throw new Error('Failed to load raw logs');
-          }
-          return res.json();
-        })
-        .then((data) => setRawLogs(data.gameLogs ?? []))
-        .catch((err) => setRawLogsError(err instanceof Error ? err.message : 'Unknown error'));
-    }
-    
-    // Fetch condensed logs
-    if (condensedLogs === null) {
-      setCondensedError(null);
-      fetchPublic(`${apiBase}/api/jobs/${id}/logs/condensed`)
-        .then((res) => {
-          if (!res.ok) {
-            if (res.status === 404) return { condensed: [] };
-            throw new Error('Failed to load condensed logs');
-          }
-          return res.json();
-        })
-        .then((data) => setCondensedLogs(data.condensed ?? []))
-        .catch((err) => setCondensedError(err instanceof Error ? err.message : 'Unknown error'));
-    }
-  }, [id, apiBase, showLogPanel, rawLogs, condensedLogs]);
-
-  // Compute win tally from simulation statuses (fallback when structured games unavailable)
-  const { simWinTally, simWinTurns, simGamesCompleted } = useMemo(() => {
-    if (streamSimulations.length === 0) {
-      return { simWinTally: null, simWinTurns: null, simGamesCompleted: 0 };
-    }
-
-    const completedSims = streamSimulations.filter((s) => s.state === 'COMPLETED');
-
-    // Use winners[] array (multi-game containers) or fall back to single winner
-    const hasAnyWinData = completedSims.some((s) => (s.winners && s.winners.length > 0) || s.winner);
-    if (!hasAnyWinData) {
-      // Count games from winners arrays if available, otherwise count sims
-      const gamesCompleted = completedSims.reduce((sum, s) => sum + (s.winners?.length ?? 0), 0) || completedSims.length;
-      return { simWinTally: null, simWinTurns: null, simGamesCompleted: gamesCompleted };
-    }
-
-    const allNames = job?.deckNames ?? [];
-    const tally: Record<string, number> = {};
-    const turns: Record<string, number[]> = {};
-
-    for (const name of allNames) {
-      tally[name] = 0;
-      turns[name] = [];
-    }
-
-    for (const sim of completedSims) {
-      // Prefer winners[] array (multi-game containers), fall back to single winner
-      const simWinners = sim.winners && sim.winners.length > 0 ? sim.winners : (sim.winner ? [sim.winner] : []);
-      const simTurns = sim.winningTurns && sim.winningTurns.length > 0 ? sim.winningTurns : (sim.winningTurn !== undefined ? [sim.winningTurn] : []);
-
-      for (let i = 0; i < simWinners.length; i++) {
-        let matchedDeck = simWinners[i];
-        const found = allNames.find(
-          (name) => matchesDeckName(simWinners[i], name)
-        );
-        if (found) matchedDeck = found;
-
-        tally[matchedDeck] = (tally[matchedDeck] || 0) + 1;
-        if (i < simTurns.length && simTurns[i] !== undefined) {
-          if (!turns[matchedDeck]) turns[matchedDeck] = [];
-          turns[matchedDeck].push(simTurns[i]);
-        }
-      }
-    }
-
-    for (const deck of Object.keys(turns)) {
-      turns[deck].sort((a, b) => a - b);
-    }
-
-    // Count actual games from winners arrays, fall back to sim count
-    const gamesCompleted = completedSims.reduce((sum, s) => sum + (s.winners?.length ?? 0), 0) || completedSims.length;
-
-    return {
-      simWinTally: tally,
-      simWinTurns: turns,
-      simGamesCompleted: gamesCompleted,
-    };
-  }, [streamSimulations, job?.deckNames]);
-
-  // Compute win tally and winning turns from structured games (must be before early returns)
-  const { winTally, winTurns } = useMemo(() => {
-    if (!structuredGames || structuredGames.length === 0) {
-      return { winTally: null, winTurns: null };
-    }
-
-    const tally: Record<string, number> = {};
-    const turns: Record<string, number[]> = {};
-
-    // Initialize tally and turns for all known decks
-    if (deckNames) {
-      for (const name of deckNames) {
-        tally[name] = 0;
-        turns[name] = [];
-      }
-    }
-
-    // Count wins and track winning turns
-    for (const game of structuredGames) {
-      if (game.winner) {
-        // Try to match winner to deck name
-        // Winner might be in format "Ai(N)-DeckName" or just "DeckName"
-        let matchedDeck = game.winner;
-        if (deckNames) {
-          const found = deckNames.find(
-            (name) => matchesDeckName(game.winner!, name)
-          );
-          if (found) {
-            matchedDeck = found;
-          }
-        }
-        tally[matchedDeck] = (tally[matchedDeck] || 0) + 1;
-
-        // Track the turn this deck won on
-        if (game.winningTurn !== undefined) {
-          if (!turns[matchedDeck]) {
-            turns[matchedDeck] = [];
-          }
-          turns[matchedDeck].push(game.winningTurn);
-        }
-      }
-    }
-
-    // Sort winning turns for each deck
-    for (const deck of Object.keys(turns)) {
-      turns[deck].sort((a, b) => a - b);
-    }
-
-    return { winTally: tally, winTurns: turns };
-  }, [structuredGames, deckNames]);
-
-  // Effective win data: prefer structured game data, fall back to simulation statuses
-  const effectiveWinTally = winTally && Object.keys(winTally).length > 0 ? winTally : simWinTally;
-  const effectiveWinTurns = winTally && Object.keys(winTally).length > 0 ? winTurns : simWinTurns;
-  const effectiveGamesPlayed = structuredGames && structuredGames.length > 0
-    ? structuredGames.length
-    : simGamesCompleted;
-
-  if (error) {
+  if (streamError) {
     return (
       <div className="max-w-2xl mx-auto text-center">
-        <p className="text-red-400 mb-4">{error}</p>
+        <p className="text-red-400 mb-4">{streamError}</p>
         <Link to="/" className="text-blue-400 hover:underline">
           Back to browse
         </Link>
@@ -443,7 +97,6 @@ export default function JobStatusPage() {
             ? 'Cancelled'
             : 'Failed';
 
-  // Compute time in queue for QUEUED jobs
   const queuedAgo = job.status === 'QUEUED' && job.createdAt
     ? Math.max(0, Math.floor((Date.now() - new Date(job.createdAt).getTime()) / 1000))
     : null;
@@ -459,9 +112,11 @@ export default function JobStatusPage() {
         const data = await response.json();
         throw new Error(data.error || 'Failed to cancel');
       }
-      setJob((prev) => prev ? { ...prev, status: 'CANCELLED' } : null);
+      queryClient.setQueryData<JobResponse>(['job', id], (prev) =>
+        prev ? { ...prev, status: 'CANCELLED' } : prev,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cancel failed');
+      setActionError(err instanceof Error ? err.message : 'Cancel failed');
     } finally {
       setIsCancelling(false);
     }
@@ -475,16 +130,40 @@ export default function JobStatusPage() {
       await deleteJob(id);
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed');
+      setActionError(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setIsDeletingJob(false);
     }
   };
 
-  // Get current structured game
-  const currentGame = structuredGames?.[selectedGame];
-  // Ensure maxTurns is at least 1 for display (prevents "1/0" if backend returns 0)
+  const handleRunAgain = async () => {
+    if (!job.deckIds || job.deckIds.length !== REQUIRED_DECK_COUNT) return;
+    setIsResubmitting(true);
+    try {
+      const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          deckIds: job.deckIds,
+          simulations: job.simulations,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create job');
+      }
+      if (!data.id) throw new Error('Server returned invalid job');
+      navigate(`/jobs/${data.id}`);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Resubmit failed');
+    } finally {
+      setIsResubmitting(false);
+    }
+  };
+
+  const currentGame = logs.structuredGames?.[selectedGame];
   const maxTurns = Math.max(1, currentGame?.totalTurns ?? 1);
+  const isTerminal = job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED';
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -497,19 +176,32 @@ export default function JobStatusPage() {
           Back to browse
         </Link>
       </div>
-      <h1 className="text-2xl font-bold mb-1">
-        {job.simulations} Game Simulation
-      </h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold">
+          {job.simulations} Game Simulation
+        </h1>
+        {isTerminal && job.deckIds?.length === REQUIRED_DECK_COUNT && (
+          <button
+            type="button"
+            onClick={handleRunAgain}
+            disabled={isResubmitting}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          >
+            {isResubmitting && <Spinner size="sm" />}
+            {isResubmitting ? 'Submitting...' : 'Run Again'}
+          </button>
+        )}
+      </div>
       <p className="text-gray-500 text-xs mb-6">ID: {job.id}</p>
 
-      {/* Deck Showcase — single authoritative deck display with integrated win data */}
+      {/* Deck Showcase */}
       {job.deckNames?.length > 0 && (
         <DeckShowcase
           deckNames={job.deckNames}
-          colorIdentityByDeckName={colorIdentityByDeckName}
-          winTally={effectiveWinTally}
-          winTurns={effectiveWinTurns}
-          gamesPlayed={effectiveGamesPlayed}
+          colorIdentityByDeckName={logs.colorIdentityByDeckName}
+          winTally={winTally}
+          winTurns={winTurns}
+          gamesPlayed={gamesPlayed}
           totalSimulations={job.simulations}
           deckLinks={job.deckLinks}
           jobStatus={job.status}
@@ -517,6 +209,21 @@ export default function JobStatusPage() {
       )}
 
       <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+        {/* Inline action error banner */}
+        {actionError && (
+          <div className="flex items-center justify-between bg-red-900/30 border border-red-600 rounded p-3 text-red-200 text-sm">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="ml-3 text-red-400 hover:text-red-200 text-lg leading-none"
+              aria-label="Dismiss error"
+            >
+              &times;
+            </button>
+          </div>
+        )}
+
         {/* Rich Queue Info Panel for QUEUED jobs */}
         {job.status === 'QUEUED' && (
           <div className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 space-y-3">
@@ -532,13 +239,13 @@ export default function JobStatusPage() {
                 type="button"
                 onClick={handleCancel}
                 disabled={isCancelling}
-                className="ml-auto px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ml-auto px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
+                {isCancelling && <Spinner size="sm" />}
                 {isCancelling ? 'Cancelling...' : 'Cancel Job'}
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              {/* Queue position */}
               <div className="bg-gray-800/50 rounded p-3">
                 <div className="text-gray-400 text-xs mb-1">Queue Position</div>
                 <div className="text-white font-medium">
@@ -549,7 +256,6 @@ export default function JobStatusPage() {
                     : 'Calculating...'}
                 </div>
               </div>
-              {/* Worker availability */}
               <div className="bg-gray-800/50 rounded p-3">
                 <div className="text-gray-400 text-xs mb-1">Workers</div>
                 {job.workers ? (
@@ -585,7 +291,6 @@ export default function JobStatusPage() {
                   <span className="text-gray-500">Checking...</span>
                 )}
               </div>
-              {/* Time in queue */}
               <div className="bg-gray-800/50 rounded p-3">
                 <div className="text-gray-400 text-xs mb-1">Time in Queue</div>
                 <div className="text-white font-medium">
@@ -622,8 +327,9 @@ export default function JobStatusPage() {
               type="button"
               onClick={handleCancel}
               disabled={isCancelling}
-              className="ml-4 px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ml-4 px-3 py-1 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
+              {isCancelling && <Spinner size="sm" />}
               {isCancelling ? 'Cancelling...' : 'Cancel Job'}
             </button>
           )}
@@ -633,7 +339,7 @@ export default function JobStatusPage() {
           <span className="text-gray-400">Games: </span>
           <span>{job.simulations}</span>
         </div>
-        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && job.durationMs != null && job.durationMs >= 0 && (
+        {isTerminal && job.durationMs != null && job.durationMs >= 0 && (
           <div>
             <span className="text-gray-400">Total run time: </span>
             <span>{formatDurationMs(job.durationMs)}</span>
@@ -652,8 +358,7 @@ export default function JobStatusPage() {
           </div>
         )}
         {job.status === 'RUNNING' && (() => {
-          // Derive progress from simulation statuses (source of truth), fall back to server value
-          const progressGames = streamSimulations.length > 0
+          const progressGames = simulations.length > 0
             ? simGamesCompleted
             : (job.gamesCompleted ?? 0);
           return progressGames > 0 ? (
@@ -681,10 +386,10 @@ export default function JobStatusPage() {
           </div>
           ) : null;
         })()}
-        {/* Per-simulation grid — shown when simulation tracking data exists */}
-        {(job.status === 'RUNNING' || job.status === 'COMPLETED' || job.status === 'CANCELLED' || job.status === 'FAILED') && streamSimulations.length > 0 && (
+        {/* Per-simulation grid */}
+        {(job.status === 'RUNNING' || isTerminal) && simulations.length > 0 && (
           <SimulationGrid
-            simulations={streamSimulations}
+            simulations={simulations}
             totalSimulations={job.simulations}
             workers={workers}
             userEmail={user?.email}
@@ -698,26 +403,35 @@ export default function JobStatusPage() {
           </div>
         )}
 
-        {/* Deck Actions Section - shown by default for completed/failed/cancelled jobs */}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && (
+        {/* Deck Actions Section */}
+        {isTerminal && (
           <div className="pt-4 border-t border-gray-600">
             <h3 className="text-lg font-semibold text-gray-200 mb-4">Deck Actions</h3>
-            {structuredError && (
-              <p className="text-sm text-red-400 mb-2">{structuredError}</p>
+            {logs.structuredError && (
+              <p className="text-sm text-red-400 mb-2">{logs.structuredError}</p>
             )}
-            {structuredGames === null && !structuredError && (
+            {logs.structuredGames === null && !logs.structuredError && !loadStructuredLogs && (
+              <button
+                type="button"
+                onClick={() => setLoadStructuredLogs(true)}
+                className="px-4 py-2 text-sm bg-gray-700 text-gray-200 rounded hover:bg-gray-600 transition-colors"
+              >
+                Load Deck Actions
+              </button>
+            )}
+            {logs.structuredGames === null && !logs.structuredError && loadStructuredLogs && (
               <p className="text-sm text-gray-500">Loading deck actions...</p>
             )}
-            {structuredGames && structuredGames.length === 0 && !structuredError && (
+            {logs.structuredGames && logs.structuredGames.length === 0 && !logs.structuredError && (
               <p className="text-sm text-gray-500">
                 Logs not available.
               </p>
             )}
-            {structuredGames && structuredGames.length > 0 && (
+            {logs.structuredGames && logs.structuredGames.length > 0 && (
               <div>
                 {/* Game and Turn selector */}
                 <div className="flex flex-wrap gap-4 mb-4 items-center">
-                  {structuredGames.length > 1 && (
+                  {logs.structuredGames.length > 1 && (
                     <div className="flex items-center gap-2">
                       <label htmlFor="game-select" className="text-sm text-gray-400">Game:</label>
                       <select
@@ -729,7 +443,7 @@ export default function JobStatusPage() {
                         }}
                         className="bg-gray-700 text-white text-sm rounded px-2 py-1"
                       >
-                        {structuredGames.map((_, i) => (
+                        {logs.structuredGames.map((_, i) => (
                           <option key={i} value={i}>Game {i + 1}</option>
                         ))}
                       </select>
@@ -771,7 +485,7 @@ export default function JobStatusPage() {
                     </button>
                   </div>
                 </div>
-                
+
                 {/* Event type filter */}
                 <div className="flex flex-wrap gap-2 mb-4 items-center">
                   <span className="text-sm text-gray-400">Filter:</span>
@@ -818,41 +532,35 @@ export default function JobStatusPage() {
                     </button>
                   ))}
                 </div>
-                
+
                 {/* 4-Deck Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   {currentGame?.decks.slice(0, 4).map((deck, i) => {
                     const turnActions = deck.turns.find(t => t.turnNumber === selectedTurn);
-                    const label = deckNames?.[i] ?? deck.deckLabel;
+                    const label = logs.deckNames?.[i] ?? deck.deckLabel;
                     const isHero = i === 0;
-                    
-                    // Get life total for this player at the selected turn
-                    // Match deck label to player key (e.g. "Doran Big Butts" -> "Ai(1)-Doran Big Butts")
+
                     const turnLifeTotals = currentGame?.lifePerTurn?.[selectedTurn];
                     const lifeTotal = turnLifeTotals ? (() => {
                       for (const [playerName, life] of Object.entries(turnLifeTotals)) {
-                        // Match "Ai(1)-Doran Big Butts" to label "Doran Big Butts"
                         if (matchesDeckName(playerName, label)) {
                           return life;
                         }
                       }
                       return undefined;
                     })() : undefined;
-                    
-                    // Filter actions based on selected event types
+
                     const filteredActions = turnActions?.actions.filter((action) => {
-                      if (eventFilters.size === 0) return true; // No filter = show all
-                      // Check for land_played (line starts with "Land:")
+                      if (eventFilters.size === 0) return true;
                       if (eventFilters.has('land_played') && action.line.startsWith('Land:')) {
                         return true;
                       }
-                      // Check for matching eventType
                       if (action.eventType && eventFilters.has(action.eventType)) {
                         return true;
                       }
                       return false;
                     }) ?? [];
-                    
+
                     return (
                       <div
                         key={i}
@@ -867,13 +575,13 @@ export default function JobStatusPage() {
                             isHero ? 'text-blue-300' : 'text-gray-300'
                           }`}>
                             {isHero ? '(Hero) ' : ''}{label}
-                            <ColorIdentity colorIdentity={colorIdentityByDeckName[label]} />
+                            <ColorIdentity colorIdentity={logs.colorIdentityByDeckName[label]} />
                           </h4>
                           {lifeTotal !== undefined && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                              lifeTotal <= 0 
-                                ? 'bg-red-900/50 text-red-400' 
-                                : lifeTotal <= 10 
+                              lifeTotal <= 0
+                                ? 'bg-red-900/50 text-red-400'
+                                : lifeTotal <= 10
                                   ? 'bg-orange-900/50 text-orange-400'
                                   : 'bg-gray-700 text-gray-300'
                             }`}>
@@ -904,7 +612,7 @@ export default function JobStatusPage() {
                     );
                   })}
                 </div>
-                
+
                 {/* Event type legend */}
                 <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-400">
                   <span className="flex items-center gap-1">
@@ -942,7 +650,7 @@ export default function JobStatusPage() {
         )}
 
         {/* Detailed Game Logs Panel (collapsible) */}
-        {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && (
+        {isTerminal && (
           <div className="pt-4 border-t border-gray-600">
             <button
               type="button"
@@ -953,10 +661,9 @@ export default function JobStatusPage() {
             >
               {showLogPanel ? 'Hide' : 'Show'} detailed game logs
             </button>
-            
+
             {showLogPanel && (
               <div id="log-panel-section" className="mt-4">
-                {/* Tab buttons */}
                 <div className="flex gap-2 mb-4">
                   <button
                     type="button"
@@ -981,24 +688,24 @@ export default function JobStatusPage() {
                     Raw Logs
                   </button>
                 </div>
-                
+
                 {/* Condensed Logs View */}
                 {logViewTab === 'condensed' && (
                   <div>
-                    {condensedError && (
-                      <p className="text-sm text-red-400 mb-2">{condensedError}</p>
+                    {logs.condensedError && (
+                      <p className="text-sm text-red-400 mb-2">{logs.condensedError}</p>
                     )}
-                    {condensedLogs && condensedLogs.length === 0 && !condensedError && (
+                    {logs.condensedLogs && logs.condensedLogs.length === 0 && !logs.condensedError && (
                       <p className="text-sm text-gray-500">
                         Condensed logs not available.
                       </p>
                     )}
-                    {condensedLogs && condensedLogs.length > 0 && (
+                    {logs.condensedLogs && logs.condensedLogs.length > 0 && (
                       <div className="space-y-4">
                         <p className="text-xs text-gray-400">
                           This is the condensed data sent to the AI for bracket analysis.
                         </p>
-                        {condensedLogs.map((game, i) => (
+                        {logs.condensedLogs.map((game, i) => (
                           <div key={i} className="bg-gray-900 rounded p-3">
                             <h4 className="text-xs font-semibold text-gray-500 mb-2">
                               Game {i + 1}
@@ -1033,21 +740,21 @@ export default function JobStatusPage() {
                     )}
                   </div>
                 )}
-              
+
                 {/* Raw Logs View */}
                 {logViewTab === 'raw' && (
                   <div>
-                    {rawLogsError && (
-                      <p className="text-sm text-red-400 mb-2">{rawLogsError}</p>
+                    {logs.rawLogsError && (
+                      <p className="text-sm text-red-400 mb-2">{logs.rawLogsError}</p>
                     )}
-                    {rawLogs != null && rawLogs.length === 0 && !rawLogsError && (
+                    {logs.rawLogs != null && logs.rawLogs.length === 0 && !logs.rawLogsError && (
                       <p className="text-sm text-gray-500">
                         Logs not available (job may still be running or logs were cleaned up).
                       </p>
                     )}
-                    {rawLogs != null && rawLogs.length > 0 && (
+                    {logs.rawLogs != null && logs.rawLogs.length > 0 && (
                       <div className="space-y-4">
-                        {rawLogs.map((log, i) => (
+                        {logs.rawLogs.map((log, i) => (
                           <div key={i} className="bg-gray-900 rounded p-3">
                             <h4 className="text-xs font-semibold text-gray-500 mb-2">Game {i + 1}</h4>
                             <pre className="text-xs overflow-auto max-h-64 whitespace-pre-wrap text-gray-400 font-mono">
@@ -1077,8 +784,9 @@ export default function JobStatusPage() {
             type="button"
             onClick={handleDelete}
             disabled={isDeletingJob}
-            className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
+            {isDeletingJob && <Spinner size="sm" />}
             {isDeletingJob ? 'Deleting...' : 'Delete Job'}
           </button>
         )}

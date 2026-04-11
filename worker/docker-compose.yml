@@ -31,8 +31,19 @@ services:
       - WORKER_ID=${WORKER_ID:-}
       - JOBS_DIR=${JOBS_DIR:-/tmp/mbs-jobs}
 
-      # Simulation image — full GHCR path for the worker to pull
-      - SIMULATION_IMAGE=${SIMULATION_IMAGE:-ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest}
+      # Simulation image — pinned to a SHA256 digest so an attacker who
+      # compromises the registry can't push a malicious :latest the worker
+      # would auto-pull on next restart. To upgrade to a newer build:
+      #
+      #   1. docker pull ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest
+      #   2. docker inspect --format='{{index .RepoDigests 0}}' \
+      #        ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest
+      #   3. Copy the printed `@sha256:...` string into the default below,
+      #      commit, and redeploy the worker.
+      #
+      # Override via env var (e.g. for local testing with a specific build):
+      #   SIMULATION_IMAGE=ghcr.io/.../simulation:my-branch docker compose up
+      - SIMULATION_IMAGE=${SIMULATION_IMAGE:-ghcr.io/tytaniumdev/magicbracketsimulator/simulation@sha256:330594cdd7a90a50d2c66c07af3674ab451dad489665cd63a927c57f730fc50e}
 
       # Worker owner email (for frontend UI ownership)
       - WORKER_OWNER_EMAIL=${WORKER_OWNER_EMAIL:-}
@@ -44,6 +55,13 @@ services:
       # Docker CLI API version — worker image ships Docker CLI v20 (API 1.41) but
       # newer daemons (v25+) require API ≥1.44. Override to negotiate correctly.
       - DOCKER_API_VERSION=1.44
+
+      # Opt-in read-only filesystem for simulation containers. When set to 1,
+      # each `docker run` for a simulation passes --read-only plus tmpfs
+      # mounts for the paths Forge writes to. Verified end-to-end against
+      # a real 4-player Commander game. See worker/src/docker-runner.ts
+      # for the exact flags.
+      - SIMULATION_READONLY=${SIMULATION_READONLY:-1}
 
     # Grant access to the host Docker socket (GID varies by runtime: Colima=991, Linux=999, etc.)
     # DOCKER_SOCK_GID is set by setup-worker.sh; falls back to 0 (root) if unset.
