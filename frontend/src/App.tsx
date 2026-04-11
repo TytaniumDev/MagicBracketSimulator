@@ -1,14 +1,12 @@
-import { Suspense, lazy } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
-
-const Browse = lazy(() => import('./pages/Browse'));
-const Home = lazy(() => import('./pages/Home'));
-const JobStatus = lazy(() => import('./pages/JobStatus'));
-const WorkerSetup = lazy(() => import('./pages/WorkerSetup'));
-const Leaderboard = lazy(() => import('./pages/Leaderboard'));
-const SentryExamplePage = lazy(() => import('./pages/SentryExamplePage'));
+import Browse from './pages/Browse';
+import Home from './pages/Home';
+import JobStatus from './pages/JobStatus';
+import WorkerSetup from './pages/WorkerSetup';
+import Leaderboard from './pages/Leaderboard';
+import SentryExamplePage from './pages/SentryExamplePage';
 
 function Header() {
   const { user, isAllowed, loading } = useAuth();
@@ -94,20 +92,14 @@ export default function App() {
         <>
           <Header />
           <main className="container mx-auto px-4 py-8">
-            <Suspense fallback={
-              <div className="flex items-center justify-center py-20">
-                <div className="animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full" />
-              </div>
-            }>
-              <Routes>
-                <Route path="/" element={<Browse />} />
-                <Route path="/submit" element={<Home />} />
-                <Route path="/jobs/:id" element={<JobStatus />} />
-                <Route path="/worker-setup" element={<WorkerSetup />} />
-                <Route path="/leaderboard" element={<Leaderboard />} />
-                <Route path="/sentry-example-page" element={<SentryExamplePage />} />
-              </Routes>
-            </Suspense>
+            <Routes>
+              <Route path="/" element={<Browse />} />
+              <Route path="/submit" element={<Home />} />
+              <Route path="/jobs/:id" element={<JobStatus />} />
+              <Route path="/worker-setup" element={<WorkerSetup />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/sentry-example-page" element={<SentryExamplePage />} />
+            </Routes>
           </main>
         </>
       )}
