@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage';
+import { isRetryableGcsError } from './gcs-retry';
 import { withRetry } from './retry';
 
 // Initialize Cloud Storage client
@@ -8,34 +9,6 @@ const storage = new Storage({
 
 const BUCKET_NAME = process.env.GCS_BUCKET || 'magic-bracket-simulator-artifacts';
 const bucket = storage.bucket(BUCKET_NAME);
-
-/**
- * Returns true for transient network/server errors that are safe to retry.
- */
-function isRetryableGcsError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-
-  const RETRYABLE_MESSAGES = [
-    'socket hang up',
-    'econnreset',
-    'etimedout',
-    'econnrefused',
-    'network error',
-  ];
-  const RETRYABLE_CODES = [429, 500, 502, 503, 504];
-
-  const msg = error.message.toLowerCase();
-  if (RETRYABLE_MESSAGES.some(retryableMsg => msg.includes(retryableMsg))) {
-    return true;
-  }
-
-  const code = (error as { code?: number }).code;
-  if (typeof code === 'number' && RETRYABLE_CODES.includes(code)) {
-    return true;
-  }
-
-  return false;
-}
 
 /**
  * Upload a job artifact to GCS
