@@ -19,4 +19,10 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    // Single-bundle output is intentional to avoid stale-chunk white screens
+    // on deploy (see PR #157). Raise the advisory threshold so the warning
+    // doesn't drown out future, genuinely-interesting chunk-size warnings.
+    chunkSizeWarningLimit: 1000,
+  },
 });

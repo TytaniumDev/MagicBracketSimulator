@@ -1,4 +1,5 @@
 import { Routes, Route, Link } from 'react-router-dom';
+import * as Sentry from '@sentry/react';
 import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
 import Browse from './pages/Browse';
@@ -92,14 +93,29 @@ export default function App() {
         <>
           <Header />
           <main className="container mx-auto px-4 py-8">
-            <Routes>
-              <Route path="/" element={<Browse />} />
-              <Route path="/submit" element={<Home />} />
-              <Route path="/jobs/:id" element={<JobStatus />} />
-              <Route path="/worker-setup" element={<WorkerSetup />} />
-              <Route path="/leaderboard" element={<Leaderboard />} />
-              <Route path="/sentry-example-page" element={<SentryExamplePage />} />
-            </Routes>
+            <Sentry.ErrorBoundary
+              fallback={
+                <div className="flex flex-col items-center justify-center py-20 gap-4 text-gray-400">
+                  <p>Something went wrong.</p>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                  >
+                    Reload page
+                  </button>
+                </div>
+              }
+            >
+              <Routes>
+                <Route path="/" element={<Browse />} />
+                <Route path="/submit" element={<Home />} />
+                <Route path="/jobs/:id" element={<JobStatus />} />
+                <Route path="/worker-setup" element={<WorkerSetup />} />
+                <Route path="/leaderboard" element={<Leaderboard />} />
+                <Route path="/sentry-example-page" element={<SentryExamplePage />} />
+              </Routes>
+            </Sentry.ErrorBoundary>
           </main>
         </>
       )}
