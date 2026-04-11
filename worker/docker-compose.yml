@@ -29,7 +29,7 @@ services:
 
       # Worker
       - WORKER_ID=${WORKER_ID:-}
-      - JOBS_DIR=/tmp/mbs-jobs
+      - JOBS_DIR=${JOBS_DIR:-/tmp/mbs-jobs}
 
       # Simulation image — full GHCR path for the worker to pull
       - SIMULATION_IMAGE=${SIMULATION_IMAGE:-ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest}
@@ -55,7 +55,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
       # Shared temp directory for deck/log files (worker writes, simulation containers read/write)
-      - /tmp/mbs-jobs:/tmp/mbs-jobs
+      - ${JOBS_DIR:-/tmp/mbs-jobs}:${JOBS_DIR:-/tmp/mbs-jobs}
 
       # GCP credentials
       - ${SA_KEY_PATH:-${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}}:/secrets/sa.json:ro

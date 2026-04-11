@@ -592,7 +592,12 @@ export DOCKER_CONFIG="$DOCKER_CONFIG_DIR"
 # Detect Docker socket GID
 DOCKER_SOCK_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock alpine stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "0")
 echo "DOCKER_SOCK_GID=$DOCKER_SOCK_GID" >> "$WORKER_DIR/.env"
+echo "JOBS_DIR=$WORKER_DIR/jobs" >> "$WORKER_DIR/.env"
 info "Docker socket GID: $DOCKER_SOCK_GID"
+
+# Create persistent jobs directory
+mkdir -p "$WORKER_DIR/jobs"
+chmod 777 "$WORKER_DIR/jobs"
 
 # ═══════════════════════════════════════════════════════════════════════
 # STEP 6: Preparing Docker
