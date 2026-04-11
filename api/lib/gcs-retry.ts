@@ -5,6 +5,7 @@
  * real @google-cloud/storage client.
  */
 
+// All entries must be lowercase — error.message is lowercased before comparison.
 const RETRYABLE_MESSAGES = [
   'socket hang up',
   'econnreset',
