@@ -2,7 +2,7 @@
 
 # Magic Bracket Simulator
 
-[ 🚀 Launch App ](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [ 📖 Documentation ](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [ 🐞 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
+[ 🚀 Launch App ](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [ 📖 Documentation ](#documentation-map) &nbsp;|&nbsp; [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
 **Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.**
 
@@ -18,8 +18,6 @@
 </div>
 
 ![Magic Bracket Simulator UI](docs/images/hero-screenshot.png)
-
-</div>
 
 ## Quick Start
 
