@@ -28,6 +28,7 @@ export interface SimulationResult {
 // ============================================================================
 
 const SIMULATION_IMAGE = process.env.SIMULATION_IMAGE || 'ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest';
+const JOBS_DIR = process.env.JOBS_DIR || '/tmp/mbs-jobs';
 const RAM_PER_SIM_MB = parseInt(process.env.RAM_PER_SIM_MB || '1200', 10);
 const SYSTEM_RESERVE_MB = 2048;
 const CONTAINER_TIMEOUT_MS = 2 * 60 * 60 * 1000;  // 2 hours (4 sequential games per container)
@@ -158,6 +159,7 @@ export async function runSimulationContainer(
     '--name', containerName,
     '--memory', `${RAM_PER_SIM_MB}m`,
     '--cpus', String(CPUS_PER_SIM),
+    '-v', `${JOBS_DIR}:${JOBS_DIR}`,
     ...deckEnvVars,
     '-e', 'FORGE_PATH=/app/forge',
     '-e', 'LOGS_DIR=/app/logs',

@@ -597,7 +597,8 @@ info "Docker socket GID: $DOCKER_SOCK_GID"
 
 # Create persistent jobs directory
 mkdir -p "$WORKER_DIR/jobs"
-chmod 777 "$WORKER_DIR/jobs"
+chown 999:999 "$WORKER_DIR/jobs" || true
+chmod 755 "$WORKER_DIR/jobs"
 
 # ═══════════════════════════════════════════════════════════════════════
 # STEP 6: Preparing Docker
