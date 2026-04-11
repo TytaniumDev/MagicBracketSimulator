@@ -154,7 +154,7 @@ function parseCardLine(line: string): DeckCard | null {
   if (!line) return null;
   
   // Remove set codes in parentheses or brackets at the end
-  line = line.replace(/\s*[\(\[][\w\d]+[\)\]]\s*$/, '');
+  line = line.replace(/\s*[([][\w\d]+[)\]]\s*$/, '');
   
   // Try to parse quantity
   // Pattern: "N CardName" or "Nx CardName" where N is a number

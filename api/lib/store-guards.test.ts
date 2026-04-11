@@ -42,10 +42,6 @@ async function test(name: string, fn: () => void | Promise<void>) {
   }
 }
 
-function assert(condition: boolean, message: string) {
-  if (!condition) throw new Error(message);
-}
-
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
     throw new Error(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);

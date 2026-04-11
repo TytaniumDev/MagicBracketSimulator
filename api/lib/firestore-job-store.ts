@@ -1,4 +1,4 @@
-import { Timestamp, FieldValue } from '@google-cloud/firestore';
+import { Timestamp, FieldValue, FieldPath } from '@google-cloud/firestore';
 import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, JobSource } from './types';
 import { getFirestore } from './firestore-client';
 
@@ -47,6 +47,14 @@ export interface CreateJobData {
   createdBy: string;
   deckIds?: string[];
   source?: JobSource;
+  /**
+   * Denormalized deck metadata, keyed by deck NAME (matches deckNames[]).
+   * Writing these into the job doc at creation time eliminates 4 Firestore
+   * deck reads per job view (Browse + detail pages) and massively reduces
+   * the leaderboard's read fan-out.
+   */
+  deckLinks?: Record<string, string | null>;
+  colorIdentity?: Record<string, string[]>;
 }
 
 /**
@@ -67,6 +75,8 @@ export async function createJob(data: CreateJobData): Promise<Job> {
   const jobData = {
     decks: data.decks,
     ...(data.deckIds != null && data.deckIds.length === 4 && { deckIds: data.deckIds }),
+    ...(data.deckLinks && Object.keys(data.deckLinks).length > 0 && { deckLinks: data.deckLinks }),
+    ...(data.colorIdentity && Object.keys(data.colorIdentity).length > 0 && { colorIdentity: data.colorIdentity }),
     status: 'QUEUED' as JobStatus,
     simulations: data.simulations,
     parallelism: data.parallelism || 4,
@@ -260,18 +270,106 @@ export async function getNextQueuedJob(): Promise<Job | null> {
   return docToJob(snapshot.docs[0]);
 }
 
+export interface ListJobsOptions {
+  userId?: string;
+  limit?: number;
+  /** Opaque cursor returned from a previous call's `nextCursor`. */
+  cursor?: string;
+}
+
+export interface ListJobsResult {
+  jobs: Job[];
+  nextCursor: string | null;
+}
+
+const DEFAULT_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 200;
+
 /**
- * List jobs, optionally filtered by user
+ * Composite pagination cursor: ISO createdAt + document id. The id is
+ * the tie-breaker for the rare case where two jobs share the exact same
+ * `createdAt` millisecond (e.g. batch imports), ensuring no job is ever
+ * skipped or duplicated across page boundaries. Wire format is
+ * base64(JSON({ts, id})). Legacy timestamp-only cursors (from the first
+ * cut of this endpoint) are still accepted for backward compat.
  */
-export async function listJobs(userId?: string): Promise<Job[]> {
-  let query: FirebaseFirestore.Query = jobsCollection.orderBy('createdAt', 'desc');
-  
-  if (userId) {
-    query = query.where('createdBy', '==', userId);
+interface ListJobsCursor {
+  ts: string;
+  id: string;
+}
+
+function encodeCursor(cursor: ListJobsCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf-8').toString('base64');
+}
+
+function decodeCursor(raw: string): ListJobsCursor | null {
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+    if (decoded.startsWith('{')) {
+      const parsed = JSON.parse(decoded) as Partial<ListJobsCursor>;
+      if (parsed && typeof parsed.ts === 'string' && typeof parsed.id === 'string') {
+        if (isNaN(new Date(parsed.ts).getTime())) return null;
+        return { ts: parsed.ts, id: parsed.id };
+      }
+      return null;
+    }
+    // Legacy timestamp-only cursor
+    if (!isNaN(new Date(decoded).getTime())) {
+      return { ts: decoded, id: '' };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * List jobs, optionally filtered by user. Results are cursor-paginated in
+ * descending (createdAt, id) order. Pass `options.cursor` from a previous
+ * result's `nextCursor` to fetch the next page; `nextCursor === null`
+ * means no more results.
+ */
+export async function listJobs(options: ListJobsOptions = {}): Promise<ListJobsResult> {
+  const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT));
+
+  // Order by (createdAt DESC, __name__ DESC) so document id is a stable
+  // tie-breaker within the same millisecond.
+  let query: FirebaseFirestore.Query = jobsCollection
+    .orderBy('createdAt', 'desc')
+    .orderBy(FieldPath.documentId(), 'desc');
+
+  if (options.userId) {
+    query = query.where('createdBy', '==', options.userId);
   }
 
-  const snapshot = await query.limit(100).get();
-  return snapshot.docs.map(doc => docToJob(doc)).filter((job): job is Job => job !== null);
+  if (options.cursor) {
+    const parsed = decodeCursor(options.cursor);
+    if (parsed) {
+      const ts = Timestamp.fromDate(new Date(parsed.ts));
+      if (parsed.id) {
+        query = query.startAfter(ts, parsed.id);
+      } else {
+        // Legacy cursor — best-effort, may lose ties on the boundary
+        query = query.startAfter(ts);
+      }
+    }
+  }
+
+  const snapshot = await query.limit(limit + 1).get();
+  const rawJobs = snapshot.docs
+    .map(doc => docToJob(doc))
+    .filter((job): job is Job => job !== null);
+
+  const hasMore = rawJobs.length > limit;
+  const jobs = hasMore ? rawJobs.slice(0, limit) : rawJobs;
+  const nextCursor = hasMore && jobs.length > 0
+    ? encodeCursor({
+        ts: jobs[jobs.length - 1].createdAt.toISOString(),
+        id: jobs[jobs.length - 1].id,
+      })
+    : null;
+
+  return { jobs, nextCursor };
 }
 
 export async function listActiveJobs(): Promise<Job[]> {

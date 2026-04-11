@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { doc, collection, onSnapshot, getDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 import { getApiBase, fetchWithAuth } from '../api';
@@ -7,6 +7,50 @@ import { isTerminal } from '../utils/status';
 import { GAMES_PER_CONTAINER } from '@shared/types/job';
 import type { JobResponse } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
+
+// ---------------------------------------------------------------------------
+// Deck caching
+// ---------------------------------------------------------------------------
+
+interface CachedDeckMeta {
+  link: string | null;
+  colorIdentity: string[] | null;
+}
+
+/**
+ * Look up a deck's display metadata (link + color identity) from React
+ * Query's cache, falling back to a Firestore read on miss. Decks are
+ * effectively immutable after creation, so `staleTime: Infinity` is safe
+ * and saves ~4 Firestore reads per job view (previously every job load
+ * fetched the 4 deck docs even across repeated views of the same job).
+ */
+function deckMetaQueryKey(deckId: string): [string, string] {
+  return ['deckMeta', deckId];
+}
+
+async function fetchDeckMetaFirestore(deckId: string): Promise<CachedDeckMeta> {
+  const snap = await getDoc(doc(db!, 'decks', deckId));
+  if (!snap.exists()) return { link: null, colorIdentity: null };
+  const data = snap.data();
+  const link = (data.link as string | undefined) ?? null;
+  const ci = data.colorIdentity as string[] | undefined;
+  return {
+    link,
+    colorIdentity: ci && ci.length > 0 ? ci : null,
+  };
+}
+
+async function getCachedDeckMeta(
+  queryClient: QueryClient,
+  deckId: string,
+): Promise<CachedDeckMeta> {
+  return queryClient.fetchQuery({
+    queryKey: deckMetaQueryKey(deckId),
+    queryFn: () => fetchDeckMetaFirestore(deckId),
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000, // 30 min idle eviction
+  });
+}
 
 // ---------------------------------------------------------------------------
 // REST API fetchers (LOCAL mode only)
@@ -54,6 +98,14 @@ function firestoreDocToJobResponse(
     ? data.deckIds as string[]
     : undefined;
 
+  // Denormalized deck metadata (written at job creation time by
+  // api/app/api/jobs/route.ts). Newer jobs carry these directly on the
+  // job doc, eliminating the 4 deck-doc reads the hook used to do on
+  // every job view. Older jobs pre-denormalization will be undefined
+  // and the fetch-and-cache fallback in fetchJobFirestore kicks in.
+  const denormalizedDeckLinks = data.deckLinks as Record<string, string | null> | undefined;
+  const denormalizedColorIdentity = data.colorIdentity as Record<string, string[]> | undefined;
+
   const createdAt = timestampToIso(data.createdAt) ?? new Date().toISOString();
   const startedAt = timestampToIso(data.startedAt);
   const completedAt = timestampToIso(data.completedAt);
@@ -93,6 +145,8 @@ function firestoreDocToJobResponse(
     ...(claimedAt ? { claimedAt } : undefined),
     retryCount: (data.retryCount as number) ?? 0,
     results: (data.results as JobResponse['results']) ?? null,
+    ...(denormalizedDeckLinks && { deckLinks: denormalizedDeckLinks }),
+    ...(denormalizedColorIdentity && { colorIdentity: denormalizedColorIdentity }),
   };
 }
 
@@ -100,30 +154,35 @@ function firestoreDocToJobResponse(
 // Firestore direct reads (GCP mode — bypasses Cloud Run)
 // ---------------------------------------------------------------------------
 
-async function fetchJobFirestore(jobId: string): Promise<JobResponse> {
+async function fetchJobFirestore(
+  jobId: string,
+  queryClient: QueryClient,
+): Promise<JobResponse> {
   const snapshot = await getDoc(doc(db!, 'jobs', jobId));
   if (!snapshot.exists()) throw new Error('Job not found');
   const job = firestoreDocToJobResponse(jobId, snapshot.data());
 
-  // Resolve deck links and color identity directly from the decks collection.
-  // These are parallel reads — no Cloud Run dependency.
+  // Fast path: job doc was denormalized at creation time (all jobs after
+  // the FU3 rollout). Zero Firestore deck reads. This path covers Browse,
+  // leaderboard, and detail views for any recent job.
+  if (job.deckLinks && job.deckNames.every((name) => name in (job.deckLinks ?? {}))) {
+    return job;
+  }
+
+  // Slow path: legacy job without denormalized metadata. Fall back to
+  // fetching each deck doc through the React Query cache so a given
+  // session only pays the Firestore read once.
   if (job.deckIds && job.deckIds.length === job.deckNames.length) {
-    const deckSnapshots = await Promise.all(
-      job.deckIds.map((id) => getDoc(doc(db!, 'decks', id))),
+    const deckMetas = await Promise.all(
+      job.deckIds.map((id) => getCachedDeckMeta(queryClient, id)),
     );
     const deckLinks: Record<string, string | null> = {};
     const colorIdentity: Record<string, string[]> = {};
-    for (let i = 0; i < deckSnapshots.length; i++) {
-      const snap = deckSnapshots[i];
+    for (let i = 0; i < deckMetas.length; i++) {
+      const meta = deckMetas[i];
       const name = job.deckNames[i];
-      if (snap.exists()) {
-        const data = snap.data();
-        deckLinks[name] = (data.link as string) ?? null;
-        const ci = data.colorIdentity as string[] | undefined;
-        if (ci && ci.length > 0) colorIdentity[name] = ci;
-      } else {
-        deckLinks[name] = null;
-      }
+      deckLinks[name] = meta.link;
+      if (meta.colorIdentity) colorIdentity[name] = meta.colorIdentity;
     }
     job.deckLinks = deckLinks;
     if (Object.keys(colorIdentity).length > 0) job.colorIdentity = colorIdentity;
@@ -148,8 +207,13 @@ async function fetchSimulationsFirestore(jobId: string): Promise<SimulationStatu
 /**
  * Merge real-time Firestore fields into an existing JobResponse.
  * Skips terminal jobs — the initial read is authoritative once complete.
+ *
+ * Exported for testing: the ordering contract (terminal state wins, no
+ * regression from later onSnapshot arriving with stale RUNNING data) is
+ * exercised by `useJobStream.test.ts` via direct calls so the assertions
+ * don't depend on Firestore mock internals.
  */
-function mergeFirestoreJobUpdate(
+export function mergeFirestoreJobUpdate(
   prev: JobResponse | undefined,
   firestoreData: Record<string, unknown>,
 ): JobResponse | undefined {
@@ -243,7 +307,7 @@ export function useJobStream(jobId: string | undefined) {
   // Primary data: Firestore direct reads in GCP mode, REST in local mode
   const jobQuery = useQuery({
     queryKey: ['job', jobId],
-    queryFn: () => db ? fetchJobFirestore(jobId!) : fetchJobRest(jobId!),
+    queryFn: () => db ? fetchJobFirestore(jobId!, queryClient) : fetchJobRest(jobId!),
     enabled: !!jobId,
     refetchInterval: (query) => {
       if (isFirebaseConfigured) return false;
@@ -293,7 +357,7 @@ export function useJobStream(jobId: string | undefined) {
           unsubscribed = true;
           if (!wasAlreadyTerminal) {
             // Re-read from Firestore to get final state with all fields
-            fetchJobFirestore(jobId).then((fullJob) => {
+            fetchJobFirestore(jobId, queryClient).then((fullJob) => {
               queryClient.setQueryData(['job', jobId], fullJob);
             }).catch((err) => {
               console.error('[useJobStream] Final Firestore fetch failed:', err);

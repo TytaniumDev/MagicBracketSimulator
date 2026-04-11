@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
+import { getDeckById } from '@/lib/deck-store-factory';
 import { publishSimulationTasks } from '@/lib/pubsub';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, createJobSchema } from '@/lib/validation';
@@ -70,7 +71,9 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
 }
 
 /**
- * GET /api/jobs - List jobs
+ * GET /api/jobs - List jobs (paginated)
+ * Query params: ?limit=N (default 100, max 200), ?cursor=<opaque>
+ * Returns: { jobs: JobSummary[], nextCursor: string | null }
  */
 export async function GET(request: NextRequest) {
   try {
@@ -80,7 +83,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const jobs = await jobStore.listJobs();
+    const url = new URL(request.url);
+    const limitParam = url.searchParams.get('limit');
+    const cursorParam = url.searchParams.get('cursor');
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      return badRequestResponse('limit must be a positive integer');
+    }
+
+    const { jobs, nextCursor } = await jobStore.listJobs({
+      limit,
+      cursor: cursorParam ?? undefined,
+    });
+
     // Derive gamesCompleted from atomic counters (O(1) — no subcollection reads)
     const summaries = jobs
       .filter((j): j is NonNullable<typeof j> => j !== null)
@@ -92,7 +107,7 @@ export async function GET(request: NextRequest) {
       })
       .filter((s): s is NonNullable<typeof s> => s !== null);
 
-    return NextResponse.json({ jobs: summaries });
+    return NextResponse.json({ jobs: summaries, nextCursor });
   } catch (error) {
     console.error('GET /api/jobs error:', error);
     return errorResponse(error instanceof Error ? error.message : 'Failed to list jobs', 500);
@@ -133,11 +148,39 @@ export async function POST(request: NextRequest) {
       return badRequestResponse(`Invalid deck IDs: ${errors.join(', ')}`);
     }
 
+    // Denormalize deck metadata into the job doc at creation time so every
+    // downstream job view (Browse list, detail page, leaderboard) doesn't
+    // have to re-fetch 4 deck docs per job. In GCP mode this is a ~4x
+    // Firestore read reduction on the hot path. LOCAL mode is unaffected:
+    // the job-store factory only passes these fields to Firestore.
+    const deckLinks: Record<string, string | null> = {};
+    const colorIdentity: Record<string, string[]> = {};
+    if (isGcpMode()) {
+      const resolved = await Promise.all(
+        deckIds.map(async (id, i) => {
+          try {
+            const deck = await getDeckById(id);
+            return { name: decks[i].name, deck };
+          } catch {
+            return { name: decks[i].name, deck: null };
+          }
+        }),
+      );
+      for (const { name, deck } of resolved) {
+        deckLinks[name] = deck?.link ?? null;
+        if (deck?.colorIdentity && deck.colorIdentity.length > 0) {
+          colorIdentity[name] = deck.colorIdentity;
+        }
+      }
+    }
+
     const job = await jobStore.createJob(decks, simulations, {
       idempotencyKey,
       parallelism,
       createdBy: user.uid,
       deckIds,
+      ...(Object.keys(deckLinks).length > 0 && { deckLinks }),
+      ...(Object.keys(colorIdentity).length > 0 && { colorIdentity }),
     });
 
     // Each container runs GAMES_PER_CONTAINER games, so we need fewer containers

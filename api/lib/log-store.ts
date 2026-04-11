@@ -15,6 +15,13 @@ import type { CondensedGame, StructuredGame } from './types';
 // Local filesystem storage directory
 const LOGS_DATA_DIR = process.env.LOGS_DATA_DIR ?? path.join(process.cwd(), 'logs-data');
 
+/**
+ * Max bytes for a single simulation log upload. Forge logs for a full game
+ * are typically <500 KB; 10 MB gives ~20x headroom and caps runaway / malicious
+ * uploads before they can OOM the API or balloon GCS costs.
+ */
+export const MAX_LOG_BYTES = 10 * 1024 * 1024;
+
 // Ensure local data directory exists in LOCAL mode
 if (!isGcpMode() && !fs.existsSync(LOGS_DATA_DIR)) {
   fs.mkdirSync(LOGS_DATA_DIR, { recursive: true });
@@ -101,6 +108,13 @@ export async function uploadSingleSimulationLog(
   filename: string,
   logText: string
 ): Promise<void> {
+  const byteLength = Buffer.byteLength(logText, 'utf-8');
+  if (byteLength > MAX_LOG_BYTES) {
+    throw new Error(
+      `Log too large: ${byteLength} bytes exceeds max of ${MAX_LOG_BYTES} bytes`
+    );
+  }
+
   if (isGcpMode()) {
     await gcs.uploadJobArtifact(jobId, filename, logText);
   } else {

@@ -6,6 +6,7 @@ import { listSavedDecks, readSavedDeckContent, saveDeck, deleteSavedDeck } from 
 import { slugify } from './saved-decks';
 import { getColorIdentityByKey } from './deck-metadata';
 import * as firestoreDecks from './firestore-decks';
+import { lruTouch, lruEvictIfFull } from './lru';
 
 const USE_FIRESTORE =
   typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
@@ -183,7 +184,7 @@ const DECK_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const DECK_CACHE_MAX_SIZE = 500;
 
 export async function getDeckById(id: string): Promise<DeckListItem | null> {
-  const cached = deckByIdCache.get(id);
+  const cached = lruTouch(deckByIdCache, id);
   if (cached && Date.now() - cached.ts < DECK_CACHE_TTL_MS) {
     return cached.item;
   }
@@ -225,11 +226,10 @@ export async function getDeckById(id: string): Promise<DeckListItem | null> {
     return item;
   }
 
-  // Evict oldest entry if at capacity (Map iteration order = insertion order)
-  if (deckByIdCache.size >= DECK_CACHE_MAX_SIZE) {
-    const oldest = deckByIdCache.keys().next().value;
-    if (oldest !== undefined) deckByIdCache.delete(oldest);
-  }
+  // Evict least-recently-used entries if at capacity. lruTouch above
+  // ensures that frequently-read decks bubble to the end and are not
+  // evicted before never-read entries.
+  lruEvictIfFull(deckByIdCache, DECK_CACHE_MAX_SIZE);
   deckByIdCache.set(id, { item, ts: Date.now() });
   return item;
 }

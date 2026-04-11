@@ -207,7 +207,7 @@ export async function syncPrecons(): Promise<SyncResult> {
 
     // Extract synchronous state changes (like ID generation) before async ops
     for (const adeck of batch) {
-      let existing = existingByArchidektId.get(adeck.id);
+      const existing = existingByArchidektId.get(adeck.id);
 
       // If we haven't seen this archidektId in the initial load but another
       // concurrent sync may have inserted it, do a fresh lookup.

@@ -74,23 +74,6 @@ function docToDeck(doc: FirebaseFirestore.DocumentSnapshot): DeckDoc | null {
   };
 }
 
-function deckToListItem(doc: DeckDoc): DeckListItem {
-  return {
-    id: doc.id,
-    name: doc.name,
-    filename: doc.filename,
-    primaryCommander: doc.primaryCommander ?? null,
-    colorIdentity: doc.colorIdentity,
-    isPrecon: doc.isPrecon,
-    link: doc.link,
-    ownerId: doc.ownerId,
-    ownerEmail: doc.ownerEmail,
-    createdAt: doc.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
-    setName: doc.setName ?? null,
-    archidektId: doc.archidektId ?? null,
-  };
-}
-
 /**
  * List all decks (precons + every user's submissions)
  */

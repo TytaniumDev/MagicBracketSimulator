@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
-import { useJobStream } from './useJobStream';
+import { useJobStream, mergeFirestoreJobUpdate } from './useJobStream';
 import { fetchWithAuth } from '../api';
+import type { JobResponse } from '@shared/types/job';
 
 vi.mock('../firebase');
 vi.mock('../api', () => ({
@@ -220,5 +221,126 @@ describe('useJobStream', () => {
     });
 
     expect(result.current.simulations).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mergeFirestoreJobUpdate: ordering race contract
+//
+// The hook merges REST fetch results with onSnapshot updates into the same
+// React Query cache entry. These tests lock in the invariant that once a
+// job has transitioned to a terminal state, a subsequent stale onSnapshot
+// cannot regress it back to RUNNING (which would cause the UI to flicker
+// and, worse, retrigger polling).
+// ---------------------------------------------------------------------------
+
+describe('mergeFirestoreJobUpdate', () => {
+  const RUNNING_JOB: JobResponse = {
+    id: 'job-1',
+    name: 'A vs B vs C vs D',
+    deckNames: ['A', 'B', 'C', 'D'],
+    deckIds: ['d1', 'd2', 'd3', 'd4'],
+    status: 'RUNNING',
+    simulations: 20,
+    gamesCompleted: 4,
+    parallelism: 4,
+    createdAt: '2026-04-10T12:00:00.000Z',
+    startedAt: '2026-04-10T12:00:05.000Z',
+    durationMs: null,
+    retryCount: 0,
+    results: null,
+  };
+
+  const COMPLETED_JOB: JobResponse = {
+    ...RUNNING_JOB,
+    status: 'COMPLETED',
+    gamesCompleted: 20,
+    completedAt: '2026-04-10T12:10:00.000Z',
+    durationMs: 10 * 60 * 1000,
+    results: { winnerCounts: {}, totalGames: 20 } as unknown as JobResponse['results'],
+  };
+
+  it('returns undefined prev unchanged (no prior REST fetch)', () => {
+    const result = mergeFirestoreJobUpdate(undefined, { status: 'COMPLETED' });
+    expect(result).toBeUndefined();
+  });
+
+  it('applies Firestore update to in-progress job', () => {
+    const result = mergeFirestoreJobUpdate(RUNNING_JOB, {
+      status: 'RUNNING',
+      gamesCompleted: 12,
+    });
+    expect(result?.status).toBe('RUNNING');
+    expect(result?.gamesCompleted).toBe(12);
+  });
+
+  it('transitions RUNNING → COMPLETED when Firestore reports terminal state', () => {
+    const result = mergeFirestoreJobUpdate(RUNNING_JOB, {
+      status: 'COMPLETED',
+      gamesCompleted: 20,
+      completedAt: '2026-04-10T12:10:00.000Z',
+    });
+    expect(result?.status).toBe('COMPLETED');
+    expect(result?.gamesCompleted).toBe(20);
+    expect(result?.durationMs).toBe(10 * 60 * 1000 - 5000); // started - completed
+  });
+
+  it('REGRESSION GUARD: stale RUNNING onSnapshot cannot revert a terminal job', () => {
+    // Scenario: REST fetch arrives first and sets the cache to COMPLETED.
+    // Then a stale onSnapshot message (produced before the worker finalized)
+    // arrives with status=RUNNING, gamesCompleted=12. The merge must refuse
+    // to touch the job so the UI does not flicker and polling does not
+    // re-enable itself.
+    const staleUpdate = {
+      status: 'RUNNING',
+      gamesCompleted: 12,
+      completedSimCount: 3,
+    };
+    const result = mergeFirestoreJobUpdate(COMPLETED_JOB, staleUpdate);
+    // Should be identical (===) to the terminal prev — no merge applied
+    expect(result).toBe(COMPLETED_JOB);
+    expect(result?.status).toBe('COMPLETED');
+    expect(result?.gamesCompleted).toBe(20);
+  });
+
+  it('REGRESSION GUARD: onSnapshot→REST order converges to COMPLETED', () => {
+    // Simulate: onSnapshot fires first with RUNNING update (normal flow),
+    // then REST fetch arrives with the authoritative COMPLETED payload.
+    // The second call is a full cache.setQueryData to fullJob (not a merge),
+    // so we simulate that here by asserting the final state is COMPLETED.
+    const afterSnapshot = mergeFirestoreJobUpdate(RUNNING_JOB, {
+      status: 'RUNNING',
+      gamesCompleted: 12,
+    });
+    expect(afterSnapshot?.status).toBe('RUNNING');
+    expect(afterSnapshot?.gamesCompleted).toBe(12);
+
+    // Now the terminal REST fetch lands. The hook replaces cache wholesale
+    // via queryClient.setQueryData, but for the merge contract we re-run
+    // with the REST payload as `prev` to assert the terminal guard still
+    // protects against any subsequent stale onSnapshot.
+    const afterLateSnapshot = mergeFirestoreJobUpdate(COMPLETED_JOB, {
+      status: 'RUNNING',
+      gamesCompleted: 12,
+    });
+    expect(afterLateSnapshot?.status).toBe('COMPLETED');
+    expect(afterLateSnapshot?.gamesCompleted).toBe(20);
+  });
+
+  it('computes durationMs from startedAt+completedAt when both present', () => {
+    const result = mergeFirestoreJobUpdate(RUNNING_JOB, {
+      completedAt: '2026-04-10T12:00:10.000Z',
+    });
+    // completedAt - startedAt = 5s
+    expect(result?.durationMs).toBe(5000);
+  });
+
+  it('prefers completedSimCount over gamesCompleted when both provided', () => {
+    const result = mergeFirestoreJobUpdate(RUNNING_JOB, {
+      completedSimCount: 3, // 3 * GAMES_PER_CONTAINER
+      gamesCompleted: 999,   // stale, should lose
+    });
+    // GAMES_PER_CONTAINER is 4 per shared constants
+    expect(result?.gamesCompleted).toBe(12);
   });
 });

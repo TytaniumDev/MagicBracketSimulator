@@ -28,7 +28,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const store = getRatingStore();
-    const jobs = await jobStore.listJobs();
+    // Backfill walks whichever jobs are in the current page cap. For full
+    // history rebuilds, call the endpoint repeatedly with `?cursor=…` once
+    // the paginated contract is exposed here (see docs/BACKFILL.md).
+    const { jobs } = await jobStore.listJobs({ limit: 200 });
 
     for (const job of jobs) {
       if (!job) continue;

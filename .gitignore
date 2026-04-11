@@ -82,3 +82,13 @@ agent-plans/
 /next.config.js
 /sentry.*.js
 /pages/
+
+# Playwright E2E ephemera
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+
+# Claude Code temp worktrees + MCP state
+.claude/worktrees/
+.playwright-mcp/
