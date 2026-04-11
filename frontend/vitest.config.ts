@@ -6,5 +6,7 @@ export default mergeConfig(viteConfig, defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // Exclude Playwright E2E tests — they're run via `npm run test:e2e`.
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/**'],
   },
 }));

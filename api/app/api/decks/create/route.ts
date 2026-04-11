@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
           return badRequestResponse('Deck link must be a valid HTTP or HTTPS URL');
         }
-      } catch (err) {
+      } catch {
         return badRequestResponse('Deck link must be a valid URL');
       }
     }

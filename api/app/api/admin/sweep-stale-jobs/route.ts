@@ -23,7 +23,23 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const startedAt = Date.now();
     const result = await sweepStaleJobs();
+    const durationMs = Date.now() - startedAt;
+
+    // Structured success log. Cloud Monitoring uses this as the signal for
+    // the "sweeper liveness" alert policy (docs/SWEEPER_ALERTING.md).
+    // The alert fires if no entry with `event: 'sweep-complete'` appears
+    // for longer than the schedule period. Do NOT change the event name
+    // without updating the alert policy or the alert will go silent.
+    console.log(JSON.stringify({
+      severity: 'INFO',
+      component: 'stale-sweeper',
+      event: 'sweep-complete',
+      durationMs,
+      ...result,
+    }));
+
     return NextResponse.json(result);
   } catch (error) {
     console.error('[StaleSweeper] Error:', error);

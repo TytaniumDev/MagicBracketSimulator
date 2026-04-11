@@ -106,6 +106,33 @@ async function runTests() {
       assert(fs.existsSync(filePath), 'Should be stored as-is');
     });
 
+    await test('uploadSingleSimulationLog: rejects log text over MAX_LOG_BYTES', async () => {
+      const maxBytes = logStore.MAX_LOG_BYTES;
+      assert(typeof maxBytes === 'number' && maxBytes > 0, 'MAX_LOG_BYTES must be exported');
+      const oversize = 'a'.repeat(maxBytes + 1);
+      let thrown: Error | null = null;
+      try {
+        await logStore.uploadSingleSimulationLog('job-upload-oversize', 'raw/game_001.txt', oversize);
+      } catch (err) {
+        thrown = err as Error;
+      }
+      assert(thrown !== null, 'should throw for oversize log');
+      assert(
+        /too large|exceeds|max/i.test(thrown!.message),
+        `error message should indicate size; got: ${thrown!.message}`
+      );
+      const filePath = path.join(tempDir, 'job-upload-oversize', 'game_001.txt');
+      assert(!fs.existsSync(filePath), 'oversize log must not be written to disk');
+    });
+
+    await test('uploadSingleSimulationLog: accepts log text exactly at MAX_LOG_BYTES', async () => {
+      const exact = 'a'.repeat(logStore.MAX_LOG_BYTES);
+      await logStore.uploadSingleSimulationLog('job-upload-exact', 'raw/game_001.txt', exact);
+      const filePath = path.join(tempDir, 'job-upload-exact', 'game_001.txt');
+      assert(fs.existsSync(filePath), 'at-limit log should be written');
+      assertEqual(fs.statSync(filePath).size, logStore.MAX_LOG_BYTES, 'file size should equal MAX_LOG_BYTES');
+    });
+
     // =========================================================================
     // getRawLogs
     // =========================================================================

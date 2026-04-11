@@ -1,0 +1,69 @@
+# Cloud Monitoring alert policy: sweeper liveness
+#
+# Fires if the stale-job sweeper has not emitted a successful completion
+# log line in the last 30 minutes. See docs/SWEEPER_ALERTING.md for full
+# deployment instructions.
+#
+# Prerequisites (run once before applying this file):
+#
+#   gcloud logging metrics create sweeper_completions \
+#     --project=magic-bracket-simulator \
+#     --description="Count of successful stale-sweeper runs" \
+#     --log-filter='jsonPayload.component="stale-sweeper" AND jsonPayload.event="sweep-complete"'
+#
+# Apply this policy:
+#
+#   gcloud alpha monitoring policies create \
+#     --project=magic-bracket-simulator \
+#     --policy-from-file=docs/sweeper-alert-policy.yaml
+#
+# REQUIRED: replace `REPLACE_WITH_CHANNEL_ID` below with a real
+# notification channel ID from:
+#   gcloud alpha monitoring channels list --project=magic-bracket-simulator
+
+displayName: "stale-sweeper has not completed a run in 30 minutes"
+documentation:
+  content: |
+    The stale-job sweeper is the only recovery path for stuck jobs
+    post-#151. This alert fires if no successful sweep has been logged
+    for 30 minutes (normal schedule is every 15 minutes, so missing one
+    invocation is tolerated but missing two is not).
+
+    Runbook:
+      1. Check Cloud Scheduler:
+         gcloud scheduler jobs list --project=magic-bracket-simulator
+         If the sweeper job is PAUSED, resume it.
+      2. Check the API's recent log entries for the sweeper component:
+         gcloud logging read 'jsonPayload.component="stale-sweeper"' \
+           --project=magic-bracket-simulator --limit=20
+      3. Check the API's authentication for WORKER_SECRET — expired
+         secrets cause the sweeper endpoint to return 401.
+      4. Worst case: run the sweeper manually to catch up:
+         curl -X POST https://api--magic-bracket-simulator.us-central1.hosted.app/api/admin/sweep-stale-jobs \
+           -H "X-Worker-Secret: $(gcloud secrets versions access latest --secret=worker-secret)"
+  mimeType: "text/markdown"
+
+conditions:
+  - displayName: "No sweep completions in 30 minutes"
+    conditionThreshold:
+      filter: >-
+        metric.type="logging.googleapis.com/user/sweeper_completions"
+        resource.type="cloud_run_revision"
+      comparison: COMPARISON_LT
+      thresholdValue: 1
+      duration: 1800s  # 30 minutes
+      aggregations:
+        - alignmentPeriod: 300s  # 5 minute buckets
+          perSeriesAligner: ALIGN_SUM
+      trigger:
+        count: 1
+
+combiner: OR
+enabled: true
+notificationChannels:
+  # Email channel created 2026-04-10 (tywholland@gmail.com). Replace or
+  # add additional channels (PagerDuty, Slack, etc.) as needed — list
+  # with: gcloud beta monitoring channels list
+  - projects/magic-bracket-simulator/notificationChannels/17583582606854007548
+alertStrategy:
+  autoClose: 86400s  # Auto-close after 24 hours if resolved

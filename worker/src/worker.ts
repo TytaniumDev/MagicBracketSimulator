@@ -50,6 +50,7 @@ import {
 import { startWorkerApi, stopWorkerApi, HealthStatus } from './worker-api.js';
 import { GAMES_PER_CONTAINER } from './constants.js';
 import { createLogger } from './logger.js';
+import { captureWorkerException, addWorkerBreadcrumb, flushSentry } from './sentry.js';
 
 const log = createLogger('Worker');
 
@@ -279,11 +280,21 @@ async function uploadSingleSimulationLog(
     });
     if (!res.ok) {
       console.warn(`[sim_${String(simIndex).padStart(3, '0')}] Log upload failed: HTTP ${res.status}`);
+      captureWorkerException(
+        new Error(`Log upload failed: HTTP ${res.status}`),
+        { component: 'log-upload', jobId, simIndex, workerId: currentWorkerId }
+      );
     } else {
       console.log(`[sim_${String(simIndex).padStart(3, '0')}] Log uploaded (${(logText.length / 1024).toFixed(1)}KB)`);
     }
   } catch (err) {
     console.warn(`[sim_${String(simIndex).padStart(3, '0')}] Log upload error:`, err instanceof Error ? err.message : err);
+    captureWorkerException(err, {
+      component: 'log-upload',
+      jobId,
+      simIndex,
+      workerId: currentWorkerId,
+    });
   }
 }
 
@@ -302,6 +313,31 @@ async function processSimulation(
 ): Promise<void> {
   const simLabel = `[${simId}]`;
   console.log(`${simLabel} Processing simulation for job ${jobId}`);
+  addWorkerBreadcrumb('processSimulation:start', { jobId, simId, simIndex });
+
+  try {
+    await processSimulationInternal(jobId, simId, simIndex);
+  } catch (err) {
+    // Any uncaught error from container orchestration, reporting, etc.
+    // lands here. Capture with full context before re-throwing so the
+    // caller's error handling (semaphore release, abort cleanup) still runs.
+    captureWorkerException(err, {
+      component: 'process-simulation',
+      jobId,
+      simId,
+      simIndex,
+      workerId: currentWorkerId,
+    });
+    throw err;
+  }
+}
+
+async function processSimulationInternal(
+  jobId: string,
+  simId: string,
+  simIndex: number
+): Promise<void> {
+  const simLabel = `[${simId}]`;
 
   // Fetch job for deck data
   const job = await fetchJob(jobId);
@@ -755,6 +791,7 @@ async function handleMessage(message: any): Promise<void> {
     messageData = JSON.parse(message.data.toString());
   } catch (error) {
     console.error('Failed to parse message:', error);
+    captureWorkerException(error, { component: 'pubsub-parse' });
     message.ack(); // Ack invalid messages to prevent redelivery
     return;
   }
@@ -789,6 +826,8 @@ async function handleMessage(message: any): Promise<void> {
       await processSimulation(jobId, simId, simIndex);
     } catch (error) {
       console.error(`Error processing simulation ${simId} for job ${jobId}:`, error);
+      // processSimulation already captured the exception with context;
+      // this outer catch is just the API-reporting safety net.
       await reportSimulationStatus(jobId, simId, {
         state: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -920,6 +959,10 @@ async function pollForJobs(): Promise<void> {
     } catch (error) {
       if (error instanceof Error && error.name !== 'TimeoutError') {
         console.error('Polling error:', error);
+        captureWorkerException(error, {
+          component: 'polling-loop',
+          workerId: currentWorkerId,
+        });
       }
     }
     // No user jobs available — check for coverage work
@@ -1101,7 +1144,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   log.error('Failed to start', { error: error instanceof Error ? error.message : String(error) });
+  captureWorkerException(error, { component: 'worker-startup' });
+  await flushSentry();
   process.exit(1);
 });

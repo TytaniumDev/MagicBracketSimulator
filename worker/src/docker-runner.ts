@@ -156,11 +156,59 @@ export async function runSimulationContainer(
     deckEnvVars.push('-e', `DECK_${i}_B64=${b64}`);
   }
 
+  // Hardening: simulation containers run untrusted user input (deck lists
+  // drive the Forge engine). These flags reduce blast radius if Forge or
+  // a dependency has a bug that lets user input escalate:
+  //   --cap-drop=ALL             no Linux capabilities (deny raw sockets etc.)
+  //   --security-opt=no-new-privileges
+  //                              suid/setgid binaries can't escalate
+  //   --pids-limit=256           fork bomb protection
+  //
+  // Opt-in via SIMULATION_READONLY=1:
+  //   --read-only                root filesystem is read-only, writable
+  //                              areas are tmpfs mounts covering every
+  //                              path Forge and our shell script write to:
+  //                                - /tmp              bash mktemp, JRE io.tmpdir
+  //                                - /home/simulator/.forge
+  //                                                    decks + user config
+  //                                - /home/simulator/.cache
+  //                                                    card database cache
+  //                                - /app/logs         per-game log files
+  //
+  //                              uid/gid=999 match the `simulator` user
+  //                              created in simulation/Dockerfile. Without
+  //                              these, tmpfs defaults to root-owned and
+  //                              the unprivileged simulator user can't
+  //                              write (mode=700/755 is too strict for
+  //                              the default world-writable 1777 fallback).
+  //                              If the Dockerfile's user/UID ever changes,
+  //                              update these values too.
+  //
+  //                              Verified end-to-end against a real Forge
+  //                              4-player Commander game before rolling out.
+  // Not applied:
+  //   --network=none             skipped per user: Forge/xvfb may need net
+  //                              access for card data downloads.
+  const readonly = process.env.SIMULATION_READONLY === '1';
+  const readonlyArgs = readonly
+    ? [
+        '--read-only',
+        '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,mode=1777',
+        '--tmpfs', '/home/simulator/.forge:rw,nosuid,size=64m,uid=999,gid=999,mode=700',
+        '--tmpfs', '/home/simulator/.cache:rw,nosuid,size=256m,uid=999,gid=999,mode=700',
+        '--tmpfs', '/app/logs:rw,noexec,nosuid,size=128m,uid=999,gid=999,mode=755',
+      ]
+    : [];
+
   const args = [
     'run', '--rm',
     '--name', containerName,
     '--memory', `${RAM_PER_SIM_MB}m`,
     '--cpus', String(CPUS_PER_SIM),
+    '--cap-drop=ALL',
+    '--security-opt=no-new-privileges',
+    '--pids-limit=256',
+    ...readonlyArgs,
     ...deckEnvVars,
     '-e', 'FORGE_PATH=/app/forge',
     '-e', 'LOGS_DIR=/app/logs',

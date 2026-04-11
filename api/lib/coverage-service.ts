@@ -54,20 +54,18 @@ export async function computePairCoverage(): Promise<PairCoverageMap> {
     return coverageCache.data;
   }
 
-  const [allDecks, matchResults] = await Promise.all([
-    listAllDecks(),
-    getAllMatchResults(),
-  ]);
-
+  const allDecks = await listAllDecks();
   const allDeckIds = allDecks.map((d) => d.id);
   const counts = new Map<string, number>();
 
-  for (const result of matchResults) {
-    const pairs = extractPairs(result.deckIds);
-    for (const pair of pairs) {
+  const incrementPairs = (deckIds: string[]): void => {
+    if (!Array.isArray(deckIds)) return;
+    for (const pair of extractPairs(deckIds)) {
       counts.set(pair, (counts.get(pair) ?? 0) + 1);
     }
-  }
+  };
+
+  await forEachMatchResult(incrementPairs);
 
   const data = { counts, allDeckIds };
   coverageCache = { data, ts: Date.now() };
@@ -202,14 +200,32 @@ export async function hasActiveCoverageJob(): Promise<boolean> {
 }
 
 /**
- * Get all match results (deck_ids arrays) from the database.
+ * Page size for Firestore match_results scans. Keeps per-RPC memory bounded
+ * so the coverage computation never loads the entire collection at once.
  */
-async function getAllMatchResults(): Promise<{ deckIds: string[] }[]> {
+const MATCH_RESULTS_PAGE_SIZE = 1000;
+
+/**
+ * Stream every match_results document through `visit`. In GCP mode this
+ * uses cursor-based pagination so the in-memory working set is at most
+ * MATCH_RESULTS_PAGE_SIZE docs; in LOCAL mode the SQLite row count is
+ * small enough that we load all rows eagerly.
+ */
+async function forEachMatchResult(visit: (deckIds: string[]) => void): Promise<void> {
   if (USE_FIRESTORE) {
-    const snapshot = await getFirestoreClient().collection('matchResults').select('deckIds').get();
-    return snapshot.docs.map((doc) => ({
-      deckIds: doc.data().deckIds as string[],
-    }));
+    const ref = getFirestoreClient().collection('matchResults');
+    let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+    while (true) {
+      let query = ref.select('deckIds').orderBy('__name__').limit(MATCH_RESULTS_PAGE_SIZE);
+      if (lastDoc) query = query.startAfter(lastDoc);
+      const snapshot = await query.get();
+      if (snapshot.empty) return;
+      for (const doc of snapshot.docs) {
+        visit(doc.data().deckIds as string[]);
+      }
+      if (snapshot.size < MATCH_RESULTS_PAGE_SIZE) return;
+      lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    }
   }
 
   const { getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
@@ -217,7 +233,7 @@ async function getAllMatchResults(): Promise<{ deckIds: string[] }[]> {
   const rows = db
     .prepare('SELECT deck_ids FROM match_results')
     .all() as { deck_ids: string }[];
-  return rows.map((r) => ({
-    deckIds: JSON.parse(r.deck_ids) as string[],
-  }));
+  for (const row of rows) {
+    visit(JSON.parse(row.deck_ids) as string[]);
+  }
 }

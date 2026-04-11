@@ -7,6 +7,8 @@ import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
 import { RequestAccessCard } from '../components/RequestAccessCard';
+import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
+import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
 
 interface Deck {
@@ -373,6 +375,10 @@ function SimulationForm() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Worker pool health banner: shows when no workers are online so
+          users understand why newly-created jobs will sit in QUEUED. */}
+      <HomeWorkerStatus />
+
       {/* Add Deck Section */}
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Add a Deck</h2>
@@ -692,5 +698,24 @@ function SimulationForm() {
         </button>
       </form>
     </div>
+  );
+}
+
+/**
+ * Thin wrapper so the simulation form doesn't need to know about the
+ * worker-status hook. Rendered above the form on Home so users see
+ * "No workers online" before they spend time building a job.
+ */
+function HomeWorkerStatus() {
+  const { user } = useAuth();
+  const { workers, queueDepth, isLoading, refresh } = useWorkerStatus(!!user);
+  return (
+    <WorkerStatusBanner
+      workers={workers}
+      queueDepth={queueDepth}
+      isLoading={isLoading}
+      onRefresh={refresh}
+      userEmail={user?.email}
+    />
   );
 }

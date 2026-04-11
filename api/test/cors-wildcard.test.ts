@@ -2,14 +2,12 @@ import { NextRequest } from 'next/server';
 
 process.env.CORS_ALLOWED_ORIGINS = '*';
 
-let passed = 0;
 let failed = 0;
 
 async function test(name: string, fn: () => void | Promise<void>) {
   try {
     await fn();
     console.log(`✓ ${name}`);
-    passed++;
   } catch (error) {
     console.error(`✗ ${name}`);
     console.error(error);

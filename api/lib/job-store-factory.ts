@@ -61,7 +61,16 @@ export async function getJobByIdempotencyKey(key: string): Promise<Job | null> {
 export async function createJob(
   decks: DeckSlot[],
   simulations: number,
-  options?: { idempotencyKey?: string; parallelism?: number; createdBy?: string; deckIds?: string[]; source?: JobSource }
+  options?: {
+    idempotencyKey?: string;
+    parallelism?: number;
+    createdBy?: string;
+    deckIds?: string[];
+    source?: JobSource;
+    /** Denormalized deck metadata, Firestore-only. See CreateJobData. */
+    deckLinks?: Record<string, string | null>;
+    colorIdentity?: Record<string, string[]>;
+  }
 ): Promise<Job> {
   if (USE_FIRESTORE) {
     return firestoreStore.createJob({
@@ -72,6 +81,8 @@ export async function createJob(
       createdBy: options?.createdBy ?? 'unknown',
       deckIds: options?.deckIds,
       source: options?.source,
+      deckLinks: options?.deckLinks,
+      colorIdentity: options?.colorIdentity,
     });
   }
   return (await sqliteStore()).createJob(
@@ -84,11 +95,23 @@ export async function createJob(
   );
 }
 
-export async function listJobs(userId?: string): Promise<Job[]> {
+export interface ListJobsOptions {
+  userId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListJobsResult {
+  jobs: Job[];
+  nextCursor: string | null;
+}
+
+export async function listJobs(options: ListJobsOptions = {}): Promise<ListJobsResult> {
   if (USE_FIRESTORE) {
-    return firestoreStore.listJobs(userId);
+    return firestoreStore.listJobs(options);
   }
-  return (await sqliteStore()).listJobs();
+  const { userId: _userId, ...rest } = options;
+  return (await sqliteStore()).listJobs(rest);
 }
 
 export async function listActiveJobs(): Promise<Job[]> {
@@ -313,7 +336,9 @@ async function recoverStaleSimulations(
   job: Job,
   activeWorkers: WorkerInfo[],
 ): Promise<boolean> {
-  if (!USE_FIRESTORE) return false; // Only applies in GCP mode with Pub/Sub
+  if (!USE_FIRESTORE) {
+    return recoverStaleSimulationsLocal(jobId, job, activeWorkers);
+  }
 
   const sims = await getSimulationStatuses(jobId);
   if (sims.length === 0) return false;
@@ -423,6 +448,82 @@ async function recoverStaleSimulations(
 }
 
 /**
+ * LOCAL-mode recovery. The architecture is different from GCP:
+ *   - Workers claim entire jobs (atomic QUEUED → RUNNING in claimNextJob).
+ *   - There is no Pub/Sub to republish individual sims to.
+ *   - If the worker holding a RUNNING job dies, the job stays RUNNING with
+ *     a stale workerId and the remaining PENDING sims never progress.
+ *
+ * Strategy:
+ *   1. If the job is RUNNING but its worker is not in the active-workers
+ *      list (and at least one other worker IS active), reset the job back
+ *      to QUEUED and reset any RUNNING/FAILED sims to PENDING. The next
+ *      call to claimNextJob() will pick it up; the worker will then resume
+ *      by processing only PENDING sims.
+ *   2. If all sims are already terminal (COMPLETED/CANCELLED) but the job
+ *      status is still RUNNING, trigger aggregation to finalize it — this
+ *      matches the GCP path and is what the stale-sweeper relies on.
+ *   3. If no active workers exist, do nothing — resetting would just thrash.
+ */
+async function recoverStaleSimulationsLocal(
+  jobId: string,
+  job: Job,
+  activeWorkers: WorkerInfo[],
+): Promise<boolean> {
+  const sims = await getSimulationStatuses(jobId);
+  if (sims.length === 0) return false;
+
+  const allTerminal = sims.every(
+    (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
+  );
+
+  // Fast path: all sims terminal but job still RUNNING → aggregate to finalize.
+  if (allTerminal) {
+    const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
+    if (needsRetrigger) {
+      recoveryLog.info('LOCAL: all sims terminal, retriggering aggregation', { jobId });
+      aggregateJobResults(jobId).catch((err) => {
+        recoveryLog.error('LOCAL aggregation failed', { jobId, error: err instanceof Error ? err.message : String(err) });
+        Sentry.captureException(err, { tags: { component: 'recovery-aggregation-local', jobId } });
+      });
+      return true;
+    }
+    return false;
+  }
+
+  // Only attempt re-claim if there's another worker to take over.
+  if (activeWorkers.length === 0) return false;
+
+  const activeWorkerIds = new Set(activeWorkers.map((w) => w.workerId));
+  const workerStillAlive = job.workerId != null && activeWorkerIds.has(job.workerId);
+  if (workerStillAlive) return false;
+
+  // Worker is dead. Reset in-flight sims so the re-claim has clean state.
+  let resetCount = 0;
+  for (const sim of sims) {
+    if (sim.state === 'RUNNING' || sim.state === 'FAILED') {
+      const updated = await conditionalUpdateSimulationStatus(
+        jobId,
+        sim.simId,
+        [sim.state],
+        { state: 'PENDING' }
+      );
+      if (updated) resetCount++;
+    }
+  }
+
+  const jobReset = await resetJobForRetry(jobId);
+  recoveryLog.info('LOCAL: reset stuck RUNNING job for re-claim', {
+    jobId,
+    deadWorkerId: job.workerId,
+    resetSims: resetCount,
+    jobReset,
+  });
+
+  return jobReset || resetCount > 0;
+}
+
+/**
  * Re-publish a QUEUED job that may have lost its Pub/Sub message.
  *
  * If the job has been QUEUED for >2 minutes, re-publish to Pub/Sub so
@@ -461,8 +562,8 @@ async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> 
       // Re-publish only for PENDING sims
       const pendingSims = sims.filter(s => s.state === 'PENDING');
       if (pendingSims.length > 0) {
-        const { publishSimulationTasks: publish } = await import('./pubsub');
-        const topic = (await import('./pubsub')).pubsub.topic((await import('./pubsub')).TOPIC_NAME);
+        const { pubsub, TOPIC_NAME } = await import('./pubsub');
+        const topic = pubsub.topic(TOPIC_NAME);
         const promises = pendingSims.map(s => {
           const msg = {
             type: 'simulation' as const,

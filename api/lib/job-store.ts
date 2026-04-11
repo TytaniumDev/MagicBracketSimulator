@@ -261,10 +261,50 @@ export function claimNextJob(workerId?: string, workerName?: string): Job | unde
   return row ? rowToJob(row) : undefined;
 }
 
-export function listJobs(): Job[] {
+export interface ListJobsOptions {
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListJobsResult {
+  jobs: Job[];
+  nextCursor: string | null;
+}
+
+const DEFAULT_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 200;
+
+export function listJobs(options: ListJobsOptions = {}): ListJobsResult {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as Row[];
-  return rows.map(rowToJob);
+  const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT));
+
+  let cursorTs: string | null = null;
+  if (options.cursor) {
+    try {
+      cursorTs = Buffer.from(options.cursor, 'base64').toString('utf-8');
+      if (isNaN(new Date(cursorTs).getTime())) cursorTs = null;
+    } catch {
+      cursorTs = null;
+    }
+  }
+
+  // Fetch limit+1 to detect a next page
+  const rows = cursorTs
+    ? (db
+        .prepare('SELECT * FROM jobs WHERE created_at < ? ORDER BY created_at DESC LIMIT ?')
+        .all(cursorTs, limit + 1) as Row[])
+    : (db
+        .prepare('SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?')
+        .all(limit + 1) as Row[]);
+
+  const allJobs = rows.map(rowToJob);
+  const hasMore = allJobs.length > limit;
+  const jobs = hasMore ? allJobs.slice(0, limit) : allJobs;
+  const nextCursor = hasMore && jobs.length > 0
+    ? Buffer.from(jobs[jobs.length - 1].createdAt.toISOString(), 'utf-8').toString('base64')
+    : null;
+
+  return { jobs, nextCursor };
 }
 
 export function listActiveJobs(): Job[] {
@@ -281,7 +321,7 @@ export function clearJobs(): void {
 }
 
 export function getJobsMap(): Map<string, Job> {
-  const jobs = listJobs();
+  const { jobs } = listJobs({ limit: MAX_LIST_LIMIT });
   const map = new Map<string, Job>();
   for (const job of jobs) {
     map.set(job.id, job);

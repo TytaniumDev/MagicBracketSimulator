@@ -13,7 +13,7 @@
  */
 
 import * as jobStore from '../lib/job-store-factory';
-import type { DeckSlot, Job, SimulationStatus } from '../lib/types';
+import type { DeckSlot, SimulationStatus } from '../lib/types';
 
 // ---------------------------------------------------------------------------
 // Test Utilities

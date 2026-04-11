@@ -21,10 +21,13 @@ export async function checkRateLimit(
     const { getFirestore } = await import('./firestore-client');
     const jobsRef = getFirestore().collection('jobs');
 
-    // Check active jobs (QUEUED + RUNNING)
+    // Check active jobs (QUEUED + RUNNING). Limit caps the query at one
+    // over the threshold so a pathologically high-volume user can't cause
+    // the query to load thousands of docs into memory.
     const activeSnap = await jobsRef
       .where('createdBy', '==', userId)
       .where('status', 'in', ['QUEUED', 'RUNNING'])
+      .limit(MAX_ACTIVE_JOBS + 1)
       .get();
 
     if (activeSnap.size >= MAX_ACTIVE_JOBS) {
@@ -34,13 +37,16 @@ export async function checkRateLimit(
       };
     }
 
-    // Check daily limits
+    // Check daily limits. Limit caps at (MAX_JOBS_PER_DAY + 1) — if there
+    // are more than MAX_JOBS_PER_DAY we reject immediately, so we never
+    // need to sum simulations from more than MAX_JOBS_PER_DAY docs.
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
     const dailySnap = await jobsRef
       .where('createdBy', '==', userId)
       .where('createdAt', '>=', startOfDay)
+      .limit(MAX_JOBS_PER_DAY + 1)
       .get();
 
     if (dailySnap.size >= MAX_JOBS_PER_DAY) {

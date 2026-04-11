@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import type { Timestamp } from 'firebase/firestore';
@@ -105,6 +105,14 @@ export default function Browse() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Pagination (M2): `jobs` holds the live first page. `extraJobs` holds
+  // older pages appended via "Load More". `nextCursor` is the REST cursor
+  // for the next page beyond what's currently visible; null means we've
+  // reached the end.
+  const [extraJobs, setExtraJobs] = useState<JobSummary[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   // Admin bulk-delete state
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
@@ -121,7 +129,7 @@ export default function Browse() {
     });
   };
 
-  const selectAll = () => setSelectedJobs(new Set(jobs.map((j) => j.id)));
+  const selectAll = () => setSelectedJobs(new Set([...jobs, ...extraJobs].map((j) => j.id)));
   const deselectAll = () => setSelectedJobs(new Set());
 
   const handleBulkDelete = async () => {
@@ -179,6 +187,7 @@ export default function Browse() {
       if (!res.ok) throw new Error('Failed to fetch jobs');
       const data = await res.json();
       setJobs(data.jobs || []);
+      setNextCursor((data.nextCursor as string | null) ?? null);
       setError(null);
       return data.jobs as JobSummary[];
     } catch (err) {
@@ -188,6 +197,54 @@ export default function Browse() {
       setIsLoading(false);
     }
   }, [apiBase]);
+
+  /**
+   * Load the next page of older jobs. Works in both GCP and LOCAL mode:
+   * - LOCAL: nextCursor came from the initial REST fetch.
+   * - GCP: the initial list is live via Firestore onSnapshot, so we derive
+   *   the cursor from the createdAt of the oldest currently-visible job.
+   *   The backend cursor format is base64(createdAt ISO string), which
+   *   matches what `/api/jobs` returns in `nextCursor`.
+   */
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      let cursor = nextCursor;
+      if (!cursor) {
+        // GCP mode first Load More: derive from oldest visible job.
+        const visible = [...jobs, ...extraJobs];
+        const oldest = visible[visible.length - 1];
+        if (!oldest) return;
+        cursor = btoa(oldest.createdAt);
+      }
+      const url = `${apiBase}/api/jobs?limit=100&cursor=${encodeURIComponent(cursor)}`;
+      const res = await fetchWithAuth(url);
+      if (!res.ok) throw new Error(`Failed to load more jobs (HTTP ${res.status})`);
+      const data = await res.json();
+      const newJobs = (data.jobs as JobSummary[] | undefined) ?? [];
+      // Dedupe: if a job is already in the live list, drop it from the new
+      // page (can happen if Firestore onSnapshot and REST overlap at the
+      // boundary).
+      const existingIds = new Set([...jobs, ...extraJobs].map((j) => j.id));
+      const deduped = newJobs.filter((j) => !existingIds.has(j.id));
+      setExtraJobs((prev) => [...prev, ...deduped]);
+      setNextCursor((data.nextCursor as string | null) ?? null);
+    } catch (err) {
+      setLoadMoreError(err instanceof Error ? err.message : 'Failed to load more jobs');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [apiBase, jobs, extraJobs, nextCursor, loadingMore]);
+
+  // Combined visible list: live first page + appended older pages.
+  const visibleJobs = useMemo(() => [...jobs, ...extraJobs], [jobs, extraJobs]);
+
+  // Whether more history is available. Unknown in GCP mode until the user
+  // clicks Load More once, so we optimistically show the button as long
+  // as the live list has the full 100 items (suggesting there may be more).
+  const hasMoreHistory = nextCursor != null || (extraJobs.length === 0 && jobs.length >= 100);
 
   useEffect(() => {
     if (db) return; // Handled by Firestore onSnapshot above
@@ -271,21 +328,21 @@ export default function Browse() {
         </div>
       )}
 
-      {!isLoading && !error && jobs.length === 0 && (
+      {!isLoading && !error && visibleJobs.length === 0 && (
         <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center">
           No simulations yet.
         </div>
       )}
 
       {/* Admin bulk-delete toolbar */}
-      {isAdmin && !isLoading && jobs.length > 0 && (
+      {isAdmin && !isLoading && visibleJobs.length > 0 && (
         <div className="mb-3 flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2 border border-gray-700">
           <button
             type="button"
-            onClick={selectedJobs.size === jobs.length ? deselectAll : selectAll}
+            onClick={selectedJobs.size === visibleJobs.length ? deselectAll : selectAll}
             className="text-sm text-blue-400 hover:text-blue-300"
           >
-            {selectedJobs.size === jobs.length ? 'Deselect All' : 'Select All'}
+            {selectedJobs.size === visibleJobs.length ? 'Deselect All' : 'Select All'}
           </button>
           {selectedJobs.size > 0 && (
             <>
@@ -310,9 +367,9 @@ export default function Browse() {
         </div>
       )}
 
-      {!isLoading && !error && jobs.length > 0 && (
+      {!isLoading && !error && visibleJobs.length > 0 && (
         <div className="space-y-3">
-          {jobs.map((run) => (
+          {visibleJobs.map((run) => (
             <Link
               key={run.id}
               to={`/jobs/${run.id}`}
@@ -379,6 +436,27 @@ export default function Browse() {
               )}
             </Link>
           ))}
+
+          {/* Load More / end-of-history */}
+          {hasMoreHistory && (
+            <div className="pt-2 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-5 py-2 rounded-md bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
+              >
+                {loadingMore && <Spinner size="sm" />}
+                {loadingMore ? 'Loading...' : 'Load more'}
+              </button>
+              {loadMoreError && (
+                <p className="text-xs text-red-400">{loadMoreError}</p>
+              )}
+            </div>
+          )}
+          {!hasMoreHistory && visibleJobs.length >= 100 && (
+            <p className="pt-2 text-center text-xs text-gray-500">End of history.</p>
+          )}
         </div>
       )}
     </div>

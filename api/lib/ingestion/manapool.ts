@@ -68,7 +68,8 @@ export async function fetchDeckFromManaPoolUrl(url: string): Promise<ParsedDeck>
     });
   } catch (err) {
     throw new Error(
-      `Could not reach ManaPool (network error). Please check the URL and try again.`
+      `Could not reach ManaPool (network error). Please check the URL and try again.`,
+      { cause: err }
     );
   }
 

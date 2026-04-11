@@ -58,6 +58,7 @@ function formatCardEntry(card: DeckCard): string {
  */
 function cleanDeckName(name: string): string {
   // Replace newlines and control characters with a space
+  // eslint-disable-next-line no-control-regex -- deliberate: sanitizing raw input
   return name.replace(/[\r\n\x00-\x1F\x7F]+/g, ' ').trim();
 }
 
@@ -75,6 +76,7 @@ function cleanCardName(name: string): string {
   }
 
   // Replace newlines and control characters with a space to prevent injection
+  // eslint-disable-next-line no-control-regex -- deliberate: sanitizing raw input
   name = name.replace(/[\r\n\x00-\x1F\x7F]+/g, ' ');
 
   // Trim whitespace

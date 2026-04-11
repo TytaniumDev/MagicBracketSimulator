@@ -123,7 +123,10 @@ export async function verifyTokenString(token: string): Promise<AuthUser> {
     if (error instanceof Error && error.message.includes('email')) {
       throw error;
     }
-    throw new Error(`Invalid token: ${error instanceof Error ? error.message : 'unknown'}`);
+    throw new Error(
+      `Invalid token: ${error instanceof Error ? error.message : 'unknown'}`,
+      { cause: error }
+    );
   }
 }
 
@@ -175,9 +178,9 @@ export async function verifyAllowedUser(req: NextRequest): Promise<AuthUser> {
       if (error.message.includes('allowlist') || error.message.includes('email')) {
         throw error;
       }
-      throw new Error(`Invalid token: ${error.message}`);
+      throw new Error(`Invalid token: ${error.message}`, { cause: error });
     }
-    throw new Error('Token verification failed');
+    throw new Error('Token verification failed', { cause: error });
   }
 }
 
@@ -264,7 +267,8 @@ async function verifyAppCheck(req: NextRequest): Promise<void> {
     await getAppCheck().verifyToken(appCheckToken);
   } catch (error) {
     throw new Error(
-      `App Check verification failed: ${error instanceof Error ? error.message : 'unknown'}`
+      `App Check verification failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      { cause: error }
     );
   }
 }

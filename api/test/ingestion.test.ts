@@ -228,6 +228,7 @@ async function runTests() {
     const hackedCardLine = lines.find(l => l.includes('100 Black Lotus') && !l.includes('Commander'));
 
     assert(!hackedNameLine, "VULNERABILITY: Deck name injection successful (found independent Name=Hacked line)");
+    assert(!hackedCardLine, "VULNERABILITY: Card injection successful (found 100 Black Lotus outside commander line)");
     // The injected card would appear as "100 Black Lotus" if injection worked
     // If sanitized, it would be part of the commander line
 
