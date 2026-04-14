@@ -17,3 +17,7 @@
 ## 2024-07-28 - Parallelizing Synchronous State
 **Learning:** In `api/lib/archidekt-sync.ts`, the Archidekt Precon synchronization was running completely sequentially, which created a significant N+1 bottleneck when making API calls and querying the database to upsert entries. While `Promise.all` allows parallel execution, we must take care when parallelizing code that involves synchronous state updates, such as ID generation (`usedIds`) and tracking set additions (`keepPreconIds`, `processedArchidektIds`), to prevent race conditions or collisions.
 **Action:** When converting sequential asynchronous loops into batched or parallel execution using `Promise.all`, always extract the necessary synchronous state mutations to execute sequentially *before* pushing the asynchronous promises to the execution array.
+
+## 2024-08-05 - Parallelizing Bulk I/O with Promise.all
+**Learning:** The `/api/jobs/bulk-delete` route in `api/app/api/jobs/bulk-delete/route.ts` was processing up to 50 document deletions sequentially using a `for...of` loop, causing significant N+1 network/database latency bottlenecks (especially against Firestore and GCS).
+**Action:** When performing bulk I/O operations (like database queries or cloud resource deletions) on arrays of independent IDs, use `Promise.all(ids.map(async (id) => { ... }))` rather than sequential loops to drastically reduce latency while preserving error isolation per item.

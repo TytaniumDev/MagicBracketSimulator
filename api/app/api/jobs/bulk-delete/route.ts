@@ -32,42 +32,43 @@ export async function POST(request: NextRequest) {
       return badRequestResponse('Maximum 50 jobs per request');
     }
 
-    const results: { id: string; deleted: boolean; error?: string }[] = [];
-
-    for (const id of jobIds) {
-      try {
-        const job = await jobStore.getJob(id);
-        if (!job) {
-          results.push({ id, deleted: false, error: 'Not found' });
-          continue;
-        }
-
-        // Cancel if still active
-        if (job.status === 'QUEUED' || job.status === 'RUNNING') {
-          await jobStore.cancelJob(id);
-        }
-
-        // Delete simulation subcollection first (Firestore doesn't cascade)
-        await jobStore.deleteSimulations(id);
-        await jobStore.deleteJob(id);
-
-        if (isGcpMode()) {
-          try {
-            await deleteJobArtifacts(id);
-          } catch (err) {
-            console.warn(`Failed to delete GCS artifacts for ${id}:`, err);
+    // ⚡ Bolt Performance Optimization:
+    // Process bulk deletions in parallel to eliminate N+1 network/DB bottlenecks
+    const results = await Promise.all(
+      jobIds.map(async (id: string) => {
+        try {
+          const job = await jobStore.getJob(id);
+          if (!job) {
+            return { id, deleted: false, error: 'Not found' };
           }
-        }
 
-        results.push({ id, deleted: true });
-      } catch (err) {
-        results.push({
-          id,
-          deleted: false,
-          error: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    }
+          // Cancel if still active
+          if (job.status === 'QUEUED' || job.status === 'RUNNING') {
+            await jobStore.cancelJob(id);
+          }
+
+          // Delete simulation subcollection first (Firestore doesn't cascade)
+          await jobStore.deleteSimulations(id);
+          await jobStore.deleteJob(id);
+
+          if (isGcpMode()) {
+            try {
+              await deleteJobArtifacts(id);
+            } catch (err) {
+              console.warn(`Failed to delete GCS artifacts for ${id}:`, err);
+            }
+          }
+
+          return { id, deleted: true };
+        } catch (err) {
+          return {
+            id,
+            deleted: false,
+            error: err instanceof Error ? err.message : 'Unknown error',
+          };
+        }
+      })
+    );
 
     const deletedCount = results.filter((r) => r.deleted).length;
     return NextResponse.json({ deletedCount, results });
