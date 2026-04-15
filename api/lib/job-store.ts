@@ -240,28 +240,6 @@ export function getNextQueuedJob(): Job | undefined {
 }
 
 /**
- * Atomically claim the next QUEUED job by transitioning it to RUNNING.
- * Returns the claimed job, or undefined if no QUEUED jobs exist.
- */
-export function claimNextJob(workerId?: string, workerName?: string): Job | undefined {
-  const db = getDb();
-  const now = new Date().toISOString();
-  // SQLite doesn't support UPDATE ... RETURNING with LIMIT in all versions,
-  // so we use a transaction: select then update.
-  const claimTx = db.transaction(() => {
-    const row = db
-      .prepare("SELECT * FROM jobs WHERE status = 'QUEUED' ORDER BY created_at ASC LIMIT 1")
-      .get() as Row | undefined;
-    if (!row) return undefined;
-    db.prepare("UPDATE jobs SET status = 'RUNNING', started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ? AND status = 'QUEUED'")
-      .run(now, workerId ?? null, workerName ?? null, now, row.id);
-    return { ...row, status: 'RUNNING', started_at: now, worker_id: workerId ?? null, worker_name: workerName ?? null, claimed_at: now } as Row;
-  });
-  const row = claimTx();
-  return row ? rowToJob(row) : undefined;
-}
-
-/**
  * Atomically claim the next PENDING simulation across any active (QUEUED or
  * RUNNING) job, ordered oldest-job-first then lowest-sim-index-first. Flips
  * the sim to RUNNING with workerId/workerName/startedAt, and promotes the

@@ -181,14 +181,6 @@ export async function setJobResults(jobId: string, results: JobResults): Promise
   (await sqliteStore()).setJobResults(jobId, results);
 }
 
-export async function claimNextJob(): Promise<Job | null> {
-  if (USE_FIRESTORE) {
-    return firestoreStore.claimNextJob();
-  }
-  const job = (await sqliteStore()).claimNextJob();
-  return job ?? null;
-}
-
 export interface ClaimedSim {
   jobId: string;
   simId: string;

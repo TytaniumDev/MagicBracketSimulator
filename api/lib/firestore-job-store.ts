@@ -487,48 +487,6 @@ export async function claimJob(id: string, workerId?: string, workerName?: strin
 }
 
 /**
- * Atomically claim the next QUEUED job by transitioning it to RUNNING.
- * Returns the claimed job, or null if no QUEUED jobs exist.
- */
-export async function claimNextJob(workerId?: string, workerName?: string): Promise<Job | null> {
-  // Find the oldest queued job
-  const snapshot = await jobsCollection
-    .where('status', '==', 'QUEUED')
-    .orderBy('createdAt', 'asc')
-    .limit(1)
-    .get();
-
-  if (snapshot.empty) return null;
-
-  const doc = snapshot.docs[0];
-  const claimed = await firestore.runTransaction(async (transaction) => {
-    const jobRef = jobsCollection.doc(doc.id);
-    const jobDoc = await transaction.get(jobRef);
-    if (!jobDoc.exists) return null;
-    const data = jobDoc.data()!;
-    if (data.status !== 'QUEUED') return null; // Already claimed by another worker
-
-    const updateData: Record<string, unknown> = {
-      status: 'RUNNING',
-      startedAt: FieldValue.serverTimestamp(),
-      claimedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-    if (workerId) {
-      updateData.workerId = workerId;
-    }
-    if (workerName) {
-      updateData.workerName = workerName;
-    }
-    transaction.update(jobRef, updateData);
-    return doc.id;
-  });
-
-  if (!claimed) return null;
-  return getJob(claimed);
-}
-
-/**
  * Atomically claim the next PENDING simulation across any active (QUEUED or
  * RUNNING) job. Scans up to 10 oldest active jobs for one with a PENDING sim;
  * uses a transaction to flip that sim to RUNNING (and promote the job from
