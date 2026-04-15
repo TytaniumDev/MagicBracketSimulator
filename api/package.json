@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.2.0",
-    "@google-cloud/pubsub": "^5.2.2",
     "@google-cloud/secret-manager": "^5.6.0",
     "@google-cloud/storage": "^7.18.0",
     "@google-cloud/tasks": "^6.2.1",

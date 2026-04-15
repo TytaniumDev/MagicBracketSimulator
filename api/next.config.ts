@@ -37,7 +37,6 @@ const nextConfig: NextConfig = {
   // standalone output so Node's native resolver finds every sidecar JSON.
   serverExternalPackages: [
     "@google-cloud/firestore",
-    "@google-cloud/pubsub",
     "@google-cloud/secret-manager",
     "@google-cloud/storage",
     "@google-cloud/tasks",
