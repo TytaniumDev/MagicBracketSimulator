@@ -432,18 +432,16 @@ async function recoverStaleSimulations(
 }
 
 /**
- * LOCAL-mode recovery. The architecture is different from GCP:
- *   - Workers claim entire jobs (atomic QUEUED → RUNNING in claimNextJob).
- *   - There is no Pub/Sub to republish individual sims to.
- *   - If the worker holding a RUNNING job dies, the job stays RUNNING with
- *     a stale workerId and the remaining PENDING sims never progress.
+ * LOCAL-mode recovery. Parallel to the GCP path above but reaches for
+ * resetJobForRetry when the job itself needs to be flipped back to QUEUED
+ * (e.g. so the UI reflects the reclaim state).
  *
  * Strategy:
  *   1. If the job is RUNNING but its worker is not in the active-workers
  *      list (and at least one other worker IS active), reset the job back
  *      to QUEUED and reset any RUNNING/FAILED sims to PENDING. The next
- *      call to claimNextJob() will pick it up; the worker will then resume
- *      by processing only PENDING sims.
+ *      worker poll to claimNextSim() picks up one of those PENDING sims
+ *      and promotes the job back to RUNNING.
  *   2. If all sims are already terminal (COMPLETED/CANCELLED) but the job
  *      status is still RUNNING, trigger aggregation to finalize it — this
  *      matches the GCP path and is what the stale-sweeper relies on.
