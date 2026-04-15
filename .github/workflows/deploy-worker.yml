@@ -34,10 +34,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set image names
-        run: |
-          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          echo "WORKER_IMAGE=ghcr.io/${REPO_LOWER}/worker" >> $GITHUB_ENV
-          echo "SIMULATION_IMAGE=ghcr.io/${REPO_LOWER}/simulation" >> $GITHUB_ENV
+        run: ./scripts/set-image-names.sh
 
       # Build and push worker image (slim: Node.js + Docker CLI)
       - name: Build and push worker image

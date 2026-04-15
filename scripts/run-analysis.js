@@ -28,7 +28,6 @@ if (!hasUv()) {
 const proc = spawn('uv', ['run', 'uvicorn', 'main:app', '--reload'], {
   cwd: analysisDir,
   stdio: 'inherit',
-  shell: true,
 });
 
 proc.on('exit', (code, signal) => {

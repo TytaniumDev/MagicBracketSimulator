@@ -31,22 +31,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set image name
-        run: |
-          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          echo "SIMULATION_IMAGE=ghcr.io/${REPO_LOWER}/simulation" >> $GITHUB_ENV
+        run: ./scripts/set-image-names.sh
 
       - name: Check if tag already exists
         id: check
         env:
           FORGE_VERSION: ${{ steps.resolve.outputs.version }}
-        run: |
-          if docker manifest inspect "${SIMULATION_IMAGE}:forge-${FORGE_VERSION}" > /dev/null 2>&1; then
-            echo "Tag forge-${FORGE_VERSION} already exists, no rebuild needed"
-            echo "rebuilt=false" >> $GITHUB_OUTPUT
-          else
-            echo "Tag forge-${FORGE_VERSION} not found, rebuild needed"
-            echo "rebuilt=true" >> $GITHUB_OUTPUT
-          fi
+        run: ./scripts/check-docker-tag.sh
 
       - name: Set up QEMU
         if: steps.check.outputs.rebuilt == 'true'
