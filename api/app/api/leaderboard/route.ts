@@ -29,11 +29,21 @@ export interface LeaderboardEntry {
   primaryCommander: string | null;
   mu: number;
   sigma: number;
-  /** Conservative rating: mu - 3*sigma (display value) */
+  /** Bayesian-adjusted win rate as a percentage (prior = 25% over 40 games). */
   rating: number;
   gamesPlayed: number;
   wins: number;
   winRate: number;
+}
+
+// Prior: expected win rate in a 4-player free-for-all is 25%.
+// Weight: equivalent to "40 games of 25%" mixed in — a new deck scores exactly
+// the prior, and the prior's influence fades as real games accumulate.
+const PRIOR_WIN_RATE = 0.25;
+const PRIOR_WEIGHT = 40;
+
+function bayesianScore(wins: number, gamesPlayed: number): number {
+  return ((wins + PRIOR_WEIGHT * PRIOR_WIN_RATE) / (gamesPlayed + PRIOR_WEIGHT)) * 100;
 }
 
 // In-memory cache with 5-minute TTL
@@ -90,7 +100,7 @@ export async function GET(request: NextRequest) {
           primaryCommander: primaryCommander ?? null,
           mu: r.mu,
           sigma: r.sigma,
-          rating: r.mu - 3 * r.sigma,
+          rating: bayesianScore(r.wins, r.gamesPlayed),
           gamesPlayed: r.gamesPlayed,
           wins: r.wins,
           winRate: r.gamesPlayed > 0 ? r.wins / r.gamesPlayed : 0,

@@ -17,17 +17,17 @@ interface LeaderboardEntry {
   winRate: number;
 }
 
-type SortKey = 'rating' | 'mu' | 'winRate' | 'gamesPlayed';
+type SortKey = 'rating' | 'winRate' | 'gamesPlayed';
 
-function ConfidenceBadge({ sigma }: { sigma: number }) {
-  if (sigma < 4) {
+function ConfidenceBadge({ gamesPlayed }: { gamesPlayed: number }) {
+  if (gamesPlayed >= 50) {
     return (
       <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-green-900/60 text-green-300 border border-green-700">
         stable
       </span>
     );
   }
-  if (sigma > 7) {
+  if (gamesPlayed < 10) {
     return (
       <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-yellow-900/60 text-yellow-300 border border-yellow-700">
         unsettled
@@ -134,7 +134,6 @@ export default function Leaderboard() {
     .filter((e) => !preconOnly || e.isPrecon)
     .sort((a, b) => {
       if (sortKey === 'rating') return b.rating - a.rating;
-      if (sortKey === 'mu') return b.mu - a.mu;
       if (sortKey === 'winRate') return b.winRate - a.winRate;
       if (sortKey === 'gamesPlayed') return b.gamesPlayed - a.gamesPlayed;
       return 0;
@@ -144,9 +143,9 @@ export default function Leaderboard() {
     <div className="max-w-5xl mx-auto">
       <h1 className="text-4xl font-bold text-center mb-2">Power Rankings</h1>
       <p className="text-gray-400 text-center mb-6">
-        TrueSkill ratings from Commander simulation results.{' '}
+        Relative power level from Commander simulation results.{' '}
         <span className="text-gray-500 text-sm">
-          Rating = μ − 3σ (conservative estimate, higher is stronger)
+          Rating is a win-rate percentage, smoothed toward 25% (4-player random baseline) until a deck has many games.
         </span>
       </p>
 
@@ -212,8 +211,6 @@ export default function Leaderboard() {
                 <th className="px-3 py-2 text-left text-gray-400 w-10">#</th>
                 <th className="px-3 py-2 text-left text-gray-400">Deck</th>
                 <SortHeader label="Rating" sortKey="rating" currentSort={sortKey} onSort={setSortKey} />
-                <SortHeader label="μ" sortKey="mu" currentSort={sortKey} onSort={setSortKey} />
-                <th className="px-3 py-2 text-right text-gray-400">σ</th>
                 <SortHeader label="Win Rate" sortKey="winRate" currentSort={sortKey} onSort={setSortKey} />
                 <SortHeader label="Games" sortKey="gamesPlayed" currentSort={sortKey} onSort={setSortKey} />
               </tr>
@@ -235,7 +232,7 @@ export default function Leaderboard() {
                               custom
                             </span>
                           )}
-                          <ConfidenceBadge sigma={entry.sigma} />
+                          <ConfidenceBadge gamesPlayed={entry.gamesPlayed} />
                         </div>
                         {entry.setName && (
                           <div className="text-xs text-gray-500 truncate">{entry.setName}</div>
@@ -249,13 +246,7 @@ export default function Leaderboard() {
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono font-semibold text-white">
-                    {entry.rating.toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-300">
-                    {entry.mu.toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gray-400">
-                    {entry.sigma.toFixed(2)}
+                    {entry.rating.toFixed(1)}
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-300">
                     {(entry.winRate * 100).toFixed(1)}%
@@ -269,8 +260,8 @@ export default function Leaderboard() {
       )}
 
       <p className="mt-4 text-xs text-gray-600 text-center">
-        TrueSkill ratings update automatically after each completed simulation job.
-        More games played → lower σ → more reliable Rating.
+        Ratings update automatically after each completed simulation job.
+        More games played → rating moves closer to the deck's true win rate.
       </p>
 
       {/* Coverage System */}
