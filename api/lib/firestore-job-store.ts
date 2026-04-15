@@ -509,14 +509,15 @@ export async function claimNextSim(
     const total = jobData.totalSimCount ?? 0;
     if (total > 0 && completed >= total) continue;
 
-    const pending = await simulationsCollection(jobDoc.id)
-      .where('state', '==', 'PENDING')
+    // Fetch sims ordered by index (single-field index, already present).
+    // Filter to PENDING in memory — per-job sim count is small (~25) so
+    // the overhead is negligible, and this avoids the composite index
+    // (state ASC + index ASC) the combined query would otherwise require.
+    const simsSnap = await simulationsCollection(jobDoc.id)
       .orderBy('index', 'asc')
-      .limit(1)
       .get();
-    if (pending.empty) continue;
-
-    const simDocSnap = pending.docs[0];
+    const simDocSnap = simsSnap.docs.find((d) => d.data()?.state === 'PENDING');
+    if (!simDocSnap) continue;
 
     try {
       const claimed = await firestore.runTransaction(async (tx) => {
