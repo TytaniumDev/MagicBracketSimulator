@@ -261,6 +261,63 @@ export function claimNextJob(workerId?: string, workerName?: string): Job | unde
   return row ? rowToJob(row) : undefined;
 }
 
+/**
+ * Atomically claim the next PENDING simulation across any active (QUEUED or
+ * RUNNING) job, ordered oldest-job-first then lowest-sim-index-first. Flips
+ * the sim to RUNNING with workerId/workerName/startedAt, and promotes the
+ * job to RUNNING if this is its first claim. Returns undefined when no work
+ * is available. Entire operation runs in a single SQLite transaction, so
+ * concurrent workers cannot claim the same sim.
+ */
+export function claimNextSim(
+  workerId: string,
+  workerName: string,
+): { jobId: string; simId: string; simIndex: number } | undefined {
+  const db = getDb();
+  const nowIso = new Date().toISOString();
+
+  const tx = db.transaction(() => {
+    const row = db
+      .prepare(
+        `SELECT s.job_id AS job_id, s.sim_id AS sim_id, s.idx AS idx, j.status AS job_status
+         FROM simulations s
+         JOIN jobs j ON j.id = s.job_id
+         WHERE s.state = 'PENDING' AND j.status IN ('QUEUED', 'RUNNING')
+         ORDER BY j.created_at ASC, s.idx ASC
+         LIMIT 1`,
+      )
+      .get() as { job_id: string; sim_id: string; idx: number; job_status: string } | undefined;
+
+    if (!row) return undefined;
+
+    const simUpdate = db
+      .prepare(
+        `UPDATE simulations
+         SET state = 'RUNNING', worker_id = ?, worker_name = ?, started_at = ?
+         WHERE job_id = ? AND sim_id = ? AND state = 'PENDING'`,
+      )
+      .run(workerId, workerName, nowIso, row.job_id, row.sim_id);
+
+    if (simUpdate.changes === 0) return undefined; // Lost race to another claimer.
+
+    if (row.job_status === 'QUEUED') {
+      db.prepare(
+        `UPDATE jobs
+         SET status = 'RUNNING',
+             started_at = COALESCE(started_at, ?),
+             worker_id = COALESCE(worker_id, ?),
+             worker_name = COALESCE(worker_name, ?),
+             claimed_at = COALESCE(claimed_at, ?)
+         WHERE id = ? AND status = 'QUEUED'`,
+      ).run(nowIso, workerId, workerName, nowIso, row.job_id);
+    }
+
+    return { jobId: row.job_id, simId: row.sim_id, simIndex: row.idx };
+  });
+
+  return tx();
+}
+
 export interface ListJobsOptions {
   limit?: number;
   cursor?: string;

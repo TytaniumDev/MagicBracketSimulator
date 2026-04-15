@@ -528,6 +528,86 @@ export async function claimNextJob(workerId?: string, workerName?: string): Prom
   return getJob(claimed);
 }
 
+/**
+ * Atomically claim the next PENDING simulation across any active (QUEUED or
+ * RUNNING) job. Scans up to 10 oldest active jobs for one with a PENDING sim;
+ * uses a transaction to flip that sim to RUNNING (and promote the job from
+ * QUEUED to RUNNING if needed). Transaction conflicts cause the loop to try
+ * the next candidate, so concurrent workers do not collide on the same sim.
+ */
+export async function claimNextSim(
+  workerId: string,
+  workerName: string,
+): Promise<{ jobId: string; simId: string; simIndex: number } | null> {
+  const candidates = await jobsCollection
+    .where('status', 'in', ['QUEUED', 'RUNNING'])
+    .orderBy('createdAt', 'asc')
+    .limit(10)
+    .get();
+
+  for (const jobDoc of candidates.docs) {
+    const jobData = jobDoc.data();
+    const completed = jobData.completedSimCount ?? 0;
+    const total = jobData.totalSimCount ?? 0;
+    if (total > 0 && completed >= total) continue;
+
+    const pending = await simulationsCollection(jobDoc.id)
+      .where('state', '==', 'PENDING')
+      .orderBy('index', 'asc')
+      .limit(1)
+      .get();
+    if (pending.empty) continue;
+
+    const simDocSnap = pending.docs[0];
+
+    try {
+      const claimed = await firestore.runTransaction(async (tx) => {
+        const freshSim = await tx.get(simDocSnap.ref);
+        if (!freshSim.exists) return null;
+        const simData = freshSim.data();
+        if (simData?.state !== 'PENDING') return null;
+
+        const freshJob = await tx.get(jobDoc.ref);
+        if (!freshJob.exists) return null;
+        const jobStatus = freshJob.data()?.status;
+        if (jobStatus !== 'QUEUED' && jobStatus !== 'RUNNING') return null;
+
+        tx.update(simDocSnap.ref, {
+          state: 'RUNNING',
+          workerId,
+          workerName,
+          startedAt: new Date().toISOString(),
+        });
+
+        if (jobStatus === 'QUEUED') {
+          tx.update(jobDoc.ref, {
+            status: 'RUNNING',
+            startedAt: FieldValue.serverTimestamp(),
+            claimedAt: FieldValue.serverTimestamp(),
+            workerId,
+            workerName,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+
+        return {
+          jobId: jobDoc.id,
+          simId: simDocSnap.id,
+          simIndex: (simData?.index ?? 0) as number,
+        };
+      });
+
+      if (claimed) return claimed;
+      // Lost the race on this sim — try the next candidate job.
+    } catch {
+      // Transaction retry exhaustion — move on, another poll will find it.
+      continue;
+    }
+  }
+
+  return null;
+}
+
 // ─── Per-Simulation Tracking (Subcollection) ────────────────────────────────
 
 /**

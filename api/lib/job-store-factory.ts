@@ -189,6 +189,28 @@ export async function claimNextJob(): Promise<Job | null> {
   return job ?? null;
 }
 
+export interface ClaimedSim {
+  jobId: string;
+  simId: string;
+  simIndex: number;
+}
+
+/**
+ * Atomically claim the next PENDING simulation across all active jobs.
+ * Flips the sim to RUNNING with the caller's workerId, and flips the job
+ * from QUEUED to RUNNING if this is the first claim against it. Returns
+ * null when no work is available.
+ */
+export async function claimNextSim(
+  workerId: string,
+  workerName: string,
+): Promise<ClaimedSim | null> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.claimNextSim(workerId, workerName);
+  }
+  return (await sqliteStore()).claimNextSim(workerId, workerName) ?? null;
+}
+
 export async function cancelJob(id: string): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreStore.cancelJob(id);
