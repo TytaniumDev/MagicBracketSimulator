@@ -12,8 +12,6 @@ env:
     value: magic-bracket-simulator
   - variable: GCS_BUCKET
     value: magic-bracket-simulator-artifacts
-  - variable: PUBSUB_TOPIC
-    value: job-created
   - variable: NODE_ENV
     value: production
   # Cloud Tasks recovery endpoint URL (used by api/lib/cloud-tasks.ts)

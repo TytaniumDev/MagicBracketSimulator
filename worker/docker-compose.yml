@@ -13,19 +13,14 @@ services:
       - .env
 
     environment:
-      # GCP Configuration
+      # GCP project — optional. Controls Sentry environment tag and the
+      # Secret Manager config loader (graceful fallback if SA key absent).
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-magic-bracket-simulator}
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json
 
-      # Pub/Sub
-      - PUBSUB_SUBSCRIPTION=${PUBSUB_SUBSCRIPTION:-job-created-worker}
-      - PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION=${PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION:-worker-report-in-sub}
-
-      # API — WORKER_SECRET comes from Secret Manager at runtime; URL is not secret
+      # API — WORKER_SECRET typically comes from Secret Manager at startup
+      # (or can be set directly here / in .env). URL is not secret.
       - API_URL=${API_URL:-https://api--magic-bracket-simulator.us-central1.hosted.app}
-
-      # Storage
-      - GCS_BUCKET=${GCS_BUCKET:-magic-bracket-simulator-artifacts}
 
       # Worker
       - WORKER_ID=${WORKER_ID:-}
@@ -75,7 +70,10 @@ services:
       # Shared temp directory for deck/log files (worker writes, simulation containers read/write)
       - ${JOBS_DIR:-/tmp/mbs-jobs}:${JOBS_DIR:-/tmp/mbs-jobs}
 
-      # GCP credentials
+      # GCP service account key — only used by the Secret Manager config
+      # loader (to read WORKER_SECRET etc.) and Sentry initialization.
+      # Fine to omit if you set WORKER_SECRET via .env directly; the
+      # Secret Manager call fails gracefully and falls back to env.
       - ${SA_KEY_PATH:-${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}}:/secrets/sa.json:ro
 
     # Resource limits — worker itself is lightweight (Node.js only)
