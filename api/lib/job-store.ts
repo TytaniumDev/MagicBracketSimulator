@@ -564,6 +564,39 @@ export function conditionalUpdateSimulationStatus(
 }
 
 /**
+ * Conditionally reset a simulation to PENDING and clear its runtime fields
+ * (worker_id, worker_name, started_at, completed_at, duration_ms,
+ * error_message). Used by stale-recovery paths so that when another worker
+ * reclaims the sim via claimNextSim, it sees a clean record.
+ *
+ * Only applies the write if the sim's current state is in expectedStates.
+ * Returns true if the write was applied.
+ */
+export function conditionalResetSimulationToPending(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+): boolean {
+  if (expectedStates.length === 0) return false;
+  const db = getDb();
+  const placeholders = expectedStates.map(() => '?').join(', ');
+  const result = db
+    .prepare(
+      `UPDATE simulations
+       SET state = 'PENDING',
+           worker_id = NULL,
+           worker_name = NULL,
+           started_at = NULL,
+           completed_at = NULL,
+           duration_ms = NULL,
+           error_message = NULL
+       WHERE job_id = ? AND sim_id = ? AND state IN (${placeholders})`,
+    )
+    .run(jobId, simId, ...expectedStates);
+  return result.changes > 0;
+}
+
+/**
  * Get a single simulation's status.
  */
 export function getSimulationStatus(jobId: string, simId: string): SimulationStatus | null {

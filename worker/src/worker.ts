@@ -818,13 +818,13 @@ async function requestCoverageJob(): Promise<boolean> {
  * notify or the idle timeout wakes us.
  */
 async function pollForSims(): Promise<void> {
-  const IDLE_POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
+  const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
 
-  console.log(`Polling ${getApiUrl()}/api/jobs/claim-sim (capacity=${localCapacity}, idle=${IDLE_POLL_INTERVAL_MS}ms)`);
+  console.log(`Polling ${getApiUrl()}/api/jobs/claim-sim (capacity=${localCapacity}, idle=${POLL_INTERVAL_MS}ms)`);
 
   while (!isShuttingDown) {
     if (isDraining) {
-      await waitForNotifyOrTimeout(IDLE_POLL_INTERVAL_MS);
+      await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
       continue;
     }
 
@@ -857,7 +857,7 @@ async function pollForSims(): Promise<void> {
       simSemaphore!.release();
       const coverageCreated = await requestCoverageJob();
       if (coverageCreated) continue; // Try to claim the coverage sim immediately.
-      await waitForNotifyOrTimeout(IDLE_POLL_INTERVAL_MS);
+      await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
       continue;
     }
 

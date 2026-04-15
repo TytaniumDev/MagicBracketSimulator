@@ -301,6 +301,26 @@ export async function conditionalUpdateSimulationStatus(
 }
 
 /**
+ * Conditionally reset a simulation to PENDING AND clear the runtime fields
+ * (workerId, workerName, startedAt, completedAt, durationMs, errorMessage)
+ * in one atomic write. Used by the stale-recovery paths so a sim reclaimed
+ * by the next poll starts from a clean slate — no leftover worker/timing
+ * fields from the previous attempt.
+ *
+ * Returns true if the write applied (sim was in one of expectedStates).
+ */
+export async function conditionalResetSimulationToPending(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.conditionalResetSimulationToPending(jobId, simId, expectedStates);
+  }
+  return (await sqliteStore()).conditionalResetSimulationToPending(jobId, simId, expectedStates);
+}
+
+/**
  * Detect and recover a stale RUNNING job.
  *
  * QUEUED jobs need no recovery: the worker's polling loop picks them up on
@@ -362,9 +382,7 @@ async function recoverStaleSimulations(
     if (sim.state === 'RUNNING' && sim.startedAt) {
       const runningForMs = now - new Date(sim.startedAt).getTime();
       if (runningForMs > STALE_RUNNING_THRESHOLD_MS) {
-        const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
-          state: 'PENDING',
-        });
+        const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
         if (updated) {
           recoveryLog.info('Sim RUNNING too long, reset to PENDING', { jobId, simId: sim.simId, runningMin: Math.round(runningForMs / 60000) });
           recovered = true;
@@ -375,9 +393,7 @@ async function recoverStaleSimulations(
 
     // Case 2: RUNNING sim whose worker is dead.
     if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
-      const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
-        state: 'PENDING',
-      });
+      const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
       if (updated) {
         recoveryLog.info('Sim worker is dead, reset to PENDING', { jobId, simId: sim.simId, deadWorker: sim.workerId });
         recovered = true;
@@ -387,9 +403,7 @@ async function recoverStaleSimulations(
 
     // Case 3: FAILED sim — retry if any worker is online to pick it up.
     if (sim.state === 'FAILED' && activeWorkers.length > 0) {
-      const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['FAILED'], {
-        state: 'PENDING',
-      });
+      const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['FAILED']);
       if (updated) {
         recoveryLog.info('Sim FAILED, reset to PENDING for retry', { jobId, simId: sim.simId });
         recovered = true;

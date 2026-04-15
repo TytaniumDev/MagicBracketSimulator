@@ -702,6 +702,44 @@ export async function conditionalUpdateSimulationStatus(
 }
 
 /**
+ * Conditionally reset a simulation to PENDING and clear its runtime fields
+ * (workerId, workerName, startedAt, completedAt, durationMs, errorMessage).
+ * Used by stale-recovery paths so that when another worker reclaims the sim
+ * via claimNextSim, it sees a clean record.
+ *
+ * Only applies the write if the sim's current state is in expectedStates.
+ * Returns true if the write was applied.
+ */
+export async function conditionalResetSimulationToPending(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+): Promise<boolean> {
+  if (expectedStates.length === 0) return false;
+  const simRef = simulationsCollection(jobId).doc(simId);
+
+  return firestore.runTransaction(async (transaction) => {
+    const doc = await transaction.get(simRef);
+    if (!doc.exists) return false;
+
+    const currentState = doc.data()!.state as SimulationState;
+    if (!expectedStates.includes(currentState)) return false;
+
+    transaction.update(simRef, {
+      state: 'PENDING',
+      workerId: FieldValue.delete(),
+      workerName: FieldValue.delete(),
+      startedAt: FieldValue.delete(),
+      completedAt: FieldValue.delete(),
+      durationMs: FieldValue.delete(),
+      errorMessage: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+}
+
+/**
  * Get a single simulation's status.
  */
 export async function getSimulationStatus(
