@@ -487,45 +487,83 @@ export async function claimJob(id: string, workerId?: string, workerName?: strin
 }
 
 /**
- * Atomically claim the next QUEUED job by transitioning it to RUNNING.
- * Returns the claimed job, or null if no QUEUED jobs exist.
+ * Atomically claim the next PENDING simulation across any active (QUEUED or
+ * RUNNING) job. Scans up to 10 oldest active jobs for one with a PENDING sim;
+ * uses a transaction to flip that sim to RUNNING (and promote the job from
+ * QUEUED to RUNNING if needed). Transaction conflicts cause the loop to try
+ * the next candidate, so concurrent workers do not collide on the same sim.
  */
-export async function claimNextJob(workerId?: string, workerName?: string): Promise<Job | null> {
-  // Find the oldest queued job
-  const snapshot = await jobsCollection
-    .where('status', '==', 'QUEUED')
+export async function claimNextSim(
+  workerId: string,
+  workerName: string,
+): Promise<{ jobId: string; simId: string; simIndex: number } | null> {
+  const candidates = await jobsCollection
+    .where('status', 'in', ['QUEUED', 'RUNNING'])
     .orderBy('createdAt', 'asc')
-    .limit(1)
+    .limit(10)
     .get();
 
-  if (snapshot.empty) return null;
+  for (const jobDoc of candidates.docs) {
+    const jobData = jobDoc.data();
+    const completed = jobData.completedSimCount ?? 0;
+    const total = jobData.totalSimCount ?? 0;
+    if (total > 0 && completed >= total) continue;
 
-  const doc = snapshot.docs[0];
-  const claimed = await firestore.runTransaction(async (transaction) => {
-    const jobRef = jobsCollection.doc(doc.id);
-    const jobDoc = await transaction.get(jobRef);
-    if (!jobDoc.exists) return null;
-    const data = jobDoc.data()!;
-    if (data.status !== 'QUEUED') return null; // Already claimed by another worker
+    const pending = await simulationsCollection(jobDoc.id)
+      .where('state', '==', 'PENDING')
+      .orderBy('index', 'asc')
+      .limit(1)
+      .get();
+    if (pending.empty) continue;
 
-    const updateData: Record<string, unknown> = {
-      status: 'RUNNING',
-      startedAt: FieldValue.serverTimestamp(),
-      claimedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-    if (workerId) {
-      updateData.workerId = workerId;
+    const simDocSnap = pending.docs[0];
+
+    try {
+      const claimed = await firestore.runTransaction(async (tx) => {
+        const freshSim = await tx.get(simDocSnap.ref);
+        if (!freshSim.exists) return null;
+        const simData = freshSim.data();
+        if (simData?.state !== 'PENDING') return null;
+
+        const freshJob = await tx.get(jobDoc.ref);
+        if (!freshJob.exists) return null;
+        const jobStatus = freshJob.data()?.status;
+        if (jobStatus !== 'QUEUED' && jobStatus !== 'RUNNING') return null;
+
+        tx.update(simDocSnap.ref, {
+          state: 'RUNNING',
+          workerId,
+          workerName,
+          startedAt: new Date().toISOString(),
+        });
+
+        if (jobStatus === 'QUEUED') {
+          tx.update(jobDoc.ref, {
+            status: 'RUNNING',
+            startedAt: FieldValue.serverTimestamp(),
+            claimedAt: FieldValue.serverTimestamp(),
+            workerId,
+            workerName,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+
+        return {
+          jobId: jobDoc.id,
+          simId: simDocSnap.id,
+          simIndex: (simData?.index ?? 0) as number,
+        };
+      });
+
+      if (claimed) return claimed;
+      // Lost the race on this sim — try the next candidate job.
+    } catch {
+      // Transaction retry exhaustion — move on, another poll will find it.
+      continue;
     }
-    if (workerName) {
-      updateData.workerName = workerName;
-    }
-    transaction.update(jobRef, updateData);
-    return doc.id;
-  });
+  }
 
-  if (!claimed) return null;
-  return getJob(claimed);
+  return null;
 }
 
 // ─── Per-Simulation Tracking (Subcollection) ────────────────────────────────
@@ -659,6 +697,44 @@ export async function conditionalUpdateSimulationStatus(
     if (update.winningTurns !== undefined) updateData.winningTurns = update.winningTurns;
 
     transaction.update(simRef, updateData);
+    return true;
+  });
+}
+
+/**
+ * Conditionally reset a simulation to PENDING and clear its runtime fields
+ * (workerId, workerName, startedAt, completedAt, durationMs, errorMessage).
+ * Used by stale-recovery paths so that when another worker reclaims the sim
+ * via claimNextSim, it sees a clean record.
+ *
+ * Only applies the write if the sim's current state is in expectedStates.
+ * Returns true if the write was applied.
+ */
+export async function conditionalResetSimulationToPending(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+): Promise<boolean> {
+  if (expectedStates.length === 0) return false;
+  const simRef = simulationsCollection(jobId).doc(simId);
+
+  return firestore.runTransaction(async (transaction) => {
+    const doc = await transaction.get(simRef);
+    if (!doc.exists) return false;
+
+    const currentState = doc.data()!.state as SimulationState;
+    if (!expectedStates.includes(currentState)) return false;
+
+    transaction.update(simRef, {
+      state: 'PENDING',
+      workerId: FieldValue.delete(),
+      workerName: FieldValue.delete(),
+      startedAt: FieldValue.delete(),
+      completedAt: FieldValue.delete(),
+      durationMs: FieldValue.delete(),
+      errorMessage: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
     return true;
   });
 }

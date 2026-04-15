@@ -77,17 +77,11 @@ jobs:
         env:
           GOOGLE_CLOUD_PROJECT: ${{ steps.project.outputs.project_id }}
           SECRET_API_URL: ${{ env.API_URL }}
-          SECRET_GCS_BUCKET: ${{ env.GCS_BUCKET }}
-          SECRET_PUBSUB_SUBSCRIPTION: ${{ env.PUBSUB_SUBSCRIPTION }}
-          SECRET_PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: ${{ env.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION }}
           SECRET_WORKER_SECRET: ${{ env.WORKER_SECRET }}
         run: |
           node scripts/populate-worker-secret.js \
             --defaults \
             --api-url="$SECRET_API_URL" \
-            --gcs-bucket="$SECRET_GCS_BUCKET" \
-            --pubsub-subscription="$SECRET_PUBSUB_SUBSCRIPTION" \
-            --pubsub-worker-report-in-subscription="$SECRET_PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION" \
             --worker-secret="$SECRET_WORKER_SECRET"
 
       - name: Populate worker-host-config in Secret Manager

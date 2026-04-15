@@ -21,7 +21,6 @@ import * as crypto from 'crypto';
 
 export interface HealthStatus {
   ok: boolean;
-  pubsub?: { connected: boolean; lastError?: string };
 }
 
 export interface WorkerApiHandlers {

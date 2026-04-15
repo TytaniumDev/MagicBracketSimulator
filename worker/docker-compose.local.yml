@@ -7,9 +7,7 @@ services:
     environment:
       - API_URL=http://host.docker.internal:3000
       - WORKER_API_URL=http://host.docker.internal:9090
-      # Override GCP defaults from base compose to force local/polling mode
+      # Force local mode: no Secret Manager / no Sentry prod tagging
       - GOOGLE_CLOUD_PROJECT=
-      - PUBSUB_SUBSCRIPTION=
-      - PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION=
       # Worker auth — must match WORKER_SECRET in api/.env
       - WORKER_SECRET=${WORKER_SECRET:-local-dev-secret}

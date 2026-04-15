@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, GAMES_PER_CONTAINER, JobSource } from './types';
+import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, JobSource } from './types';
 import { isTerminalSimState } from '@shared/types/state-machine';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -181,12 +181,26 @@ export async function setJobResults(jobId: string, results: JobResults): Promise
   (await sqliteStore()).setJobResults(jobId, results);
 }
 
-export async function claimNextJob(): Promise<Job | null> {
+export interface ClaimedSim {
+  jobId: string;
+  simId: string;
+  simIndex: number;
+}
+
+/**
+ * Atomically claim the next PENDING simulation across all active jobs.
+ * Flips the sim to RUNNING with the caller's workerId, and flips the job
+ * from QUEUED to RUNNING if this is the first claim against it. Returns
+ * null when no work is available.
+ */
+export async function claimNextSim(
+  workerId: string,
+  workerName: string,
+): Promise<ClaimedSim | null> {
   if (USE_FIRESTORE) {
-    return firestoreStore.claimNextJob();
+    return firestoreStore.claimNextSim(workerId, workerName);
   }
-  const job = (await sqliteStore()).claimNextJob();
-  return job ?? null;
+  return (await sqliteStore()).claimNextSim(workerId, workerName) ?? null;
 }
 
 export async function cancelJob(id: string): Promise<boolean> {
@@ -287,11 +301,36 @@ export async function conditionalUpdateSimulationStatus(
 }
 
 /**
- * Detect and recover a stale RUNNING/QUEUED job.
+ * Conditionally reset a simulation to PENDING AND clear the runtime fields
+ * (workerId, workerName, startedAt, completedAt, durationMs, errorMessage)
+ * in one atomic write. Used by the stale-recovery paths so a sim reclaimed
+ * by the next poll starts from a clean slate — no leftover worker/timing
+ * fields from the previous attempt.
  *
- * Uses per-simulation recovery: individually retries stuck or failed sims
- * rather than resetting the entire job. Sims are retried indefinitely until
- * they succeed (or the job is cancelled).
+ * Returns true if the write applied (sim was in one of expectedStates).
+ */
+export async function conditionalResetSimulationToPending(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.conditionalResetSimulationToPending(jobId, simId, expectedStates);
+  }
+  return (await sqliteStore()).conditionalResetSimulationToPending(jobId, simId, expectedStates);
+}
+
+/**
+ * Detect and recover a stale RUNNING job.
+ *
+ * QUEUED jobs need no recovery: the worker's polling loop picks them up on
+ * the next /api/jobs/claim-sim call. If no worker is online, the job stays
+ * QUEUED and the stale-sweeper eventually hard-fails it once it exceeds
+ * QUEUED_JOB_HARD_FAIL_THRESHOLD_MS.
+ *
+ * RUNNING jobs use per-simulation recovery: each stuck or dead-worker sim is
+ * individually reset to PENDING so another poll can reclaim it. FAILED sims
+ * auto-retry the same way.
  *
  * Returns true if any recovery action was taken.
  */
@@ -299,37 +338,28 @@ export async function recoverStaleJob(jobId: string): Promise<boolean> {
   const job = await getJob(jobId);
   if (!job) return false;
 
-  // Handle stuck QUEUED jobs: re-publish if stuck for >2 minutes
-  if (job.status === 'QUEUED') {
-    return recoverStaleQueuedJob(jobId, job);
-  }
-
   if (job.status !== 'RUNNING') return false;
 
-  // Always use per-simulation recovery, regardless of primary worker health.
-  // Multiple workers can process sims for the same job via Pub/Sub.
   const activeWorkers = await workerStore.getActiveWorkers(120_000);
   return recoverStaleSimulations(jobId, job, activeWorkers);
 }
 
 // ─── Per-Simulation Stale Detection ──────────────────────────────────────────
 
-const STALE_PENDING_THRESHOLD_MS = parseInt(process.env.STALE_PENDING_THRESHOLD_MS || '300000', 10);  // Default: 5 min
 // Should exceed CONTAINER_TIMEOUT_MS (default 2h) to avoid false positives
 const STALE_RUNNING_THRESHOLD_MS = parseInt(process.env.STALE_RUNNING_THRESHOLD_MS || '9000000', 10);  // Default: 2.5 hours
-const REQUEUE_COOLDOWN_MS = parseInt(process.env.REQUEUE_COOLDOWN_MS || '120000', 10);
 
 /**
  * Detect and recover individual stuck simulations within a RUNNING job.
  *
- * Handles four cases:
- * 1. PENDING sims stuck >5 min: Pub/Sub message was lost → republish
- * 2. RUNNING sims stuck >2.5 hrs: container hung → mark FAILED (will be retried next scan)
- * 3. RUNNING sims whose worker is dead: worker crashed → mark FAILED (will be retried next scan)
- * 4. FAILED sims: reset to PENDING + republish for automatic retry
+ * Handles three cases, all resolved by resetting the sim to PENDING so a
+ * polling worker will claim it on its next call:
+ * 1. RUNNING sims stuck >2.5 hrs  — container hung.
+ * 2. RUNNING sims under a dead worker — crashed mid-sim.
+ * 3. FAILED sims — auto-retry.
  *
- * Uses conditional writes (Firestore transactions) to prevent race conditions
- * where a worker completes a sim between the read and the recovery write.
+ * Uses conditional writes so a worker completing a sim at the last moment
+ * wins the race (the reset becomes a no-op).
  */
 async function recoverStaleSimulations(
   jobId: string,
@@ -347,93 +377,47 @@ async function recoverStaleSimulations(
   const activeWorkerIds = new Set(activeWorkers.map((w) => w.workerId));
   let recovered = false;
 
-  const simsToRepublish: SimulationStatus[] = [];
-
   for (const sim of sims) {
-    // Case 1: PENDING sim stuck for >5 minutes — republish its Pub/Sub message
-    if (sim.state === 'PENDING') {
-      const jobStartedMs = job.startedAt ? job.startedAt.getTime() : job.createdAt.getTime();
-      const pendingForMs = now - jobStartedMs;
-      if (pendingForMs > STALE_PENDING_THRESHOLD_MS) {
-        recoveryLog.info('Sim stuck PENDING, republishing', { jobId, simId: sim.simId, pendingSec: Math.round(pendingForMs / 1000) });
-        simsToRepublish.push(sim);
-        recovered = true;
-      }
-    }
-
-    // Case 2: RUNNING sim stuck for >2.5 hours — container timed out
+    // Case 1: RUNNING sim stuck for >2.5 hours — container hung.
     if (sim.state === 'RUNNING' && sim.startedAt) {
       const runningForMs = now - new Date(sim.startedAt).getTime();
       if (runningForMs > STALE_RUNNING_THRESHOLD_MS) {
-        recoveryLog.info('Sim stuck RUNNING, marking FAILED for retry', { jobId, simId: sim.simId, runningMin: Math.round(runningForMs / 60000) });
-        const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
-          state: 'FAILED',
-          errorMessage: `Simulation timed out after ${Math.round(runningForMs / 60000)} minutes`,
-          completedAt: new Date().toISOString(),
-        });
+        const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
         if (updated) {
-          simsToRepublish.push(sim);
+          recoveryLog.info('Sim RUNNING too long, reset to PENDING', { jobId, simId: sim.simId, runningMin: Math.round(runningForMs / 60000) });
           recovered = true;
         }
+        continue;
       }
     }
 
-    // Case 3: RUNNING sim whose specific worker is dead
+    // Case 2: RUNNING sim whose worker is dead.
     if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
-      recoveryLog.info('Sim worker is dead, marking FAILED for retry', { jobId, simId: sim.simId, workerId: sim.workerId });
-      const updated = await conditionalUpdateSimulationStatus(jobId, sim.simId, ['RUNNING'], {
-        state: 'FAILED',
-        errorMessage: 'Worker lost connection',
-        completedAt: new Date().toISOString(),
-      });
+      const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
       if (updated) {
-        simsToRepublish.push(sim);
+        recoveryLog.info('Sim worker is dead, reset to PENDING', { jobId, simId: sim.simId, deadWorker: sim.workerId });
+        recovered = true;
+      }
+      continue;
+    }
+
+    // Case 3: FAILED sim — retry if any worker is online to pick it up.
+    if (sim.state === 'FAILED' && activeWorkers.length > 0) {
+      const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['FAILED']);
+      if (updated) {
+        recoveryLog.info('Sim FAILED, reset to PENDING for retry', { jobId, simId: sim.simId });
         recovered = true;
       }
     }
-
-    // Case 4: FAILED sim — retry by resetting to PENDING + republish
-    if (sim.state === 'FAILED' && activeWorkers.length > 0) {
-      recoveryLog.info('Sim is FAILED, retrying', { jobId, simId: sim.simId });
-      simsToRepublish.push(sim);
-      recovered = true;
-    }
   }
 
-  // Republish messages for recovered sims so they can be retried
-  if (simsToRepublish.length > 0) {
-    try {
-      const { pubsub: pubsubClient, TOPIC_NAME } = await import('./pubsub');
-      const topic = pubsubClient.topic(TOPIC_NAME);
-      const promises = simsToRepublish.map((sim) => {
-        const msg = {
-          type: 'simulation' as const,
-          jobId,
-          simId: sim.simId,
-          simIndex: sim.index,
-          totalSims: job.simulations,
-        };
-        // Reset to PENDING so workers can pick them up (conditional to prevent races)
-        return conditionalUpdateSimulationStatus(jobId, sim.simId, ['FAILED', 'PENDING'], { state: 'PENDING' })
-          .then((updated) => {
-            if (updated) return topic.publishMessage({ json: msg });
-          });
-      });
-      await Promise.all(promises);
-      recoveryLog.info('Republished simulation messages', { jobId, count: simsToRepublish.length });
-    } catch (err) {
-      recoveryLog.warn('Failed to republish sims', { jobId, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  // Only aggregate when all sims are COMPLETED or CANCELLED (not FAILED — those will be retried)
+  // Only aggregate when all sims are terminal. FAILED sims above are reset
+  // to PENDING and will be retried; they're not terminal here.
   if (!recovered) {
     const allDone = sims.every(
       (s) => s.state === 'COMPLETED' || s.state === 'CANCELLED'
     );
     if (allDone) {
-      // Re-trigger aggregation if job is stuck (all sims done but still RUNNING)
-      // or if a previous aggregation failed (needsAggregation flag set)
       const needsRetrigger = job.status === 'RUNNING' || job.needsAggregation === true;
       if (needsRetrigger) {
         aggregateJobResults(jobId).catch((err) => {
@@ -448,18 +432,16 @@ async function recoverStaleSimulations(
 }
 
 /**
- * LOCAL-mode recovery. The architecture is different from GCP:
- *   - Workers claim entire jobs (atomic QUEUED → RUNNING in claimNextJob).
- *   - There is no Pub/Sub to republish individual sims to.
- *   - If the worker holding a RUNNING job dies, the job stays RUNNING with
- *     a stale workerId and the remaining PENDING sims never progress.
+ * LOCAL-mode recovery. Parallel to the GCP path above but reaches for
+ * resetJobForRetry when the job itself needs to be flipped back to QUEUED
+ * (e.g. so the UI reflects the reclaim state).
  *
  * Strategy:
  *   1. If the job is RUNNING but its worker is not in the active-workers
  *      list (and at least one other worker IS active), reset the job back
  *      to QUEUED and reset any RUNNING/FAILED sims to PENDING. The next
- *      call to claimNextJob() will pick it up; the worker will then resume
- *      by processing only PENDING sims.
+ *      worker poll to claimNextSim() picks up one of those PENDING sims
+ *      and promotes the job back to RUNNING.
  *   2. If all sims are already terminal (COMPLETED/CANCELLED) but the job
  *      status is still RUNNING, trigger aggregation to finalize it — this
  *      matches the GCP path and is what the stale-sweeper relies on.
@@ -527,68 +509,6 @@ async function recoverStaleSimulationsLocal(
   });
 
   return jobReset || resetCount > 0;
-}
-
-/**
- * Re-publish a QUEUED job that may have lost its Pub/Sub message.
- *
- * If the job has been QUEUED for >2 minutes, re-publish to Pub/Sub so
- * any online worker can pick it up. Uses a per-job cooldown to avoid
- * spamming Pub/Sub with duplicate messages.
- */
-const requeueCooldowns = new Map<string, number>();
-
-async function recoverStaleQueuedJob(jobId: string, job: Job): Promise<boolean> {
-  if (!USE_FIRESTORE) return false; // Polling mode picks up QUEUED jobs automatically
-
-  const queuedForMs = Date.now() - job.createdAt.getTime();
-  if (queuedForMs < REQUEUE_COOLDOWN_MS) return false; // Not stuck yet
-
-  // Cooldown: don't re-publish more often than every 2 minutes per job
-  const lastRequeue = requeueCooldowns.get(jobId) ?? 0;
-  if (Date.now() - lastRequeue < REQUEUE_COOLDOWN_MS) return false;
-
-  // Only re-publish if there's at least one active worker to receive it
-  const activeWorkers = await workerStore.getActiveWorkers();
-  if (activeWorkers.length === 0) return false;
-
-  recoveryLog.info('Job stuck in QUEUED, re-publishing to Pub/Sub', { jobId, queuedSec: Math.round(queuedForMs / 1000) });
-  requeueCooldowns.set(jobId, Date.now());
-
-  try {
-    // Re-publish per-simulation messages for any PENDING simulations
-    const sims = await getSimulationStatuses(jobId);
-    if (sims.length === 0) {
-      // Sims not yet initialized — initialize and publish all
-      const containerCount = Math.ceil(job.simulations / GAMES_PER_CONTAINER);
-      await initializeSimulations(jobId, containerCount);
-      const { publishSimulationTasks } = await import('./pubsub');
-      await publishSimulationTasks(jobId, containerCount);
-    } else {
-      // Re-publish only for PENDING sims
-      const pendingSims = sims.filter(s => s.state === 'PENDING');
-      if (pendingSims.length > 0) {
-        const { pubsub, TOPIC_NAME } = await import('./pubsub');
-        const topic = pubsub.topic(TOPIC_NAME);
-        const promises = pendingSims.map(s => {
-          const msg = {
-            type: 'simulation' as const,
-            jobId,
-            simId: s.simId,
-            simIndex: s.index,
-            totalSims: job.simulations,
-          };
-          return topic.publishMessage({ json: msg });
-        });
-        await Promise.all(promises);
-        recoveryLog.info('Re-published pending simulation messages', { jobId, count: pendingSims.length });
-      }
-    }
-    return true;
-  } catch (err) {
-    recoveryLog.warn('Failed to re-publish queued job', { jobId, error: err instanceof Error ? err.message : String(err) });
-    return false;
-  }
 }
 
 /**

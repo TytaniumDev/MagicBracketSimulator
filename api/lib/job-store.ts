@@ -240,25 +240,60 @@ export function getNextQueuedJob(): Job | undefined {
 }
 
 /**
- * Atomically claim the next QUEUED job by transitioning it to RUNNING.
- * Returns the claimed job, or undefined if no QUEUED jobs exist.
+ * Atomically claim the next PENDING simulation across any active (QUEUED or
+ * RUNNING) job, ordered oldest-job-first then lowest-sim-index-first. Flips
+ * the sim to RUNNING with workerId/workerName/startedAt, and promotes the
+ * job to RUNNING if this is its first claim. Returns undefined when no work
+ * is available. Entire operation runs in a single SQLite transaction, so
+ * concurrent workers cannot claim the same sim.
  */
-export function claimNextJob(workerId?: string, workerName?: string): Job | undefined {
+export function claimNextSim(
+  workerId: string,
+  workerName: string,
+): { jobId: string; simId: string; simIndex: number } | undefined {
   const db = getDb();
-  const now = new Date().toISOString();
-  // SQLite doesn't support UPDATE ... RETURNING with LIMIT in all versions,
-  // so we use a transaction: select then update.
-  const claimTx = db.transaction(() => {
+  const nowIso = new Date().toISOString();
+
+  const tx = db.transaction(() => {
     const row = db
-      .prepare("SELECT * FROM jobs WHERE status = 'QUEUED' ORDER BY created_at ASC LIMIT 1")
-      .get() as Row | undefined;
+      .prepare(
+        `SELECT s.job_id AS job_id, s.sim_id AS sim_id, s.idx AS idx, j.status AS job_status
+         FROM simulations s
+         JOIN jobs j ON j.id = s.job_id
+         WHERE s.state = 'PENDING' AND j.status IN ('QUEUED', 'RUNNING')
+         ORDER BY j.created_at ASC, s.idx ASC
+         LIMIT 1`,
+      )
+      .get() as { job_id: string; sim_id: string; idx: number; job_status: string } | undefined;
+
     if (!row) return undefined;
-    db.prepare("UPDATE jobs SET status = 'RUNNING', started_at = ?, worker_id = ?, worker_name = ?, claimed_at = ? WHERE id = ? AND status = 'QUEUED'")
-      .run(now, workerId ?? null, workerName ?? null, now, row.id);
-    return { ...row, status: 'RUNNING', started_at: now, worker_id: workerId ?? null, worker_name: workerName ?? null, claimed_at: now } as Row;
+
+    const simUpdate = db
+      .prepare(
+        `UPDATE simulations
+         SET state = 'RUNNING', worker_id = ?, worker_name = ?, started_at = ?
+         WHERE job_id = ? AND sim_id = ? AND state = 'PENDING'`,
+      )
+      .run(workerId, workerName, nowIso, row.job_id, row.sim_id);
+
+    if (simUpdate.changes === 0) return undefined; // Lost race to another claimer.
+
+    if (row.job_status === 'QUEUED') {
+      db.prepare(
+        `UPDATE jobs
+         SET status = 'RUNNING',
+             started_at = COALESCE(started_at, ?),
+             worker_id = COALESCE(worker_id, ?),
+             worker_name = COALESCE(worker_name, ?),
+             claimed_at = COALESCE(claimed_at, ?)
+         WHERE id = ? AND status = 'QUEUED'`,
+      ).run(nowIso, workerId, workerName, nowIso, row.job_id);
+    }
+
+    return { jobId: row.job_id, simId: row.sim_id, simIndex: row.idx };
   });
-  const row = claimTx();
-  return row ? rowToJob(row) : undefined;
+
+  return tx();
 }
 
 export interface ListJobsOptions {
@@ -525,6 +560,39 @@ export function conditionalUpdateSimulationStatus(
   const result = db
     .prepare(`UPDATE simulations SET ${sets.join(', ')} WHERE job_id = ? AND sim_id = ? AND state IN (${placeholders})`)
     .run(...values);
+  return result.changes > 0;
+}
+
+/**
+ * Conditionally reset a simulation to PENDING and clear its runtime fields
+ * (worker_id, worker_name, started_at, completed_at, duration_ms,
+ * error_message). Used by stale-recovery paths so that when another worker
+ * reclaims the sim via claimNextSim, it sees a clean record.
+ *
+ * Only applies the write if the sim's current state is in expectedStates.
+ * Returns true if the write was applied.
+ */
+export function conditionalResetSimulationToPending(
+  jobId: string,
+  simId: string,
+  expectedStates: SimulationState[],
+): boolean {
+  if (expectedStates.length === 0) return false;
+  const db = getDb();
+  const placeholders = expectedStates.map(() => '?').join(', ');
+  const result = db
+    .prepare(
+      `UPDATE simulations
+       SET state = 'PENDING',
+           worker_id = NULL,
+           worker_name = NULL,
+           started_at = NULL,
+           completed_at = NULL,
+           duration_ms = NULL,
+           error_message = NULL
+       WHERE job_id = ? AND sim_id = ? AND state IN (${placeholders})`,
+    )
+    .run(jobId, simId, ...expectedStates);
   return result.changes > 0;
 }
 

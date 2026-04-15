@@ -4,9 +4,7 @@ import { getCoverageStore } from '@/lib/coverage-store-factory';
 import { generateNextPod, hasActiveCoverageJob } from '@/lib/coverage-service';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import * as jobStore from '@/lib/job-store-factory';
-import { isGcpMode } from '@/lib/job-store-factory';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
-import { publishSimulationTasks } from '@/lib/pubsub';
 import { pushToAllWorkers } from '@/lib/worker-push';
 import { errorResponse } from '@/lib/api-response';
 
@@ -54,15 +52,10 @@ export async function POST(request: NextRequest) {
     const containerCount = Math.ceil(COVERAGE_SIMULATIONS / GAMES_PER_CONTAINER);
     await jobStore.initializeSimulations(job.id, containerCount);
 
-    if (isGcpMode()) {
-      await publishSimulationTasks(job.id, containerCount).catch((err) =>
-        console.error(`[Coverage] Failed to publish tasks for job ${job.id}:`, err)
-      );
-    } else {
-      pushToAllWorkers('/notify', {}).catch((err) =>
-        console.warn('[Coverage] Worker notify failed:', err instanceof Error ? err.message : err)
-      );
-    }
+    // Workers pick up sims via /api/jobs/claim-sim; push-notify for low-latency wake-up.
+    pushToAllWorkers('/notify', {}).catch((err) =>
+      console.warn('[Coverage] Worker notify failed:', err instanceof Error ? err.message : err),
+    );
 
     const deckNames = job.decks.map((d) => d.name);
     console.log(`[Coverage] Created job ${job.id}: ${deckNames.join(' vs ')}`);

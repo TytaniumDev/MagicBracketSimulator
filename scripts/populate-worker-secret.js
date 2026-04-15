@@ -49,8 +49,6 @@ const SECRET_NAME = 'simulation-worker-config';
 
 const CONSOLE_BASE = 'https://console.cloud.google.com';
 const RUN_URL = `${CONSOLE_BASE}/run?project=`;
-const STORAGE_URL = `${CONSOLE_BASE}/storage/browser?project=`;
-const PUBSUB_URL = `${CONSOLE_BASE}/cloudpubsub/subscription/list?project=`;
 const SECRETS_URL = `${CONSOLE_BASE}/security/secret-manager?project=`;
 const ADC_DOCS = 'https://cloud.google.com/docs/authentication/application-default-credentials';
 
@@ -107,35 +105,24 @@ You need:
   // Default values
   const defaults = {
     API_URL: 'https://api--magic-bracket-simulator.us-central1.hosted.app',
-    GCS_BUCKET: `${PROJECT_ID}-artifacts`,
-    PUBSUB_SUBSCRIPTION: 'job-created-worker',
-    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: 'worker-report-in-worker',
     WORKER_SECRET: '',
   };
 
-  let API_URL, GCS_BUCKET, PUBSUB_SUBSCRIPTION, PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION, WORKER_SECRET;
+  let API_URL, WORKER_SECRET;
 
   if (USE_DEFAULTS) {
     // Non-interactive mode: use defaults with CLI overrides
     API_URL = getArgValue('api-url') || defaults.API_URL;
-    GCS_BUCKET = getArgValue('gcs-bucket') || defaults.GCS_BUCKET;
-    PUBSUB_SUBSCRIPTION = getArgValue('pubsub-subscription') || defaults.PUBSUB_SUBSCRIPTION;
-    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = getArgValue('pubsub-worker-report-in-subscription') || defaults.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION;
     WORKER_SECRET = getArgValue('worker-secret') || defaults.WORKER_SECRET;
 
     console.log('\n--- Using defaults (--defaults mode) ---');
     console.log(`  API_URL: ${API_URL}`);
-    console.log(`  GCS_BUCKET: ${GCS_BUCKET}`);
-    console.log(`  PUBSUB_SUBSCRIPTION: ${PUBSUB_SUBSCRIPTION}`);
-    console.log(`  PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION: ${PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION}`);
     console.log(`  WORKER_SECRET: ${WORKER_SECRET ? '(set)' : '(not set)'}`);
   } else {
     // Interactive mode
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
     const runUrl = RUN_URL + PROJECT_ID;
-    const storageUrl = STORAGE_URL + PROJECT_ID;
-    const pubsubUrl = PUBSUB_URL + PROJECT_ID;
     const secretsUrl = SECRETS_URL + PROJECT_ID;
 
     console.log('\n--- Values to store (press Enter to accept default) ---');
@@ -145,27 +132,6 @@ You need:
       'API_URL \u2013 API URL (App Hosting: https://api--magic-bracket-simulator.us-central1.hosted.app)',
       runUrl,
       defaults.API_URL
-    );
-
-    GCS_BUCKET = await prompt(
-      rl,
-      'GCS_BUCKET \u2013 Bucket name for job artifacts',
-      storageUrl,
-      defaults.GCS_BUCKET
-    );
-
-    PUBSUB_SUBSCRIPTION = await prompt(
-      rl,
-      'PUBSUB_SUBSCRIPTION \u2013 Subscription the worker pulls from',
-      pubsubUrl,
-      defaults.PUBSUB_SUBSCRIPTION
-    );
-
-    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION = await prompt(
-      rl,
-      'PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION \u2013 Subscription for frontend-triggered worker status',
-      pubsubUrl,
-      defaults.PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION
     );
 
     console.log(`
@@ -185,9 +151,6 @@ You need:
 
   const config = {
     API_URL,
-    GCS_BUCKET,
-    PUBSUB_SUBSCRIPTION,
-    PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION,
     WORKER_SECRET,
   };
   // Omit empty optional
