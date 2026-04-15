@@ -6,6 +6,43 @@ network at each step.
 
 ---
 
+## 0. Work dispatch (how a worker gets a simulation to run)
+
+Both local and GCP modes share one path: a worker polls the API for the next
+PENDING simulation it's allowed to run. There is no Pub/Sub subscription, no
+server-side broker, no push delivery. Firestore (or SQLite) is the only work
+queue.
+
+1. **Job created:** `POST /api/jobs` (or `POST /api/coverage/next-job`) writes
+   the job row and then calls `initializeSimulations(jobId, count)` to create
+   one PENDING sim doc per container.
+2. **Notify (best-effort):** the API fires `pushToAllWorkers('/notify', {})`
+   to wake online workers immediately. If no worker is reachable, the next
+   poll tick (default 3 s) picks up the work.
+3. **Worker poll:** each worker runs a loop: acquire a semaphore slot, then
+   `GET /api/jobs/claim-sim?workerId=...&workerName=...`. The endpoint
+   atomically flips the oldest PENDING sim on the oldest active job to
+   RUNNING, promotes the job from QUEUED to RUNNING if this is its first
+   claim, and returns `{ jobId, simId, simIndex }`. A 204 means no work.
+4. **Run:** the worker calls `GET /api/jobs/:id` for deck data, runs the
+   simulation container, and reports status via
+   `PATCH /api/jobs/:id/simulations/:simId` (see §2 below).
+
+**Crash recovery:** if a worker dies mid-sim, the sim stays RUNNING with a
+stale `workerId` and its worker stops heartbeating. After 120 s the API's
+active-workers list no longer contains that worker, and `recoverStaleJob`
+(called by the stale-sweeper Cloud Scheduler job and by Cloud Tasks recovery)
+conditionally flips the sim back to PENDING. The next worker poll reclaims
+it. Stuck-for-too-long sims (> 2.5 h) and always-retryable FAILED sims are
+handled the same way — reset to PENDING, reclaimed by the next poll.
+
+**No Pub/Sub anywhere in the dispatch path.** Replaced 2026-04-15 after a
+single auth hiccup silently killed the subscription stream for three days.
+Polling fetches fresh credentials on every request and is trivially
+resilient to transient auth or network issues.
+
+---
+
 ## 1. Simulation container (Docker)
 
 - **Where:** Inside the simulation container (Java + Forge).
@@ -99,13 +136,8 @@ job that has sat QUEUED for >2h, (b) hard-cancels any sim whose baseline
 age exceeds the 2h cap, (c) calls `recoverStaleJob`, and (d) explicitly
 calls `aggregateJobResults(jobId)` when the cancel-and-recover pass
 leaves the job with every sim in a terminal state (COMPLETED or
-CANCELLED). This last step is the safety-net aggregation trigger that
-unsticks jobs where a worker has died mid-sim or a re-published Pub/Sub
-message was starved by higher-volume traffic. Runs in both GCP and
-LOCAL mode; in GCP mode the Firestore/Pub/Sub recovery inside
-`recoverStaleJob` already handles the re-trigger, and step (d) is the
-catch-all for LOCAL mode (SQLite, no Pub/Sub) where that path is a
-no-op.
+CANCELLED). Step (d) is the catch-all that unsticks jobs where a worker
+died mid-sim before the dead-worker reclaim could complete the pipeline.
 
 **When raw log is uploaded (POST logs/simulation):**
 
@@ -225,8 +257,9 @@ reporting path:
 1. **Terminal state guard** (`PATCH simulations/[simId]/route.ts`): Before
 applying any state update, the handler checks whether the sim is already
 COMPLETED or CANCELLED. If so, it returns `{ updated: false,
-reason: 'terminal_state' }` and skips the write. This prevents stale Pub/Sub
-redeliveries from regressing COMPLETED→RUNNING.
+reason: 'terminal_state' }` and skips the write. This prevents a worker
+that's just finishing a sim from writing stale RUNNING updates on top of a
+COMPLETED status (e.g. if the sweeper reclaimed the sim concurrently).
 
 2. **Conditional COMPLETED update** (`PATCH simulations/[simId]/route.ts`):
 When transitioning to COMPLETED, uses `conditionalUpdateSimulationStatus`
@@ -332,7 +365,8 @@ pairs have sufficient game data for reliable TrueSkill rankings.
 | Game log files | `api/test/game-logs.test.ts` | Local filesystem log utilities |
 | Simulation wins | `api/test/simulation-wins.test.ts` | Simulation win extraction |
 | Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
-| Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, Pub/Sub redelivery scenario |
+| Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, concurrent update scenarios |
+| Per-sim claim | `api/lib/claim-sim.test.ts` | `claimNextSim` (SQLite): oldest-first ordering, job promotion QUEUED→RUNNING, sim RUNNING update, skipping terminal jobs |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |
