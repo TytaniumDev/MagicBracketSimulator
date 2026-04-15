@@ -38,19 +38,7 @@ jobs:
         id: project
         env:
           SA_KEY: ${{ env.GCP_SA_KEY }}
-        run: |
-          # Trim whitespace/newlines so multiline or single-line JSON both work
-          SA_KEY_TRIMMED=$(echo "$SA_KEY" | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-          if ! PROJECT_ID=$(echo "$SA_KEY_TRIMMED" | jq -r '.project_id'); then
-            echo "::error::Invalid GCP_SA_KEY: secret must be the full service account JSON (paste raw key as-is, one line or multiline)."
-            exit 1
-          fi
-          if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "null" ]; then
-            echo "::error::GCP_SA_KEY has no project_id field. Use the full JSON key from GCP Console."
-            exit 1
-          fi
-          echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
-          echo "Using GCP project: $PROJECT_ID"
+        run: ./scripts/extract-gcp-project.sh
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v3
@@ -69,9 +57,7 @@ jobs:
         run: npm ci --prefix api
 
       - name: Derive IMAGE_NAME
-        run: |
-          REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_NAME=ghcr.io/${REPO_LOWER}/worker" >> "$GITHUB_ENV"
+        run: ./scripts/set-image-names.sh
 
       - name: Populate simulation-worker-config in Secret Manager
         env:
