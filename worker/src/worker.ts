@@ -30,11 +30,7 @@ if (!process.env.GOOGLE_CLOUD_PROJECT) {
 
 import * as os from 'os';
 
-import {
-  JobData,
-  SimulationTaskMessage,
-  JobCreatedMessage,
-} from './types.js';
+import { JobData } from './types.js';
 import { runProcess } from './process.js';
 import {
   runSimulationContainer,
@@ -48,7 +44,6 @@ import {
   extractWinningTurn,
 } from './condenser.js';
 import { startWorkerApi, stopWorkerApi, HealthStatus } from './worker-api.js';
-import { GAMES_PER_CONTAINER } from './constants.js';
 import { createLogger } from './logger.js';
 import { captureWorkerException, addWorkerBreadcrumb, flushSentry } from './sentry.js';
 
@@ -83,10 +78,6 @@ let jobNotifyResolve: (() => void) | null = null;
 
 // Drain flag — when true, worker stops accepting new work
 let isDraining = false;
-
-// Pub/Sub health tracking — healthy until an error occurs, reset on message receipt
-let pubSubHealthy = true;
-let lastPubSubError: string | null = null;
 
 // ============================================================================
 // Worker Naming
@@ -182,13 +173,6 @@ async function loadConfigFromSecretManager(): Promise<void> {
     }
   }
 }
-
-// ============================================================================
-// Subscriptions (for shutdown handler)
-// ============================================================================
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let subscription: any = null;
 
 // ============================================================================
 // API Functions
@@ -377,18 +361,9 @@ async function processSimulationInternal(
     job.decks[3].dck,
   ];
 
-  // Report RUNNING — if the API rejects (sim already completed/cancelled), skip
+  // claim-sim has already flipped this sim to RUNNING with our workerId;
+  // no need to PATCH here. Just bump the in-flight counter.
   activeSimCount++;
-  const accepted = await reportSimulationStatus(jobId, simId, {
-    state: 'RUNNING',
-    workerId: currentWorkerId,
-    workerName: currentWorkerName,
-  });
-  if (!accepted) {
-    console.log(`${simLabel} Sim already completed/cancelled, skipping`);
-    activeSimCount = Math.max(0, activeSimCount - 1);
-    return;
-  }
 
   // Register abort controller for push-based cancellation and capacity preemption
   const abortController = new AbortController();
@@ -776,81 +751,7 @@ class Semaphore {
 }
 
 // ============================================================================
-// Pub/Sub Message Handler
-// ============================================================================
-
-/**
- * Handle a Pub/Sub message (one message = one simulation).
- * Pub/Sub flow control limits concurrent messages to localCapacity.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleMessage(message: any): Promise<void> {
-  let messageData: SimulationTaskMessage | JobCreatedMessage;
-
-  try {
-    messageData = JSON.parse(message.data.toString());
-  } catch (error) {
-    console.error('Failed to parse message:', error);
-    captureWorkerException(error, { component: 'pubsub-parse' });
-    message.ack(); // Ack invalid messages to prevent redelivery
-    return;
-  }
-
-  // Handle per-simulation messages
-  if ('type' in messageData && messageData.type === 'simulation') {
-    const { jobId, simId, simIndex } = messageData;
-
-    // Reject work when draining
-    if (isDraining) {
-      console.log(`Draining, nacking simulation task: job=${jobId} sim=${simId}`);
-      message.nack();
-      return;
-    }
-
-    // Enforce concurrency cap: if all slots are busy, nack immediately
-    if (!simSemaphore || !simSemaphore.tryAcquire()) {
-      console.log(`At capacity, nacking simulation task: job=${jobId} sim=${simId}`);
-      message.nack();
-      return;
-    }
-
-    console.log(`Received simulation task: job=${jobId} sim=${simId}`);
-
-    // Ack immediately — simulation state is tracked via the API, not Pub/Sub.
-    // Delaying ack until processSimulation completes (~12 min) causes the ack
-    // deadline to expire, triggering redelivery while the container is still
-    // running, which leads to Docker name conflicts and an infinite retry loop.
-    message.ack();
-
-    try {
-      await processSimulation(jobId, simId, simIndex);
-    } catch (error) {
-      console.error(`Error processing simulation ${simId} for job ${jobId}:`, error);
-      // processSimulation already captured the exception with context;
-      // this outer catch is just the API-reporting safety net.
-      await reportSimulationStatus(jobId, simId, {
-        state: 'FAILED',
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      });
-    } finally {
-      simSemaphore.release();
-    }
-    return;
-  }
-
-  // Legacy: handle job-level messages (from stale job recovery on older API versions)
-  if ('jobId' in messageData) {
-    console.log(`Received legacy job-created message for job ${messageData.jobId}, acking`);
-    message.ack();
-    return;
-  }
-
-  console.warn('Unknown message format, acking:', messageData);
-  message.ack();
-}
-
-// ============================================================================
-// Polling Mode (local, no Pub/Sub)
+// Polling Mode (HTTP claim-sim)
 // ============================================================================
 
 /**
@@ -907,70 +808,71 @@ async function requestCoverageJob(): Promise<boolean> {
   }
 }
 
-async function pollForJobs(): Promise<void> {
-  const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
+/**
+ * Polling loop: the worker's only source of work.
+ *
+ * For each available semaphore slot, ask the API to atomically claim the
+ * next PENDING simulation. On success, process it in the background (fire-
+ * and-forget) so the loop can immediately try to fill the next slot. On
+ * 204 (no work), request a coverage job and then sleep until the push-
+ * notify or the idle timeout wakes us.
+ */
+async function pollForSims(): Promise<void> {
+  const IDLE_POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
 
-  console.log(`Polling for jobs at ${getApiUrl()}/api/jobs/next every ${POLL_INTERVAL_MS}ms (capacity=${localCapacity})...`);
+  console.log(`Polling ${getApiUrl()}/api/jobs/claim-sim (capacity=${localCapacity}, idle=${IDLE_POLL_INTERVAL_MS}ms)`);
 
   while (!isShuttingDown) {
-    // Skip claiming when draining
     if (isDraining) {
-      await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
+      await waitForNotifyOrTimeout(IDLE_POLL_INTERVAL_MS);
       continue;
     }
 
+    // Block until a semaphore slot is free — no point claiming work we
+    // can't run. Resize-down paths already preempt excess in-flight sims.
+    await simSemaphore!.acquire();
+
+    let claimed: { jobId: string; simId: string; simIndex: number } | null = null;
     try {
-      const res = await fetch(`${getApiUrl()}/api/jobs/next`, {
+      const claimUrl = new URL(`${getApiUrl()}/api/jobs/claim-sim`);
+      claimUrl.searchParams.set('workerId', currentWorkerId);
+      claimUrl.searchParams.set('workerName', currentWorkerName);
+      const res = await fetch(claimUrl.toString(), {
         headers: getApiHeaders(),
         signal: AbortSignal.timeout(API_TIMEOUT_MS),
       });
       if (res.status === 200) {
-        const job = await res.json() as JobData;
-
-        // Each container runs GAMES_PER_CONTAINER games; derive container count
-        const totalSims = Math.ceil(job.simulations / GAMES_PER_CONTAINER);
-        const simIds = Array.from({ length: totalSims }, (_, i) => ({
-          simId: `sim_${String(i).padStart(3, '0')}`,
-          index: i,
-        }));
-
-        console.log(`Claimed job ${job.id}: running ${totalSims} simulations with capacity=${localCapacity}`);
-
-        await Promise.all(
-          simIds.map(async ({ simId, index }) => {
-            await simSemaphore!.acquire();
-            try {
-              await processSimulation(job.id, simId, index);
-            } catch (error) {
-              console.error(`Error processing simulation ${simId} for job ${job.id}:`, error);
-              await reportSimulationStatus(job.id, simId, {
-                state: 'FAILED',
-                errorMessage: error instanceof Error ? error.message : 'Unknown error',
-              });
-            } finally {
-              simSemaphore!.release();
-            }
-          })
-        );
-
-        console.log(`Job ${job.id}: all simulations processed`);
-        continue; // Check immediately for more jobs
+        claimed = (await res.json()) as { jobId: string; simId: string; simIndex: number };
+      } else if (res.status !== 204) {
+        console.warn(`claim-sim unexpected status ${res.status}`);
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'TimeoutError') {
         console.error('Polling error:', error);
-        captureWorkerException(error, {
-          component: 'polling-loop',
-          workerId: currentWorkerId,
-        });
+        captureWorkerException(error, { component: 'polling-loop', workerId: currentWorkerId });
       }
     }
-    // No user jobs available — check for coverage work
-    const coverageCreated = await requestCoverageJob();
-    if (coverageCreated) {
+
+    if (!claimed) {
+      simSemaphore!.release();
+      const coverageCreated = await requestCoverageJob();
+      if (coverageCreated) continue; // Try to claim the coverage sim immediately.
+      await waitForNotifyOrTimeout(IDLE_POLL_INTERVAL_MS);
       continue;
     }
-    await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
+
+    const { jobId, simId, simIndex } = claimed;
+    // Fire-and-forget so the loop can claim the next sim in parallel.
+    // simSemaphore is released in the finally handler below.
+    processSimulation(jobId, simId, simIndex)
+      .catch(async (error) => {
+        console.error(`Error processing simulation ${simId} for job ${jobId}:`, error);
+        await reportSimulationStatus(jobId, simId, {
+          state: 'FAILED',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+      })
+      .finally(() => simSemaphore!.release());
   }
 }
 
@@ -1001,11 +903,10 @@ function handleShutdown(signal: string): void {
     .then(() => console.log('Sent updating heartbeat'))
     .catch((err) => console.warn('Failed to send updating heartbeat:', err instanceof Error ? err.message : err));
 
-  // After the heartbeat (or timeout), close Pub/Sub + worker API and exit
+  // After the heartbeat (or timeout), close the worker API and exit.
   updatingHeartbeat.finally(() => {
-    const closeSub = subscription ? subscription.close() : Promise.resolve();
-    const closeApi = stopWorkerApi().catch(() => {});
-    Promise.all([closeSub, closeApi])
+    stopWorkerApi()
+      .catch(() => {})
       .then(() => {
         console.log('Shutdown complete');
         process.exit(0);
@@ -1033,15 +934,12 @@ process.on('SIGINT', () => handleShutdown('SIGINT'));
 async function main(): Promise<void> {
   await loadConfigFromSecretManager();
 
-  const usePubSub = !!process.env.PUBSUB_SUBSCRIPTION;
-
   currentWorkerName = getWorkerName();
   currentWorkerId = getWorkerId();
   log.info('Worker identity', { workerId: currentWorkerId, workerName: currentWorkerName });
 
   log.info('Worker starting');
   log.info('Mode', { mode: 'Per-Simulation (docker run --rm)' });
-  log.info('Transport', { transport: usePubSub ? 'Pub/Sub' : 'Polling' });
   log.info('API URL', { url: getApiUrl() });
   log.info('Simulation image', { image: SIMULATION_IMAGE });
 
@@ -1066,16 +964,10 @@ async function main(): Promise<void> {
     onNotify: notifyJobAvailable,
     onDrain: setDraining,
     onPullImage: pullSimulationImage,
-    getHealth: (): HealthStatus => {
-      if (!usePubSub) return { ok: true };
-      return {
-        ok: pubSubHealthy,
-        pubsub: { connected: pubSubHealthy, ...(lastPubSubError ? { lastError: lastPubSubError } : {}) },
-      };
-    },
+    getHealth: (): HealthStatus => ({ ok: true }),
   });
 
-  // Initial heartbeat (await to apply override before Pub/Sub starts)
+  // Initial heartbeat (await to apply override before polling starts)
   await sendHeartbeat();
   // 60s default: the heartbeat exists only so the frontend can show "worker
   // online" within ~1-2 minutes. More frequent beats burned Firestore writes
@@ -1092,56 +984,8 @@ async function main(): Promise<void> {
     );
   }, 60 * 60 * 1000);
 
-  if (usePubSub) {
-    const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
-    const SUBSCRIPTION_NAME = process.env.PUBSUB_SUBSCRIPTION!;
-
-    const { PubSub } = await import('@google-cloud/pubsub');
-    const pubsub = new PubSub({ projectId: PROJECT_ID });
-
-    // Pub/Sub flow control: limit message delivery rate (defense-in-depth,
-    // the semaphore in handleMessage is the authoritative concurrency gate).
-    // Uses simSemaphore.maxSlots so override from initial heartbeat is respected.
-    subscription = pubsub.subscription(SUBSCRIPTION_NAME, {
-      flowControl: { maxMessages: simSemaphore.maxSlots, allowExcessMessages: false },
-    });
-
-    console.log('Project:', PROJECT_ID);
-    console.log('Subscription:', SUBSCRIPTION_NAME);
-    console.log(`Subscribing to Pub/Sub messages (maxMessages=${simSemaphore.maxSlots})...`);
-
-    subscription.on('message', (msg: any) => {
-      pubSubHealthy = true;
-      lastPubSubError = null;
-      handleMessage(msg);
-    });
-    subscription.on('error', (error: unknown) => {
-      pubSubHealthy = false;
-      lastPubSubError = error instanceof Error ? error.message : String(error);
-      console.error('Subscription error:', error);
-    });
-
-    // Periodically check for coverage work when idle (Pub/Sub mode has no
-    // polling loop, so we need a separate timer to request coverage jobs).
-    const COVERAGE_CHECK_INTERVAL_MS = 30_000;
-    setInterval(async () => {
-      if (isShuttingDown || isDraining) return;
-      if (activeSimCount > 0) return; // Only request coverage when idle
-      try {
-        const created = await requestCoverageJob();
-        if (created) {
-          console.log('[Coverage] Coverage job created, will arrive via Pub/Sub');
-        }
-      } catch (err) {
-        console.error('[Coverage] Failed to request coverage job:', err);
-      }
-    }, COVERAGE_CHECK_INTERVAL_MS);
-
-    console.log('Worker is running. Waiting for simulation tasks...');
-  } else {
-    console.log('Worker is running in polling mode.');
-    await pollForJobs();
-  }
+  console.log('Worker is running in polling mode.');
+  await pollForSims();
 }
 
 main().catch(async (error) => {
