@@ -3,7 +3,6 @@ import { verifyAuth, verifyAllowedUser, unauthorizedResponse } from '@/lib/auth'
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { getDeckById } from '@/lib/deck-store-factory';
-import { publishSimulationTasks } from '@/lib/pubsub';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, createJobSchema } from '@/lib/validation';
 import type { JobSummary } from '@shared/types/job';
@@ -186,24 +185,24 @@ export async function POST(request: NextRequest) {
     // Each container runs GAMES_PER_CONTAINER games, so we need fewer containers
     const containerCount = Math.ceil(simulations / GAMES_PER_CONTAINER);
 
-    // Initialize per-simulation tracking and publish messages (1 sim record = 1 container)
+    // Initialize per-simulation tracking. Workers discover these sims via
+    // their GET /api/jobs/claim-sim polling loop; no queue publish needed.
     await jobStore.initializeSimulations(job.id, containerCount);
 
     const deckNames = job.decks.map((d) => d.name);
 
+    // Best-effort push to wake any online workers for near-instant pickup.
+    // If none are reachable, the next poll (POLL_INTERVAL_MS, ~3s) picks it up.
+    pushToAllWorkers('/notify', {}).catch(err =>
+      console.warn('[Worker Push] Notify failed:', err instanceof Error ? err.message : err),
+    );
+
     if (isGcpMode()) {
-      try {
-        await publishSimulationTasks(job.id, containerCount);
-      } catch (pubsubError) {
-        // Log but don't fail — the job is already persisted in Firestore.
-        // Recovery Cloud Task will re-publish messages if needed.
-        console.error(`Failed to publish simulation tasks for job ${job.id}:`, pubsubError);
-      }
-      // Schedule a recovery check at T+10min in case something goes wrong
-      scheduleRecoveryCheck(job.id, 600).catch(err => console.warn('[Recovery] Failed to schedule check:', err instanceof Error ? err.message : err));
-    } else {
-      // Local mode: notify workers that a new job is available (best-effort)
-      pushToAllWorkers('/notify', {}).catch(err => console.warn('[Worker Push] Notify failed:', err instanceof Error ? err.message : err));
+      // Schedule a recovery check at T+10min as defense-in-depth. The
+      // stale-sweeper runs on a schedule too, so this is redundant but cheap.
+      scheduleRecoveryCheck(job.id, 600).catch(err =>
+        console.warn('[Recovery] Failed to schedule check:', err instanceof Error ? err.message : err),
+      );
     }
 
     return NextResponse.json(
