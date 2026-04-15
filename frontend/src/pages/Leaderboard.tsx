@@ -9,8 +9,6 @@ interface LeaderboardEntry {
   setName: string | null;
   isPrecon: boolean;
   primaryCommander: string | null;
-  mu: number;
-  sigma: number;
   rating: number;
   gamesPlayed: number;
   wins: number;
@@ -246,7 +244,7 @@ export default function Leaderboard() {
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono font-semibold text-white">
-                    {entry.rating.toFixed(1)}
+                    {entry.rating.toFixed(1)}%
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-300">
                     {(entry.winRate * 100).toFixed(1)}%

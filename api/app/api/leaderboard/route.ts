@@ -1,7 +1,8 @@
 /**
  * GET /api/leaderboard
  *
- * Returns TrueSkill ratings for all decks, enriched with deck metadata.
+ * Returns Bayesian-adjusted win-rate rankings for all decks, enriched with
+ * deck metadata.
  *
  * Query parameters:
  *   minGames  — minimum games_played to include (default: 0)
@@ -10,10 +11,13 @@
  * Response:
  *   { decks: LeaderboardEntry[] }
  *
- * Optimizations:
- *   - Reads denormalized deck metadata from rating docs (no N+1 getDeckById calls)
- *   - Falls back to getDeckById only for rating docs missing denormalized fields
- *   - 5-minute in-memory cache + Cache-Control headers
+ * Implementation notes:
+ *   - The rating store's internal sort/limit is irrelevant here: we fetch all
+ *     matching ratings, re-score with the Bayesian formula, then sort/slice
+ *     in the route so top-N reflects the new ranking system.
+ *   - Reads denormalized deck metadata from rating docs (no N+1 getDeckById calls).
+ *   - Falls back to getDeckById only for rating docs missing denormalized fields.
+ *   - 5-minute in-memory cache + Cache-Control headers.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
@@ -41,9 +45,16 @@ export interface LeaderboardEntry {
 // the prior, and the prior's influence fades as real games accumulate.
 const PRIOR_WIN_RATE = 0.25;
 const PRIOR_WEIGHT = 40;
+const PRIOR_WINS = PRIOR_WEIGHT * PRIOR_WIN_RATE;
+
+// Upper bound when fetching from the store — anything above this means we have
+// bigger problems than leaderboard truncation. The route applies the user's
+// `limit` itself after Bayesian scoring so the store's internal sort order
+// cannot silently drop high-Bayesian decks.
+const STORE_FETCH_CAP = 10_000;
 
 function bayesianScore(wins: number, gamesPlayed: number): number {
-  return ((wins + PRIOR_WEIGHT * PRIOR_WIN_RATE) / (gamesPlayed + PRIOR_WEIGHT)) * 100;
+  return ((wins + PRIOR_WINS) / (gamesPlayed + PRIOR_WEIGHT)) * 100;
 }
 
 // In-memory cache with 5-minute TTL
@@ -71,7 +82,10 @@ export async function GET(request: NextRequest) {
     }
 
     const store = getRatingStore();
-    const ratings = await store.getLeaderboard({ minGames, limit });
+    // Fetch without honoring the user's limit at the store layer: the store
+    // sorts by the legacy TrueSkill formula, which no longer matches the
+    // ranking we present. Sort/slice ourselves below.
+    const ratings = await store.getLeaderboard({ minGames, limit: STORE_FETCH_CAP });
 
     // Build leaderboard entries using denormalized metadata when available
     const entries = await Promise.all(
@@ -108,7 +122,10 @@ export async function GET(request: NextRequest) {
       }),
     );
 
-    const validEntries = entries.filter((e): e is LeaderboardEntry => e !== null);
+    const validEntries = entries
+      .filter((e): e is LeaderboardEntry => e !== null)
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, limit);
 
     // Update cache
     cache = { data: validEntries, minGames, limit, at: now };
