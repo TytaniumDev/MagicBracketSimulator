@@ -621,8 +621,10 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   const allCancelled = sims.every(s => s.state === 'CANCELLED');
   if (allCancelled) {
+    await setJobFailed(jobId, 'All simulations were cancelled (likely by stale-sweeper lifetime cap)');
     await setNeedsAggregation(jobId, false);
-    return; // Already handled by cancel flow
+    cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
+    return;
   }
 
   await setJobCompleted(jobId);
