@@ -2,7 +2,7 @@
 
 # Magic Bracket Simulator
 
-[ 🚀 Launch App ](https://magic-bracket-simulator.web.app) &nbsp;|&nbsp; [ 📖 Documentation ](#documentation-map) &nbsp;|&nbsp; [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
+[ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
 **Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.**
 
@@ -57,8 +57,11 @@ Visit **http://localhost:5173** to start simulating.
 *   **[Deployment Guide](docs/DEPLOYMENT.md):** Detailed setup instructions, prerequisites, and cloud deployment.
 *   **[Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md):** Plan for the Worker + Simulation Split Architecture.
 *   **[Mode Setup](docs/MODE_SETUP.md):** Configure for Local vs GCP operation.
-*   **[Secrets Setup](docs/SECRETS_SETUP.md):** How to configure API keys and credentials.
+*   **[Precon Sync](docs/PRECON_SYNC.md):** Daily synchronization of Firestore decks with Archidekt.
 *   **[Remote Worker Setup](docs/DEPLOYMENT.md#remote-worker-headless-machine):** Deploy the worker on a separate machine with auto-updates via Watchtower.
+*   **[Secrets Setup](docs/SECRETS_SETUP.md):** How to configure API keys and credentials.
+*   **[Stale Job Sweeper](docs/STALE_SWEEPER.md):** Recovery net for stuck jobs (`POST /api/admin/sweep-stale-jobs`).
+*   **[Sweeper Alerting](docs/SWEEPER_ALERTING.md):** Cloud Monitoring setup for the stale-job sweeper.
 
 ## Contributing
 
