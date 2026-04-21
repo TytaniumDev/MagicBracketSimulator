@@ -278,7 +278,7 @@ second call exits immediately.
 ## 6. Auto-coverage system
 
 The coverage system automatically queues simulation jobs to ensure all deck
-pairs have sufficient game data for reliable TrueSkill rankings.
+pairs have sufficient game data for reliable Bayesian win-rate rankings.
 
 **Configuration (stored in `coverage_config` table/Firestore doc):**
 
