@@ -388,6 +388,7 @@ export default function Browse() {
                   onClick={(e) => toggleSelectJob(run.id, e)}
                   onChange={() => {}}
                   className="absolute left-3 top-5 w-4 h-4 accent-blue-500 cursor-pointer"
+                  aria-label={`Select job ${run.name}`}
                 />
               )}
               <div className="flex items-start justify-between gap-4">
