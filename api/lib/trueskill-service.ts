@@ -77,7 +77,7 @@ export async function processJobForRatings(
   });
 
   const matchResults: MatchResult[] = [];
-  let updatedAtLeastOne = false;
+  let resolvedGames = 0;
 
   for (let i = 0; i < games.length; i++) {
     const game = games[i]!;
@@ -125,17 +125,17 @@ export async function processJobForRatings(
         lastUpdated: new Date().toISOString(),
       };
     }
-    updatedAtLeastOne = true;
+    resolvedGames += 1;
   }
 
   for (const result of matchResults) {
     await store.recordMatchResult(result);
   }
 
-  if (updatedAtLeastOne) {
+  if (resolvedGames > 0) {
     await store.updateRatings(currentRatings);
     console.log(
-      `[RatingStats] Job ${jobId}: recorded ${games.length} game(s) for decks [${deckIds.join(', ')}]`,
+      `[RatingStats] Job ${jobId}: recorded ${resolvedGames}/${games.length} game(s) for decks [${deckIds.join(', ')}]`,
     );
   } else {
     Sentry.addBreadcrumb({

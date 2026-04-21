@@ -31,7 +31,9 @@ export interface LeaderboardEntry {
   setName: string | null;
   isPrecon: boolean;
   primaryCommander: string | null;
+  /** @deprecated Legacy TrueSkill mean; no longer updated. Neutral default (25) for new decks. */
   mu: number;
+  /** @deprecated Legacy TrueSkill uncertainty; no longer updated. Neutral default (≈8.33) for new decks. */
   sigma: number;
   /** Bayesian-adjusted win rate as a percentage (prior = 25% over 40 games). */
   rating: number;
