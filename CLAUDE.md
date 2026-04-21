@@ -141,7 +141,7 @@ Error tracking via `@sentry/nextjs` in `api/`. Graceful no-op when `SENTRY_DSN` 
   Also available in `api/.env` as `SENTRY_AUTH_TOKEN` for local use.
 - **Sentry org/project**: `tytaniumdev` / `magic-bracket-api`
 - **Alerts**: 4 alert rules configured with GitHub issue creation (labels: `bug`, `sentry`):
-  - Error Spike (catch-all), Aggregation Failures (critical), TrueSkill Rating Failures, Backfill Rating Failures
+  - Error Spike (catch-all), Aggregation Failures (critical), Rating Stats Failures, Backfill Rating Failures
 
 ## Lint & Type Checking
 

@@ -82,9 +82,9 @@ export async function GET(request: NextRequest) {
     }
 
     const store = getRatingStore();
-    // Fetch without honoring the user's limit at the store layer: the store
-    // sorts by the legacy TrueSkill formula, which no longer matches the
-    // ranking we present. Sort/slice ourselves below.
+    // Fetch without honoring the user's limit at the store layer: the store's
+    // internal sort order is legacy and may not match the Bayesian ranking we
+    // present here. Sort/slice ourselves below.
     const ratings = await store.getLeaderboard({ minGames, limit: STORE_FETCH_CAP });
 
     // Build leaderboard entries using denormalized metadata when available

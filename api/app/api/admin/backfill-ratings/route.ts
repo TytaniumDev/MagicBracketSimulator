@@ -7,7 +7,7 @@ import * as Sentry from '@sentry/nextjs';
 import { errorResponse } from '@/lib/api-response';
 
 /**
- * POST /api/admin/backfill-ratings — Re-run TrueSkill ratings for completed jobs.
+ * POST /api/admin/backfill-ratings — Re-run per-deck win stats for completed jobs.
  *
  * Admin-only. For each COMPLETED job (or stuck RUNNING job with all sims done):
  * 1. Check if match results already exist (idempotent skip).
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
           await jobStore.aggregateJobResults(job.id);
         }
 
-        // Run TrueSkill rating
+        // Record match results and update per-deck win/game counters
         const { getStructuredLogs } = await import('@/lib/log-store');
         const structuredData = await getStructuredLogs(job.id);
 

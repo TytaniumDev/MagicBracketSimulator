@@ -571,7 +571,7 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     await ingestLogs(jobId, rawLogs, deckNames, deckLists);
   }
 
-  // Load structured games for results computation and TrueSkill
+  // Load structured games for results computation and per-deck win stats
   const structuredData = await getStructuredLogs(jobId);
 
   // Compute aggregated results from structured games
@@ -604,12 +604,12 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     await setJobResults(jobId, results);
   }
 
-  // Update TrueSkill ratings for jobs with 4 resolved deck IDs
+  // Update per-deck win/game counters for jobs with 4 resolved deck IDs
   if (Array.isArray(job.deckIds) && job.deckIds.length === 4 && structuredData?.games?.length) {
     const { processJobForRatings } = await import('./trueskill-service');
     processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
-      log.error('TrueSkill rating update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
-      Sentry.captureException(err, { tags: { component: 'trueskill', jobId } });
+      log.error('Rating stats update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
+      Sentry.captureException(err, { tags: { component: 'rating-stats', jobId } });
     });
   }
 
