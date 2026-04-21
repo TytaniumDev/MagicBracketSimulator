@@ -263,6 +263,30 @@ async function runTests() {
     }
   });
 
+  await test('old RUNNING job with ALL sims cancelled transitions to FAILED', async () => {
+    wipeAllActiveJobs();
+    const jobId = makeRunningJob(2);
+    try {
+      // Both sims stay PENDING — sweeper will cancel both.
+      const farFuture = Date.now() + SIM_HARD_CANCEL_THRESHOLD_MS + 60_000;
+      const result = await sweep(farFuture);
+
+      assert(result.simsCancelled === 2, `both sims should be cancelled, got ${result.simsCancelled}`);
+
+      const sims = jobStoreSqlite.getSimulationStatuses(jobId);
+      assert(sims.every((s) => s.state === 'CANCELLED'), 'all sims should be CANCELLED');
+
+      const finalJob = jobStoreSqlite.getJob(jobId);
+      assert(finalJob!.status === 'FAILED', `job should be FAILED, got ${finalJob!.status}`);
+      assert(
+        (finalJob!.errorMessage ?? '').includes('cancelled'),
+        'errorMessage should mention cancellation'
+      );
+    } finally {
+      cleanupJob(jobId);
+    }
+  });
+
   await test('old QUEUED job is hard-failed', async () => {
     wipeAllActiveJobs();
     const job = jobStoreSqlite.createJob(DECKS, 4);
