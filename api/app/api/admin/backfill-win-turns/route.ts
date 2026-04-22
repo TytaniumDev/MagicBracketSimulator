@@ -98,7 +98,6 @@ async function* iterateMatchResults(): AsyncGenerator<MatchResult[]> {
 
 async function* iterateFirestoreMatchResults(): AsyncGenerator<MatchResult[]> {
   const { getFirestore } = await import('@/lib/firestore-client');
-  const { Timestamp } = await import('@google-cloud/firestore');
   const col = getFirestore().collection('matchResults');
 
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
@@ -109,10 +108,6 @@ async function* iterateFirestoreMatchResults(): AsyncGenerator<MatchResult[]> {
     if (snap.empty) return;
     const batch: MatchResult[] = snap.docs.map((doc) => {
       const d = doc.data();
-      const playedAt =
-        d.playedAt instanceof Timestamp
-          ? d.playedAt.toDate().toISOString()
-          : String(d.playedAt ?? '');
       return {
         id: doc.id,
         jobId: d.jobId as string,
@@ -120,13 +115,28 @@ async function* iterateFirestoreMatchResults(): AsyncGenerator<MatchResult[]> {
         deckIds: (d.deckIds as string[]) ?? [],
         winnerDeckId: (d.winnerDeckId as string | null) ?? null,
         turnCount: typeof d.turnCount === 'number' ? d.turnCount : null,
-        playedAt,
+        playedAt: firestoreTimestampToIso(d.playedAt),
       };
     });
     yield batch;
     if (snap.docs.length < FIRESTORE_PAGE_SIZE) return;
     cursor = snap.docs[snap.docs.length - 1]!;
   }
+}
+
+/**
+ * Convert a Firestore Timestamp-like value to an ISO string.
+ * Uses duck-typing rather than `instanceof Timestamp` because dynamic imports
+ * of @google-cloud/firestore can yield a module namespace where Timestamp is
+ * not the same constructor the SDK internally attaches, making the instanceof
+ * check throw "Right-hand side of 'instanceof' is not an object".
+ */
+function firestoreTimestampToIso(value: unknown): string {
+  if (value && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    const d = (value as { toDate: () => Date }).toDate();
+    if (d instanceof Date && !Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return String(value ?? '');
 }
 
 async function* iterateSqliteMatchResults(): AsyncGenerator<MatchResult[]> {
