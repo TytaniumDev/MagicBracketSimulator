@@ -301,6 +301,19 @@ export function getDb(): Database.Database {
     )
   `);
 
+  // Per-deck win-turn aggregate (additive migration — use prepare().run to stay consistent)
+  for (const alter of [
+    'ALTER TABLE ratings ADD COLUMN win_turn_sum INTEGER',
+    'ALTER TABLE ratings ADD COLUMN win_turn_wins INTEGER',
+    'ALTER TABLE ratings ADD COLUMN win_turn_histogram TEXT',
+  ]) {
+    try {
+      db.prepare(alter).run();
+    } catch {
+      // Column already exists
+    }
+  }
+
   // Per-game match results for idempotency tracking
   db.exec(`
     CREATE TABLE IF NOT EXISTS match_results (
