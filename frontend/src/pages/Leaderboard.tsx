@@ -1,8 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
 import type { CoverageConfig, CoverageStatus } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WinTurnTooltip } from '../components/WinTurnTooltip';
+
+const TOOLTIP_WIDTH = 320;
+// Approximate — the tooltip's actual height depends on bar rendering, but a
+// conservative estimate is enough to pick "flip above" vs "stay below".
+const TOOLTIP_ESTIMATED_HEIGHT = 180;
+const TOOLTIP_MARGIN = 8;
+const TOOLTIP_GAP = 4;
 
 interface LeaderboardEntry {
   deckId: string;
@@ -45,38 +53,58 @@ function AvgWinTurnCell({
   avgWinTurn: number;
   histogram: number[] | null;
 }) {
-  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const totalWins = histogram ? histogram.reduce((a, b) => a + b, 0) : 0;
   const canShowTooltip = histogram !== null && totalWins > 0;
+
+  const showTooltip = () => {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const maxLeft = window.innerWidth - TOOLTIP_WIDTH - TOOLTIP_MARGIN;
+    const left = Math.max(
+      TOOLTIP_MARGIN,
+      Math.min(rect.right - TOOLTIP_WIDTH, maxLeft),
+    );
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < TOOLTIP_ESTIMATED_HEIGHT + TOOLTIP_GAP + TOOLTIP_MARGIN
+      ? Math.max(TOOLTIP_MARGIN, rect.top - TOOLTIP_ESTIMATED_HEIGHT - TOOLTIP_GAP)
+      : rect.bottom + TOOLTIP_GAP;
+    setCoords({ top, left });
+  };
+  const hideTooltip = () => setCoords(null);
+
   return (
     <span className="inline-flex items-center justify-end gap-1">
       <span>{avgWinTurn.toFixed(1)}</span>
       {canShowTooltip && (
-        <span
-          className="relative inline-flex"
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-        >
+        <>
           <button
+            ref={btnRef}
             type="button"
             tabIndex={0}
             aria-label="Show win turn distribution"
             className="text-gray-500 hover:text-gray-300 cursor-help"
+            onMouseEnter={showTooltip}
+            onMouseLeave={hideTooltip}
+            onFocus={showTooltip}
+            onBlur={hideTooltip}
           >
             ⓘ
           </button>
-          {open && (
-            <span className="absolute right-0 top-full mt-1">
+          {coords && createPortal(
+            <div
+              style={{ position: 'fixed', top: coords.top, left: coords.left, zIndex: 50 }}
+            >
               <WinTurnTooltip
                 histogram={histogram}
                 avgWinTurn={avgWinTurn}
                 totalWins={totalWins}
               />
-            </span>
+            </div>,
+            document.body,
           )}
-        </span>
+        </>
       )}
     </span>
   );
