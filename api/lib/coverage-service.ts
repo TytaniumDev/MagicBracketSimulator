@@ -2,7 +2,7 @@
  * Coverage service: computes pair coverage from match_results and generates
  * optimal 4-player pods using a greedy algorithm.
  */
-import { listAllDecks } from './deck-store-factory';
+import { listAllDecks, type DeckListItem } from './deck-store-factory';
 import { getFirestore } from './firestore-client';
 
 const USE_FIRESTORE =
@@ -38,6 +38,7 @@ export interface CoverageStatus {
 export interface PairCoverageMap {
   counts: Map<string, number>;
   allDeckIds: string[];
+  allDecks: DeckListItem[];
 }
 
 // In-memory cache to avoid re-reading all match_results on every request
@@ -67,9 +68,46 @@ export async function computePairCoverage(): Promise<PairCoverageMap> {
 
   await forEachMatchResult(incrementPairs);
 
-  const data = { counts, allDeckIds };
+  const data = { counts, allDeckIds, allDecks };
   coverageCache = { data, ts: Date.now() };
   return data;
+}
+
+/**
+ * Build a priority score per deck, biased toward recently-added custom decks.
+ * Custom decks get a rank-based score (newest = highest); precons get 0.
+ * This is used as a tiebreaker when many pairs/decks tie on coverage metrics.
+ */
+function buildDeckPriority(allDecks: DeckListItem[]): Map<string, number> {
+  const customDecks = allDecks
+    .filter((d) => !d.isPrecon)
+    .map((d) => ({ id: d.id, ts: d.createdAt ? Date.parse(d.createdAt) : 0 }))
+    .sort((a, b) => b.ts - a.ts); // newest first
+
+  const priority = new Map<string, number>();
+  const n = customDecks.length;
+  customDecks.forEach((d, rank) => {
+    priority.set(d.id, n - rank); // newest gets n, oldest gets 1
+  });
+  for (const d of allDecks) {
+    if (!priority.has(d.id)) priority.set(d.id, 0);
+  }
+  return priority;
+}
+
+/**
+ * Weighted random choice. `weights` must be >= 0 and at least one must be > 0.
+ * Falls back to uniform if all weights are 0.
+ */
+function weightedRandomIndex(weights: number[]): number {
+  const total = weights.reduce((s, w) => s + w, 0);
+  if (total <= 0) return Math.floor(Math.random() * weights.length);
+  let r = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return i;
+  }
+  return weights.length - 1;
 }
 
 /**
@@ -104,7 +142,7 @@ export async function getCoverageStatus(targetGamesPerPair: number): Promise<Cov
  * Returns null if all pairs meet the target or fewer than 4 decks exist.
  */
 export async function generateNextPod(targetGamesPerPair: number): Promise<string[] | null> {
-  const { counts, allDeckIds } = await computePairCoverage();
+  const { counts, allDeckIds, allDecks } = await computePairCoverage();
 
   if (allDeckIds.length < 4) return null;
 
@@ -122,55 +160,59 @@ export async function generateNextPod(targetGamesPerPair: number): Promise<strin
 
   if (underCovered.size === 0) return null;
 
-  // Step 1: Pick the pair (A, B) with the fewest games played
+  const priority = buildDeckPriority(allDecks);
+  // +1 ensures precons (priority 0) still have a non-zero chance.
+  const deckWeight = (id: string): number => (priority.get(id) ?? 0) + 1;
+
+  // Step 1: Among pairs with the fewest games played, weight-random by priority
+  // so newly-added custom decks are favored but every under-covered pair can still
+  // be picked.
   let minCount = Infinity;
-  let bestA = '';
-  let bestB = '';
-  for (const [key, count] of underCovered) {
-    if (count < minCount) {
-      minCount = count;
-      const [a, b] = key.split('|');
-      bestA = a;
-      bestB = b;
-    }
+  for (const count of underCovered.values()) {
+    if (count < minCount) minCount = count;
   }
+  const candidatePairs: Array<[string, string]> = [];
+  const pairWeights: number[] = [];
+  for (const [key, count] of underCovered) {
+    if (count !== minCount) continue;
+    const [a, b] = key.split('|');
+    candidatePairs.push([a, b]);
+    pairWeights.push(deckWeight(a) + deckWeight(b));
+  }
+  const [bestA, bestB] = candidatePairs[weightedRandomIndex(pairWeights)];
 
   const pod = [bestA, bestB];
   const podSet = new Set(pod);
 
-  // Step 2: Pick deck C that maximizes new under-covered pairs
-  let bestC = '';
-  let bestCScore = -1;
-  for (const deckId of allDeckIds) {
-    if (podSet.has(deckId)) continue;
-    let score = 0;
-    for (const existing of pod) {
-      const key = pairKey(deckId, existing);
-      if (underCovered.has(key)) score++;
+  // Steps 2 & 3: among decks tied for max new-under-covered-pair score,
+  // weight-random by priority.
+  const pickNextDeck = (): string => {
+    let bestScore = -1;
+    const scores = new Map<string, number>();
+    for (const deckId of allDeckIds) {
+      if (podSet.has(deckId)) continue;
+      let score = 0;
+      for (const existing of pod) {
+        if (underCovered.has(pairKey(deckId, existing))) score++;
+      }
+      scores.set(deckId, score);
+      if (score > bestScore) bestScore = score;
     }
-    if (score > bestCScore) {
-      bestCScore = score;
-      bestC = deckId;
+    const candidates: string[] = [];
+    const weights: number[] = [];
+    for (const [id, score] of scores) {
+      if (score !== bestScore) continue;
+      candidates.push(id);
+      weights.push(deckWeight(id));
     }
-  }
+    return candidates[weightedRandomIndex(weights)];
+  };
+
+  const bestC = pickNextDeck();
   pod.push(bestC);
   podSet.add(bestC);
 
-  // Step 3: Pick deck D that maximizes new under-covered pairs
-  let bestD = '';
-  let bestDScore = -1;
-  for (const deckId of allDeckIds) {
-    if (podSet.has(deckId)) continue;
-    let score = 0;
-    for (const existing of pod) {
-      const key = pairKey(deckId, existing);
-      if (underCovered.has(key)) score++;
-    }
-    if (score > bestDScore) {
-      bestDScore = score;
-      bestD = deckId;
-    }
-  }
+  const bestD = pickNextDeck();
   pod.push(bestD);
 
   return pod;
