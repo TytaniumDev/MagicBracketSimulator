@@ -519,6 +519,23 @@ function applyOverride(newOverride: number | null): void {
 }
 
 /**
+ * Parse the X-Max-Concurrent-Override header from a claim-sim response and
+ * apply it. `none` clears the override; a positive integer 1-20 sets it.
+ * Anything else (missing, malformed) is ignored — leaves current state alone.
+ */
+function applyOverrideFromHeader(header: string | null): void {
+  if (header === null) return;
+  if (header === 'none') {
+    applyOverride(null);
+    return;
+  }
+  const n = parseInt(header, 10);
+  if (Number.isInteger(n) && n >= 1 && n <= 20) {
+    applyOverride(n);
+  }
+}
+
+/**
  * Cancel all active simulations for a job by aborting their controllers.
  */
 function cancelJob(jobId: string): void {
@@ -841,6 +858,10 @@ async function pollForSims(): Promise<void> {
         headers: getApiHeaders(),
         signal: AbortSignal.timeout(API_TIMEOUT_MS),
       });
+      // Sync override from response header. This is the responsive fallback
+      // when push /config is unavailable (worker behind NAT / WORKER_API_URL
+      // unset): the override propagates within one poll interval.
+      applyOverrideFromHeader(res.headers.get('X-Max-Concurrent-Override'));
       if (res.status === 200) {
         claimed = (await res.json()) as { jobId: string; simId: string; simIndex: number };
       } else if (res.status !== 204) {
