@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
 import type { CoverageConfig, CoverageStatus } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { WinTurnTooltip } from '../components/WinTurnTooltip';
 
 interface LeaderboardEntry {
   deckId: string;
@@ -13,9 +14,11 @@ interface LeaderboardEntry {
   gamesPlayed: number;
   wins: number;
   winRate: number;
+  avgWinTurn: number | null;
+  winTurnHistogram: number[] | null;
 }
 
-type SortKey = 'rating' | 'winRate' | 'gamesPlayed';
+type SortKey = 'rating' | 'winRate' | 'gamesPlayed' | 'avgWinTurn';
 
 function ConfidenceBadge({ gamesPlayed }: { gamesPlayed: number }) {
   if (gamesPlayed >= 50) {
@@ -33,6 +36,50 @@ function ConfidenceBadge({ gamesPlayed }: { gamesPlayed: number }) {
     );
   }
   return null;
+}
+
+function AvgWinTurnCell({
+  avgWinTurn,
+  histogram,
+}: {
+  avgWinTurn: number;
+  histogram: number[] | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const totalWins = histogram ? histogram.reduce((a, b) => a + b, 0) : 0;
+  const canShowTooltip = histogram !== null && totalWins > 0;
+  return (
+    <span className="inline-flex items-center justify-end gap-1">
+      <span>{avgWinTurn.toFixed(1)}</span>
+      {canShowTooltip && (
+        <span
+          className="relative inline-flex"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+        >
+          <button
+            type="button"
+            tabIndex={0}
+            aria-label="Show win turn distribution"
+            className="text-gray-500 hover:text-gray-300 cursor-help"
+          >
+            ⓘ
+          </button>
+          {open && (
+            <span className="absolute right-0 top-full mt-1">
+              <WinTurnTooltip
+                histogram={histogram}
+                avgWinTurn={avgWinTurn}
+                totalWins={totalWins}
+              />
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function SortHeader({
@@ -134,6 +181,11 @@ export default function Leaderboard() {
       if (sortKey === 'rating') return b.rating - a.rating;
       if (sortKey === 'winRate') return b.winRate - a.winRate;
       if (sortKey === 'gamesPlayed') return b.gamesPlayed - a.gamesPlayed;
+      if (sortKey === 'avgWinTurn') {
+        const av = a.avgWinTurn ?? Infinity;
+        const bv = b.avgWinTurn ?? Infinity;
+        return av - bv;
+      }
       return 0;
     });
 
@@ -210,6 +262,7 @@ export default function Leaderboard() {
                 <th className="px-3 py-2 text-left text-gray-400">Deck</th>
                 <SortHeader label="Rating" sortKey="rating" currentSort={sortKey} onSort={setSortKey} />
                 <SortHeader label="Win Rate" sortKey="winRate" currentSort={sortKey} onSort={setSortKey} />
+                <SortHeader label="Avg Win Turn" sortKey="avgWinTurn" currentSort={sortKey} onSort={setSortKey} />
                 <SortHeader label="Games" sortKey="gamesPlayed" currentSort={sortKey} onSort={setSortKey} />
               </tr>
             </thead>
@@ -248,6 +301,16 @@ export default function Leaderboard() {
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-300">
                     {(entry.winRate * 100).toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-gray-300 font-mono">
+                    {entry.avgWinTurn != null ? (
+                      <AvgWinTurnCell
+                        avgWinTurn={entry.avgWinTurn}
+                        histogram={entry.winTurnHistogram}
+                      />
+                    ) : (
+                      <span className="text-gray-600">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-400">{entry.gamesPlayed}</td>
                 </tr>

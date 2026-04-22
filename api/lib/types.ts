@@ -112,6 +112,12 @@ export interface DeckRating {
   sigma: number;
   gamesPlayed: number;
   wins: number;
+  /** Sum of winning `turnCount` values across recorded wins. Used with winTurnWins to compute avg. */
+  winTurnSum?: number;
+  /** Count of wins contributing to winTurnSum (≤ wins; excludes wins with null turnCount). */
+  winTurnWins?: number;
+  /** 16 bins — indexes 0..14 map to turns 1..15, index 15 is "16+". */
+  winTurnHistogram?: number[];
   lastUpdated: string;
   /** Denormalized deck metadata (for leaderboard without N+1 queries) */
   deckName?: string;

@@ -14,6 +14,7 @@ import type { DeckRating, MatchResult, StructuredGame } from './types';
 import { matchesDeckName } from './condenser/deck-match';
 import { getDeckById } from './deck-store-factory';
 import { getRatingStore } from './rating-store-factory';
+import { addWinTurn, emptyWinTurnAggregate } from './win-turn-aggregate';
 import * as Sentry from '@sentry/nextjs';
 
 const MU_DEFAULT = 25;
@@ -78,6 +79,7 @@ export async function processJobForRatings(
 
   const matchResults: MatchResult[] = [];
   let resolvedGames = 0;
+  const jobTimestamp = new Date().toISOString();
 
   for (let i = 0; i < games.length; i++) {
     const game = games[i]!;
@@ -100,7 +102,7 @@ export async function processJobForRatings(
       deckIds,
       winnerDeckId,
       turnCount: game.winningTurn ?? null,
-      playedAt: new Date().toISOString(),
+      playedAt: jobTimestamp,
     });
 
     if (!winnerDeckId) {
@@ -118,12 +120,31 @@ export async function processJobForRatings(
 
     for (let j = 0; j < deckIds.length; j++) {
       const current = currentRatings[j]!;
-      currentRatings[j] = {
+      const isWinner = j === winnerIdx;
+      let next: DeckRating = {
         ...current,
         gamesPlayed: current.gamesPlayed + 1,
-        wins: current.wins + (j === winnerIdx ? 1 : 0),
-        lastUpdated: new Date().toISOString(),
+        wins: current.wins + (isWinner ? 1 : 0),
+        lastUpdated: jobTimestamp,
       };
+      if (isWinner && game.winningTurn != null) {
+        const nextAgg = addWinTurn(
+          {
+            winTurnSum: current.winTurnSum ?? 0,
+            winTurnWins: current.winTurnWins ?? 0,
+            winTurnHistogram:
+              current.winTurnHistogram ?? emptyWinTurnAggregate().winTurnHistogram,
+          },
+          game.winningTurn,
+        );
+        next = {
+          ...next,
+          winTurnSum: nextAgg.winTurnSum,
+          winTurnWins: nextAgg.winTurnWins,
+          winTurnHistogram: nextAgg.winTurnHistogram,
+        };
+      }
+      currentRatings[j] = next;
     }
     resolvedGames += 1;
   }
