@@ -1,15 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
 
-/**
- * Regression guard for the Power Rankings "Avg Win Turn" tooltip.
- *
- * Covers the three bugs that were visible at PR #175:
- *   1. Tooltip rendered too narrow (16 bars in w-64).
- *   2. Tooltip was clipped by the table's overflow-x-auto container.
- *   3. Histogram bars had 0 computed height (percentage heights didn't
- *      resolve against the flex ancestor), so no data was visible.
- */
-
 const HISTOGRAM = [0, 0, 0, 0, 2, 5, 10, 15, 8, 4, 3, 2, 1, 0, 0, 0];
 const MAX_BIN_INDEX = 7;
 

@@ -124,13 +124,7 @@ async function* iterateFirestoreMatchResults(): AsyncGenerator<MatchResult[]> {
   }
 }
 
-/**
- * Convert a Firestore Timestamp-like value to an ISO string.
- * Uses duck-typing rather than `instanceof Timestamp` because dynamic imports
- * of @google-cloud/firestore can yield a module namespace where Timestamp is
- * not the same constructor the SDK internally attaches, making the instanceof
- * check throw "Right-hand side of 'instanceof' is not an object".
- */
+// Duck-typed: dynamic @google-cloud/firestore imports can produce a Timestamp constructor that differs from the one attached to runtime values, breaking `instanceof`.
 function firestoreTimestampToIso(value: unknown): string {
   if (value && typeof value === 'object') {
     const v = value as { toDate?: unknown; _seconds?: unknown; _nanoseconds?: unknown };
@@ -138,7 +132,6 @@ function firestoreTimestampToIso(value: unknown): string {
       const d = (v.toDate as () => Date)();
       if (d instanceof Date && !Number.isNaN(d.getTime())) return d.toISOString();
     }
-    // Serialized POJO form (e.g., after JSON round-trip): { _seconds, _nanoseconds }
     if (typeof v._seconds === 'number') {
       const nanos = typeof v._nanoseconds === 'number' ? v._nanoseconds : 0;
       const d = new Date(v._seconds * 1000 + Math.floor(nanos / 1e6));
