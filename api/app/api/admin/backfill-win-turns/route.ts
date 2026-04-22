@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorizedResponse } from '@/lib/auth';
 import { getRatingStore } from '@/lib/rating-store-factory';
-import { aggregateMatchResultsByWinner } from '@/lib/match-results-scan';
+import { addWinTurn, emptyWinTurnAggregate, type WinTurnAggregate } from '@/lib/win-turn-aggregate';
 import type { MatchResult, DeckRating } from '@/lib/types';
 import * as Sentry from '@sentry/nextjs';
 import { errorResponse } from '@/lib/api-response';
@@ -13,10 +13,18 @@ import { errorResponse } from '@/lib/api-response';
  * Admin-only. Idempotent: re-running produces the same values because
  * the aggregate is recomputed from match_results, not incremented.
  *
- * Behaviour:
+ * Implementation notes:
+ *   - Match results are streamed in bounded-size pages and aggregated
+ *     on the fly, so working set stays small as history grows.
+ *   - Rating docs are read in a single batched leaderboard fetch instead
+ *     of one getRating call per deck, avoiding N+1 reads.
  *   - Decks with no matching match_results are left untouched.
- *   - Decks with no existing rating doc are skipped (nothing to attach to).
+ *   - Decks with no existing rating doc are skipped.
  */
+
+const FIRESTORE_PAGE_SIZE = 1000;
+const SQLITE_PAGE_SIZE = 5000;
+
 export async function POST(request: NextRequest) {
   try {
     await verifyAdmin(request);
@@ -26,15 +34,29 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const allResults = await loadAllMatchResults();
-    const aggByDeck = aggregateMatchResultsByWinner(allResults);
+    const aggByDeck = new Map<string, WinTurnAggregate>();
+    let totalScanned = 0;
+
+    for await (const batch of iterateMatchResults()) {
+      totalScanned += batch.length;
+      for (const r of batch) {
+        if (!r.winnerDeckId || r.turnCount == null) continue;
+        const prev = aggByDeck.get(r.winnerDeckId) ?? emptyWinTurnAggregate();
+        aggByDeck.set(r.winnerDeckId, addWinTurn(prev, r.turnCount));
+      }
+    }
 
     const store = getRatingStore();
+
+    // Single batched fetch — avoids N+1 getRating calls.
+    const existingRatings = await store.getLeaderboard({ limit: 10_000 });
+    const ratingByDeckId = new Map(existingRatings.map((r) => [r.deckId, r]));
+
     const missingRatings: string[] = [];
     const updates: DeckRating[] = [];
 
     for (const [deckId, agg] of aggByDeck.entries()) {
-      const current = await store.getRating(deckId);
+      const current = ratingByDeckId.get(deckId);
       if (!current) {
         missingRatings.push(deckId);
         continue;
@@ -55,7 +77,7 @@ export async function POST(request: NextRequest) {
       updated: updates.length,
       missingRatings: missingRatings.length,
       missingRatingsIds: missingRatings,
-      totalMatchResults: allResults.length,
+      totalMatchResults: totalScanned,
     });
   } catch (err) {
     console.error('[BackfillWinTurns] Fatal error:', err);
@@ -64,13 +86,28 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function loadAllMatchResults(): Promise<MatchResult[]> {
+/** Yields match_results in bounded-size pages; works for both SQLite and Firestore. */
+async function* iterateMatchResults(): AsyncGenerator<MatchResult[]> {
   const isGcp = !!process.env.GOOGLE_CLOUD_PROJECT;
   if (isGcp) {
-    const { getFirestore } = await import('@/lib/firestore-client');
-    const { Timestamp } = await import('@google-cloud/firestore');
-    const snap = await getFirestore().collection('matchResults').get();
-    return snap.docs.map((doc) => {
+    yield* iterateFirestoreMatchResults();
+  } else {
+    yield* iterateSqliteMatchResults();
+  }
+}
+
+async function* iterateFirestoreMatchResults(): AsyncGenerator<MatchResult[]> {
+  const { getFirestore } = await import('@/lib/firestore-client');
+  const { Timestamp } = await import('@google-cloud/firestore');
+  const col = getFirestore().collection('matchResults');
+
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  while (true) {
+    let q = col.orderBy('__name__').limit(FIRESTORE_PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) return;
+    const batch: MatchResult[] = snap.docs.map((doc) => {
       const d = doc.data();
       const playedAt =
         d.playedAt instanceof Timestamp
@@ -86,32 +123,44 @@ async function loadAllMatchResults(): Promise<MatchResult[]> {
         playedAt,
       };
     });
+    yield batch;
+    if (snap.docs.length < FIRESTORE_PAGE_SIZE) return;
+    cursor = snap.docs[snap.docs.length - 1]!;
   }
+}
 
-  // LOCAL / SQLite
+async function* iterateSqliteMatchResults(): AsyncGenerator<MatchResult[]> {
   const { getDb } = await import('@/lib/db');
-  const rows = getDb()
-    .prepare(
-      'SELECT id, job_id, game_index, deck_ids, winner_deck_id, turn_count, played_at FROM match_results',
-    )
-    .all() as Array<{
-      id: string;
-      job_id: string;
-      game_index: number;
-      deck_ids: string;
-      winner_deck_id: string | null;
-      turn_count: number | null;
-      played_at: string;
-    }>;
-  return rows.map((row) => ({
-    id: row.id,
-    jobId: row.job_id,
-    gameIndex: row.game_index,
-    deckIds: safeJsonArray(row.deck_ids),
-    winnerDeckId: row.winner_deck_id,
-    turnCount: row.turn_count,
-    playedAt: row.played_at,
-  }));
+  const db = getDb();
+  let offset = 0;
+  while (true) {
+    const rows = db
+      .prepare(
+        'SELECT id, job_id, game_index, deck_ids, winner_deck_id, turn_count, played_at FROM match_results ORDER BY id LIMIT ? OFFSET ?',
+      )
+      .all(SQLITE_PAGE_SIZE, offset) as Array<{
+        id: string;
+        job_id: string;
+        game_index: number;
+        deck_ids: string;
+        winner_deck_id: string | null;
+        turn_count: number | null;
+        played_at: string;
+      }>;
+    if (rows.length === 0) return;
+    const batch: MatchResult[] = rows.map((row) => ({
+      id: row.id,
+      jobId: row.job_id,
+      gameIndex: row.game_index,
+      deckIds: safeJsonArray(row.deck_ids),
+      winnerDeckId: row.winner_deck_id,
+      turnCount: row.turn_count,
+      playedAt: row.played_at,
+    }));
+    yield batch;
+    if (rows.length < SQLITE_PAGE_SIZE) return;
+    offset += rows.length;
+  }
 }
 
 function safeJsonArray(raw: string): string[] {

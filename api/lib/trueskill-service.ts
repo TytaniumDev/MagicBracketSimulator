@@ -79,6 +79,7 @@ export async function processJobForRatings(
 
   const matchResults: MatchResult[] = [];
   let resolvedGames = 0;
+  const jobTimestamp = new Date().toISOString();
 
   for (let i = 0; i < games.length; i++) {
     const game = games[i]!;
@@ -101,7 +102,7 @@ export async function processJobForRatings(
       deckIds,
       winnerDeckId,
       turnCount: game.winningTurn ?? null,
-      playedAt: new Date().toISOString(),
+      playedAt: jobTimestamp,
     });
 
     if (!winnerDeckId) {
@@ -124,7 +125,7 @@ export async function processJobForRatings(
         ...current,
         gamesPlayed: current.gamesPlayed + 1,
         wins: current.wins + (isWinner ? 1 : 0),
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: jobTimestamp,
       };
       if (isWinner && game.winningTurn != null) {
         const nextAgg = addWinTurn(

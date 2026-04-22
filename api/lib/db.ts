@@ -301,16 +301,20 @@ export function getDb(): Database.Database {
     )
   `);
 
-  // Per-deck win-turn aggregate (additive migration — use prepare().run to stay consistent)
-  for (const alter of [
-    'ALTER TABLE ratings ADD COLUMN win_turn_sum INTEGER',
-    'ALTER TABLE ratings ADD COLUMN win_turn_wins INTEGER',
-    'ALTER TABLE ratings ADD COLUMN win_turn_histogram TEXT',
-  ]) {
-    try {
-      db.prepare(alter).run();
-    } catch {
-      // Column already exists
+  // Per-deck win-turn aggregate (additive migration — introspect current columns, add missing ones)
+  {
+    const ratingsColumns = new Set(
+      (db.prepare('PRAGMA table_info(ratings)').all() as { name: string }[]).map((c) => c.name),
+    );
+    const additions: Array<[string, string]> = [
+      ['win_turn_sum', 'INTEGER'],
+      ['win_turn_wins', 'INTEGER'],
+      ['win_turn_histogram', 'TEXT'],
+    ];
+    for (const [name, type] of additions) {
+      if (!ratingsColumns.has(name)) {
+        db.prepare(`ALTER TABLE ratings ADD COLUMN ${name} ${type}`).run();
+      }
     }
   }
 
