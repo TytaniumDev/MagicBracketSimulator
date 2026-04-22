@@ -40,6 +40,10 @@ export interface LeaderboardEntry {
   gamesPlayed: number;
   wins: number;
   winRate: number;
+  /** Mean of winning turnCount across resolved wins. Null when no wins have a recorded turn. */
+  avgWinTurn: number | null;
+  /** 16 bins — indexes 0..14 map to turns 1..15, index 15 is "16+". Null when no data. */
+  winTurnHistogram: number[] | null;
 }
 
 // Prior: expected win rate in a 4-player free-for-all is 25%.
@@ -108,6 +112,11 @@ export async function GET(request: NextRequest) {
           primaryCommander = deck.primaryCommander ?? null;
         }
 
+        const winTurnWins = r.winTurnWins ?? 0;
+        const hasHistogram =
+          Array.isArray(r.winTurnHistogram) &&
+          r.winTurnHistogram.length === 16 &&
+          r.winTurnHistogram.some((n) => n > 0);
         return {
           deckId: r.deckId,
           name,
@@ -120,6 +129,8 @@ export async function GET(request: NextRequest) {
           gamesPlayed: r.gamesPlayed,
           wins: r.wins,
           winRate: r.gamesPlayed > 0 ? r.wins / r.gamesPlayed : 0,
+          avgWinTurn: winTurnWins > 0 ? (r.winTurnSum ?? 0) / winTurnWins : null,
+          winTurnHistogram: hasHistogram ? r.winTurnHistogram! : null,
         };
       }),
     );
