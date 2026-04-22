@@ -13,30 +13,38 @@ import { test, expect, type Page } from '@playwright/test';
 const HISTOGRAM = [0, 0, 0, 0, 2, 5, 10, 15, 8, 4, 3, 2, 1, 0, 0, 0];
 const MAX_BIN_INDEX = 7;
 
+function makeDeck(n: number) {
+  return {
+    deckId: `test-deck-${n}`,
+    name: `Test Deck ${n}`,
+    setName: 'Test Set',
+    isPrecon: true,
+    primaryCommander: null,
+    rating: 50.0,
+    gamesPlayed: 100,
+    wins: 50,
+    winRate: 0.5,
+    avgWinTurn: 7.8,
+    winTurnHistogram: HISTOGRAM,
+  };
+}
+
 const mockLeaderboard = {
-  decks: [
-    {
-      deckId: 'test-deck',
-      name: 'Test Deck',
-      setName: 'Test Set',
-      isPrecon: true,
-      primaryCommander: null,
-      rating: 50.0,
-      gamesPlayed: 100,
-      wins: 50,
-      winRate: 0.5,
-      avgWinTurn: 7.8,
-      winTurnHistogram: HISTOGRAM,
-    },
-  ],
+  decks: [makeDeck(1)],
 };
 
-async function stubLeaderboardApis(page: Page) {
+// Many-row fixture for scrolling tests — enough rows that the last row sits
+// near the bottom of the viewport and exercises vertical clamping.
+const mockLeaderboardLong = {
+  decks: Array.from({ length: 30 }, (_, i) => makeDeck(i + 1)),
+};
+
+async function stubLeaderboardApis(page: Page, payload = mockLeaderboard) {
   await page.route('**/api/leaderboard*', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(mockLeaderboard),
+      body: JSON.stringify(payload),
     }),
   );
   await page.route('**/api/coverage/config', (route) =>
@@ -132,6 +140,48 @@ test.describe('WinTurnTooltip', () => {
     expect(box!.width).toBeGreaterThanOrEqual(300);
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(600);
+  });
+
+  test('flips above the icon when there is not enough space below', async ({ page }) => {
+    await page.unroute('**/api/leaderboard*');
+    await page.route('**/api/leaderboard*', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockLeaderboardLong),
+      }),
+    );
+    await page.setViewportSize({ width: 1200, height: 700 });
+    await page.goto('/leaderboard');
+
+    const icons = page.getByRole('button', { name: /show win turn distribution/i });
+    await expect(icons.first()).toBeVisible();
+    const lastIcon = icons.last();
+    await lastIcon.scrollIntoViewIfNeeded();
+
+    // Force the last icon near the bottom of the viewport — enough that a
+    // ~180px-tall tooltip positioned below it would overflow.
+    await lastIcon.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const targetFromBottom = 40;
+      window.scrollBy({ top: rect.bottom - (window.innerHeight - targetFromBottom) });
+    });
+
+    await lastIcon.hover();
+    const tooltip = page.getByRole('tooltip');
+    await expect(tooltip).toBeVisible();
+
+    const viewport = page.viewportSize()!;
+    const tooltipBox = await tooltip.boundingBox();
+    const iconBox = await lastIcon.boundingBox();
+    expect(tooltipBox).not.toBeNull();
+    expect(iconBox).not.toBeNull();
+
+    // Stays inside the viewport vertically.
+    expect(tooltipBox!.y).toBeGreaterThanOrEqual(0);
+    expect(tooltipBox!.y + tooltipBox!.height).toBeLessThanOrEqual(viewport.height);
+    // And specifically flipped above the icon (tooltip bottom is at or above icon top).
+    expect(tooltipBox!.y + tooltipBox!.height).toBeLessThanOrEqual(iconBox!.y + 1);
   });
 
   test('tooltip portals to document.body, outside the table', async ({ page }) => {

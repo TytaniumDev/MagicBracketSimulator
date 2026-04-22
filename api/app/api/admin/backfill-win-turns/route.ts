@@ -132,9 +132,18 @@ async function* iterateFirestoreMatchResults(): AsyncGenerator<MatchResult[]> {
  * check throw "Right-hand side of 'instanceof' is not an object".
  */
 function firestoreTimestampToIso(value: unknown): string {
-  if (value && typeof (value as { toDate?: unknown }).toDate === 'function') {
-    const d = (value as { toDate: () => Date }).toDate();
-    if (d instanceof Date && !Number.isNaN(d.getTime())) return d.toISOString();
+  if (value && typeof value === 'object') {
+    const v = value as { toDate?: unknown; _seconds?: unknown; _nanoseconds?: unknown };
+    if (typeof v.toDate === 'function') {
+      const d = (v.toDate as () => Date)();
+      if (d instanceof Date && !Number.isNaN(d.getTime())) return d.toISOString();
+    }
+    // Serialized POJO form (e.g., after JSON round-trip): { _seconds, _nanoseconds }
+    if (typeof v._seconds === 'number') {
+      const nanos = typeof v._nanoseconds === 'number' ? v._nanoseconds : 0;
+      const d = new Date(v._seconds * 1000 + Math.floor(nanos / 1e6));
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+    }
   }
   return String(value ?? '');
 }

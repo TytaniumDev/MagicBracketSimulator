@@ -6,7 +6,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { WinTurnTooltip } from '../components/WinTurnTooltip';
 
 const TOOLTIP_WIDTH = 320;
+// Approximate — the tooltip's actual height depends on bar rendering, but a
+// conservative estimate is enough to pick "flip above" vs "stay below".
+const TOOLTIP_ESTIMATED_HEIGHT = 180;
 const TOOLTIP_MARGIN = 8;
+const TOOLTIP_GAP = 4;
 
 interface LeaderboardEntry {
   deckId: string;
@@ -62,7 +66,11 @@ function AvgWinTurnCell({
       TOOLTIP_MARGIN,
       Math.min(rect.right - TOOLTIP_WIDTH, maxLeft),
     );
-    setCoords({ top: rect.bottom + 4, left });
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < TOOLTIP_ESTIMATED_HEIGHT + TOOLTIP_GAP + TOOLTIP_MARGIN
+      ? Math.max(TOOLTIP_MARGIN, rect.top - TOOLTIP_ESTIMATED_HEIGHT - TOOLTIP_GAP)
+      : rect.bottom + TOOLTIP_GAP;
+    setCoords({ top, left });
   };
   const hideTooltip = () => setCoords(null);
 
