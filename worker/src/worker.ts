@@ -46,6 +46,7 @@ import {
 import { startWorkerApi, stopWorkerApi, HealthStatus } from './worker-api.js';
 import { createLogger } from './logger.js';
 import { captureWorkerException, addWorkerBreadcrumb, flushSentry } from './sentry.js';
+import { parseOverrideHeader } from './override.js';
 
 const log = createLogger('Worker');
 
@@ -519,20 +520,13 @@ function applyOverride(newOverride: number | null): void {
 }
 
 /**
- * Parse the X-Max-Concurrent-Override header from a claim-sim response and
- * apply it. `none` clears the override; a positive integer 1-20 sets it.
- * Anything else (missing, malformed) is ignored — leaves current state alone.
+ * Apply the X-Max-Concurrent-Override header from a claim-sim response.
+ * Parsing lives in override.ts so it's independently testable.
  */
 function applyOverrideFromHeader(header: string | null): void {
-  if (header === null) return;
-  if (header === 'none') {
-    applyOverride(null);
-    return;
-  }
-  const n = parseInt(header, 10);
-  if (Number.isInteger(n) && n >= 1 && n <= 20) {
-    applyOverride(n);
-  }
+  const parsed = parseOverrideHeader(header);
+  if (parsed === undefined) return;
+  applyOverride(parsed);
 }
 
 /**

@@ -3,6 +3,7 @@ import { isWorkerRequest } from '@/lib/auth';
 import { claimNextSim } from '@/lib/job-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import { OVERRIDE_HEADER_NAME, encodeOverrideHeader } from '@/lib/override-header';
 
 /**
  * GET /api/jobs/claim-sim — Atomically claim the next PENDING simulation.
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     const overrideHeader: Record<string, string> = {};
     if (overrideResult !== undefined) {
-      overrideHeader['X-Max-Concurrent-Override'] = overrideResult == null ? 'none' : String(overrideResult);
+      overrideHeader[OVERRIDE_HEADER_NAME] = encodeOverrideHeader(overrideResult);
     }
 
     if (!claimed) return new NextResponse(null, { status: 204, headers: overrideHeader });
