@@ -24,6 +24,10 @@ queue.
    atomically flips the oldest PENDING sim on the oldest active job to
    RUNNING, promotes the job from QUEUED to RUNNING if this is its first
    claim, and returns `{ jobId, simId, simIndex }`. A 204 means no work.
+   Every response (200 or 204) carries the worker's current concurrency
+   override in the `X-Max-Concurrent-Override` header so runtime changes
+   propagate within one poll interval even when the push `/config` path is
+   unreachable (worker behind NAT / `WORKER_API_URL` unset).
 4. **Run:** the worker calls `GET /api/jobs/:id` for deck data, runs the
    simulation container, and reports status via
    `PATCH /api/jobs/:id/simulations/:simId` (see §2 below).

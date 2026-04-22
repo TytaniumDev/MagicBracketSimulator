@@ -46,6 +46,7 @@ import {
 import { startWorkerApi, stopWorkerApi, HealthStatus } from './worker-api.js';
 import { createLogger } from './logger.js';
 import { captureWorkerException, addWorkerBreadcrumb, flushSentry } from './sentry.js';
+import { parseOverrideHeader } from './override.js';
 
 const log = createLogger('Worker');
 
@@ -519,6 +520,16 @@ function applyOverride(newOverride: number | null): void {
 }
 
 /**
+ * Apply the X-Max-Concurrent-Override header from a claim-sim response.
+ * Parsing lives in override.ts so it's independently testable.
+ */
+function applyOverrideFromHeader(header: string | null): void {
+  const parsed = parseOverrideHeader(header);
+  if (parsed === undefined) return;
+  applyOverride(parsed);
+}
+
+/**
  * Cancel all active simulations for a job by aborting their controllers.
  */
 function cancelJob(jobId: string): void {
@@ -841,6 +852,10 @@ async function pollForSims(): Promise<void> {
         headers: getApiHeaders(),
         signal: AbortSignal.timeout(API_TIMEOUT_MS),
       });
+      // Sync override from response header. This is the responsive fallback
+      // when push /config is unavailable (worker behind NAT / WORKER_API_URL
+      // unset): the override propagates within one poll interval.
+      applyOverrideFromHeader(res.headers.get('X-Max-Concurrent-Override'));
       if (res.status === 200) {
         claimed = (await res.json()) as { jobId: string; simId: string; simIndex: number };
       } else if (res.status !== 204) {

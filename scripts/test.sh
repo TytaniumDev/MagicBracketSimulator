@@ -18,3 +18,7 @@ cd api && npm ci && npm run test:unit
 
 echo "=== API ingestion tests ==="
 npm run test:ingestion && cd ..
+
+# Worker tests
+echo "=== Worker unit tests ==="
+cd worker && npm ci && npm run test:unit && cd ..

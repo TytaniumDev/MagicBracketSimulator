@@ -8,7 +8,8 @@
     "start": "node dist/worker.js",
     "dev": "tsx src/worker.ts",
     "watch": "tsx watch src/worker.ts",
-    "start:keep-awake": "caffeinate -i npm start"
+    "start:keep-awake": "caffeinate -i npm start",
+    "test:unit": "tsx src/override.test.ts"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^4.3.0",
