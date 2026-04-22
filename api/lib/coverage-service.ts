@@ -39,6 +39,7 @@ export interface PairCoverageMap {
   counts: Map<string, number>;
   allDeckIds: string[];
   allDecks: DeckListItem[];
+  deckPriority: Map<string, number>;
 }
 
 // In-memory cache to avoid re-reading all match_results on every request
@@ -68,7 +69,8 @@ export async function computePairCoverage(): Promise<PairCoverageMap> {
 
   await forEachMatchResult(incrementPairs);
 
-  const data = { counts, allDeckIds, allDecks };
+  const deckPriority = buildDeckPriority(allDecks);
+  const data = { counts, allDeckIds, allDecks, deckPriority };
   coverageCache = { data, ts: Date.now() };
   return data;
 }
@@ -77,11 +79,19 @@ export async function computePairCoverage(): Promise<PairCoverageMap> {
  * Build a priority score per deck, biased toward recently-added custom decks.
  * Custom decks get a rank-based score (newest = highest); precons get 0.
  * This is used as a tiebreaker when many pairs/decks tie on coverage metrics.
+ *
+ * Note: in LOCAL mode, saved custom decks have `createdAt === ''` (see
+ * deck-store-factory.ts:111), so every custom deck tiebreaks on insertion
+ * (alphabetical) order rather than true recency. The GCP path stores real
+ * timestamps, so the "newest first" claim holds there.
  */
 function buildDeckPriority(allDecks: DeckListItem[]): Map<string, number> {
   const customDecks = allDecks
     .filter((d) => !d.isPrecon)
-    .map((d) => ({ id: d.id, ts: d.createdAt ? Date.parse(d.createdAt) : 0 }))
+    .map((d) => {
+      const parsed = d.createdAt ? Date.parse(d.createdAt) : 0;
+      return { id: d.id, ts: Number.isNaN(parsed) ? 0 : parsed };
+    })
     .sort((a, b) => b.ts - a.ts); // newest first
 
   const priority = new Map<string, number>();
@@ -96,10 +106,14 @@ function buildDeckPriority(allDecks: DeckListItem[]): Map<string, number> {
 }
 
 /**
- * Weighted random choice. `weights` must be >= 0 and at least one must be > 0.
- * Falls back to uniform if all weights are 0.
+ * Weighted random choice. Throws if `weights` is empty — callers are
+ * responsible for guaranteeing a non-empty candidate set. Falls back to
+ * uniform if all weights are 0.
  */
 function weightedRandomIndex(weights: number[]): number {
+  if (weights.length === 0) {
+    throw new Error('weightedRandomIndex called with empty weights');
+  }
   const total = weights.reduce((s, w) => s + w, 0);
   if (total <= 0) return Math.floor(Math.random() * weights.length);
   let r = Math.random() * total;
@@ -142,7 +156,7 @@ export async function getCoverageStatus(targetGamesPerPair: number): Promise<Cov
  * Returns null if all pairs meet the target or fewer than 4 decks exist.
  */
 export async function generateNextPod(targetGamesPerPair: number): Promise<string[] | null> {
-  const { counts, allDeckIds, allDecks } = await computePairCoverage();
+  const { counts, allDeckIds, deckPriority } = await computePairCoverage();
 
   if (allDeckIds.length < 4) return null;
 
@@ -160,9 +174,8 @@ export async function generateNextPod(targetGamesPerPair: number): Promise<strin
 
   if (underCovered.size === 0) return null;
 
-  const priority = buildDeckPriority(allDecks);
   // +1 ensures precons (priority 0) still have a non-zero chance.
-  const deckWeight = (id: string): number => (priority.get(id) ?? 0) + 1;
+  const deckWeight = (id: string): number => (deckPriority.get(id) ?? 0) + 1;
 
   // Step 1: Among pairs with the fewest games played, weight-random by priority
   // so newly-added custom decks are favored but every under-covered pair can still
