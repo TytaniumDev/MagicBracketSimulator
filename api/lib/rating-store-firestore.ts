@@ -15,24 +15,37 @@ const firestore = getFirestore();
 const ratingsCol = firestore.collection('ratings');
 const matchResultsCol = firestore.collection('matchResults');
 
+function parseWinTurnHistogram(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 16) return undefined;
+  if (!raw.every((n) => typeof n === 'number')) return undefined;
+  return raw as number[];
+}
+
+function docToRating(deckId: string, d: FirebaseFirestore.DocumentData): DeckRating {
+  const rating: DeckRating = {
+    deckId,
+    mu: d.mu as number,
+    sigma: d.sigma as number,
+    gamesPlayed: d.gamesPlayed as number,
+    wins: d.wins as number,
+    lastUpdated: (d.lastUpdated as Timestamp).toDate().toISOString(),
+  };
+  if (d.deckName) rating.deckName = d.deckName as string;
+  if (d.setName !== undefined) rating.setName = d.setName as string | null;
+  if (d.isPrecon !== undefined) rating.isPrecon = d.isPrecon as boolean;
+  if (d.primaryCommander !== undefined) rating.primaryCommander = d.primaryCommander as string | null;
+  if (typeof d.winTurnSum === 'number') rating.winTurnSum = d.winTurnSum;
+  if (typeof d.winTurnWins === 'number') rating.winTurnWins = d.winTurnWins;
+  const hist = parseWinTurnHistogram(d.winTurnHistogram);
+  if (hist) rating.winTurnHistogram = hist;
+  return rating;
+}
+
 export const firestoreRatingStore: RatingStore = {
   async getRating(deckId: string): Promise<DeckRating | null> {
     const doc = await ratingsCol.doc(deckId).get();
     if (!doc.exists) return null;
-    const d = doc.data()!;
-    return {
-      deckId,
-      mu: d.mu as number,
-      sigma: d.sigma as number,
-      gamesPlayed: d.gamesPlayed as number,
-      wins: d.wins as number,
-      lastUpdated: (d.lastUpdated as Timestamp).toDate().toISOString(),
-      // Denormalized metadata (may be absent on older docs)
-      ...(d.deckName && { deckName: d.deckName as string }),
-      ...(d.setName !== undefined && { setName: d.setName as string | null }),
-      ...(d.isPrecon !== undefined && { isPrecon: d.isPrecon as boolean }),
-      ...(d.primaryCommander !== undefined && { primaryCommander: d.primaryCommander as string | null }),
-    };
+    return docToRating(deckId, doc.data()!);
   },
 
   async updateRatings(updates: DeckRating[]): Promise<void> {
@@ -46,11 +59,13 @@ export const firestoreRatingStore: RatingStore = {
         wins: r.wins,
         lastUpdated: now,
       };
-      // Write denormalized deck metadata (for leaderboard without N+1 queries)
       if (r.deckName !== undefined) doc.deckName = r.deckName;
       if (r.setName !== undefined) doc.setName = r.setName;
       if (r.isPrecon !== undefined) doc.isPrecon = r.isPrecon;
       if (r.primaryCommander !== undefined) doc.primaryCommander = r.primaryCommander;
+      if (r.winTurnSum !== undefined) doc.winTurnSum = r.winTurnSum;
+      if (r.winTurnWins !== undefined) doc.winTurnWins = r.winTurnWins;
+      if (r.winTurnHistogram !== undefined) doc.winTurnHistogram = r.winTurnHistogram;
       batch.set(ratingsCol.doc(r.deckId), doc);
     }
     await batch.commit();
@@ -82,24 +97,7 @@ export const firestoreRatingStore: RatingStore = {
       .limit(limit)
       .get();
 
-    const ratings: DeckRating[] = snapshot.docs.map((doc) => {
-      const d = doc.data();
-      return {
-        deckId: doc.id,
-        mu: d.mu as number,
-        sigma: d.sigma as number,
-        gamesPlayed: d.gamesPlayed as number,
-        wins: d.wins as number,
-        lastUpdated: (d.lastUpdated as Timestamp).toDate().toISOString(),
-        // Denormalized metadata (may be absent on older docs)
-        ...(d.deckName && { deckName: d.deckName as string }),
-        ...(d.setName !== undefined && { setName: d.setName as string | null }),
-        ...(d.isPrecon !== undefined && { isPrecon: d.isPrecon as boolean }),
-        ...(d.primaryCommander !== undefined && { primaryCommander: d.primaryCommander as string | null }),
-      };
-    });
-
-    // Sort by conservative rating (mu - 3*sigma) descending
+    const ratings: DeckRating[] = snapshot.docs.map((doc) => docToRating(doc.id, doc.data()));
     ratings.sort((a, b) => b.mu - 3 * b.sigma - (a.mu - 3 * a.sigma));
     return ratings;
   },
