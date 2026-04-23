@@ -395,12 +395,13 @@ function matchesDeckName(fullName: string, shortName: string): boolean {
   return false;
 }
 
-// Number of Turn: markers owned by each player — accurate with eliminations.
-function calculatePerDeckTurns(ranges: TurnRange[]): Record<string, number> {
-  const result: Record<string, number> = {};
+// Shape mirrors api/lib/condenser/turns.ts so drift is obvious if the two diverge.
+function calculatePerDeckTurns(ranges: TurnRange[]): Record<string, { turnsTaken: number }> {
+  const result: Record<string, { turnsTaken: number }> = {};
   for (const range of ranges) {
     if (!range.player) continue;
-    result[range.player] = (result[range.player] ?? 0) + 1;
+    if (!result[range.player]) result[range.player] = { turnsTaken: 0 };
+    result[range.player].turnsTaken++;
   }
   return result;
 }
@@ -413,11 +414,15 @@ export function extractWinningTurn(rawLog: string): number {
   const winner = extractWinner(rawLog);
   if (winner) {
     const winnerKey = Object.keys(perDeck).find((k) => matchesDeckName(k, winner));
-    if (winnerKey) return perDeck[winnerKey]!;
+    if (winnerKey) return perDeck[winnerKey].turnsTaken;
   }
 
-  const counts = Object.values(perDeck);
-  return counts.length > 0 ? Math.max(...counts) : 0;
+  const allTurns = Object.values(perDeck).map((d) => d.turnsTaken);
+  if (allTurns.length > 0) return Math.max(...allTurns);
+
+  // Last resort: turn markers present but none had a player name (old log format
+  // with missing player). Fall back to the round-count approximation.
+  return getMaxRound(turnRanges, getNumPlayers(turnRanges));
 }
 
 // ============================================================================

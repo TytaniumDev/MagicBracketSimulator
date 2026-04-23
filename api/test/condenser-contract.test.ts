@@ -161,6 +161,44 @@ test('extractWinningTurn: worker and API agree for every split game', () => {
   }
 });
 
+test('extractWinningTurn: worker and API agree when winner name does not match any turn owner', () => {
+  // Synthetic: turn markers attribute to Alice/Bob/Carol/Dan, but the winner
+  // line names someone not in the turn ranges. Both sides must fall through
+  // to max-per-deck (Bob=3) instead of returning 0 or diverging.
+  const log = [
+    'Turn: Turn 1 (Alice)', 'stuff',
+    'Turn: Turn 2 (Bob)', 'stuff',
+    'Turn: Turn 3 (Carol)', 'stuff',
+    'Turn: Turn 4 (Dan)', 'stuff',
+    'Turn: Turn 5 (Alice)', 'stuff',
+    'Turn: Turn 6 (Bob)', 'stuff',
+    'Turn: Turn 7 (Carol)', 'stuff',
+    'Turn: Turn 8 (Dan)', 'stuff',
+    'Turn: Turn 9 (Bob)', 'stuff',
+    'Eve has won because all opponents have lost',
+  ].join('\n');
+  const apiT = normTurn(apiExtractWinningTurn(log));
+  const workerT = normTurn(workerExtractWinningTurn(log));
+  assertEqual(workerT, apiT, 'unknown winner falls through to same value');
+  assertEqual(apiT, 3, 'max-per-deck is Bob = 3');
+});
+
+test('extractWinningTurn: worker and API agree when turn markers lack player attribution', () => {
+  // Forge's older log format emits "Turn N: <player>" where <player> can be
+  // empty; both implementations should reach the last-resort round fallback.
+  const log = [
+    'Turn 1:',
+    'Turn 2:',
+    'Turn 3:',
+    'Turn 4:',
+    'Turn 5:',
+    'Alice has won because all opponents have lost',
+  ].join('\n');
+  const apiT = normTurn(apiExtractWinningTurn(log));
+  const workerT = normTurn(workerExtractWinningTurn(log));
+  assertEqual(workerT, apiT, 'last-resort fallback agrees');
+});
+
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
