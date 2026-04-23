@@ -22,12 +22,12 @@
  *   - Byte-for-byte game boundaries. Both implementations agree on the
  *     game count and on the line containing the winner, but they may
  *     include slightly different surrounding noise in each chunk.
- *   - extractWinningTurn. The worker's turn count is a preliminary
- *     preview; the API's aggregation uses per-deck turn tracking which
- *     is authoritative and overwrites it.
  *
- * If a future change makes the worker's turn extraction authoritative,
- * add the stricter assertion here so drift is caught at test time.
+ * extractWinningTurn MUST agree: the worker reports winningTurns[] on
+ * simulation docs (seen in DeckShowcase) while the API feeds the rating
+ * store / Power Rankings histogram from its own aggregation. When the
+ * two diverge, users see different turn values in the two views for the
+ * same game — see the contract test below.
  *
  * Run with: npx tsx test/condenser-contract.test.ts
  */
@@ -149,6 +149,54 @@ test('extractWinningTurn: empty log returns no turn on both sides', () => {
   const workerT = normTurn(workerExtractWinningTurn(''));
   assertEqual(apiT, undefined, 'api empty');
   assertEqual(workerT, undefined, 'worker empty');
+});
+
+test('extractWinningTurn: worker and API agree for every split game', () => {
+  const apiGames = apiSplit(RAW_LOG);
+  const workerGames = workerSplit(RAW_LOG);
+  for (let i = 0; i < apiGames.length; i++) {
+    const apiT = normTurn(apiExtractWinningTurn(apiGames[i]));
+    const workerT = normTurn(workerExtractWinningTurn(workerGames[i]));
+    assertEqual(workerT, apiT, `game ${i} winning turn`);
+  }
+});
+
+test('extractWinningTurn: worker and API agree when winner name does not match any turn owner', () => {
+  // Synthetic: turn markers attribute to Alice/Bob/Carol/Dan, but the winner
+  // line names someone not in the turn ranges. Both sides must fall through
+  // to max-per-deck (Bob=3) instead of returning 0 or diverging.
+  const log = [
+    'Turn: Turn 1 (Alice)', 'stuff',
+    'Turn: Turn 2 (Bob)', 'stuff',
+    'Turn: Turn 3 (Carol)', 'stuff',
+    'Turn: Turn 4 (Dan)', 'stuff',
+    'Turn: Turn 5 (Alice)', 'stuff',
+    'Turn: Turn 6 (Bob)', 'stuff',
+    'Turn: Turn 7 (Carol)', 'stuff',
+    'Turn: Turn 8 (Dan)', 'stuff',
+    'Turn: Turn 9 (Bob)', 'stuff',
+    'Eve has won because all opponents have lost',
+  ].join('\n');
+  const apiT = normTurn(apiExtractWinningTurn(log));
+  const workerT = normTurn(workerExtractWinningTurn(log));
+  assertEqual(workerT, apiT, 'unknown winner falls through to same value');
+  assertEqual(apiT, 3, 'max-per-deck is Bob = 3');
+});
+
+test('extractWinningTurn: worker and API agree when turn markers lack player attribution', () => {
+  // Forge's older log format emits "Turn N: <player>" where <player> can be
+  // empty; both implementations should reach the last-resort round fallback.
+  const log = [
+    'Turn 1:',
+    'Turn 2:',
+    'Turn 3:',
+    'Turn 4:',
+    'Turn 5:',
+    'Alice has won because all opponents have lost',
+  ].join('\n');
+  const apiT = normTurn(apiExtractWinningTurn(log));
+  const workerT = normTurn(workerExtractWinningTurn(log));
+  assertEqual(workerT, apiT, 'last-resort fallback agrees');
 });
 
 // ---------------------------------------------------------------------------
