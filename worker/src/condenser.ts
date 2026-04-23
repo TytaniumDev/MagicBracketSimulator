@@ -383,30 +383,41 @@ export function extractWinner(rawLog: string): string {
   return '';
 }
 
+// Keep in sync with api/lib/condenser/deck-match.ts:matchesDeckName.
+function matchesDeckName(fullName: string, shortName: string): boolean {
+  if (fullName === shortName) return true;
+  if (fullName.endsWith('-' + shortName)) return true;
+  const stripped = fullName.replace(/^Ai\(\d+\)-/, '');
+  if (stripped !== fullName) {
+    if (stripped === shortName) return true;
+    if (stripped.startsWith(shortName + ' - ')) return true;
+  }
+  return false;
+}
+
+// Number of Turn: markers owned by each player — accurate with eliminations.
+function calculatePerDeckTurns(ranges: TurnRange[]): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const range of ranges) {
+    if (!range.player) continue;
+    result[range.player] = (result[range.player] ?? 0) + 1;
+  }
+  return result;
+}
+
 export function extractWinningTurn(rawLog: string): number {
-  const lines = rawLog.replace(/\r\n/g, '\n').split('\n');
   const turnRanges = extractTurnRanges(rawLog);
-  const numPlayers = getNumPlayers(turnRanges);
+  if (turnRanges.length === 0) return 0;
 
-  // Find the line with the win condition and determine its turn
-  for (let i = 0; i < lines.length; i++) {
-    if (KeepWinCondition.test(lines[i])) {
-      // Find which turn range this line belongs to
-      for (const tr of turnRanges) {
-        if (i >= tr.startIndex && i <= tr.endIndex) {
-          // Convert to round
-          return Math.ceil(tr.turnNumber / numPlayers);
-        }
-      }
-    }
+  const perDeck = calculatePerDeckTurns(turnRanges);
+  const winner = extractWinner(rawLog);
+  if (winner) {
+    const winnerKey = Object.keys(perDeck).find((k) => matchesDeckName(k, winner));
+    if (winnerKey) return perDeck[winnerKey]!;
   }
 
-  // If we can't find the win line in a turn, return the last round
-  if (turnRanges.length > 0) {
-    return getMaxRound(turnRanges, numPlayers);
-  }
-
-  return 0;
+  const counts = Object.values(perDeck);
+  return counts.length > 0 ? Math.max(...counts) : 0;
 }
 
 // ============================================================================

@@ -22,12 +22,12 @@
  *   - Byte-for-byte game boundaries. Both implementations agree on the
  *     game count and on the line containing the winner, but they may
  *     include slightly different surrounding noise in each chunk.
- *   - extractWinningTurn. The worker's turn count is a preliminary
- *     preview; the API's aggregation uses per-deck turn tracking which
- *     is authoritative and overwrites it.
  *
- * If a future change makes the worker's turn extraction authoritative,
- * add the stricter assertion here so drift is caught at test time.
+ * extractWinningTurn MUST agree: the worker reports winningTurns[] on
+ * simulation docs (seen in DeckShowcase) while the API feeds the rating
+ * store / Power Rankings histogram from its own aggregation. When the
+ * two diverge, users see different turn values in the two views for the
+ * same game — see the contract test below.
  *
  * Run with: npx tsx test/condenser-contract.test.ts
  */
@@ -149,6 +149,16 @@ test('extractWinningTurn: empty log returns no turn on both sides', () => {
   const workerT = normTurn(workerExtractWinningTurn(''));
   assertEqual(apiT, undefined, 'api empty');
   assertEqual(workerT, undefined, 'worker empty');
+});
+
+test('extractWinningTurn: worker and API agree for every split game', () => {
+  const apiGames = apiSplit(RAW_LOG);
+  const workerGames = workerSplit(RAW_LOG);
+  for (let i = 0; i < apiGames.length; i++) {
+    const apiT = normTurn(apiExtractWinningTurn(apiGames[i]));
+    const workerT = normTurn(workerExtractWinningTurn(workerGames[i]));
+    assertEqual(workerT, apiT, `game ${i} winning turn`);
+  }
 });
 
 // ---------------------------------------------------------------------------
