@@ -11,8 +11,8 @@ The system supports two deployment modes, auto-detected by the `GOOGLE_CLOUD_PRO
 
 | Mode | Storage | Queue | Auth | Worker Transport |
 |------|---------|-------|------|------------------|
-| **Local** (env unset) | SQLite + filesystem | HTTP polling | None | `GET /api/jobs/next` |
-| **GCP** (env set) | Firestore + Cloud Storage | Pub/Sub | Firebase Auth | Pub/Sub pull subscription |
+| **Local** (env unset) | SQLite + filesystem | HTTP polling | None | `GET /api/jobs/claim-sim` |
+| **GCP** (env set) | Firestore + Cloud Storage | HTTP polling | Firebase Auth | `GET /api/jobs/claim-sim` |
 
 ---
 
@@ -24,12 +24,10 @@ flowchart TB
         AppHosting[App Hosting<br/>Next.js API]
         Firestore[(Firestore)]
         GCS[(Cloud Storage)]
-        PubSub[Pub/Sub]
         FirebaseAuth[Firebase Auth]
         FirebaseHosting[Firebase Hosting<br/>React Frontend]
         AppHosting --> Firestore
         AppHosting --> GCS
-        AppHosting --> PubSub
         FirebaseAuth --> AppHosting
     end
 
@@ -51,7 +49,7 @@ flowchart TB
 
     User --> FirebaseHosting
     FirebaseHosting --> AppHosting
-    PubSub -.-> Worker
+    Worker -->|GET claim-sim| AppHosting
     AppHosting -->|push config/cancel/notify| Worker
     Worker -->|PATCH status| AppHosting
     Worker -->|POST logs| AppHosting
@@ -65,7 +63,7 @@ flowchart TB
 | **Frontend** | Firebase Hosting | React SPA |
 | **Job Metadata** | Firestore | Job state, deck references, simulation statuses, results |
 | **Artifacts** | Cloud Storage | Raw logs, condensed logs, structured logs |
-| **Job Queue** | Pub/Sub | Triggers workers when jobs are created |
+| **Job Queue** | Firestore / HTTP Polling | Queue state is stored in Firestore; workers poll `claim-sim` for PENDING simulations |
 | **Authentication** | Firebase Auth | Google sign-in with email allowlist |
 | **Secrets** | Secret Manager | Worker config |
 
@@ -134,7 +132,6 @@ sequenceDiagram
     participant Frontend as Firebase Hosting
     participant API as App Hosting (API)
     participant Firestore
-    participant PubSub
     participant Worker
     participant SimContainer as Simulation Container
 
@@ -142,21 +139,22 @@ sequenceDiagram
     Frontend->>API: POST /api/jobs
     API->>Firestore: Store job (QUEUED)
     API->>Firestore: Initialize subcollection (PENDING)
-    API->>PubSub: Publish N simulation-task messages
     API-->>Frontend: 201 Created
 
     par Parallel simulation containers
-        PubSub->>Worker: Pull simulation-task (sim_000)
+        Worker->>API: GET /api/jobs/claim-sim
+        API->>Firestore: Atomically set oldest PENDING to RUNNING
+        API-->>Worker: sim_000 claimed
         Worker->>API: GET /api/jobs/:id (deck data)
         Worker->>SimContainer: docker run simulation (game 1)
-        Worker->>API: PATCH sim_000 → RUNNING
         SimContainer-->>Worker: Exit (log file)
         Worker->>API: PATCH sim_000 → COMPLETED
     and
-        PubSub->>Worker: Pull simulation-task (sim_001)
+        Worker->>API: GET /api/jobs/claim-sim
+        API->>Firestore: Atomically set next PENDING to RUNNING
+        API-->>Worker: sim_001 claimed
         Worker->>API: GET /api/jobs/:id (deck data)
         Worker->>SimContainer: docker run simulation (game 2)
-        Worker->>API: PATCH sim_001 → RUNNING
         SimContainer-->>Worker: Exit (log file)
         Worker->>API: PATCH sim_001 → COMPLETED
     end
@@ -236,7 +234,7 @@ The semaphore capacity can be dynamically overridden via the worker's push API (
 
 | Aspect | Container Mode | Monolithic Mode (legacy) |
 |--------|---------------|-------------------------|
-| Tasks in flight | Multiple (Pub/Sub maxMessages = capacity) | 1 job at a time |
+| Tasks in flight | Multiple (1 HTTP poll claim per capacity slot) | 1 job at a time |
 | Sims per task | 1 container per game | N games per child process |
 | Isolation | Full (separate containers) | Shared filesystem |
 | Progress | Per-simulation API updates | Batch-level only |
@@ -298,7 +296,7 @@ flowchart LR
 |-----------|---------|
 | **frontend/** | React SPA (Vite + Tailwind v4 + Firebase Auth) |
 | **api/** | Next.js 15 API: jobs, decks, simulations |
-| **worker/** | Node.js orchestrator: Pub/Sub/polling, container management |
+| **worker/** | Node.js orchestrator: HTTP polling, container management |
 | **worker/forge-engine/** | Forge assets: `run_sim.sh`, precon decks |
 | **simulation/** | Simulation image Dockerfile (references `worker/forge-engine/`) |
 | **scripts/** | Setup and provisioning scripts |

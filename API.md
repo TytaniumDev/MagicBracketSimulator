@@ -87,15 +87,16 @@ Server-Sent Events stream for real-time job updates.
 - `data`: Job status update (JSON)
 - `event: simulations`: List of simulation statuses (JSON)
 
-### Get Next Job (Worker)
-`GET /jobs/next`
+### Claim Next Simulation (Worker)
+`GET /jobs/claim-sim`
 
-Used by the worker in polling mode to claim the next QUEUED job.
+Used by the worker to atomically claim the next PENDING simulation.
+Accepts `workerId` and `workerName` as query parameters.
 **Auth:** `X-Worker-Secret` header required.
 
 **Response:**
-- `200 OK`: Job object (same as `GET /jobs/:id`)
-- `204 No Content`: No jobs available
+- `200 OK`: JSON object with `jobId`, `simId`, and `simIndex`.
+- `204 No Content`: No simulations available.
 
 ### Cancel Job
 `POST /jobs/:id/cancel`
