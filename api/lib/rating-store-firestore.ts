@@ -71,15 +71,25 @@ export const firestoreRatingStore: RatingStore = {
     await batch.commit();
   },
 
-  async recordMatchResult(result: MatchResult): Promise<void> {
-    await matchResultsCol.doc(result.id).set({
-      jobId: result.jobId,
-      gameIndex: result.gameIndex,
-      deckIds: result.deckIds,
-      winnerDeckId: result.winnerDeckId ?? null,
-      turnCount: result.turnCount ?? null,
-      playedAt: Timestamp.now(),
-    });
+  async recordMatchResults(results: MatchResult[]): Promise<void> {
+    if (results.length === 0) return;
+    const now = Timestamp.now();
+    // Firestore batches cap at 500 writes; chunk to stay under the limit.
+    const CHUNK = 500;
+    for (let i = 0; i < results.length; i += CHUNK) {
+      const batch = firestore.batch();
+      for (const r of results.slice(i, i + CHUNK)) {
+        batch.set(matchResultsCol.doc(r.id), {
+          jobId: r.jobId,
+          gameIndex: r.gameIndex,
+          deckIds: r.deckIds,
+          winnerDeckId: r.winnerDeckId ?? null,
+          turnCount: r.turnCount ?? null,
+          playedAt: now,
+        });
+      }
+      await batch.commit();
+    }
   },
 
   async hasMatchResultsForJob(jobId: string): Promise<boolean> {

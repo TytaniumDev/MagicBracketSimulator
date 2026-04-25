@@ -215,3 +215,19 @@ export async function deleteDeck(id: string, userId: string): Promise<boolean> {
 export async function deletePrecon(id: string): Promise<void> {
   await decksCollection.doc(id).delete();
 }
+
+/**
+ * Delete many precon decks by ID in batched writes (for sync cleanup).
+ * Chunks at the Firestore 500-write batch limit.
+ */
+export async function deletePrecons(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const batch = firestore.batch();
+    for (const id of ids.slice(i, i + CHUNK)) {
+      batch.delete(decksCollection.doc(id));
+    }
+    await batch.commit();
+  }
+}

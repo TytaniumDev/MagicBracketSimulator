@@ -319,20 +319,30 @@ export async function syncPrecons(): Promise<SyncResult> {
   const orphanIds = [...allExistingPreconIds].filter((id) => !keepPreconIds.has(id));
   if (orphanIds.length > 0 && archidektDecks.length >= allExistingPreconIds.size * 0.5) {
     console.log(`[PreconSync] Removing ${orphanIds.length} orphaned precons...`);
-    for (const id of orphanIds) {
+    if (USE_FIRESTORE) {
       try {
-        if (USE_FIRESTORE) {
-          const firestoreDecks = await import('./firestore-decks');
-          await firestoreDecks.deletePrecon(id);
-        } else {
-          const { getDb } = await import('./db');
-          const db = getDb();
-          db.prepare('DELETE FROM precons WHERE id = ?').run(id);
-        }
-        result.removed++;
-        console.log(`[PreconSync] Removed orphan: ${id}`);
+        const firestoreDecks = await import('./firestore-decks');
+        await firestoreDecks.deletePrecons(orphanIds);
+        result.removed += orphanIds.length;
+        console.log(`[PreconSync] Removed ${orphanIds.length} orphans`);
       } catch (err) {
-        const msg = `Failed to remove orphan "${id}": ${err instanceof Error ? err.message : err}`;
+        const msg = `Failed to batch-delete ${orphanIds.length} orphans: ${err instanceof Error ? err.message : err}`;
+        console.error(`[PreconSync] ${msg}`);
+        result.errors.push(msg);
+      }
+    } else {
+      const { getDb } = await import('./db');
+      const db = getDb();
+      const stmt = db.prepare('DELETE FROM precons WHERE id = ?');
+      const deleteAll = db.transaction((ids: string[]) => {
+        for (const id of ids) stmt.run(id);
+      });
+      try {
+        deleteAll(orphanIds);
+        result.removed += orphanIds.length;
+        console.log(`[PreconSync] Removed ${orphanIds.length} orphans`);
+      } catch (err) {
+        const msg = `Failed to delete ${orphanIds.length} orphans: ${err instanceof Error ? err.message : err}`;
         console.error(`[PreconSync] ${msg}`);
         result.errors.push(msg);
       }

@@ -19,16 +19,15 @@ export async function resolveDeckId(deckId: string): Promise<DeckSlot | undefine
 export async function resolveDeckIds(
   deckIds: string[]
 ): Promise<{ decks: DeckSlot[]; errors: string[] }> {
+  const resolved = await Promise.all(
+    deckIds.map(async (id) => ({ id, deck: await resolveDeckId(id) }))
+  );
+
   const decks: DeckSlot[] = [];
   const errors: string[] = [];
-
-  for (const id of deckIds) {
-    const deck = await resolveDeckId(id);
-    if (deck) {
-      decks.push(deck);
-    } else {
-      errors.push(id);
-    }
+  for (const { id, deck } of resolved) {
+    if (deck) decks.push(deck);
+    else errors.push(id);
   }
 
   return { decks, errors };

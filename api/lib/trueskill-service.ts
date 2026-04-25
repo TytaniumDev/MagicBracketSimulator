@@ -149,9 +149,7 @@ export async function processJobForRatings(
     resolvedGames += 1;
   }
 
-  for (const result of matchResults) {
-    await store.recordMatchResult(result);
-  }
+  await store.recordMatchResults(matchResults);
 
   if (resolvedGames > 0) {
     await store.updateRatings(currentRatings);
