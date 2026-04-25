@@ -94,20 +94,27 @@ export const sqliteRatingStore: RatingStore = {
     runAll(updates);
   },
 
-  async recordMatchResult(result: MatchResult): Promise<void> {
+  async recordMatchResults(results: MatchResult[]): Promise<void> {
+    if (results.length === 0) return;
     const db = getDb();
-    db.prepare(`
+    const stmt = db.prepare(`
       INSERT OR IGNORE INTO match_results (id, job_id, game_index, deck_ids, winner_deck_id, turn_count, played_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      result.id,
-      result.jobId,
-      result.gameIndex,
-      JSON.stringify(result.deckIds),
-      result.winnerDeckId ?? null,
-      result.turnCount ?? null,
-      result.playedAt,
-    );
+    `);
+    const runAll = db.transaction((rows: MatchResult[]) => {
+      for (const r of rows) {
+        stmt.run(
+          r.id,
+          r.jobId,
+          r.gameIndex,
+          JSON.stringify(r.deckIds),
+          r.winnerDeckId ?? null,
+          r.turnCount ?? null,
+          r.playedAt,
+        );
+      }
+    });
+    runAll(results);
   },
 
   async hasMatchResultsForJob(jobId: string): Promise<boolean> {

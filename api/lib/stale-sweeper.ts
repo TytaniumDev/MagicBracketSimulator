@@ -79,27 +79,27 @@ export async function hardCancelStaleSimsForJob(
   if (sims.length === 0) return 0;
 
   const baselineMs = jobBaselineMs(job);
-  let cancelled = 0;
   const message = `Hard-cancelled by stale-sweeper after exceeding ${Math.round(
     SIM_HARD_CANCEL_THRESHOLD_MS / 60000
   )}m lifetime cap`;
 
-  for (const sim of sims) {
-    if (!shouldHardCancelSim(sim, baselineMs, nowMs)) continue;
-    const updated = await jobStore.conditionalUpdateSimulationStatus(
-      job.id,
-      sim.simId,
-      ['PENDING', 'RUNNING', 'FAILED'],
-      {
-        state: 'CANCELLED',
-        errorMessage: message,
-        completedAt: new Date(nowMs).toISOString(),
-      }
-    );
-    if (updated) cancelled += 1;
-  }
+  const results = await Promise.all(
+    sims.map((sim) => {
+      if (!shouldHardCancelSim(sim, baselineMs, nowMs)) return Promise.resolve(false);
+      return jobStore.conditionalUpdateSimulationStatus(
+        job.id,
+        sim.simId,
+        ['PENDING', 'RUNNING', 'FAILED'],
+        {
+          state: 'CANCELLED',
+          errorMessage: message,
+          completedAt: new Date(nowMs).toISOString(),
+        }
+      );
+    })
+  );
 
-  return cancelled;
+  return results.filter(Boolean).length;
 }
 
 /**
@@ -175,9 +175,11 @@ export async function sweepStaleJobs(nowMs: number = Date.now()): Promise<SweepR
       // Local mode + post-cancel catch-up: if the job is still RUNNING but
       // every sim is terminal, explicitly aggregate. recoverStaleJob's
       // built-in re-trigger is gated on GCP mode, so we cover the gap here.
-      const refreshed = await jobStore.getJob(job.id);
+      const [refreshed, sims] = await Promise.all([
+        jobStore.getJob(job.id),
+        jobStore.getSimulationStatuses(job.id),
+      ]);
       if (refreshed && refreshed.status === 'RUNNING') {
-        const sims = await jobStore.getSimulationStatuses(job.id);
         const allTerminal =
           sims.length > 0 &&
           sims.every((s) => s.state === 'COMPLETED' || s.state === 'CANCELLED');

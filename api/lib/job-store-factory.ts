@@ -375,41 +375,44 @@ async function recoverStaleSimulations(
 
   const now = Date.now();
   const activeWorkerIds = new Set(activeWorkers.map((w) => w.workerId));
-  let recovered = false;
 
-  for (const sim of sims) {
-    // Case 1: RUNNING sim stuck for >2.5 hours — container hung.
-    if (sim.state === 'RUNNING' && sim.startedAt) {
-      const runningForMs = now - new Date(sim.startedAt).getTime();
-      if (runningForMs > STALE_RUNNING_THRESHOLD_MS) {
+  const recoveryFlags = await Promise.all(
+    sims.map(async (sim) => {
+      // Case 1: RUNNING sim stuck for >2.5 hours — container hung.
+      if (sim.state === 'RUNNING' && sim.startedAt) {
+        const runningForMs = now - new Date(sim.startedAt).getTime();
+        if (runningForMs > STALE_RUNNING_THRESHOLD_MS) {
+          const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
+          if (updated) {
+            recoveryLog.info('Sim RUNNING too long, reset to PENDING', { jobId, simId: sim.simId, runningMin: Math.round(runningForMs / 60000) });
+          }
+          return updated;
+        }
+      }
+
+      // Case 2: RUNNING sim whose worker is dead.
+      if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
         const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
         if (updated) {
-          recoveryLog.info('Sim RUNNING too long, reset to PENDING', { jobId, simId: sim.simId, runningMin: Math.round(runningForMs / 60000) });
-          recovered = true;
+          recoveryLog.info('Sim worker is dead, reset to PENDING', { jobId, simId: sim.simId, deadWorker: sim.workerId });
         }
-        continue;
+        return updated;
       }
-    }
 
-    // Case 2: RUNNING sim whose worker is dead.
-    if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
-      const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
-      if (updated) {
-        recoveryLog.info('Sim worker is dead, reset to PENDING', { jobId, simId: sim.simId, deadWorker: sim.workerId });
-        recovered = true;
+      // Case 3: FAILED sim — retry if any worker is online to pick it up.
+      if (sim.state === 'FAILED' && activeWorkers.length > 0) {
+        const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['FAILED']);
+        if (updated) {
+          recoveryLog.info('Sim FAILED, reset to PENDING for retry', { jobId, simId: sim.simId });
+        }
+        return updated;
       }
-      continue;
-    }
 
-    // Case 3: FAILED sim — retry if any worker is online to pick it up.
-    if (sim.state === 'FAILED' && activeWorkers.length > 0) {
-      const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['FAILED']);
-      if (updated) {
-        recoveryLog.info('Sim FAILED, reset to PENDING for retry', { jobId, simId: sim.simId });
-        recovered = true;
-      }
-    }
-  }
+      return false;
+    })
+  );
+
+  const recovered = recoveryFlags.some(Boolean);
 
   // Only aggregate when all sims are terminal. FAILED sims above are reset
   // to PENDING and will be retried; they're not terminal here.
@@ -487,18 +490,18 @@ async function recoverStaleSimulationsLocal(
   if (workerStillAlive) return false;
 
   // Worker is dead. Reset in-flight sims so the re-claim has clean state.
-  let resetCount = 0;
-  for (const sim of sims) {
-    if (sim.state === 'RUNNING' || sim.state === 'FAILED') {
-      const updated = await conditionalUpdateSimulationStatus(
+  const resetResults = await Promise.all(
+    sims.map(async (sim) => {
+      if (sim.state !== 'RUNNING' && sim.state !== 'FAILED') return false;
+      return conditionalUpdateSimulationStatus(
         jobId,
         sim.simId,
         [sim.state],
         { state: 'PENDING' }
       );
-      if (updated) resetCount++;
-    }
-  }
+    })
+  );
+  const resetCount = resetResults.filter(Boolean).length;
 
   const jobReset = await resetJobForRetry(jobId);
   recoveryLog.info('LOCAL: reset stuck RUNNING job for re-claim', {

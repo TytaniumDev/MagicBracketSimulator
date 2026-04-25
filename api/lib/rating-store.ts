@@ -18,8 +18,8 @@ export interface RatingStore {
   /** Upsert ratings for multiple decks in one operation. */
   updateRatings(updates: DeckRating[]): Promise<void>;
 
-  /** Record a match result (for idempotency checks). */
-  recordMatchResult(result: MatchResult): Promise<void>;
+  /** Record match results (for idempotency checks). Writes are batched. */
+  recordMatchResults(results: MatchResult[]): Promise<void>;
 
   /** Return true if match results already exist for this jobId. */
   hasMatchResultsForJob(jobId: string): Promise<boolean>;
