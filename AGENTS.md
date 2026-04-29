@@ -25,6 +25,7 @@
 - **API Unit Test**: `cd api && npm run test:unit`
 - **API Ingestion Test**: `cd api && npm run test:ingestion`
 - **Worker Build**: `cd worker && npm run build`
+- **Worker Test**: `cd worker && npm run test:unit`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
