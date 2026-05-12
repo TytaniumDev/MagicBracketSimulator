@@ -17,7 +17,7 @@ function docToWorkerInfo(docId: string, data: Record<string, unknown>): WorkerIn
   return {
     workerId: docId,
     workerName: data.workerName as string,
-    status: data.status as 'idle' | 'busy' | 'updating',
+    status: data.status as WorkerInfo['status'],
     ...(data.currentJobId ? { currentJobId: data.currentJobId as string } : undefined),
     capacity: (data.capacity as number) ?? 0,
     activeSimulations: (data.activeSimulations as number) ?? 0,

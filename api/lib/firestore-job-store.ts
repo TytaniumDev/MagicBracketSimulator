@@ -871,8 +871,13 @@ export async function revertSimToPending(
 
     tx.update(simRef, {
       state: 'PENDING',
-      workerId: null,
-      workerName: null,
+      workerId: FieldValue.delete(),
+      workerName: FieldValue.delete(),
+      startedAt: FieldValue.delete(),
+      completedAt: FieldValue.delete(),
+      durationMs: FieldValue.delete(),
+      errorMessage: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
       revertedAt: new Date().toISOString(),
       revertReason: 'lease-expired',
     });

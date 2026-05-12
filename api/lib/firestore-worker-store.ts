@@ -58,7 +58,7 @@ export async function getActiveWorkers(staleThresholdMs = 180_000): Promise<Work
       return {
         workerId: doc.id,
         workerName: d.workerName,
-        status: d.status as 'idle' | 'busy' | 'updating',
+        status: d.status as WorkerInfo['status'],
         ...(d.currentJobId && { currentJobId: d.currentJobId }),
         capacity: d.capacity ?? 0,
         activeSimulations: d.activeSimulations ?? 0,
