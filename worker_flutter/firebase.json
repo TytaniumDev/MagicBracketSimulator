@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"macos":{"default":{"projectId":"magic-bracket-simulator","appId":"1:14286370379:ios:eb91598352257eef6d7fce","uploadDebugSymbols":false,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"magic-bracket-simulator","configurations":{"macos":"1:14286370379:ios:eb91598352257eef6d7fce"}}}}}}

@@ -1,12 +1,17 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'config.dart';
 import 'firebase_options.dart';
+import 'installer/install_progress_app.dart';
+import 'installer/installer.dart';
 import 'ui/dashboard.dart';
-import 'ui/tray_setup.dart';
 import 'worker/worker_engine.dart';
 
 /// Magic Bracket Worker entry point.
@@ -23,7 +28,23 @@ import 'worker/worker_engine.dart';
 /// window via the red dot is intercepted by window_manager.setPreventClose
 /// and hides instead of exiting — the engine keeps running.
 Future<void> main() async {
+  await _initFileLogger();
   WidgetsFlutterBinding.ensureInitialized();
+  _log('main() started');
+  FlutterError.onError = (details) {
+    _log('FlutterError: ${details.exception}\n${details.stack}');
+    FlutterError.dumpErrorToConsole(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    _log('PlatformDispatcher onError: $error\n$stack');
+    return true;
+  };
+  await runZonedGuarded(_appMain, (error, stack) {
+    _log('UNCAUGHT (zone): $error\n$stack');
+  });
+}
+
+Future<void> _appMain() async {
 
   // Detect placeholder firebase_options.dart values BEFORE calling
   // initializeApp — the native FirebaseCore plugin throws an uncaught
@@ -34,30 +55,41 @@ Future<void> main() async {
     firebaseInitError =
         'firebase_options.dart still has STUB values. Run `flutterfire configure` to populate.';
   } else {
+    _log('Initializing Firebase for project ${fbOpts.projectId}');
     try {
       await Firebase.initializeApp(options: fbOpts);
+      _log('Firebase ready');
     } catch (e) {
       firebaseInitError = e.toString();
+      _log('Firebase init failed: $e');
     }
   }
 
-  // Native window setup (start hidden so we don't flash before tray is up).
+  // Native window setup. With LSUIElement=false (MVP fallback) the app
+  // appears in the Dock with a regular window. The user can minimize-to-
+  // tray-style behavior via the tray icon; closing the window hides it
+  // (setPreventClose=true) so the engine keeps running.
+  _log('Initializing window_manager');
   await windowManager.ensureInitialized();
+  _log('window_manager initialized');
   const opts = WindowOptions(
-    size: Size(560, 480),
+    size: Size(640, 520),
     minimumSize: Size(420, 360),
     center: true,
-    skipTaskbar: true,
     titleBarStyle: TitleBarStyle.normal,
     title: 'Magic Bracket Worker',
   );
   await windowManager.waitUntilReadyToShow(opts, () async {
-    await windowManager.hide();
+    _log('waitUntilReadyToShow callback');
+    await windowManager.show();
+    await windowManager.focus();
     await windowManager.setPreventClose(true);
   });
+  _log('window ready, shown');
 
   // Persistent worker identity + paths.
   final config = await WorkerConfig.loadOrInit();
+  _log('Config loaded: workerId=${config.workerId}, capacity=${config.maxCapacity}');
 
   if (firebaseInitError != null) {
     // Show a window-only mode with a clear setup message; no engine, no tray.
@@ -66,20 +98,98 @@ Future<void> main() async {
     return;
   }
 
-  // Engine: listens to Firestore, claims sims, runs Java, writes lease.
+  // First-launch installer: downloads the JRE and Forge into the app's
+  // support directory if they aren't already there. After this we re-load
+  // the config so config.javaPath/forgePath pick up the new bundled paths.
+  final installer = Installer();
+  installer.progressStream.listen((p) {
+    _log('installer ${p.stage}: ${p.message} (${(p.progress * 100).toStringAsFixed(1)}%)');
+  });
+  final ready = await installer.isReady();
+  _log('Installer ready=$ready, jreBin=${await installer.javaBinary()}');
+  if (!ready) {
+    _log('Showing installer UI');
+    await windowManager.show();
+    runApp(InstallProgressApp(
+      installer: installer,
+      onComplete: () async {
+        _log('Install complete; booting engine');
+        // Re-resolve config (java/forge paths) now that the install is done.
+        final newConfig = await WorkerConfig.loadOrInit();
+        await windowManager.hide();
+        await _bootEngine(newConfig);
+      },
+    ));
+    return;
+  }
+
+  _log('Already installed; booting engine');
+  await _bootEngine(config);
+}
+
+Future<void> _bootEngine(WorkerConfig config) async {
+  // Auth is intentionally NOT performed at boot. The firebase_auth_macos
+  // plugin throws an uncaught NSException for several common boot
+  // conditions (anonymous-auth-disabled, no GoogleService-Info.plist,
+  // etc.) that bypass Dart try/catch and kill the app. Until we wire up
+  // a proper Google Sign-In flow (Plan 3), Firestore writes will fail
+  // with permission-denied if the project's security rules require auth,
+  // but the engine itself will at least stay running and surface those
+  // errors in the dashboard.
+  _log('Boot: skipping Firebase Auth (deferred to Plan 3)');
+
+  _log('Boot: constructing WorkerEngine');
   final engine = WorkerEngine(
     config: config,
     firestore: FirebaseFirestore.instance,
   );
 
-  // Tray icon: left-click shows window, right-click menu has controls.
-  final tray = TraySetup(engine: engine);
-  await tray.init();
+  // Tray init disabled for MVP. The tray_manager plugin crashes natively
+  // on cold boot in our sandbox-disabled, unsigned configuration. With the
+  // window visible (LSUIElement=false) the user doesn't need the tray to
+  // interact with the worker. Re-enable in Plan 3 once the app is signed.
+  _log('Boot: skipping tray (deferred to Plan 3)');
 
-  // Start the engine immediately on launch. User can stop via tray.
-  await engine.start();
-
+  // Run the UI immediately. Start the engine in the background so a
+  // Firestore plugin crash (which can throw native NSExceptions that
+  // bypass Dart try/catch) doesn't bring down the app before the user
+  // sees the dashboard.
+  _log('Boot: runApp');
   runApp(_WorkerApp(engine: engine, config: config));
+  _log('Boot: runApp returned');
+
+  _log('Boot: scheduling engine.start() in background');
+  Future<void>(() async {
+    try {
+      await engine.start();
+      _log('Boot: engine running');
+    } catch (e, st) {
+      _log('Engine start FAILED (caught): $e\n$st');
+    }
+  });
+}
+
+// ── Simple file logger ────────────────────────────────────────────
+// Tray-only apps have no stderr console visible to the user; we write
+// to ~/Library/Logs/ which is the standard macOS user log location.
+File? _logFile;
+Future<void> _initFileLogger() async {
+  final home = Platform.environment['HOME'] ?? '';
+  final logsDir = Directory('$home/Library/Logs');
+  if (!logsDir.existsSync()) logsDir.createSync(recursive: true);
+  _logFile = File('${logsDir.path}/com.tytaniumdev.workerFlutter.log');
+  _logFile!.writeAsStringSync(
+    '\n=== ${DateTime.now().toIso8601String()} app launched ===\n',
+    mode: FileMode.append,
+  );
+}
+
+void _log(String msg) {
+  final line = '${DateTime.now().toIso8601String()} $msg\n';
+  if (kDebugMode) debugPrint(line);
+  try {
+    _logFile?.writeAsStringSync(line, mode: FileMode.append);
+  } catch (_) {/* ignore */}
 }
 
 /// Shown when Firebase failed to initialize (typically the first run before

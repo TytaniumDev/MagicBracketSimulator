@@ -25,13 +25,17 @@ class DefaultFirebaseOptions {
   }
 
   // Replace these with values from your Firebase project's macOS app config.
-  // The `flutterfire configure` CLI will overwrite this whole file.
+
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'STUB_API_KEY',
-    appId: 'STUB_APP_ID',
-    messagingSenderId: 'STUB_SENDER_ID',
-    projectId: 'STUB_PROJECT_ID',
-    storageBucket: 'STUB_STORAGE_BUCKET',
+    apiKey: 'AIzaSyDevBZ3RfwNtrqW7L2ICgmV8QkvoDDvNbc',
+    appId: '1:14286370379:ios:eb91598352257eef6d7fce',
+    messagingSenderId: '14286370379',
+    projectId: 'magic-bracket-simulator',
+    databaseURL: 'https://magic-bracket-simulator-default-rtdb.firebaseio.com',
+    storageBucket: 'magic-bracket-simulator.firebasestorage.app',
+    iosClientId: '14286370379-lfs99gcgmrv03rhpbijdev0bfd2r5u6s.apps.googleusercontent.com',
     iosBundleId: 'com.tytaniumdev.workerFlutter',
   );
+
+  // The `flutterfire configure` CLI will overwrite this whole file.
 }

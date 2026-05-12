@@ -29,6 +29,9 @@ dependencies:
   # Reactive state
   rxdart: ^0.28.0
 
+  # First-run installer downloads (JRE + Forge)
+  http: ^1.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

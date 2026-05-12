@@ -73,7 +73,9 @@ class SimRunner {
       '-Xmx${maxHeapMb}m',
       '-Dio.netty.tryReflectionSetAccessible=true',
       '-Dfile.encoding=UTF-8',
-      '-Djava.awt.headless=true',
+      // NOTE: do NOT add -Djava.awt.headless=true. Forge initialises an
+      // AWT toolkit even in sim mode and that flag causes it to bail
+      // silently with exit 1 and no output. forge.sh ships without it.
       '-jar',
       forgeJar,
       'sim',

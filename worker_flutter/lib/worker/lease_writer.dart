@@ -46,10 +46,18 @@ class LeaseWriter {
 
   /// Start the periodic writer. Writes an initial "I'm alive" doc
   /// immediately, then every `tickInterval` until [stop] is called.
+  ///
+  /// The first write is wrapped in try/catch so a Firestore permission or
+  /// network error doesn't kill the caller. We still start the periodic
+  /// timer — subsequent ticks will keep retrying.
   Future<void> start() async {
     _startTime = DateTime.now();
     _uptimeMsAtStart = 0;
-    await _writeOnce(status: 'idle');
+    try {
+      await _writeOnce(status: 'idle');
+    } catch (_) {
+      // _writeOnce already swallows; this is belt-and-suspenders.
+    }
     _timer = Timer.periodic(tickInterval, (_) => _writeOnce(status: _activeStatus()));
   }
 

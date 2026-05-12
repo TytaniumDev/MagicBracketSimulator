@@ -109,21 +109,29 @@ class WorkerEngine {
     _stopped = false;
     _stateSubject.add(currentState.copyWith(running: true, lastError: null));
 
-    await _leaseWriter.start();
+    try {
+      await _leaseWriter.start();
+    } catch (e) {
+      _stateSubject.add(currentState.copyWith(lastError: 'lease writer: $e'));
+    }
 
     // Listen to PENDING sims across all jobs. Every time the listener
     // fires (a new PENDING sim appears, or an existing one's state
     // changes) we try to claim if we have capacity.
-    _pendingSub = firestore
-        .collectionGroup('simulations')
-        .where('state', isEqualTo: 'PENDING')
-        .snapshots()
-        .listen(
-      (_) => _tryClaimLoop(),
-      onError: (Object err) {
-        _stateSubject.add(currentState.copyWith(lastError: err.toString()));
-      },
-    );
+    try {
+      _pendingSub = firestore
+          .collectionGroup('simulations')
+          .where('state', isEqualTo: 'PENDING')
+          .snapshots()
+          .listen(
+        (_) => _tryClaimLoop(),
+        onError: (Object err) {
+          _stateSubject.add(currentState.copyWith(lastError: err.toString()));
+        },
+      );
+    } catch (e) {
+      _stateSubject.add(currentState.copyWith(lastError: 'listener setup: $e'));
+    }
   }
 
   Future<void> stop() async {
@@ -273,18 +281,23 @@ class WorkerEngine {
     final data = doc.data();
     if (data == null) return null;
 
-    // Decks may be stored as `deckLinks` (rich) or `deckFilenames` (plain).
-    // We accept either, normalising to .dck filenames.
-    final raw = data['deckFilenames'] ?? data['deckFiles'];
+    // Job docs store decks as `decks: DeckSlot[]` where each entry has
+    // { name, dck } — the dck field is the full .dck file content as a
+    // string. We materialize these to disk so Forge's CLI can find them.
+    final rawDecks = data['decks'];
     final filenames = <String>[];
-    if (raw is List) {
-      for (final v in raw) {
-        if (v is String) filenames.add(v);
-      }
-    } else if (data['deckLinks'] is List) {
-      for (final link in (data['deckLinks'] as List)) {
-        if (link is Map && link['filename'] is String) {
-          filenames.add(link['filename'] as String);
+    if (rawDecks is List) {
+      for (final slot in rawDecks) {
+        if (slot is Map && slot['name'] is String && slot['dck'] is String) {
+          final name = (slot['name'] as String).replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+          final filename = '$name.dck';
+          final filePath = '${config.decksPath}/$filename';
+          final f = File(filePath);
+          // Always overwrite — content can change between jobs even for the
+          // same deck name (deck editing).
+          f.parent.createSync(recursive: true);
+          f.writeAsStringSync(slot['dck'] as String);
+          filenames.add(filename);
         }
       }
     }
@@ -292,7 +305,7 @@ class WorkerEngine {
     return JobInfo(
       jobId: jobId,
       deckFilenames: filenames,
-      simulationsPerJob: (data['simulationsRequested'] as num?)?.toInt() ?? 1,
+      simulationsPerJob: (data['simulations'] as num?)?.toInt() ?? 1,
     );
   }
 

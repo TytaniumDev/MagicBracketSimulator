@@ -49,7 +49,7 @@ class WorkerConfig {
 
     final capacity = prefs.getInt(_kCapacity) ?? defaultCapacity;
     final forgePath = prefs.getString(_kForgePath) ?? await _defaultForgePath();
-    final javaPath = prefs.getString(_kJavaPath) ?? _defaultJavaPath();
+    final javaPath = prefs.getString(_kJavaPath) ?? await _defaultJavaPath();
     final decksPath = await _forgeDecksDir();
     final logsPath = await _logsDir();
 
@@ -89,13 +89,20 @@ class WorkerConfig {
   }
 
   static Future<String> _defaultForgePath() async {
+    // Bundled location managed by the first-run Installer.
     final supportDir = await getApplicationSupportDirectory();
     return '${supportDir.path}/forge';
   }
 
-  static String _defaultJavaPath() {
-    // OpenJDK 17 installed via Homebrew on Apple Silicon
-    final candidates = [
+  static Future<String> _defaultJavaPath() async {
+    // First try the bundled JRE installed by the first-run Installer.
+    final supportDir = await getApplicationSupportDirectory();
+    final bundledJre = '${supportDir.path}/jre/Contents/Home/bin/java';
+    if (File(bundledJre).existsSync()) return bundledJre;
+
+    // Fall back to system Java if the user installed one themselves
+    // (e.g. running from CLI before first-launch download completes).
+    const candidates = [
       '/opt/homebrew/opt/openjdk@17/bin/java',
       '/usr/local/opt/openjdk@17/bin/java',
       '/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home/bin/java',
@@ -103,7 +110,6 @@ class WorkerConfig {
     for (final c in candidates) {
       if (File(c).existsSync()) return c;
     }
-    // Fallback — will fail at spawn time with a clear "java not found" if missing.
     return 'java';
   }
 
