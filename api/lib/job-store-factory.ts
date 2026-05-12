@@ -321,6 +321,23 @@ export async function conditionalResetSimulationToPending(
 }
 
 /**
+ * Atomically revert a RUNNING sim back to PENDING when its owning worker's
+ * lease has expired. Guarded by expectedWorkerId so racing sweep ticks and
+ * already-reclaimed sims are no-ops. SQLite mode returns false (Flutter
+ * workers — the only producers of leases — only run in GCP mode).
+ */
+export async function revertSimToPending(
+  jobId: string,
+  simId: string,
+  expectedWorkerId: string,
+): Promise<boolean> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.revertSimToPending(jobId, simId, expectedWorkerId);
+  }
+  return (await sqliteStore()).revertSimToPending(jobId, simId, expectedWorkerId);
+}
+
+/**
  * Detect and recover a stale RUNNING job.
  *
  * QUEUED jobs need no recovery: the worker's polling loop picks them up on
