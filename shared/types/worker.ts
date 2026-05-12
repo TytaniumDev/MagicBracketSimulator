@@ -8,7 +8,7 @@
 export interface WorkerInfo {
   workerId: string;
   workerName: string;
-  status: 'idle' | 'busy' | 'updating';
+  status: 'idle' | 'busy' | 'updating' | 'crashed';
   currentJobId?: string;
   capacity: number;
   activeSimulations: number;

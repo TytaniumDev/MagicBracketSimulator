@@ -1,4 +1,4 @@
-import { Timestamp } from '@google-cloud/firestore';
+import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import { getFirestore } from './firestore-client';
 import type { WorkerInfo } from './types';
 
@@ -119,4 +119,46 @@ export async function getQueueDepth(): Promise<number> {
     .count()
     .get();
   return snapshot.data().count;
+}
+
+/**
+ * Query workers whose lease.expiresAt is strictly before nowMs.
+ * Workers without a lease field are automatically excluded from this query
+ * (Firestore inequality queries skip docs missing the field). Docker workers
+ * never write a lease, so they cannot match.
+ */
+export async function getWorkersWithExpiredLeases(nowMs: number): Promise<WorkerInfo[]> {
+  const cutoffIso = new Date(nowMs).toISOString();
+  const snapshot = await workersCollection
+    .where('lease.expiresAt', '<', cutoffIso)
+    .get();
+  return snapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      workerId: doc.id,
+      workerName: data.workerName,
+      status: data.status,
+      capacity: data.capacity,
+      activeSimulations: data.activeSimulations,
+      uptimeMs: data.uptimeMs,
+      lastHeartbeat: data.lastHeartbeat,
+      currentJobId: data.currentJobId ?? undefined,
+      version: data.version ?? undefined,
+      ownerEmail: data.ownerEmail ?? undefined,
+      workerApiUrl: data.workerApiUrl ?? undefined,
+      workerType: data.workerType ?? undefined,
+      lease: data.lease ?? undefined,
+    } as WorkerInfo;
+  });
+}
+
+/**
+ * Mark a worker as crashed and clear its lease. Idempotent — a second
+ * call after the doc has been cleared is a no-op.
+ */
+export async function markWorkerCrashed(workerId: string): Promise<void> {
+  await workersCollection.doc(workerId).set({
+    status: 'crashed',
+    lease: FieldValue.delete(),
+  }, { merge: true });
 }
