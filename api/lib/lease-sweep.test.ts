@@ -2,7 +2,7 @@
  * Tests for the lease-sweep pure predicate and orchestration.
  * Run with: npx tsx lib/lease-sweep.test.ts
  */
-import { isLeaseExpired, sweepExpiredLeases } from './lease-sweep';
+import { isLeaseExpired } from './lease-sweep';
 import type { WorkerInfo } from './types';
 
 interface TestResult { name: string; passed: boolean; error?: string; }
