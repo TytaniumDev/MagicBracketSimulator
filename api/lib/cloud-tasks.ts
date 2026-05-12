@@ -108,3 +108,62 @@ export async function cancelRecoveryCheck(jobId: string): Promise<void> {
     console.warn(`[CloudTasks] Failed to cancel recovery for job ${jobId}:`, err);
   }
 }
+
+/**
+ * Schedule the next lease-sweep run. Used by the sweep endpoint to
+ * self-reschedule after each invocation. Default delay 12 seconds —
+ * combined with the 15s lease window, this gives ~27s worst-case
+ * detection of a crashed Flutter worker.
+ *
+ * Uses a fixed task name (overwriting any existing scheduled task) so we
+ * never accumulate duplicate sweeps if the endpoint is invoked manually
+ * during scheduled-task downtime.
+ */
+export async function scheduleLeaseSweep(delaySeconds = 12): Promise<void> {
+  const client = getClient();
+  const queuePath = getQueuePath();
+  if (!client || !queuePath) return;
+
+  const apiBase = getApiBaseUrl();
+  const taskName = `${queuePath}/tasks/lease-sweep`;
+
+  // Delete any existing task with this name so we can re-create it.
+  // ALREADY_EXISTS protection (delete-then-create) avoids stuck stale tasks.
+  try {
+    await client.deleteTask({ name: taskName });
+  } catch (err: unknown) {
+    const code = (err as { code?: number }).code;
+    if (code !== 5) { // 5 = NOT_FOUND, expected on first run or after fire
+      console.warn('[CloudTasks] lease-sweep delete pre-create failed:', err);
+    }
+  }
+
+  try {
+    const scheduleTime = new Date(Date.now() + delaySeconds * 1000);
+
+    await client.createTask({
+      parent: queuePath,
+      task: {
+        name: taskName,
+        scheduleTime: {
+          seconds: Math.floor(scheduleTime.getTime() / 1000),
+          nanos: 0,
+        },
+        httpRequest: {
+          httpMethod: 'POST',
+          url: `${apiBase}/api/admin/sweep-leases`,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.WORKER_SECRET ? { 'X-Worker-Secret': process.env.WORKER_SECRET } : {}),
+          },
+          body: Buffer.from(JSON.stringify({})).toString('base64'),
+        },
+      },
+    });
+  } catch (err: unknown) {
+    const code = (err as { code?: number }).code;
+    if (code !== 6) { // 6 = ALREADY_EXISTS — race; benign
+      console.warn('[CloudTasks] lease-sweep schedule failed:', err);
+    }
+  }
+}
