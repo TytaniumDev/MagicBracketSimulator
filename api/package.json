@@ -24,7 +24,8 @@
     "test:state-machine": "tsx test/state-machine.test.ts",
     "test:sim-wins": "tsx test/simulation-wins.test.ts",
     "recompute-logs": "tsx scripts/recompute-job-logs.ts",
-    "backfill-color-identity": "tsx scripts/backfill-deck-color-identity.ts"
+    "backfill-color-identity": "tsx scripts/backfill-deck-color-identity.ts",
+    "bootstrap:lease-sweep": "tsx scripts/bootstrap-lease-sweep.ts"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.2.0",
