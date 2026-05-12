@@ -143,23 +143,6 @@ leaves the job with every sim in a terminal state (COMPLETED or
 CANCELLED). Step (d) is the catch-all that unsticks jobs where a worker
 died mid-sim before the dead-worker reclaim could complete the pipeline.
 
-## Lease-based crash recovery (Flutter workers)
-
-Flutter desktop workers (introduced 2026) write a short-lived lease to their `workers/{id}` doc instead of relying solely on the 60-second heartbeat. The lease has two fields:
-
-- `lease.expiresAt`: ISO timestamp set to `now + 15s`, refreshed every 5 seconds by the worker.
-- `lease.activeSimIds`: array of `${jobId}:${simId}` composite IDs for sims the worker currently holds RUNNING.
-
-A Cloud Task hits `POST /api/admin/sweep-leases` every ~12 seconds. The handler:
-1. Queries `workers where lease.expiresAt < now` (Docker workers without a `lease` field are automatically excluded).
-2. For each expired worker, transactionally reverts each `activeSimIds` entry: if the sim is still `RUNNING` and still owned by that workerId, flip to `PENDING`, clear the workerId, set `revertReason = 'lease-expired'`.
-3. Marks the worker `status = 'crashed'` and clears the lease.
-4. Self-reschedules the next sweep via Cloud Tasks.
-
-Worst-case detection time: 15s (lease) + 12s (sweep cadence) = **~27 seconds** from worker disappearance to sims being available for re-claim. The existing 60s heartbeat / 120s TTL recovery and the 15-minute stale-sweeper remain in place as catch-alls.
-
-To bootstrap the sweep chain after a fresh deployment, run `npm run bootstrap:lease-sweep --prefix api` once. The chain is self-sustaining after that.
-
 **When raw log is uploaded (POST logs/simulation):**
 
 - `**uploadSingleSimulationLog`** (log-store): writes the raw log to storage
