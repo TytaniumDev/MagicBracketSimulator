@@ -18,4 +18,19 @@ export interface WorkerInfo {
   maxConcurrentOverride?: number | null;
   ownerEmail?: string | null;
   workerApiUrl?: string | null;
+
+  /**
+   * Distinguishes worker implementations. Optional for backward compat
+   * with existing Docker workers (which never set this field).
+   */
+  workerType?: 'docker' | 'flutter';
+
+  /**
+   * Lease metadata. Only Flutter workers write this. Lease expiry drives
+   * the lease-sweep recovery path (see api/lib/lease-sweep.ts).
+   */
+  lease?: {
+    expiresAt: string;          // ISO timestamp; sweep query: where('lease.expiresAt', '<', now)
+    activeSimIds: string[];     // sims this worker currently holds RUNNING
+  };
 }
