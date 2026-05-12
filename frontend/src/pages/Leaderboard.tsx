@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
 import type { CoverageConfig, CoverageStatus } from '../api';
@@ -55,7 +55,11 @@ function AvgWinTurnCell({
 }) {
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
-  const totalWins = histogram ? histogram.reduce((a, b) => a + b, 0) : 0;
+
+  const totalWins = useMemo(() => {
+    return histogram ? histogram.reduce((a, b) => a + b, 0) : 0;
+  }, [histogram]);
+
   const canShowTooltip = histogram !== null && totalWins > 0;
 
   const showTooltip = () => {
@@ -203,19 +207,21 @@ export default function Leaderboard() {
     fetchLeaderboard();
   }, [fetchLeaderboard]);
 
-  const filtered = entries
-    .filter((e) => !preconOnly || e.isPrecon)
-    .sort((a, b) => {
-      if (sortKey === 'rating') return b.rating - a.rating;
-      if (sortKey === 'winRate') return b.winRate - a.winRate;
-      if (sortKey === 'gamesPlayed') return b.gamesPlayed - a.gamesPlayed;
-      if (sortKey === 'avgWinTurn') {
-        const av = a.avgWinTurn ?? Infinity;
-        const bv = b.avgWinTurn ?? Infinity;
-        return av - bv;
-      }
-      return 0;
-    });
+  const filtered = useMemo(() => {
+    return entries
+      .filter((e) => !preconOnly || e.isPrecon)
+      .sort((a, b) => {
+        if (sortKey === 'rating') return b.rating - a.rating;
+        if (sortKey === 'winRate') return b.winRate - a.winRate;
+        if (sortKey === 'gamesPlayed') return b.gamesPlayed - a.gamesPlayed;
+        if (sortKey === 'avgWinTurn') {
+          const av = a.avgWinTurn ?? Infinity;
+          const bv = b.avgWinTurn ?? Infinity;
+          return av - bv;
+        }
+        return 0;
+      });
+  }, [entries, preconOnly, sortKey]);
 
   return (
     <div className="max-w-5xl mx-auto">
