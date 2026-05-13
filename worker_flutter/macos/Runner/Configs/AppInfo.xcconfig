@@ -8,7 +8,7 @@
 PRODUCT_NAME = worker_flutter
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.tytaniumdev.workerFlutter
+PRODUCT_BUNDLE_IDENTIFIER = com.tytaniumdev.magicBracketSimulator
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.tytaniumdev. All rights reserved.

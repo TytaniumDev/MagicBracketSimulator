@@ -246,7 +246,7 @@ Future<void> _initFileLogger() async {
   final home = Platform.environment['HOME'] ?? '';
   final logsDir = Directory('$home/Library/Logs');
   if (!logsDir.existsSync()) logsDir.createSync(recursive: true);
-  _logFile = File('${logsDir.path}/com.tytaniumdev.workerFlutter.log');
+  _logFile = File('${logsDir.path}/com.tytaniumdev.magicBracketSimulator.log');
   _logFile!.writeAsStringSync(
     '\n=== ${DateTime.now().toIso8601String()} app launched ===\n',
     mode: FileMode.append,

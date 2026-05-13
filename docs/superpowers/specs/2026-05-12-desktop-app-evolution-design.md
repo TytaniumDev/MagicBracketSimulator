@@ -178,8 +178,8 @@ Re-enable `tray_manager` calls in cloud mode bootstrap only (not offline mode �
 Mirror BlinkBreak's Fastlane match pattern, with these adjustments for macOS:
 
 1. **Cert type:** `developer_id` (not `appstore`). Distributes outside the App Store.
-2. **Storage:** new directory `developer_id/` in the existing `TytaniumDev-certificates` repo (so we don't manage two cert repos). Optional: rename repo to a generic name in a separate change.
-3. **Seed step (run once locally):** `fastlane match developer_id --app_identifier=com.tytaniumdev.workerFlutter`. Requires the user to first create a "Developer ID Application" cert in the Apple Developer portal (or let match create it). This is a manual step — match cannot run unattended for cert creation the very first time.
+2. **Storage:** new directory `developer_id/` in the existing `TytaniumDev-certificates` repo (so we don't manage two cert repos).
+3. **Seed step (run once locally):** `fastlane match developer_id --app_identifier=com.tytaniumdev.magicBracketSimulator`. Requires the user to first create a "Developer ID Application" cert in the Apple Developer portal (or let match create it). This is a manual step — match cannot run unattended for cert creation the very first time.
 4. **CI lane (Fastfile):** `sync_certs` → `update_code_signing_settings` for `worker_flutter/macos/Runner.xcodeproj` → `flutter build macos --release` → `notarize` (xcrun notarytool via Fastlane's `notarize` action) → staple → zip → upload artifact.
 5. **Credentials:** reuse ASC API key from BlinkBreak (ASC_KEY_ID / ASC_ISSUER_ID / ASC_API_KEY_CONTENT) since same team (F2HXQGU2CC).
 6. **Local dev unchanged:** unsigned debug build still works for fast iteration.
