@@ -36,5 +36,37 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+
+	<!-- Sparkle (auto_updater) configuration.
+	     SUFeedURL points at the appcast in this repo on `main`. Updates
+	     are surfaced by Sparkle itself; the worker just calls
+	     checkForUpdates() at boot + every hour.
+
+	     SUEnableInstallerLauncherService=YES: required by Sparkle 2 when
+	     the host app has app-sandbox=NO (which is our case — see
+	     Release.entitlements).
+
+	     SUEnableAutomaticChecks=YES: lets Sparkle's scheduled-check
+	     timer run.
+
+	     ⚠️ SUEnableInstallerInteractionService is intentionally absent:
+	     not required for Developer-ID-signed apps. Sparkle verifies the
+	     downloaded .app's Developer ID matches the running app's. As
+	     long as v0.1.0's signing identity matches future versions',
+	     update install works.
+
+	     TODO before going live with auto-update: generate Ed25519
+	     signing keys (sign_update tool ships with Sparkle), embed the
+	     public key here as SUPublicEDKey, and have the release workflow
+	     sign each appcast entry. Until that lands, Sparkle's EdDSA
+	     verification falls back to Developer ID code-signing check,
+	     which works for our case but is weaker. See
+	     worker_flutter/macos/fastlane/SETUP.md. -->
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/worker_flutter/appcast.xml</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
 </dict>
 </plist>

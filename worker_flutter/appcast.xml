@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sparkle appcast for Magic Bracket Simulator desktop worker.
+
+  Fetched at runtime from this file on `main`:
+    https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/worker_flutter/appcast.xml
+
+  Each release adds an <item> below the most recent. Sparkle picks the
+  highest sparkle:version and offers it as the update.
+
+  Release flow (manual for now):
+    1. Tag a new `worker-v*` commit. CI signs + notarizes + attaches the
+       zip to the GitHub Release.
+    2. Note the zip's `length` (bytes) from the release asset.
+    3. Add a new <item> block above the v0.1.0 entry with:
+         - sparkle:version       = build number, monotonic (e.g. 2, 3, ...)
+         - sparkle:shortVersionString = display version (e.g. "0.2.0")
+         - enclosure url         = GitHub Release download URL
+         - enclosure length      = byte size
+         - pubDate               = RFC 822 date
+    4. Commit + push to `main`. Existing installs notice within ~1 hour.
+
+  Automating this in CI is in the TODO list — see
+  worker_flutter/macos/fastlane/SETUP.md.
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Magic Bracket Simulator</title>
+    <description>Desktop worker for the Magic Bracket Simulator project.</description>
+    <language>en</language>
+
+    <item>
+      <title>Version 0.1.0</title>
+      <pubDate>Wed, 13 May 2026 06:37:00 -0700</pubDate>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.1.0/worker_flutter-macos.zip"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

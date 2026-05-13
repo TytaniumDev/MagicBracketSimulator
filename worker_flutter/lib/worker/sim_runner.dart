@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../installer/installer.dart';
 import '../models/sim.dart';
 
 /// Spawns a Forge `sim` invocation as a child Java process and captures the
@@ -49,15 +48,19 @@ class SimRunner {
       );
     }
 
-    final forgeJar = '$forgePath/${Installer.forgeJarName}';
-    if (!File(forgeJar).existsSync()) {
+    // Resolve the JAR by globbing `forgePath`. The version isn't baked
+    // into the worker any more — it's manifest-driven via the installer,
+    // so a single Forge bump can ship without an .app release.
+    final forgeJar = _findForgeJar(forgePath);
+    if (forgeJar == null) {
       return SimResult(
         success: false,
         durationMs: 0,
         winners: const [],
         winningTurns: const [],
         logText: '',
-        errorMessage: 'Forge JAR not found at $forgeJar',
+        errorMessage:
+            'Forge JAR not found in $forgePath. Did the first-run installer complete?',
       );
     }
     if (javaPath != 'java' && !File(javaPath).existsSync()) {
@@ -102,17 +105,24 @@ class SimRunner {
     final logBuf = StringBuffer();
     // utf8.decoder buffers partial multi-byte chars across chunks so we don't
     // mangle non-ASCII output (e.g. card names with em-dashes or accents).
-    final stdoutSub = process.stdout.transform(utf8.decoder).listen(logBuf.write);
-    final stderrSub = process.stderr.transform(utf8.decoder).listen(logBuf.write);
+    final stdoutSub = process.stdout
+        .transform(utf8.decoder)
+        .listen(logBuf.write);
+    final stderrSub = process.stderr
+        .transform(utf8.decoder)
+        .listen(logBuf.write);
 
     var cancelled = false;
-    unawaited(cancelSignal?.then((_) {
-      cancelled = true;
-      process.kill(ProcessSignal.sigterm);
-      Future<void>.delayed(const Duration(seconds: 3), () {
-        process.kill(ProcessSignal.sigkill);
-      });
-    }) ?? Future<void>.value());
+    unawaited(
+      cancelSignal?.then((_) {
+            cancelled = true;
+            process.kill(ProcessSignal.sigterm);
+            Future<void>.delayed(const Duration(seconds: 3), () {
+              process.kill(ProcessSignal.sigkill);
+            });
+          }) ??
+          Future<void>.value(),
+    );
 
     final exitCode = await process.exitCode;
     await stdoutSub.cancel();
@@ -152,6 +162,22 @@ class SimRunner {
       errorMessage: parsed.winners.isEmpty ? 'no winner detected in log' : null,
     );
   }
+
+  /// Glob-style lookup for the installed Forge JAR. Mirrors the pattern
+  /// the installer writes (`forge-gui-desktop-<version>-jar-with-dependencies.jar`).
+  /// Returns null if no matching JAR is present.
+  String? _findForgeJar(String dir) {
+    final d = Directory(dir);
+    if (!d.existsSync()) return null;
+    for (final entry in d.listSync()) {
+      final name = entry.path.split(Platform.pathSeparator).last;
+      if (name.startsWith('forge-gui-desktop-') &&
+          name.endsWith('-jar-with-dependencies.jar')) {
+        return entry.path;
+      }
+    }
+    return null;
+  }
 }
 
 /// Pure log parser. Lives here (not in a separate file) since SimRunner is
@@ -177,7 +203,9 @@ ParsedGameLog parseGameLog(String logText) {
   final winners = <String>[];
   final winningTurns = <int>[];
 
-  final winnerRegex = RegExp(r'Game Result: Game (\d+) ended in \d+ ms\.\s*(.+?) has won!');
+  final winnerRegex = RegExp(
+    r'Game Result: Game (\d+) ended in \d+ ms\.\s*(.+?) has won!',
+  );
   final turnRegex = RegExp(r'Game outcome: Turn (\d+)');
 
   // For each "has won" line we walk back through the text to find the most
