@@ -24,7 +24,10 @@ permissions:
 
 jobs:
   release-macos:
-    runs-on: macos-14
+    # macos-15 ships Xcode 16 (Swift 6); FirebaseSharedSwift pods built
+    # against the latest iOS SDK use the Swift 6 `sending` keyword and
+    # fail to compile on macos-14's Swift 5.10.
+    runs-on: macos-15
     timeout-minutes: 45
 
     steps:
@@ -83,9 +86,21 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.2"
+          # 3.3+ required: fastlane 2.234.0 fails ES256 key parsing on
+          # Ruby 3.2's bundled OpenSSL with "invalid curve name", and
+          # fastlane upstream is dropping 3.2 support shortly anyway.
+          ruby-version: "3.3"
           bundler-cache: true
           working-directory: worker_flutter/macos
+
+      - name: Install CocoaPods via Homebrew
+        # macos-14 runners ship a CocoaPods tied to the system Ruby.
+        # ruby/setup-ruby switches PATH to a different Ruby, leaving
+        # that system pod unusable — Flutter then aborts mid-build with
+        # "CocoaPods is installed but broken." Homebrew bundles its own
+        # Ruby with cocoapods, so it works regardless of which Ruby
+        # ruby/setup-ruby is currently presenting.
+        run: brew list cocoapods >/dev/null 2>&1 || brew install cocoapods
 
       - name: flutter pub get
         working-directory: worker_flutter
@@ -112,16 +127,52 @@ jobs:
           GIT_SSH_COMMAND: "ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
         run: bundle exec fastlane release
 
+      - name: Sign zip for Sparkle (EdDSA)
+        # sign_update ships with the Sparkle CocoaPod (Pods/Sparkle/bin).
+        # The output is "sparkle:edSignature=... length=..." — exactly the
+        # attributes the appcast <enclosure> tag needs. We write a small
+        # manifest JSON alongside the zip so the appcast-update step (or
+        # a human pasting into appcast.xml) doesn't have to parse the
+        # raw stdout.
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        working-directory: worker_flutter
+        run: |
+          if [ -z "$SPARKLE_ED_PRIVATE_KEY" ]; then
+            echo "::error::SPARKLE_ED_PRIVATE_KEY is unset — release would produce an unsigned update Sparkle 2 refuses to install" >&2
+            exit 1
+          fi
+          ZIP=build/worker_flutter-macos.zip
+          SIGN_UPDATE=macos/Pods/Sparkle/bin/sign_update
+          # sign_update emits: sparkle:edSignature="..." length="..."
+          # Stream the secret on stdin so it never lands in `ps` output.
+          SIG_LINE=$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$ZIP")
+          echo "Sparkle signature line: $SIG_LINE"
+          ED_SIG=$(echo "$SIG_LINE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          LEN=$(echo "$SIG_LINE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')
+          if [ -z "$ED_SIG" ] || [ -z "$LEN" ]; then
+            echo "::error::Failed to parse sign_update output: $SIG_LINE" >&2
+            exit 1
+          fi
+          jq -n --arg sig "$ED_SIG" --arg len "$LEN" --arg ref "$GITHUB_REF_NAME" \
+            '{tag: $ref, edSignature: $sig, length: ($len|tonumber)}' \
+            > build/sparkle-manifest.json
+          cat build/sparkle-manifest.json
+
       - name: Upload signed artifact
         uses: actions/upload-artifact@v4
         with:
           name: magic-bracket-simulator-macos
-          path: worker_flutter/build/worker_flutter-macos.zip
+          path: |
+            worker_flutter/build/worker_flutter-macos.zip
+            worker_flutter/build/sparkle-manifest.json
           if-no-files-found: error
 
       - name: Attach to release (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/worker-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: worker_flutter/build/worker_flutter-macos.zip
+          files: |
+            worker_flutter/build/worker_flutter-macos.zip
+            worker_flutter/build/sparkle-manifest.json
           fail_on_unmatched_files: true

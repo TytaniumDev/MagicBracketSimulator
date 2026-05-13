@@ -57,6 +57,21 @@ IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// WinSparkle DSA public key
+//
+// WinSparkle 0.8.x verifies update zips against a DSA public key it
+// loads from the embedded resource "DSAPub" of type "DSAPEM". The
+// matching private half lives in the SPARKLE_DSA_PRIVATE_KEY GitHub
+// Actions secret; the release workflow streams it into the WinSparkle
+// `sign_update` tool to produce a sparkle:dsaSignature for each
+// appcast entry. Without this resource baked into the .exe, WinSparkle
+// refuses to install any update.
+
+DSAPub DSAPEM "dsa_pub.pem"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // Version
 //
 

@@ -10,9 +10,11 @@ name: Release magic-bracket-simulator (Windows)
 # (or building a Microsoft Trusted-Signing reputation) is the long-term
 # fix; see worker_flutter/macos/fastlane/SETUP.md.
 #
-# WinSparkle auto-update: the worker runs on Windows but app-updates
-# need DSA-signed appcast entries before WinSparkle will install them.
-# Forge auto-update (manifest-driven) works regardless.
+# WinSparkle auto-update: enabled. Each zip gets a DSA signature
+# (SHA1-of-zip signed with the SPARKLE_DSA_PRIVATE_KEY secret) emitted
+# in a `sparkle-manifest-windows.json` next to the zip. The matching
+# DSA public key is baked into the .exe via Runner.rc's `DSAPub`
+# resource — without it WinSparkle would refuse to install updates.
 
 on:
   workflow_dispatch:
@@ -52,23 +54,63 @@ jobs:
         run: |
           $src = "build/windows/x64/runner/Release"
           if (-not (Test-Path $src)) {
-            $src = "build/windows/runner/Release"  # older Flutter layout
+            $src = "build/windows/runner/Release"
           }
           $dst = "build/worker_flutter-windows.zip"
           if (Test-Path $dst) { Remove-Item $dst }
           Compress-Archive -Path "$src/*" -DestinationPath $dst
           Get-ChildItem $dst
 
+      - name: Sign zip for WinSparkle (DSA)
+        # WinSparkle 0.8.x verifies update zips against the embedded
+        # DSAPub resource using a SHA1 + DSA signature, base64-encoded.
+        # The recipe matches WinSparkle's sign_update.bat:
+        #   openssl dgst -sha1 -binary < zip
+        #     | openssl dgst -sha1 -sign priv.pem
+        #     | openssl enc -base64
+        # Without this signature on the appcast entry, WinSparkle marks
+        # the update available but refuses to install it.
+        env:
+          SPARKLE_DSA_PRIVATE_KEY: ${{ secrets.SPARKLE_DSA_PRIVATE_KEY }}
+        shell: bash
+        working-directory: worker_flutter
+        run: |
+          if [ -z "$SPARKLE_DSA_PRIVATE_KEY" ]; then
+            echo "::error::SPARKLE_DSA_PRIVATE_KEY is unset" >&2
+            exit 1
+          fi
+          KEY_FILE=$(mktemp)
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s' "$SPARKLE_DSA_PRIVATE_KEY" > "$KEY_FILE"
+          ZIP=build/worker_flutter-windows.zip
+          LEN=$(wc -c < "$ZIP")
+          SIG=$(openssl dgst -sha1 -binary < "$ZIP" \
+            | openssl dgst -sha1 -sign "$KEY_FILE" \
+            | openssl enc -base64 -A)
+          if [ -z "$SIG" ]; then
+            echo "::error::DSA signing produced an empty signature" >&2
+            exit 1
+          fi
+          echo "WinSparkle signature: $SIG (length: $LEN)"
+          jq -n --arg sig "$SIG" --arg len "$LEN" --arg ref "$GITHUB_REF_NAME" \
+            '{tag: $ref, dsaSignature: $sig, length: ($len|tonumber)}' \
+            > build/sparkle-manifest-windows.json
+          cat build/sparkle-manifest-windows.json
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: magic-bracket-simulator-windows
-          path: worker_flutter/build/worker_flutter-windows.zip
+          path: |
+            worker_flutter/build/worker_flutter-windows.zip
+            worker_flutter/build/sparkle-manifest-windows.json
           if-no-files-found: error
 
       - name: Attach to release (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/worker-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: worker_flutter/build/worker_flutter-windows.zip
+          files: |
+            worker_flutter/build/worker_flutter-windows.zip
+            worker_flutter/build/sparkle-manifest-windows.json
           fail_on_unmatched_files: true
