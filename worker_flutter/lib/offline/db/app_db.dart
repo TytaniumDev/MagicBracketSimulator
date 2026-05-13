@@ -52,13 +52,28 @@ class Settings extends Table {
 class AppDb extends _$AppDb {
   AppDb() : super(_openConnection());
 
+  /// Open the schema against an arbitrary `QueryExecutor`. Used by the
+  /// test suite with `NativeDatabase.memory()` for hermetic, fast
+  /// integration tests that exercise the same SQL the app does at
+  /// runtime — but without touching disk.
+  AppDb.forTesting(QueryExecutor e) : super(e);
+
   @override
   int get schemaVersion => 1;
 
   /// All jobs newest-first. Drives the history list.
+  ///
+  /// Sorted by `createdAt DESC` with `id DESC` as a tiebreaker — two
+  /// jobs created in the same millisecond (rare but possible during
+  /// scripted bulk-import) still resolve to a stable, monotonically-
+  /// newest-first order rather than relying on SQLite's row-storage
+  /// order.
   Future<List<Job>> recentJobs({int limit = 50}) {
     return (select(jobs)
-          ..orderBy([(j) => OrderingTerm.desc(j.createdAt)])
+          ..orderBy([
+            (j) => OrderingTerm.desc(j.createdAt),
+            (j) => OrderingTerm.desc(j.id),
+          ])
           ..limit(limit))
         .get();
   }
@@ -67,7 +82,10 @@ class AppDb extends _$AppDb {
   /// `jobs` table changes. Avoids per-second polling in the history UI.
   Stream<List<Job>> watchRecentJobs({int limit = 50}) {
     return (select(jobs)
-          ..orderBy([(j) => OrderingTerm.desc(j.createdAt)])
+          ..orderBy([
+            (j) => OrderingTerm.desc(j.createdAt),
+            (j) => OrderingTerm.desc(j.id),
+          ])
           ..limit(limit))
         .watch();
   }
