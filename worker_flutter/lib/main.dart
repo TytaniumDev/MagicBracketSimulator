@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'auth/auth_gate_screen.dart';
+import 'auth/auth_service.dart';
 import 'config.dart';
 import 'firebase_options.dart';
 import 'installer/install_progress_app.dart';
@@ -198,15 +200,14 @@ Future<void> _bootOffline(WorkerConfig config) async {
 }
 
 Future<void> _bootEngine(WorkerConfig config) async {
-  // Auth is intentionally NOT performed at boot. The firebase_auth_macos
-  // plugin throws an uncaught NSException for several common boot
-  // conditions (anonymous-auth-disabled, no GoogleService-Info.plist,
-  // etc.) that bypass Dart try/catch and kill the app. Until we wire up
-  // a proper Google Sign-In flow (Plan 3), Firestore writes will fail
-  // with permission-denied if the project's security rules require auth,
-  // but the engine itself will at least stay running and surface those
-  // errors in the dashboard.
-  _log('Boot: skipping Firebase Auth (deferred to Plan 3)');
+  // Auth is performed lazily through the AuthGate UI rather than at
+  // boot. Deferring `FirebaseAuth.instance` access until after
+  // `runApp` returns keeps the historical firebase_auth_macos boot
+  // crash off the cold-launch path (uncaught NSExceptions there
+  // bypass Dart try/catch). The gate runs inside Flutter's normal
+  // event loop, so a plugin throw lands as a Dart exception we can
+  // surface in the UI instead of taking the whole process down.
+  _log('Boot: deferring auth to AuthGate');
 
   _log('Boot: constructing WorkerEngine');
   final engine = WorkerEngine(
@@ -227,23 +228,27 @@ Future<void> _bootEngine(WorkerConfig config) async {
     _log('Boot: tray init failed (non-fatal): $e\n$st');
   }
 
-  // Run the UI immediately. Start the engine in the background so a
-  // Firestore plugin crash (which can throw native NSExceptions that
-  // bypass Dart try/catch) doesn't bring down the app before the user
-  // sees the dashboard.
+  // Run the UI immediately. Start the engine *after* sign-in so
+  // Firestore writes carry `request.auth.uid` — the security rules can
+  // then drop the unauthenticated-write branches that exist for the
+  // pre-auth MVP.
   _log('Boot: runApp');
   runApp(_WorkerApp(engine: engine, config: config));
   _log('Boot: runApp returned');
+}
 
+/// Start the engine. Called by `_WorkerApp` once auth completes (or
+/// immediately if the AuthGate is bypassed). Wrapped to keep a
+/// Firestore plugin crash (native NSException) from killing the UI
+/// before the dashboard has a chance to render.
+Future<void> _startEngineSafe(WorkerEngine engine) async {
   _log('Boot: scheduling engine.start() in background');
-  Future<void>(() async {
-    try {
-      await engine.start();
-      _log('Boot: engine running');
-    } catch (e, st) {
-      _log('Engine start FAILED (caught): $e\n$st');
-    }
-  });
+  try {
+    await engine.start();
+    _log('Boot: engine running');
+  } catch (e, st) {
+    _log('Engine start FAILED (caught): $e\n$st');
+  }
 }
 
 // ── Simple file logger ────────────────────────────────────────────
@@ -405,10 +410,24 @@ class _WorkerApp extends StatefulWidget {
 }
 
 class _WorkerAppState extends State<_WorkerApp> with WindowListener {
+  final AuthService _auth = AuthService();
+  AuthedUser? _user;
+  bool _engineStarted = false;
+
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    // firebase_auth persists the session across launches — restore it
+    // synchronously so a returning user lands straight on the
+    // dashboard rather than the AuthGate.
+    final restored = _auth.currentUserSnapshot;
+    if (restored != null) {
+      _user = restored;
+      // Schedule outside the build cycle: _startEngineSafe awaits the
+      // engine, and initState shouldn't be async.
+      Future.microtask(() => _onAuthed(restored));
+    }
   }
 
   @override
@@ -423,6 +442,20 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
     await windowManager.hide();
   }
 
+  Future<void> _onAuthed(AuthedUser user) async {
+    setState(() => _user = user);
+    if (_engineStarted) return;
+    _engineStarted = true;
+    await _startEngineSafe(widget.engine);
+  }
+
+  Future<void> _switchToOffline() async {
+    // Clear the remembered cloud choice so next launch reshows the
+    // mode picker, then signal the existing route-to-mode helper.
+    await clearRememberedLaunchMode();
+    await _routeToMode(widget.config);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -435,7 +468,13 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
           surface: Color(0xFF111827),
         ),
       ),
-      home: Dashboard(engine: widget.engine, config: widget.config),
+      home: _user == null
+          ? AuthGateScreen(
+              authService: _auth,
+              onAuthed: _onAuthed,
+              onSwitchToOffline: _switchToOffline,
+            )
+          : Dashboard(engine: widget.engine, config: widget.config),
     );
   }
 }
