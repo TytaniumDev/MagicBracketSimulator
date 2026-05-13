@@ -5,7 +5,7 @@
 #   1. Create a "Developer ID Application" cert in the Apple Developer
 #      portal for team F2HXQGU2CC.
 #   2. Run `bundle exec fastlane seed_certs` to seed the cert/profile
-#      into the BlinkBreak-certificates git repo.
+#      into the TytaniumDev-certificates git repo.
 #   3. From CI, the `release` lane below uses `sync_certs` (readonly)
 #      to install the cert + profile into an ephemeral keychain.
 #
@@ -41,7 +41,7 @@ platform :mac do
   lane :seed_certs do
     match(
       api_key:        asc_api_key,
-      git_url:        "git@github.com:TytaniumDev/BlinkBreak-certificates.git",
+      git_url:        "git@github.com:TytaniumDev/TytaniumDev-certificates.git",
       storage_mode:   "git",
       type:           "developer_id",
       app_identifier: [APP_IDENTIFIER],
@@ -66,7 +66,7 @@ platform :mac do
 
     match(
       api_key:        asc_api_key,
-      git_url:        "git@github.com:TytaniumDev/BlinkBreak-certificates.git",
+      git_url:        "git@github.com:TytaniumDev/TytaniumDev-certificates.git",
       storage_mode:   "git",
       type:           "developer_id",
       app_identifier: [APP_IDENTIFIER],

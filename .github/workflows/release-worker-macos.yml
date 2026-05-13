@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure SSH for certs repo
-        # The BlinkBreak-certificates repo is private; match needs an SSH
+        # The TytaniumDev-certificates repo is private; match needs an SSH
         # key to read it. The secret is the private half of a deploy key
         # added to that repo with read-only permissions.
         env:
