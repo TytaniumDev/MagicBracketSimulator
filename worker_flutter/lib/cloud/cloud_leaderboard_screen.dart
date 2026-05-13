@@ -112,7 +112,9 @@ List<_LeaderboardEntry> _aggregate(
         ),
       );
       e.games += completedSims;
-      e.lastSeenJobId = doc.id;
+      // Don't overwrite lastSeenJobId — putIfAbsent's initializer already
+      // captured the newest doc (we iterate newest-first), so any further
+      // assignment here would chase the iteration backwards to the oldest.
     }
 
     // Per-deck wins live in `aggregateResults.winsByDeck` once
