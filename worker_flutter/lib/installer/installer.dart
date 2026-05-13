@@ -53,8 +53,15 @@ class Installer {
 
   Future<String> jrePath() async => '${await _supportDir()}/jre';
   Future<String> forgePath() async => '${await _supportDir()}/forge';
-  Future<String> javaBinary() async =>
-      '${await jrePath()}/Contents/Home/bin/java';
+
+  /// Path to the JVM launcher. Adoptium's macOS JRE nests it under
+  /// `Contents/Home/bin/java` (Apple's framework convention); Windows
+  /// ships the more conventional `bin/java.exe`.
+  Future<String> javaBinary() async {
+    final jre = await jrePath();
+    if (Platform.isWindows) return '$jre\\bin\\java.exe';
+    return '$jre/Contents/Home/bin/java';
+  }
 
   /// True iff:
   /// - the JRE binary is present, and
@@ -140,19 +147,25 @@ class Installer {
   }
 
   Future<void> _installJre(String destDir) async {
-    final arch = await _archSlug(); // 'aarch64' or 'x64'
+    final arch = await _archSlug();
+    final os = Platform.isWindows ? 'windows' : 'mac';
+    final archiveExt = Platform.isWindows ? 'zip' : 'tar.gz';
     final url = Uri.parse(
-      'https://api.adoptium.net/v3/binary/latest/$_jreVersionFeature/ga/mac/$arch/jre/hotspot/normal/eclipse',
+      'https://api.adoptium.net/v3/binary/latest/$_jreVersionFeature/ga/$os/$arch/jre/hotspot/normal/eclipse',
     );
-    final tmpFile = File('${await _supportDir()}/jre-download.tar.gz');
+    final tmpFile = File('${await _supportDir()}/jre-download.$archiveExt');
     await _downloadWithProgress(url, tmpFile, label: 'jre');
 
-    // Adoptium ships a JRE folder structured like:
-    //   <name>/Contents/Home/bin/java
-    // Extract into destDir, stripping the top-level archive folder.
+    // Adoptium nests the JRE one folder deep inside the archive. We
+    // strip that wrapper so the destDir lands directly on the runtime:
+    //   macOS:   destDir/Contents/Home/bin/java
+    //   Windows: destDir/bin/java.exe
+    // tar.exe ships with Windows 10 1803+ and transparently handles
+    // both .tar.gz and .zip (auto-detect via magic bytes), so we can
+    // use one extractor for both platforms.
     Directory(destDir).createSync(recursive: true);
     final res = await Process.run('tar', [
-      '-xzf',
+      Platform.isWindows ? '-xf' : '-xzf',
       tmpFile.path,
       '-C',
       destDir,
@@ -162,8 +175,11 @@ class Installer {
       throw Exception('tar (jre) failed: ${res.stderr}');
     }
     tmpFile.deleteSync();
-    // chmod +x on the bin so the JVM is invokable.
-    await Process.run('chmod', ['-R', '+x', '$destDir/Contents/Home/bin']);
+    if (!Platform.isWindows) {
+      // chmod +x the bin so the JVM is invokable. Windows uses ACLs
+      // (not POSIX mode bits) and zip-extracted files are launchable.
+      await Process.run('chmod', ['-R', '+x', '$destDir/Contents/Home/bin']);
+    }
   }
 
   Future<void> _installForge(String destDir, ForgeManifest manifest) async {
@@ -211,7 +227,11 @@ class Installer {
       throw Exception('tar (forge) failed: ${res.stderr}');
     }
     tmpFile.deleteSync();
-    await Process.run('chmod', ['+x', '$destDir/forge.sh']);
+    if (!Platform.isWindows) {
+      // forge.sh is shell-only and irrelevant on Windows; SimRunner
+      // spawns java directly with the JAR anyway.
+      await Process.run('chmod', ['+x', '$destDir/forge.sh']);
+    }
   }
 
   Future<String> _sha256OfFile(File f) async {
@@ -256,6 +276,12 @@ class Installer {
   }
 
   Future<String> _archSlug() async {
+    if (Platform.isWindows) {
+      // %PROCESSOR_ARCHITECTURE% — set by Windows for every process.
+      // AMD64 → Adoptium's "x64"; ARM64 → "aarch64".
+      final pa = Platform.environment['PROCESSOR_ARCHITECTURE'] ?? 'AMD64';
+      return pa.toUpperCase() == 'ARM64' ? 'aarch64' : 'x64';
+    }
     final res = await Process.run('uname', ['-m']);
     final arch = (res.stdout as String).trim();
     return arch == 'x86_64' ? 'x64' : 'aarch64';

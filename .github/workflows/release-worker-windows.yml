@@ -1,0 +1,74 @@
+name: Release magic-bracket-simulator (Windows)
+
+# Triggered manually or on push of a tag matching `worker-v*`. Builds
+# the Flutter Windows release, zips it, and attaches it to the GitHub
+# Release that the matching macOS workflow also targets.
+#
+# Code signing: NOT done. The .exe ships unsigned; users see a
+# SmartScreen "Windows protected your PC" dialog on first launch and
+# have to click "More info → Run anyway". Buying an Authenticode cert
+# (or building a Microsoft Trusted-Signing reputation) is the long-term
+# fix; see worker_flutter/macos/fastlane/SETUP.md.
+#
+# WinSparkle auto-update: the worker runs on Windows but app-updates
+# need DSA-signed appcast entries before WinSparkle will install them.
+# Forge auto-update (manifest-driven) works regardless.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "worker-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        working-directory: worker_flutter
+        run: flutter pub get
+
+      - name: flutter build windows --release
+        working-directory: worker_flutter
+        run: flutter build windows --release
+
+      - name: Package release as zip
+        working-directory: worker_flutter
+        shell: pwsh
+        run: |
+          $src = "build/windows/x64/runner/Release"
+          if (-not (Test-Path $src)) {
+            $src = "build/windows/runner/Release"  # older Flutter layout
+          }
+          $dst = "build/worker_flutter-windows.zip"
+          if (Test-Path $dst) { Remove-Item $dst }
+          Compress-Archive -Path "$src/*" -DestinationPath $dst
+          Get-ChildItem $dst
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: magic-bracket-simulator-windows
+          path: worker_flutter/build/worker_flutter-windows.zip
+          if-no-files-found: error
+
+      - name: Attach to release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/worker-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: worker_flutter/build/worker_flutter-windows.zip
+          fail_on_unmatched_files: true

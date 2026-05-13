@@ -128,23 +128,36 @@ class WorkerConfig {
   static Future<String> _defaultJavaPath() async {
     // First try the bundled JRE installed by the first-run Installer.
     final supportDir = await getApplicationSupportDirectory();
-    final bundledJre = '${supportDir.path}/jre/Contents/Home/bin/java';
+    final bundledJre = Platform.isWindows
+        ? '${supportDir.path}\\jre\\bin\\java.exe'
+        : '${supportDir.path}/jre/Contents/Home/bin/java';
     if (File(bundledJre).existsSync()) return bundledJre;
 
-    // Fall back to system Java if the user installed one themselves
-    // (e.g. running from CLI before first-launch download completes).
-    const candidates = [
-      '/opt/homebrew/opt/openjdk@17/bin/java',
-      '/usr/local/opt/openjdk@17/bin/java',
-      '/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home/bin/java',
-    ];
+    // Fall back to a system Java if the user installed one themselves.
+    final candidates = Platform.isWindows
+        ? const <String>[
+            r'C:\Program Files\Eclipse Adoptium\jre-17\bin\java.exe',
+            r'C:\Program Files\Java\jre-17\bin\java.exe',
+          ]
+        : const <String>[
+            '/opt/homebrew/opt/openjdk@17/bin/java',
+            '/usr/local/opt/openjdk@17/bin/java',
+            '/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home/bin/java',
+          ];
     for (final c in candidates) {
       if (File(c).existsSync()) return c;
     }
-    return 'java';
+    return Platform.isWindows ? 'java.exe' : 'java';
   }
 
   static Future<String> _forgeDecksDir() async {
+    if (Platform.isWindows) {
+      // Forge defaults to %AppData%\Forge on Windows.
+      final appData =
+          Platform.environment['APPDATA'] ??
+          '${Platform.environment['USERPROFILE'] ?? ''}\\AppData\\Roaming';
+      return '$appData\\Forge\\decks\\commander';
+    }
     final home = Platform.environment['HOME'] ?? '';
     return '$home/Library/Application Support/Forge/decks/commander';
   }
