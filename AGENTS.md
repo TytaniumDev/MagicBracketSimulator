@@ -24,6 +24,7 @@
 - **Frontend Test**: `cd frontend && npm test`
 - **API Unit Test**: `cd api && npm run test:unit`
 - **API Ingestion Test**: `cd api && npm run test:ingestion`
+- **Worker Unit Test**: `cd worker && npm run test:unit`
 - **Worker Build**: `cd worker && npm run build`
 
 ## Deployment
