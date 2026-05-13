@@ -107,6 +107,31 @@ platform :mac do
 
     app_path = "../build/macos/Build/Products/Release/worker_flutter.app"
 
+    # Sparkle's embedded Updater.app, Autoupdate binary, and XPCServices
+    # don't pick up the Hardened Runtime + secure timestamp from Flutter's
+    # default "Embed & Sign" pass, so notarization rejects the package
+    # with "binary is not signed with a valid Developer ID certificate."
+    # Walk the framework and re-sign every nested executable with the
+    # Developer ID identity that match just installed, then re-sign the
+    # framework + outer .app on top so the seal includes the updated
+    # nested signatures.
+    sign_id = "Developer ID Application"
+    sparkle_root = "#{app_path}/Contents/Frameworks/Sparkle.framework"
+    [
+      "#{sparkle_root}/Versions/B/Autoupdate",
+      "#{sparkle_root}/Versions/B/Updater.app/Contents/MacOS/Updater",
+      "#{sparkle_root}/Versions/B/Updater.app",
+      "#{sparkle_root}/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer",
+      "#{sparkle_root}/Versions/B/XPCServices/Installer.xpc",
+      "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader",
+      "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc",
+      sparkle_root,
+      app_path,
+    ].each do |target|
+      next unless File.exist?(target)
+      sh("codesign --force --options runtime --timestamp --sign #{sign_id.shellescape} #{target.shellescape}")
+    end
+
     # Notarize the signed .app, then staple the ticket so users without
     # network at first launch don't see the unsigned warning.
     notarize(
