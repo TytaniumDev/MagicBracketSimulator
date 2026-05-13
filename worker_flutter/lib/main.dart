@@ -281,10 +281,24 @@ Future<void> _initAutoUpdater() async {
 }
 
 Future<void> _initFileLogger() async {
-  final home = Platform.environment['HOME'] ?? '';
-  final logsDir = Directory('$home/Library/Logs');
+  // Per-platform convention: macOS uses ~/Library/Logs; Windows uses
+  // %LocalAppData%\com.tytaniumdev.magicBracketSimulator\Logs.
+  late final Directory logsDir;
+  if (Platform.isWindows) {
+    final localAppData =
+        Platform.environment['LOCALAPPDATA'] ??
+        '${Platform.environment['USERPROFILE'] ?? ''}\\AppData\\Local';
+    logsDir = Directory(
+      '$localAppData\\com.tytaniumdev.magicBracketSimulator\\Logs',
+    );
+  } else {
+    final home = Platform.environment['HOME'] ?? '';
+    logsDir = Directory('$home/Library/Logs');
+  }
   if (!logsDir.existsSync()) logsDir.createSync(recursive: true);
-  _logFile = File('${logsDir.path}/com.tytaniumdev.magicBracketSimulator.log');
+  _logFile = File(
+    '${logsDir.path}${Platform.pathSeparator}com.tytaniumdev.magicBracketSimulator.log',
+  );
   _logFile!.writeAsStringSync(
     '\n=== ${DateTime.now().toIso8601String()} app launched ===\n',
     mode: FileMode.append,

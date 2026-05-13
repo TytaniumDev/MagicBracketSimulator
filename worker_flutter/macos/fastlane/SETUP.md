@@ -78,18 +78,25 @@ The worker has two independent update channels:
 2. **App updates** — Sparkle appcast at `worker_flutter/appcast.xml`.
    - Fetched at boot (and every hour while running) from
      raw.githubusercontent.com on `main`.
+   - One appcast covers both platforms; each `<item>` has a
+     `<sparkle:os>` tag so macOS clients ignore Windows items and
+     vice-versa.
    - To release a new app version:
      1. Bump `version:` in `worker_flutter/pubspec.yaml` (e.g.
         `0.1.0+1` → `0.2.0+2`). The `+N` is the monotonic build
         number Sparkle uses internally.
-     2. Tag the commit (e.g. `worker-v0.2.0`) and push. CI signs,
-        notarizes, and attaches `worker_flutter-macos.zip` to the
-        GitHub Release.
-     3. Add a new `<item>` to `appcast.xml` matching the tag
-        (template in the file header). Commit + push to `main`.
+     2. Tag the commit (e.g. `worker-v0.2.0`) and push. Both
+        release workflows fire:
+        - `release-worker-macos.yml` (macos-14): signs, notarizes,
+          attaches `worker_flutter-macos.zip`.
+        - `release-worker-windows.yml` (windows-latest): builds
+          unsigned, attaches `worker_flutter-windows.zip`.
+     3. Add new `<item>` entries to `appcast.xml` (one per OS;
+        `<sparkle:os>macos</sparkle:os>` or `windows`). Commit +
+        push to `main`.
      4. Existing installs see the update within ~1 hour.
 
-### ⚠️ Pre-go-live TODO: EdDSA signing of appcast entries
+### ⚠️ Pre-go-live TODO: EdDSA signing of appcast entries (macOS)
 
 Sparkle 2 *can* fall back to Developer ID code-signing verification
 when `SUPublicEDKey` is absent, but the recommended setup is to also
@@ -104,6 +111,48 @@ EdDSA-sign each appcast entry. To upgrade:
 4. Add a CI step that runs `sign_update worker_flutter-macos.zip`
    and writes the signature into the appcast item's
    `sparkle:edSignature` attribute before pushing.
+
+### ⚠️ Pre-go-live TODO: DSA signing of appcast entries (Windows)
+
+WinSparkle is stricter than its macOS sibling — it refuses to install
+an update entirely unless the appcast entry carries a DSA signature
+that validates against an embedded public key. The Windows release
+artifact is already produced by the CI workflow; the signing piece is
+not yet wired in. To enable Windows app-updates:
+
+1. Generate a DSA keypair locally:
+   ```bash
+   openssl dsaparam -out /tmp/dsaparam.pem 4096
+   openssl gendsa  -out /tmp/dsa_priv.pem /tmp/dsaparam.pem
+   openssl dsa     -in /tmp/dsa_priv.pem -pubout -out /tmp/dsa_pub.pem
+   ```
+2. Embed `dsa_pub.pem` as a Windows resource in
+   `worker_flutter/windows/runner/Runner.rc` (the `auto_updater_windows`
+   plugin docs the exact resource ID; check that package's README).
+3. Store `dsa_priv.pem` in Doppler under `SPARKLE_DSA_PRIVATE_KEY`.
+4. Add a Windows-side CI step that runs `sign_update.bat` (ships with
+   WinSparkle) against `worker_flutter-windows.zip`, then writes the
+   resulting base64 signature into the matching appcast item's
+   `sparkle:dsaSignature` attribute before pushing.
+
+Until that lands, Windows users see "update available" toasts but the
+install step errors out. Forge auto-update (manifest-driven) works on
+Windows regardless — it doesn't touch WinSparkle.
+
+### ⚠️ Pre-go-live TODO: Authenticode signing of the .exe
+
+The Windows .exe ships unsigned. Every user will see "Windows protected
+your PC" on first launch and have to click *More info → Run anyway*.
+Long-term fixes:
+
+- Buy an OV code-signing cert (~$100–300/yr) — SmartScreen still warns
+  briefly per publisher until reputation accumulates, then trusts.
+- Buy an EV code-signing cert (~$300–700/yr) — instant SmartScreen pass.
+- Use Microsoft Trusted Signing (newer, $9.99/mo + Azure setup).
+
+Whichever route, the GitHub Actions step that signs is the same shape
+as macOS Fastlane: pull cert (typically a `.pfx` blob) from Doppler,
+run `signtool sign /f cert.pfx /p $PASS /t http://timestamp.digicert.com worker_flutter.exe` before zipping.
 
 ## Known issue: fastlane G2 cert preference
 

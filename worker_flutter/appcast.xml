@@ -29,8 +29,10 @@
     <description>Desktop worker for the Magic Bracket Simulator project.</description>
     <language>en</language>
 
+    <!-- macOS (Sparkle) -->
     <item>
-      <title>Version 0.1.0</title>
+      <title>Version 0.1.0 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
       <pubDate>Wed, 13 May 2026 06:37:00 -0700</pubDate>
       <sparkle:version>1</sparkle:version>
       <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
@@ -39,5 +41,10 @@
         url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.1.0/worker_flutter-macos.zip"
         type="application/octet-stream" />
     </item>
+
+    <!-- Windows (WinSparkle) — entries get added once the first Windows
+         release is tagged. Until DSA-signing is wired into CI (see
+         macos/fastlane/SETUP.md → "Auto-update flow"), WinSparkle will
+         detect Windows updates but refuse to install them. -->
   </channel>
 </rss>
