@@ -11,6 +11,8 @@ import 'config.dart';
 import 'firebase_options.dart';
 import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
+import 'launch/mode_picker_screen.dart';
+import 'offline/offline_app.dart';
 import 'ui/dashboard.dart';
 import 'ui/tray_setup.dart';
 import 'worker/worker_engine.dart';
@@ -118,19 +120,73 @@ Future<void> _appMain() async {
       InstallProgressApp(
         installer: installer,
         onComplete: () async {
-          _log('Install complete; booting engine');
+          _log('Install complete; routing to mode');
           // Re-resolve config (java/forge paths) now that the install is done.
           final newConfig = await WorkerConfig.loadOrInit();
-          await windowManager.hide();
-          await _bootEngine(newConfig);
+          await _routeToMode(newConfig);
         },
       ),
     );
     return;
   }
 
-  _log('Already installed; booting engine');
-  await _bootEngine(config);
+  _log('Already installed; routing to mode');
+  await _routeToMode(config);
+}
+
+/// Dispatch into cloud or offline mode based on the user's remembered
+/// choice. If nothing is remembered, show the mode picker first.
+Future<void> _routeToMode(WorkerConfig config) async {
+  final remembered = await readRememberedLaunchMode();
+  if (remembered != null) {
+    _log('Routing to remembered mode: ${remembered.prefsValue}');
+    await _bootMode(config, remembered);
+    return;
+  }
+  _log('No remembered mode; showing picker');
+  await windowManager.show();
+  runApp(
+    MaterialApp(
+      title: 'Magic Bracket',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF1F2937),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF60A5FA),
+          surface: Color(0xFF111827),
+        ),
+      ),
+      home: ModePickerScreen(
+        onChosen: (mode) async {
+          _log('User picked mode: ${mode.prefsValue}');
+          await _bootMode(config, mode);
+        },
+      ),
+    ),
+  );
+}
+
+Future<void> _bootMode(WorkerConfig config, LaunchMode mode) async {
+  switch (mode) {
+    case LaunchMode.cloud:
+      await _bootEngine(config);
+    case LaunchMode.offline:
+      await _bootOffline(config);
+  }
+}
+
+Future<void> _bootOffline(WorkerConfig config) async {
+  _log('Boot offline: runApp placeholder');
+  await windowManager.show();
+  runApp(
+    OfflineApp(
+      onSwitchMode: () async {
+        // Clear the remembered choice (already done by the button) and
+        // re-route. The picker will show again.
+        await _routeToMode(config);
+      },
+    ),
+  );
 }
 
 Future<void> _bootEngine(WorkerConfig config) async {
