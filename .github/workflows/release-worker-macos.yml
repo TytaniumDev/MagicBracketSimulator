@@ -56,6 +56,15 @@ jobs:
           bundler-cache: true
           working-directory: worker_flutter/macos
 
+      - name: Install CocoaPods into active Ruby
+        # macos-14 runners ship with a system CocoaPods tied to system
+        # Ruby. `ruby/setup-ruby` swaps PATH to Ruby 3.2, which makes
+        # the pre-installed `pod` unrunnable — Flutter then prints
+        # "CocoaPods is installed but broken. Skipping pod install."
+        # mid-build and fails. Reinstalling cocoapods into the active
+        # Ruby keeps a working `pod` on PATH for `flutter build macos`.
+        run: gem install cocoapods
+
       - name: flutter pub get
         working-directory: worker_flutter
         run: flutter pub get
