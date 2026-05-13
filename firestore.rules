@@ -107,6 +107,19 @@ service cloud.firestore {
       allow delete: if isAllowedUser();
     }
 
+    // Allow `collectionGroup('simulations')` reads for the Flutter worker.
+    // Firestore looks up rules by the top-level path for collection-group
+    // queries, so the nested `match /jobs/{jobId}/simulations/{simId}`
+    // rule above doesn't apply to listener queries. Without this match,
+    // the Flutter worker's `where state == PENDING` listener silently
+    // returns empty and never picks up jobs.
+    //
+    // Reads only — actual write paths still flow through the nested
+    // rule's stricter state-transition checks.
+    match /{path=**}/simulations/{simId} {
+      allow read: if true;
+    }
+
     // Catch-all: deny everything else not explicitly matched
     match /{document=**} {
       allow read, write: if false;
