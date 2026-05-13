@@ -1,7 +1,8 @@
 /**
  * One-time bootstrap: enqueue the first lease-sweep Cloud Task. Subsequent
- * sweeps self-reschedule. Safe to re-run — uses a fixed task name and
- * delete-then-create, so it overwrites any pending scheduled sweep.
+ * sweeps self-reschedule. Each invocation enqueues an independent scheduling
+ * chain, so re-running creates duplicate concurrent sweeps — benign because
+ * the sweep is idempotent, but prefer running only once after deploy.
  *
  * Run: npx tsx scripts/bootstrap-lease-sweep.ts
  *

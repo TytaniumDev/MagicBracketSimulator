@@ -97,7 +97,7 @@ async function runTests() {
         .get();
       const data = snap.data();
       assert(data?.state === 'PENDING', `expected PENDING, got ${data?.state}`);
-      assert(data?.workerId === null, `expected workerId cleared, got ${data?.workerId}`);
+      assert(data?.workerId === undefined, `expected workerId cleared, got ${data?.workerId}`);
       assert(data?.revertReason === 'lease-expired', `expected revertReason='lease-expired', got ${data?.revertReason}`);
     });
 

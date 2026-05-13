@@ -115,9 +115,12 @@ export async function cancelRecoveryCheck(jobId: string): Promise<void> {
  * combined with the 15s lease window, this gives ~27s worst-case
  * detection of a crashed Flutter worker.
  *
- * Uses a fixed task name (overwriting any existing scheduled task) so we
- * never accumulate duplicate sweeps if the endpoint is invoked manually
- * during scheduled-task downtime.
+ * Lets Cloud Tasks auto-generate a unique task name (no `name` field).
+ * A fixed name is unusable here because Cloud Tasks tombstones names for
+ * ~1 hour after a task fires, which would break the self-reschedule chain
+ * on every cycle. Manual invocations of the sweep endpoint can therefore
+ * create parallel scheduling chains, but the sweep is idempotent, so the
+ * duplicate work is benign.
  */
 export async function scheduleLeaseSweep(delaySeconds = 12): Promise<void> {
   const client = getClient();
@@ -125,18 +128,6 @@ export async function scheduleLeaseSweep(delaySeconds = 12): Promise<void> {
   if (!client || !queuePath) return;
 
   const apiBase = getApiBaseUrl();
-  const taskName = `${queuePath}/tasks/lease-sweep`;
-
-  // Delete any existing task with this name so we can re-create it.
-  // ALREADY_EXISTS protection (delete-then-create) avoids stuck stale tasks.
-  try {
-    await client.deleteTask({ name: taskName });
-  } catch (err: unknown) {
-    const code = (err as { code?: number }).code;
-    if (code !== 5) { // 5 = NOT_FOUND, expected on first run or after fire
-      console.warn('[CloudTasks] lease-sweep delete pre-create failed:', err);
-    }
-  }
 
   try {
     const scheduleTime = new Date(Date.now() + delaySeconds * 1000);
@@ -144,7 +135,6 @@ export async function scheduleLeaseSweep(delaySeconds = 12): Promise<void> {
     await client.createTask({
       parent: queuePath,
       task: {
-        name: taskName,
         scheduleTime: {
           seconds: Math.floor(scheduleTime.getTime() / 1000),
           nanos: 0,
@@ -161,9 +151,6 @@ export async function scheduleLeaseSweep(delaySeconds = 12): Promise<void> {
       },
     });
   } catch (err: unknown) {
-    const code = (err as { code?: number }).code;
-    if (code !== 6) { // 6 = ALREADY_EXISTS — race; benign
-      console.warn('[CloudTasks] lease-sweep schedule failed:', err);
-    }
+    console.error('[CloudTasks] lease-sweep schedule failed:', err);
   }
 }
