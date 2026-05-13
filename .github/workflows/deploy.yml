@@ -65,8 +65,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend
-        working-directory: frontend
-        run: npm ci && npm run build
+        run: ./scripts/build-frontend-ci.sh
         env:
           VITE_FIREBASE_API_KEY: ${{ env.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ env.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -78,4 +77,4 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ env.VITE_FIREBASE_APP_ID }}
 
       - name: Deploy Hosting & Firestore
-        run: npx firebase-tools@latest deploy --only hosting,firestore --force
+        run: ./scripts/deploy-firebase.sh

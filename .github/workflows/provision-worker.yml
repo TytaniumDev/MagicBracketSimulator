@@ -50,11 +50,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Install API dependencies
-        run: npm ci --prefix api
+      - name: Install root and API dependencies
+        run: ./scripts/install-provision-deps.sh
 
       - name: Derive IMAGE_NAME
         run: ./scripts/set-image-names.sh
@@ -64,11 +61,7 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ steps.project.outputs.project_id }}
           SECRET_API_URL: ${{ env.API_URL }}
           SECRET_WORKER_SECRET: ${{ env.WORKER_SECRET }}
-        run: |
-          node scripts/populate-worker-secret.js \
-            --defaults \
-            --api-url="$SECRET_API_URL" \
-            --worker-secret="$SECRET_WORKER_SECRET"
+        run: ./scripts/run-populate-worker-secret.sh
 
       - name: Populate worker-host-config in Secret Manager
         env:
