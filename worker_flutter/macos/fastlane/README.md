@@ -3,14 +3,22 @@
 Fastlane match + notarytool pipeline for distributing the Magic Bracket
 worker as a signed, notarized `.app` outside the Mac App Store.
 
-The certs are shared with BlinkBreak (same Apple team, same git repo):
-private repo `TytaniumDev/BlinkBreak-certificates`.
+The certs live alongside BlinkBreak's (same Apple team `F2HXQGU2CC`)
+in the private repo `TytaniumDev/TytaniumDev-certificates` — which is
+the renamed `BlinkBreak-certificates` repo, generalized for all of
+this team's signing assets.
 
 ## One-time setup (manual)
 
-Before the CI workflow can succeed, the Developer ID Application cert
-needs to exist in the certs repo. As of 2026-05-12 the repo only has the
-iOS App Store cert, so you'll need to seed the macOS one.
+Before the CI workflow can succeed:
+
+- The cert storage repo must be renamed from `BlinkBreak-certificates`
+  → `TytaniumDev-certificates` in GitHub (Settings → Repository name).
+  GitHub auto-redirects the old name to the new one, so BlinkBreak's
+  existing pipeline continues to work without changes; updating its
+  Matchfile/Fastfile to the new name is a follow-up cleanup.
+- A "Developer ID Application" cert must exist for team `F2HXQGU2CC`.
+  As of 2026-05-12 the repo only has the iOS App Store cert.
 
 1. **Create the cert in the Apple Developer portal** (or let match create
    it on first run — it will try). Required: a "Developer ID Application"
@@ -44,7 +52,7 @@ iOS App Store cert, so you'll need to seed the macOS one.
    | `ASC_ISSUER_ID` | Same page. |
    | `ASC_API_KEY_CONTENT` | Contents of the `AuthKey_<ID>.p8` file (raw text or base64). |
    | `ASC_API_KEY_IS_BASE64` | `"true"` if you base64-encoded the previous; else omit. |
-   | `CERTS_REPO_DEPLOY_KEY` | Private half of an SSH deploy key. Add the public half to `BlinkBreak-certificates` repo settings → Deploy keys, read-only. |
+   | `CERTS_REPO_DEPLOY_KEY` | Private half of an SSH deploy key. Add the public half to `TytaniumDev-certificates` repo settings → Deploy keys, read-only. |
 
 ## Releasing
 

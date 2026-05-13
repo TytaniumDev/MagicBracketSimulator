@@ -178,7 +178,7 @@ Re-enable `tray_manager` calls in cloud mode bootstrap only (not offline mode �
 Mirror BlinkBreak's Fastlane match pattern, with these adjustments for macOS:
 
 1. **Cert type:** `developer_id` (not `appstore`). Distributes outside the App Store.
-2. **Storage:** new directory `developer_id/` in the existing `BlinkBreak-certificates` repo (so we don't manage two cert repos). Optional: rename repo to a generic name in a separate change.
+2. **Storage:** new directory `developer_id/` in the existing `TytaniumDev-certificates` repo (so we don't manage two cert repos). Optional: rename repo to a generic name in a separate change.
 3. **Seed step (run once locally):** `fastlane match developer_id --app_identifier=com.tytaniumdev.workerFlutter`. Requires the user to first create a "Developer ID Application" cert in the Apple Developer portal (or let match create it). This is a manual step — match cannot run unattended for cert creation the very first time.
 4. **CI lane (Fastfile):** `sync_certs` → `update_code_signing_settings` for `worker_flutter/macos/Runner.xcodeproj` → `flutter build macos --release` → `notarize` (xcrun notarytool via Fastlane's `notarize` action) → staple → zip → upload artifact.
 5. **Credentials:** reuse ASC API key from BlinkBreak (ASC_KEY_ID / ASC_ISSUER_ID / ASC_API_KEY_CONTENT) since same team (F2HXQGU2CC).
@@ -215,7 +215,7 @@ Given the prerequisites (signing first on both platforms), this is parked until 
 | Risk | Mitigation |
 |---|---|
 | Google Sign-In via `firebase_auth_macos` historically crashed natively in unsigned/sandbox-disabled config (the original Plan 3 deferral reason). | Sub-project D (signing) runs first, OR we use `google_sign_in` desktop OAuth flow which doesn't go through firebase_auth's native crash path. Plan to use the latter as a safety net. |
-| Developer ID cert doesn't exist in `BlinkBreak-certificates` repo yet (verified 2026-05-12 — only iOS App Store cert present). | Sub-project D explicitly includes a manual "seed cert" step. Fastlane config is written so once the cert exists, the rest is unattended. |
+| Developer ID cert doesn't exist in `TytaniumDev-certificates` repo yet (verified 2026-05-12 — only iOS App Store cert present). | Sub-project D explicitly includes a manual "seed cert" step. Fastlane config is written so once the cert exists, the rest is unattended. |
 | Drift codegen requires running `build_runner` — first-time setup cost. | Single `pub run build_runner build` step documented in worker_flutter/README. CI runs it before `flutter test`. |
 | Refactor of `worker/` → `cloud/` + `shared/` touches many files; risk of breaking the existing PR #189 work. | Refactor lands as one mechanical commit *after* PR #189 merges. Or: rebased into the same PR if not yet merged. |
 | Storage pruner deleting active job logs. | Pruner skips jobs with status != COMPLETED/FAILED/CANCELLED. |
@@ -226,7 +226,7 @@ Given the prerequisites (signing first on both platforms), this is parked until 
 - Cloud → offline sync (one-way only: separate worlds).
 - Moxfield URL fetch / raw deck paste in offline v1 (precons only).
 - Auto-updater on Windows (requires Windows code signing).
-- Migrating existing iOS App Store creds repo to a renamed "tytaniumdev-certificates" generic repo (separate refactor).
+- Migrating existing iOS App Store creds repo to a renamed "TytaniumDev-certificates" generic repo (separate refactor).
 
 ---
 
