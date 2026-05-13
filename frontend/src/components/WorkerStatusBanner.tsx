@@ -81,11 +81,13 @@ export function WorkerStatusBanner({ workers, queueDepth, isLoading, onRefresh, 
                   <div className="flex items-center gap-2">
                     <span
                       className={`inline-block w-2 h-2 rounded-full ${
-                        w.status === 'updating'
-                          ? 'bg-amber-500'
-                          : w.status === 'idle'
-                            ? 'bg-green-500'
-                            : 'bg-blue-500'
+                        w.status === 'crashed'
+                          ? 'bg-red-500'
+                          : w.status === 'updating'
+                            ? 'bg-amber-500'
+                            : w.status === 'idle'
+                              ? 'bg-green-500'
+                              : 'bg-blue-500'
                       }`}
                     />
                     <span className="text-gray-300 font-medium">{w.workerName}</span>
