@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../cloud/cloud_jobs_screen.dart';
+import '../cloud/cloud_leaderboard_screen.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import '../worker/worker_engine.dart';
@@ -33,7 +34,7 @@ class _DashboardState extends State<Dashboard> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: const Color(0xFF1F2937),
         appBar: AppBar(
@@ -46,6 +47,7 @@ class _DashboardState extends State<Dashboard> {
             tabs: [
               Tab(icon: Icon(Icons.memory), text: 'Worker'),
               Tab(icon: Icon(Icons.cloud_queue), text: 'Jobs'),
+              Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Leaderboard'),
             ],
             labelColor: Color(0xFF60A5FA),
             unselectedLabelColor: Colors.white70,
@@ -93,6 +95,10 @@ class _DashboardState extends State<Dashboard> {
             // Jobs tab — Firestore-backed browser of all jobs (read-only
             // for now; mutations need auth which the worker lacks).
             const CloudJobsScreen(),
+            // Leaderboard tab — aggregates win rate per deck across
+            // recent completed jobs. Client-side because the
+            // /api/leaderboard endpoint requires auth.
+            const CloudLeaderboardScreen(),
           ],
         ),
       ),
