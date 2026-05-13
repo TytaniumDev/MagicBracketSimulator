@@ -39,8 +39,11 @@ jobs:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_BLINKBREAK_TOKEN }}
         run: |
           DELIM=$(openssl rand -hex 16)
-          # Token is already scoped to blinkbreak/prd; no need to pass them.
-          SECRETS=$(doppler secrets download --no-file --format json)
+          # Service token is scoped to blinkbreak/prd, but still pass the
+          # flags explicitly — without them, the CLI tries to use a local
+          # Doppler config that doesn't exist on a fresh runner and the
+          # request 401s as "Invalid Auth token".
+          SECRETS=$(doppler secrets download --project blinkbreak --config prd --no-file --format json)
           KEYS='[
             "MATCH_PASSWORD",
             "MATCH_SSH_PRIVATE_KEY",

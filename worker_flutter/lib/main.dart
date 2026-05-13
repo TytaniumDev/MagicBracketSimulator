@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:auto_updater/auto_updater.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -88,6 +89,12 @@ Future<void> _appMain() async {
     await windowManager.setPreventClose(true);
   });
   _log('window ready, shown');
+
+  // Self-update: ask Sparkle (via auto_updater) to check the appcast in
+  // the repo. New `worker-v*` tags add an entry there; users running the
+  // old build see the update offer on next launch and again every hour
+  // while running. Non-fatal on failure (e.g. offline / appcast 404).
+  await _initAutoUpdater();
 
   // Persistent worker identity + paths.
   final config = await WorkerConfig.loadOrInit();
@@ -242,6 +249,37 @@ Future<void> _bootEngine(WorkerConfig config) async {
 // Tray-only apps have no stderr console visible to the user; we write
 // to ~/Library/Logs/ which is the standard macOS user log location.
 File? _logFile;
+
+/// Appcast URL — RSS feed Sparkle polls to discover new releases. Pinned
+/// to `main` so a tag push that updates the appcast hits existing
+/// installs without any extra deploy step.
+const _kAppcastUrl =
+    'https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/worker_flutter/appcast.xml';
+
+/// Check on launch + every hour while the app is open. Sparkle will
+/// surface a "new version available" dialog itself; we don't render UI.
+const _kAutoUpdateCheckIntervalSeconds = 3600;
+
+Future<void> _initAutoUpdater() async {
+  try {
+    await autoUpdater.setFeedURL(_kAppcastUrl);
+    await autoUpdater.setScheduledCheckInterval(
+      _kAutoUpdateCheckIntervalSeconds,
+    );
+    // Background check so the user doesn't see a "no update available" toast
+    // when nothing is new.
+    await autoUpdater.checkForUpdates(inBackground: true);
+    _log(
+      'AutoUpdater: feed=$_kAppcastUrl, interval=${_kAutoUpdateCheckIntervalSeconds}s',
+    );
+  } catch (e, st) {
+    // Sparkle init failure (e.g. missing SUPublicEDKey in some configs) is
+    // not fatal — the worker still runs, just without self-update. Log
+    // so we notice in the diagnostic file.
+    _log('AutoUpdater init failed (non-fatal): $e\n$st');
+  }
+}
+
 Future<void> _initFileLogger() async {
   final home = Platform.environment['HOME'] ?? '';
   final logsDir = Directory('$home/Library/Logs');

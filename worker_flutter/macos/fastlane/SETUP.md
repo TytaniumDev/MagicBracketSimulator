@@ -63,6 +63,48 @@ under `certs/developer_id/` and `profiles/developer_id/`). If you ever
 need to re-seed (e.g. after cert revocation), the steps are documented
 in the Fastfile header.
 
+## Auto-update flow
+
+The worker has two independent update channels:
+
+1. **Forge updates** — manifest-driven, no .app release needed.
+   - Source of truth: `worker_flutter/forge-manifest.json`.
+   - Fetched at boot from raw.githubusercontent.com on `main`.
+   - To bump Forge: download the new tarball, compute its sha256,
+     update the manifest JSON, commit + push to `main`. Existing
+     installs pick it up on next launch — the installer cleans the
+     old jar, verifies the new sha256, extracts.
+
+2. **App updates** — Sparkle appcast at `worker_flutter/appcast.xml`.
+   - Fetched at boot (and every hour while running) from
+     raw.githubusercontent.com on `main`.
+   - To release a new app version:
+     1. Bump `version:` in `worker_flutter/pubspec.yaml` (e.g.
+        `0.1.0+1` → `0.2.0+2`). The `+N` is the monotonic build
+        number Sparkle uses internally.
+     2. Tag the commit (e.g. `worker-v0.2.0`) and push. CI signs,
+        notarizes, and attaches `worker_flutter-macos.zip` to the
+        GitHub Release.
+     3. Add a new `<item>` to `appcast.xml` matching the tag
+        (template in the file header). Commit + push to `main`.
+     4. Existing installs see the update within ~1 hour.
+
+### ⚠️ Pre-go-live TODO: EdDSA signing of appcast entries
+
+Sparkle 2 *can* fall back to Developer ID code-signing verification
+when `SUPublicEDKey` is absent, but the recommended setup is to also
+EdDSA-sign each appcast entry. To upgrade:
+
+1. Generate a key pair with Sparkle's `generate_keys` (ships in the
+   `auto_updater_macos` plugin's Sparkle bundle, or download
+   Sparkle's tools dist).
+2. Add the public key to `worker_flutter/macos/Runner/Info.plist`
+   under `SUPublicEDKey`.
+3. Store the private key in Doppler (`SPARKLE_ED_PRIVATE_KEY`).
+4. Add a CI step that runs `sign_update worker_flutter-macos.zip`
+   and writes the signature into the appcast item's
+   `sparkle:edSignature` attribute before pushing.
+
 ## Known issue: fastlane G2 cert preference
 
 Fastlane 2.234.0 defaults to creating `DEVELOPER_ID_APPLICATION_G2` certs,

@@ -32,6 +32,12 @@ dependencies:
   # First-run installer downloads (JRE + Forge)
   http: ^1.2.2
 
+  # SHA-256 verification of downloaded Forge bundles before extract.
+  crypto: ^3.0.5
+
+  # macOS app self-update (Sparkle wrapper).
+  auto_updater: ^1.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

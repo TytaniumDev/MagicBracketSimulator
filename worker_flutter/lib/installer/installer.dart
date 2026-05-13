@@ -1,35 +1,37 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
-/// One-time installer that downloads the JRE and Forge into the app's
-/// support directory on first launch. After this the worker can run real
-/// simulations without the user installing anything by hand.
+import 'forge_manifest.dart';
+
+/// First-launch installer for the JRE + Forge bundle.
 ///
-/// Why first-launch instead of bundled inside the .app:
-///   - .app ships at ~50MB (just Flutter + plugins) instead of ~500MB
-///   - JRE and Forge are easily re-downloadable if something corrupts
-///   - Forge data updates can be handled independently of app releases
+/// Forge versioning is now manifest-driven:
+///   - `worker_flutter/forge-manifest.json` is the source of truth.
+///   - On every boot the worker fetches the manifest from
+///     raw.githubusercontent.com (pinned to `main`).
+///   - If the manifest's version doesn't match what's installed on disk,
+///     the installer re-downloads + extracts + verifies SHA-256 +
+///     removes old `forge-gui-desktop-*.jar` files. This lets a Forge
+///     bump ship without a .app release: bump the JSON on `main` and
+///     every running install picks it up on its next launch.
 ///
-/// Trade-off: requires network on first launch. Subsequent launches use
-/// the local install. The installer is idempotent — re-running it with
-/// existing files is a no-op.
+/// JRE versioning is still pinned to Adoptium's "latest" Java 17.
+/// Existing installs are not bumped to newer JREs — we only fetch if
+/// the bundled JRE binary is missing. Adoptium's JRE is generally
+/// API-stable within a feature release, so this is intentional.
 class Installer {
-  Installer({http.Client? client}) : _client = client ?? http.Client();
+  Installer({http.Client? client, ForgeManifestClient? manifestClient})
+    : _client = client ?? http.Client(),
+      _manifestClient = manifestClient ?? ForgeManifestClient();
 
   final http.Client _client;
+  final ForgeManifestClient _manifestClient;
 
-  // Pinned versions. Bump these as needed.
-  static const forgeVersion = '2.0.10';
   static const _jreVersionFeature = 17;
-
-  /// Filename of the Forge JAR inside `forgePath`. Public so `SimRunner`
-  /// resolves the same filename the installer downloads — keeps the two
-  /// in lockstep when the version is bumped.
-  static const forgeJarName =
-      'forge-gui-desktop-$forgeVersion-jar-with-dependencies.jar';
 
   /// Hard cap on redirect follows. Adoptium typically issues one 3xx
   /// (to a CDN); we allow up to 5 to handle geo-routing chains, then bail.
@@ -39,6 +41,10 @@ class Installer {
   final _progress = StreamController<InstallProgress>.broadcast();
   Stream<InstallProgress> get progressStream => _progress.stream;
 
+  /// Cached after first successful fetch. Used by [installedJarName] so
+  /// callers (SimRunner) don't have to fetch again.
+  ForgeManifest? _lastManifest;
+
   Future<String> _supportDir() async {
     final dir = await getApplicationSupportDirectory();
     if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -47,21 +53,37 @@ class Installer {
 
   Future<String> jrePath() async => '${await _supportDir()}/jre';
   Future<String> forgePath() async => '${await _supportDir()}/forge';
-  Future<String> javaBinary() async => '${await jrePath()}/Contents/Home/bin/java';
+  Future<String> javaBinary() async =>
+      '${await jrePath()}/Contents/Home/bin/java';
 
-  /// True iff both JRE and Forge are installed and look valid.
+  /// True iff:
+  /// - the JRE binary is present, and
+  /// - either we couldn't reach the manifest (so we trust whatever JAR
+  ///   is on disk), or the on-disk JAR matches the manifest's version.
+  ///
+  /// The "manifest unreachable" fallback keeps the worker bootable
+  /// offline; the user gets the previously-installed Forge.
   Future<bool> isReady() async {
     final java = await javaBinary();
-    final forgeJar = '${await forgePath()}/$forgeJarName';
-    return File(java).existsSync() && File(forgeJar).existsSync();
+    if (!File(java).existsSync()) return false;
+
+    final manifest = await _manifestClient.fetch();
+    _lastManifest = manifest;
+    final forge = await forgePath();
+
+    if (manifest == null) {
+      // Offline: accept whatever Forge JAR is present.
+      return _findAnyForgeJar(forge) != null;
+    }
+    final wantedJar = File('$forge/${manifest.jarName}');
+    return wantedJar.existsSync();
   }
 
-  /// Install whatever is missing. Idempotent.
+  /// Install whatever is missing or out of date.
   Future<void> install() async {
     final jre = await jrePath();
-    final forge = await forgePath();
     final java = await javaBinary();
-    final forgeJar = '$forge/$forgeJarName';
+    final forge = await forgePath();
 
     if (!File(java).existsSync()) {
       _emit('jre', 'Downloading Java runtime', 0);
@@ -71,15 +93,50 @@ class Installer {
       _emit('jre', 'Java already installed', 1);
     }
 
-    if (!File(forgeJar).existsSync()) {
-      _emit('forge', 'Downloading Forge $forgeVersion (~270 MB)', 0);
-      await _installForge(forge);
-      _emit('forge', 'Forge ready', 1);
+    final manifest = _lastManifest ?? await _manifestClient.fetch();
+    _lastManifest = manifest;
+
+    if (manifest == null) {
+      // Offline: keep whatever is installed; surface in UI.
+      _emit('forge', 'Forge manifest unreachable — using local install', 1);
     } else {
-      _emit('forge', 'Forge already installed', 1);
+      final wantedJar = File('$forge/${manifest.jarName}');
+      if (wantedJar.existsSync()) {
+        _emit('forge', 'Forge ${manifest.version} already installed', 1);
+      } else {
+        final sizeMb = (manifest.size / (1024 * 1024)).toStringAsFixed(0);
+        _emit(
+          'forge',
+          'Downloading Forge ${manifest.version} (~$sizeMb MB)',
+          0,
+        );
+        await _installForge(forge, manifest);
+        _emit('forge', 'Forge ${manifest.version} ready', 1);
+      }
     }
 
     _emit('done', 'All set', 1);
+  }
+
+  /// Resolved Forge JAR filename. Reflects whatever the most recent
+  /// [isReady]/[install] call established. Returns null if neither has
+  /// run yet AND no JAR exists on disk.
+  Future<String?> installedJarName() async {
+    if (_lastManifest != null) return _lastManifest!.jarName;
+    return _findAnyForgeJar(await forgePath());
+  }
+
+  String? _findAnyForgeJar(String forgeDir) {
+    final dir = Directory(forgeDir);
+    if (!dir.existsSync()) return null;
+    for (final entry in dir.listSync()) {
+      final name = entry.path.split(Platform.pathSeparator).last;
+      if (name.startsWith('forge-gui-desktop-') &&
+          name.endsWith('-jar-with-dependencies.jar')) {
+        return name;
+      }
+    }
+    return null;
   }
 
   Future<void> _installJre(String destDir) async {
@@ -94,10 +151,13 @@ class Installer {
     //   <name>/Contents/Home/bin/java
     // Extract into destDir, stripping the top-level archive folder.
     Directory(destDir).createSync(recursive: true);
-    final res = await Process.run(
-      'tar',
-      ['-xzf', tmpFile.path, '-C', destDir, '--strip-components=1'],
-    );
+    final res = await Process.run('tar', [
+      '-xzf',
+      tmpFile.path,
+      '-C',
+      destDir,
+      '--strip-components=1',
+    ]);
     if (res.exitCode != 0) {
       throw Exception('tar (jre) failed: ${res.stderr}');
     }
@@ -106,24 +166,57 @@ class Installer {
     await Process.run('chmod', ['-R', '+x', '$destDir/Contents/Home/bin']);
   }
 
-  Future<void> _installForge(String destDir) async {
-    final url = Uri.parse(
-      'https://github.com/Card-Forge/forge/releases/download/forge-$forgeVersion/forge-installer-$forgeVersion.tar.bz2',
-    );
+  Future<void> _installForge(String destDir, ForgeManifest manifest) async {
     final tmpFile = File('${await _supportDir()}/forge-download.tar.bz2');
-    await _downloadWithProgress(url, tmpFile, label: 'forge');
-
-    Directory(destDir).createSync(recursive: true);
-    _emit('forge', 'Extracting Forge', 0);
-    final res = await Process.run(
-      'tar',
-      ['-xjf', tmpFile.path, '-C', destDir],
+    await _downloadWithProgress(
+      Uri.parse(manifest.url),
+      tmpFile,
+      label: 'forge',
     );
+
+    // Verify SHA-256 before trusting the bytes. A mismatched hash means
+    // either a corrupted download or a tampered redirect target — either
+    // way, do not extract.
+    _emit('forge', 'Verifying download', 0.95);
+    final actual = await _sha256OfFile(tmpFile);
+    if (actual.toLowerCase() != manifest.sha256.toLowerCase()) {
+      tmpFile.deleteSync();
+      throw Exception(
+        'Forge download SHA-256 mismatch: expected ${manifest.sha256}, got $actual',
+      );
+    }
+
+    // Clean up any older forge-gui-desktop JARs so we don't leak ~270 MB
+    // per bump. Other Forge resources (decks, images, configs) are kept.
+    final dir = Directory(destDir);
+    if (dir.existsSync()) {
+      for (final entry in dir.listSync()) {
+        final name = entry.path.split(Platform.pathSeparator).last;
+        if (name.startsWith('forge-gui-desktop-') &&
+            name.endsWith('-jar-with-dependencies.jar') &&
+            name != manifest.jarName) {
+          try {
+            File(entry.path).deleteSync();
+          } catch (_) {
+            /* best effort */
+          }
+        }
+      }
+    }
+
+    dir.createSync(recursive: true);
+    _emit('forge', 'Extracting Forge ${manifest.version}', 0);
+    final res = await Process.run('tar', ['-xjf', tmpFile.path, '-C', destDir]);
     if (res.exitCode != 0) {
       throw Exception('tar (forge) failed: ${res.stderr}');
     }
     tmpFile.deleteSync();
     await Process.run('chmod', ['+x', '$destDir/forge.sh']);
+  }
+
+  Future<String> _sha256OfFile(File f) async {
+    final digest = await sha256.bind(f.openRead()).first;
+    return digest.toString();
   }
 
   Future<void> _downloadWithProgress(
@@ -134,7 +227,9 @@ class Installer {
   }) async {
     final req = http.Request('GET', url);
     final resp = await _client.send(req);
-    if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers['location'] != null) {
+    if (resp.statusCode >= 300 &&
+        resp.statusCode < 400 &&
+        resp.headers['location'] != null) {
       if (redirectsRemaining <= 0) {
         throw Exception('exceeded $_maxRedirects redirects downloading $url');
       }
@@ -167,12 +262,15 @@ class Installer {
   }
 
   void _emit(String stage, String message, double progress) {
-    _progress.add(InstallProgress(stage: stage, message: message, progress: progress));
+    _progress.add(
+      InstallProgress(stage: stage, message: message, progress: progress),
+    );
   }
 
   void dispose() {
     _progress.close();
     _client.close();
+    _manifestClient.close();
   }
 }
 
