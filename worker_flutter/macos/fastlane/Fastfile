@@ -21,7 +21,7 @@
 
 default_platform(:mac)
 
-APP_IDENTIFIER = "com.tytaniumdev.workerFlutter".freeze
+APP_IDENTIFIER = "com.tytaniumdev.magicBracketSimulator".freeze
 TEAM_ID        = "F2HXQGU2CC".freeze
 XCODEPROJ      = "Runner.xcodeproj".freeze
 SCHEME         = "Runner".freeze
@@ -87,7 +87,7 @@ platform :mac do
       targets:               ["Runner"],
       team_id:               TEAM_ID,
       code_sign_identity:    "Developer ID Application",
-      profile_name:          "match Direct #{APP_IDENTIFIER}",
+      profile_name:          "match Direct #{APP_IDENTIFIER} macos",
       bundle_identifier:     APP_IDENTIFIER
     )
 
@@ -108,8 +108,14 @@ platform :mac do
     )
 
     # Zip for distribution. The stapled .app inside the zip is what users
-    # download.
-    sh("cd ../build/macos/Build/Products/Release && zip -ry " \
-       "../../../../worker_flutter-macos.zip worker_flutter.app")
+    # download. Use absolute paths so fastlane's `sh` working-directory
+    # quirks don't bite.
+    flutter_root = File.expand_path('../..', __dir__)
+    release_dir = File.join(flutter_root, 'build/macos/Build/Products/Release')
+    zip_path = File.join(flutter_root, 'build/worker_flutter-macos.zip')
+    FileUtils.rm_f(zip_path)
+    Dir.chdir(release_dir) do
+      sh("zip -ry #{zip_path.shellescape} worker_flutter.app")
+    end
   end
 end

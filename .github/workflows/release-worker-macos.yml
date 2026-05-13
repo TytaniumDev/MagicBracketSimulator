@@ -1,9 +1,17 @@
-name: Release worker_flutter (macOS)
+name: Release magic-bracket-simulator (macOS)
 
 # Triggered manually or on push of a tag matching `worker-v*` (e.g.
 # `worker-v0.1.0`). Builds, signs, and notarizes the .app, then
-# uploads the zipped artifact to the workflow run. A follow-up step
-# can attach it to a GitHub Release.
+# uploads the zipped artifact to the workflow run and attaches it to
+# the GitHub Release for the tag.
+#
+# Secrets pattern mirrors BlinkBreak's deploy-testflight.yml: only
+# DOPPLER_BLINKBREAK_TOKEN is a GitHub Actions secret (a service token
+# scoped to Doppler project "blinkbreak", config "prd"). Everything
+# else (match password, ASC API key, certs-repo SSH key) comes from
+# Doppler. The repo's other workflows use DOPPLER_TOKEN scoped to
+# magic-bracket-simulator — this workflow needs a separately-scoped
+# token because the signing secrets live in BlinkBreak's Doppler config.
 
 on:
   workflow_dispatch:
@@ -19,29 +27,49 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 45
 
-    env:
-      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-      MATCH_KEYCHAIN_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
-      ASC_API_KEY_IS_BASE64: ${{ secrets.ASC_API_KEY_IS_BASE64 }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure SSH for certs repo
-        # The TytaniumDev-certificates repo is private; match needs an SSH
-        # key to read it. The secret is the private half of a deploy key
-        # added to that repo with read-only permissions.
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Load secrets from Doppler
         env:
-          DEPLOY_KEY: ${{ secrets.CERTS_REPO_DEPLOY_KEY }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_BLINKBREAK_TOKEN }}
+        run: |
+          DELIM=$(openssl rand -hex 16)
+          # Token is already scoped to blinkbreak/prd; no need to pass them.
+          SECRETS=$(doppler secrets download --no-file --format json)
+          KEYS='[
+            "MATCH_PASSWORD",
+            "MATCH_SSH_PRIVATE_KEY",
+            "MATCH_KEYCHAIN_PASSWORD",
+            "ASC_KEY_ID",
+            "ASC_ISSUER_ID",
+            "ASC_API_KEY_CONTENT",
+            "ASC_API_KEY_IS_BASE64"
+          ]'
+          # Mask every value before using it.
+          echo "$SECRETS" | jq -r --argjson keys "$KEYS" '
+            to_entries[] | select(.key | IN($keys[])) | .value
+          ' | while IFS= read -r val; do
+            [ -n "$val" ] && echo "::add-mask::$val"
+          done
+          # Write into $GITHUB_ENV with a random heredoc delimiter so multi-line
+          # values (RSA/ED25519 private key, base64 .p8, etc.) survive intact.
+          echo "$SECRETS" | jq -r --argjson keys "$KEYS" --arg d "$DELIM" '
+            to_entries[] | select(.key | IN($keys[])) | "\(.key)<<\($d)\n\(.value)\n\($d)"
+          ' >> "$GITHUB_ENV"
+
+      - name: Install SSH deploy key for certs repo
+        env:
+          MATCH_SSH_PRIVATE_KEY: ${{ env.MATCH_SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          printf '%s\n' "$MATCH_SSH_PRIVATE_KEY" > ~/.ssh/match_deploy_key
+          chmod 600 ~/.ssh/match_deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -66,12 +94,25 @@ jobs:
 
       - name: Fastlane release (sign + notarize)
         working-directory: worker_flutter/macos
+        env:
+          MATCH_PASSWORD: ${{ env.MATCH_PASSWORD }}
+          MATCH_KEYCHAIN_PASSWORD: ${{ env.MATCH_KEYCHAIN_PASSWORD }}
+          ASC_KEY_ID: ${{ env.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ env.ASC_ISSUER_ID }}
+          ASC_API_KEY_CONTENT: ${{ env.ASC_API_KEY_CONTENT }}
+          ASC_API_KEY_IS_BASE64: ${{ env.ASC_API_KEY_IS_BASE64 }}
+          FASTLANE_HIDE_CHANGELOG: "1"
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_DISABLE_COLORS: "1"
+          # Force match's git operations to use the deploy key, regardless of
+          # the runner's default SSH config.
+          GIT_SSH_COMMAND: "ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
         run: bundle exec fastlane release
 
       - name: Upload signed artifact
         uses: actions/upload-artifact@v4
         with:
-          name: worker_flutter-macos
+          name: magic-bracket-simulator-macos
           path: worker_flutter/build/worker_flutter-macos.zip
           if-no-files-found: error
 

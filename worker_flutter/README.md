@@ -14,7 +14,7 @@ collections — see `../docs/superpowers/specs/2026-05-11-flutter-worker-archite
 MVP working on macOS (May 2026). The app:
 - Builds, launches, stays alive
 - On first launch, automatically downloads + extracts the JRE and Forge
-  into `~/Library/Application Support/com.tytaniumdev.workerFlutter/`
+  into `~/Library/Application Support/com.tytaniumdev.magicBracketSimulator/`
   (~540 MB one-time, ~40 seconds on broadband)
 - Runs the worker engine in the background (Firestore listener, atomic
   claim transaction, lease writer, Java sim spawner)
@@ -109,7 +109,7 @@ The Flutter worker depends on the lease-sweep infrastructure from PR #188:
   the existing `POST /api/jobs/:id/logs/simulation` endpoint is a small
   follow-up so frontend dashboards can show full game logs.
 - **Diagnostic log file**: the app writes to
-  `~/Library/Logs/com.tytaniumdev.workerFlutter.log` on every launch.
+  `~/Library/Logs/com.tytaniumdev.magicBracketSimulator.log` on every launch.
   Useful for debugging boot issues; safe to delete.
 
 ## Verification done
