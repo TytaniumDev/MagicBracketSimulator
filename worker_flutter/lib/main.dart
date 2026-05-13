@@ -417,6 +417,16 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    // firebase_auth persists the session across launches — restore it
+    // synchronously so a returning user lands straight on the
+    // dashboard rather than the AuthGate.
+    final restored = _auth.currentUserSnapshot;
+    if (restored != null) {
+      _user = restored;
+      // Schedule outside the build cycle: _startEngineSafe awaits the
+      // engine, and initState shouldn't be async.
+      Future.microtask(() => _onAuthed(restored));
+    }
   }
 
   @override

@@ -50,14 +50,22 @@ class AuthService {
   /// Stream of the current Firebase user, mapped to our `AuthedUser`
   /// shape. Emits `null` while signed out.
   Stream<AuthedUser?> get currentUser =>
-      _firebaseAuth.authStateChanges().map((user) {
-        if (user == null) return null;
-        return AuthedUser(
-          uid: user.uid,
-          email: user.email ?? '<no email>',
-          displayName: user.displayName,
-        );
-      });
+      _firebaseAuth.authStateChanges().map(_mapUser);
+
+  /// Synchronous snapshot of the currently signed-in user, if any.
+  /// Used at boot to restore a persisted session — firebase_auth
+  /// caches tokens on disk, so a user who signed in last launch
+  /// shouldn't have to OAuth again on this one.
+  AuthedUser? get currentUserSnapshot => _mapUser(_firebaseAuth.currentUser);
+
+  AuthedUser? _mapUser(User? user) {
+    if (user == null) return null;
+    return AuthedUser(
+      uid: user.uid,
+      email: user.email ?? '<no email>',
+      displayName: user.displayName,
+    );
+  }
 
   /// Trigger the Google Sign-In flow and exchange the result for a
   /// Firebase session. Returns the signed-in user on success.
