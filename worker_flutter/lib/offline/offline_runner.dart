@@ -50,13 +50,20 @@ class OfflineRunner {
   /// Find any jobs left RUNNING (or with PENDING sims) from a prior
   /// session and re-drive them. Called on app launch — without this,
   /// closing the app mid-run permanently strands those jobs.
+  ///
+  /// The "incomplete counter" branch also excludes terminal states
+  /// (CANCELLED / FAILED / COMPLETED) — without the COMPLETED guard,
+  /// a finalized job whose `completedSims` somehow trails `totalSims`
+  /// (direct DB edit, future bug, etc.) would get silently re-run and
+  /// overwrite its results.
   Future<void> resumeInFlightJobs() async {
+    const terminal = {'CANCELLED', 'FAILED', 'COMPLETED'};
     final all = await db.recentJobs(limit: 100);
     for (final job in all) {
-      if (job.state == 'RUNNING' ||
-          (job.completedSims < job.totalSims &&
-              job.state != 'CANCELLED' &&
-              job.state != 'FAILED')) {
+      final isRunning = job.state == 'RUNNING';
+      final isIncomplete =
+          job.completedSims < job.totalSims && !terminal.contains(job.state);
+      if (isRunning || isIncomplete) {
         // Don't await — start each in parallel-ish (the actual sim
         // runs are sequential per job, but multiple jobs interleave).
         unawaited(run(job.id));
