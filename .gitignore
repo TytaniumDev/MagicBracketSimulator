@@ -15,6 +15,11 @@ agent-plans/
 firebase-admin-key.json
 magic-bracket-worker-key.json
 *.pem
+# Exception: WinSparkle DSA public key MUST be committed — it gets
+# compiled into the Windows .exe via Runner.rc so WinSparkle can
+# verify update signatures at install time. The private half lives
+# only in the SPARKLE_DSA_PRIVATE_KEY GitHub Actions secret.
+!worker_flutter/windows/runner/dsa_pub.pem
 service-account*.json
 **/sa.json
 
