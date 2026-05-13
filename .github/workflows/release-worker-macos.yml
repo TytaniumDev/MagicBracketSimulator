@@ -1,0 +1,83 @@
+name: Release worker_flutter (macOS)
+
+# Triggered manually or on push of a tag matching `worker-v*` (e.g.
+# `worker-v0.1.0`). Builds, signs, and notarizes the .app, then
+# uploads the zipped artifact to the workflow run. A follow-up step
+# can attach it to a GitHub Release.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "worker-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-macos:
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    env:
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      MATCH_KEYCHAIN_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+      ASC_API_KEY_IS_BASE64: ${{ secrets.ASC_API_KEY_IS_BASE64 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH for certs repo
+        # The BlinkBreak-certificates repo is private; match needs an SSH
+        # key to read it. The secret is the private half of a deploy key
+        # added to that repo with read-only permissions.
+        env:
+          DEPLOY_KEY: ${{ secrets.CERTS_REPO_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: worker_flutter/macos
+
+      - name: flutter pub get
+        working-directory: worker_flutter
+        run: flutter pub get
+
+      - name: Pod install
+        working-directory: worker_flutter/macos
+        run: pod install --repo-update
+
+      - name: Fastlane release (sign + notarize)
+        working-directory: worker_flutter/macos
+        run: bundle exec fastlane release
+
+      - name: Upload signed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker_flutter-macos
+          path: worker_flutter/build/worker_flutter-macos.zip
+          if-no-files-found: error
+
+      - name: Attach to release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/worker-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: worker_flutter/build/worker_flutter-macos.zip
+          fail_on_unmatched_files: true

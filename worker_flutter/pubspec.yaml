@@ -1,0 +1,48 @@
+name: worker_flutter
+description: "Magic Bracket Simulator desktop worker (macOS)."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Firebase + Firestore for job queue and lease writes
+  firebase_core: ^3.10.0
+  firebase_auth: ^5.4.0
+  cloud_firestore: ^5.6.0
+  firebase_storage: ^12.3.0
+
+  # Native window + tray
+  tray_manager: ^0.5.2
+  window_manager: ^0.4.3
+
+  # Local config + ID generation
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.3
+  uuid: ^4.5.1
+
+  # Reactive state
+  rxdart: ^0.28.0
+
+  # First-run installer downloads (JRE + Forge)
+  http: ^1.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  mockito: ^5.4.5
+  build_runner: ^2.4.13
+  fake_cloud_firestore: ^3.1.0
+  firebase_auth_mocks: ^0.14.1
+
+flutter:
+  uses-material-design: true
+  # Tray icon asset goes here once you have a 16x16 PNG ready:
+  # assets:
+  #   - assets/tray_icon.png
