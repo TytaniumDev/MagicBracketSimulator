@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
 import type { CoverageConfig, CoverageStatus } from '../api';
@@ -203,19 +203,24 @@ export default function Leaderboard() {
     fetchLeaderboard();
   }, [fetchLeaderboard]);
 
-  const filtered = entries
-    .filter((e) => !preconOnly || e.isPrecon)
-    .sort((a, b) => {
-      if (sortKey === 'rating') return b.rating - a.rating;
-      if (sortKey === 'winRate') return b.winRate - a.winRate;
-      if (sortKey === 'gamesPlayed') return b.gamesPlayed - a.gamesPlayed;
-      if (sortKey === 'avgWinTurn') {
-        const av = a.avgWinTurn ?? Infinity;
-        const bv = b.avgWinTurn ?? Infinity;
-        return av - bv;
-      }
-      return 0;
-    });
+  // ⚡ Bolt Performance Optimization:
+  // Memoize the filtered and sorted entries so we avoid re-running
+  // O(N) filter and O(N log N) sort operations on up to 1000 items during every render.
+  const filtered = useMemo(() => {
+    return entries
+      .filter((e) => !preconOnly || e.isPrecon)
+      .sort((a, b) => {
+        if (sortKey === 'rating') return b.rating - a.rating;
+        if (sortKey === 'winRate') return b.winRate - a.winRate;
+        if (sortKey === 'gamesPlayed') return b.gamesPlayed - a.gamesPlayed;
+        if (sortKey === 'avgWinTurn') {
+          const av = a.avgWinTurn ?? Infinity;
+          const bv = b.avgWinTurn ?? Infinity;
+          return av - bv;
+        }
+        return 0;
+      });
+  }, [entries, preconOnly, sortKey]);
 
   return (
     <div className="max-w-5xl mx-auto">
