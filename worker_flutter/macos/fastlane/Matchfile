@@ -1,0 +1,5 @@
+git_url("git@github.com:TytaniumDev/BlinkBreak-certificates.git")
+storage_mode("git")
+type("developer_id")
+app_identifier(["com.tytaniumdev.workerFlutter"])
+team_id("F2HXQGU2CC")
