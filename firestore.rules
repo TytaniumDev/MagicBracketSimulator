@@ -16,17 +16,26 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Jobs: public reads, writes require allowlist
+    // Jobs: public reads, writes require allowlist.
+    // SOLO-DEV (Plan 2): the unauthenticated Flutter desktop worker bumps
+    // `completedSimCount` on the parent job after each successful sim. Tighten
+    // to `if isAllowedUser()` once Plan 3 enables auth in the worker.
     match /jobs/{jobId} {
       allow read: if true;
       allow create: if isAllowedUser();
-      allow update: if isAllowedUser();
+      allow update: if isAllowedUser()
+        || (request.auth == null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedSimCount']));
       allow delete: if isAllowedUser();
 
-      // Per-simulation tracking subcollection: public reads
+      // Per-simulation tracking subcollection: public reads.
+      // SOLO-DEV (Plan 2): Flutter worker claims PENDING sims and writes
+      // terminal results without auth. Creates/deletes still go through the
+      // API. Tighten once Plan 3 enables auth.
       match /simulations/{simId} {
         allow read: if true;
-        allow write: if isAllowedUser();
+        allow create, delete: if isAllowedUser();
+        allow update: if isAllowedUser() || request.auth == null;
       }
     }
 
@@ -46,10 +55,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Workers collection: public reads (worker status), writes via Admin SDK only
+    // Workers collection: public reads (worker status).
+    // SOLO-DEV (Plan 2): the unauthenticated Flutter desktop worker writes its
+    // own status/lease doc (workerType == 'flutter'). Other writes still go
+    // through Admin SDK. Tighten once Plan 3 enables auth in the worker.
     match /workers/{workerId} {
       allow read: if true;
-      allow write: if false;
+      allow create, update: if isAllowedUser()
+        || (request.auth == null && request.resource.data.workerType == 'flutter');
+      allow delete: if isAllowedUser();
     }
 
     // Catch-all: deny everything else not explicitly matched
