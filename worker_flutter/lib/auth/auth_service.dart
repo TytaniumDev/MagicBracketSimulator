@@ -29,10 +29,16 @@ class AuthedUser {
 ///
 /// firebase_auth_macos's native plugin historically crashed at boot
 /// for several Firebase configs (uncaught NSExceptions that bypass
-/// Dart try/catch). The fix has been merged upstream as of 5.x — this
-/// service still defers `Firebase.initializeApp()`'s auth side-effects
-/// by only touching `FirebaseAuth.instance` AFTER the user has clicked
-/// Sign In, so a broken Firebase config can't kill the app on boot.
+/// Dart try/catch). The fix has been merged upstream as of 5.x. The
+/// invariant this service preserves regardless: every `FirebaseAuth`
+/// access happens inside Flutter's event loop — i.e., AFTER `runApp`
+/// has returned and the framework is processing frames — rather than
+/// at native cold-boot time. The class is constructed as a field on
+/// `_WorkerAppState`, so the `FirebaseAuth.instance` lookup in the
+/// constructor fires during `State.initState`, not during
+/// `main()`'s top-level setup. That's enough to keep the crash off
+/// the cold-launch path: any native NSException now lands inside
+/// `Future`/`Stream` callbacks Dart can catch.
 class AuthService {
   AuthService({GoogleSignIn? googleSignIn, FirebaseAuth? firebaseAuth})
     : _googleSignIn =

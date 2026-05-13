@@ -201,11 +201,12 @@ Future<void> _bootOffline(WorkerConfig config) async {
 
 Future<void> _bootEngine(WorkerConfig config) async {
   // Auth is performed lazily through the AuthGate UI rather than at
-  // boot. Touching `FirebaseAuth.instance` before the user clicks
-  // Sign In keeps the historical firebase_auth_macos boot crash off
-  // the cold-launch path (uncaught NSExceptions there bypass Dart
-  // try/catch). The gate runs inside Flutter's normal event loop, so
-  // a plugin throw lands as a Dart exception and stays recoverable.
+  // boot. Deferring `FirebaseAuth.instance` access until after
+  // `runApp` returns keeps the historical firebase_auth_macos boot
+  // crash off the cold-launch path (uncaught NSExceptions there
+  // bypass Dart try/catch). The gate runs inside Flutter's normal
+  // event loop, so a plugin throw lands as a Dart exception we can
+  // surface in the UI instead of taking the whole process down.
   _log('Boot: deferring auth to AuthGate');
 
   _log('Boot: constructing WorkerEngine');
