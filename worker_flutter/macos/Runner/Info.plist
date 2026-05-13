@@ -49,21 +49,21 @@
 	     SUEnableAutomaticChecks=YES: lets Sparkle's scheduled-check
 	     timer run.
 
-	     ⚠️ SUEnableInstallerInteractionService is intentionally absent:
-	     not required for Developer-ID-signed apps. Sparkle verifies the
-	     downloaded .app's Developer ID matches the running app's. As
-	     long as v0.1.0's signing identity matches future versions',
-	     update install works.
+	     SUPublicEDKey is the public half of the Ed25519 keypair the
+	     release workflow uses to sign each update zip. Without this,
+	     Sparkle 2 refuses to install updates whose appcast entry lacks
+	     `sparkle:edSignature`. The private half lives in the
+	     `SPARKLE_ED_PRIVATE_KEY` GitHub Actions secret; the matching
+	     local copy is in the macOS Keychain under account `mbs-prod`.
 
-	     TODO before going live with auto-update: generate Ed25519
-	     signing keys (sign_update tool ships with Sparkle), embed the
-	     public key here as SUPublicEDKey, and have the release workflow
-	     sign each appcast entry. Until that lands, Sparkle's EdDSA
-	     verification falls back to Developer ID code-signing check,
-	     which works for our case but is weaker. See
-	     worker_flutter/macos/fastlane/SETUP.md. -->
+	     ⚠️ Never rotate this without preparing a transition release:
+	     existing installs verify against THIS embedded public key, so a
+	     change here breaks update install for everyone on the prior
+	     version. See worker_flutter/macos/fastlane/SETUP.md. -->
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/worker_flutter/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>+IEgM5RRA9Fq9nlcBaBaZY1jrKAIYu+XT6uvbfAbCfY=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUEnableInstallerLauncherService</key>
