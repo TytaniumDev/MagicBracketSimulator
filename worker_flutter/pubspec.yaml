@@ -38,12 +38,18 @@ dependencies:
   # macOS app self-update (Sparkle wrapper).
   auto_updater: ^1.0.0
 
+  # Offline-mode local persistence (drift = type-safe SQLite for Flutter).
+  drift: ^2.20.0
+  sqlite3_flutter_libs: ^0.5.24
+  path: ^1.9.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   mockito: ^5.4.5
   build_runner: ^2.4.13
+  drift_dev: ^2.20.0
   fake_cloud_firestore: ^3.1.0
   firebase_auth_mocks: ^0.14.1
 
