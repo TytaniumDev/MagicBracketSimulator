@@ -90,14 +90,14 @@ jobs:
           bundler-cache: true
           working-directory: worker_flutter/macos
 
-      - name: Install CocoaPods into active Ruby
-        # macos-14 runners ship with a system CocoaPods tied to system
-        # Ruby. ruby/setup-ruby swaps PATH to Ruby 3.2, which makes
-        # the pre-installed pod unrunnable — Flutter then prints
-        # "CocoaPods is installed but broken. Skipping pod install."
-        # mid-build and fails. Reinstalling cocoapods into the active
-        # Ruby keeps a working pod on PATH for flutter build macos.
-        run: gem install cocoapods
+      - name: Install CocoaPods via Homebrew
+        # macos-14 runners ship a CocoaPods tied to the system Ruby.
+        # ruby/setup-ruby switches PATH to a different Ruby, leaving
+        # that system pod unusable — Flutter then aborts mid-build with
+        # "CocoaPods is installed but broken." Homebrew bundles its own
+        # Ruby with cocoapods, so it works regardless of which Ruby
+        # ruby/setup-ruby is currently presenting.
+        run: brew list cocoapods >/dev/null 2>&1 || brew install cocoapods
 
       - name: flutter pub get
         working-directory: worker_flutter
