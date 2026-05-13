@@ -8,6 +8,7 @@ import 'package:rxdart/subjects.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import 'lease_writer.dart';
+import 'log_uploader.dart';
 import 'sim_claim.dart';
 import 'sim_runner.dart';
 
@@ -30,20 +31,19 @@ class EngineState {
     List<SimDoc>? activeSims,
     String? lastError,
     int? completedCount,
-  }) =>
-      EngineState(
-        running: running ?? this.running,
-        activeSims: activeSims ?? this.activeSims,
-        lastError: lastError ?? this.lastError,
-        completedCount: completedCount ?? this.completedCount,
-      );
+  }) => EngineState(
+    running: running ?? this.running,
+    activeSims: activeSims ?? this.activeSims,
+    lastError: lastError ?? this.lastError,
+    completedCount: completedCount ?? this.completedCount,
+  );
 
   static EngineState initial() => EngineState(
-        running: false,
-        activeSims: const [],
-        lastError: null,
-        completedCount: 0,
-      );
+    running: false,
+    activeSims: const [],
+    lastError: null,
+    completedCount: 0,
+  );
 }
 
 /// Top-level orchestrator. Owns:
@@ -61,36 +61,41 @@ class WorkerEngine {
     required this.config,
     required this.firestore,
     SimRunner? runnerOverride,
-  })  : _runner = runnerOverride ??
-            SimRunner(
-              javaPath: config.javaPath,
-              forgePath: config.forgePath,
-            ),
-        _leaseWriter = LeaseWriter(
-          firestore: firestore,
-          workerId: config.workerId,
-          workerName: config.workerName,
-          capacity: config.maxCapacity,
-        ),
-        _claimer = SimClaimer(
-          firestore: firestore,
-          workerId: config.workerId,
-          workerName: config.workerName,
-        );
+  }) : _runner =
+           runnerOverride ??
+           SimRunner(javaPath: config.javaPath, forgePath: config.forgePath),
+       _leaseWriter = LeaseWriter(
+         firestore: firestore,
+         workerId: config.workerId,
+         workerName: config.workerName,
+         capacity: config.maxCapacity,
+       ),
+       _claimer = SimClaimer(
+         firestore: firestore,
+         workerId: config.workerId,
+         workerName: config.workerName,
+       ),
+       _logUploader = LogUploader(
+         apiUrl: config.apiUrl,
+         workerSecret: config.workerSecret,
+       );
 
   final WorkerConfig config;
   final FirebaseFirestore firestore;
   final SimRunner _runner;
   final LeaseWriter _leaseWriter;
   final SimClaimer _claimer;
+  final LogUploader _logUploader;
 
-  final _stateSubject = BehaviorSubject<EngineState>.seeded(EngineState.initial());
+  final _stateSubject = BehaviorSubject<EngineState>.seeded(
+    EngineState.initial(),
+  );
   Stream<EngineState> get stateStream => _stateSubject.stream;
   EngineState get currentState => _stateSubject.value;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _pendingSub;
   final Map<String, StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>
-      _cancelSubs = {};
+  _cancelSubs = {};
 
   /// Holds per-sim cancellation completers so a `jobs/{id}.status=CANCELLED`
   /// listener can ask the corresponding sim runner to terminate.
@@ -125,11 +130,13 @@ class WorkerEngine {
           .where('state', isEqualTo: 'PENDING')
           .snapshots()
           .listen(
-        (_) => _tryClaimLoop(),
-        onError: (Object err) {
-          _stateSubject.add(currentState.copyWith(lastError: err.toString()));
-        },
-      );
+            (_) => _tryClaimLoop(),
+            onError: (Object err) {
+              _stateSubject.add(
+                currentState.copyWith(lastError: err.toString()),
+              );
+            },
+          );
     } catch (e) {
       _stateSubject.add(currentState.copyWith(lastError: 'listener setup: $e'));
     }
@@ -170,7 +177,10 @@ class WorkerEngine {
         await Future<void>.delayed(Duration(milliseconds: 100 * attempt));
       }
       if (result is ClaimNoneAvailable) return;
-      if (result is ClaimLostRace) return; // exhausted retries; listener will refire on next change
+      if (result is ClaimLostRace) {
+        // exhausted retries; listener will refire on next change
+        return;
+      }
       if (result is ClaimSucceeded) {
         unawaited(_runSim(result.sim));
       }
@@ -235,10 +245,22 @@ class WorkerEngine {
       );
       await _claimer.reportTerminal(sim: sim, result: result);
 
+      // Best-effort: post the raw sim log to the API so it shows up under
+      // the frontend's per-sim log view. Non-blocking; failures only log.
+      unawaited(
+        _logUploader.upload(
+          jobId: sim.jobId,
+          simIndex: sim.index,
+          logText: result.logText,
+        ),
+      );
+
       if (result.success) {
-        _stateSubject.add(currentState.copyWith(
-          completedCount: currentState.completedCount + 1,
-        ));
+        _stateSubject.add(
+          currentState.copyWith(
+            completedCount: currentState.completedCount + 1,
+          ),
+        );
       }
     } catch (e) {
       await _claimer.reportTerminal(
@@ -257,8 +279,9 @@ class WorkerEngine {
       _cancelByComposite.remove(sim.compositeId);
       _publishActiveSims();
       // Drop the per-job cancel sub if no other sims for that job remain.
-      final stillHasSamJob = _cancelByComposite.keys
-          .any((k) => k.startsWith('${sim.jobId}:'));
+      final stillHasSamJob = _cancelByComposite.keys.any(
+        (k) => k.startsWith('${sim.jobId}:'),
+      );
       if (!stillHasSamJob) {
         await _cancelSubs.remove(sim.jobId)?.cancel();
       }
@@ -269,28 +292,32 @@ class WorkerEngine {
 
   void _watchJobCancellation(String jobId) {
     if (_cancelSubs.containsKey(jobId)) return;
-    final sub = firestore.collection('jobs').doc(jobId).snapshots().listen(
-      (snap) {
-        if (!snap.exists) return;
-        final status = snap.data()?['status'];
-        if (status != 'CANCELLED') return;
-        // Signal every active sim for this job. Looking up completers via
-        // `_cancelByComposite` (rather than capturing a single one at
-        // subscription time) handles the multi-sim case where additional
-        // sims are claimed for the same job after the listener was set up.
-        for (final entry in _cancelByComposite.entries) {
-          if (entry.key.startsWith('$jobId:') && !entry.value.isCompleted) {
-            entry.value.complete();
-          }
-        }
-      },
-      onError: (Object err) {
-        // Listener errors are non-fatal here — if the cancel signal misses,
-        // the sim still completes or times out on its own. Log so a broken
-        // Firestore connection is at least visible during dev.
-        debugPrint('cancellation listener for job $jobId errored: $err');
-      },
-    );
+    final sub = firestore
+        .collection('jobs')
+        .doc(jobId)
+        .snapshots()
+        .listen(
+          (snap) {
+            if (!snap.exists) return;
+            final status = snap.data()?['status'];
+            if (status != 'CANCELLED') return;
+            // Signal every active sim for this job. Looking up completers via
+            // `_cancelByComposite` (rather than capturing a single one at
+            // subscription time) handles the multi-sim case where additional
+            // sims are claimed for the same job after the listener was set up.
+            for (final entry in _cancelByComposite.entries) {
+              if (entry.key.startsWith('$jobId:') && !entry.value.isCompleted) {
+                entry.value.complete();
+              }
+            }
+          },
+          onError: (Object err) {
+            // Listener errors are non-fatal here — if the cancel signal misses,
+            // the sim still completes or times out on its own. Log so a broken
+            // Firestore connection is at least visible during dev.
+            debugPrint('cancellation listener for job $jobId errored: $err');
+          },
+        );
     _cancelSubs[jobId] = sub;
   }
 
@@ -308,7 +335,10 @@ class WorkerEngine {
     if (rawDecks is List) {
       for (final slot in rawDecks) {
         if (slot is Map && slot['name'] is String && slot['dck'] is String) {
-          final name = (slot['name'] as String).replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+          final name = (slot['name'] as String).replaceAll(
+            RegExp(r'[^A-Za-z0-9._-]'),
+            '_',
+          );
           final filename = '$name.dck';
           final filePath = '${config.decksPath}/$filename';
           final f = File(filePath);

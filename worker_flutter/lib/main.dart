@@ -12,6 +12,7 @@ import 'firebase_options.dart';
 import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
 import 'ui/dashboard.dart';
+import 'ui/tray_setup.dart';
 import 'worker/worker_engine.dart';
 
 /// Magic Bracket Worker entry point.
@@ -45,7 +46,6 @@ Future<void> main() async {
 }
 
 Future<void> _appMain() async {
-
   // Detect placeholder firebase_options.dart values BEFORE calling
   // initializeApp — the native FirebaseCore plugin throws an uncaught
   // NSException on bad credentials that bypasses Dart try/catch.
@@ -89,7 +89,9 @@ Future<void> _appMain() async {
 
   // Persistent worker identity + paths.
   final config = await WorkerConfig.loadOrInit();
-  _log('Config loaded: workerId=${config.workerId}, capacity=${config.maxCapacity}');
+  _log(
+    'Config loaded: workerId=${config.workerId}, capacity=${config.maxCapacity}',
+  );
 
   if (firebaseInitError != null) {
     // Show a window-only mode with a clear setup message; no engine, no tray.
@@ -103,23 +105,27 @@ Future<void> _appMain() async {
   // the config so config.javaPath/forgePath pick up the new bundled paths.
   final installer = Installer();
   installer.progressStream.listen((p) {
-    _log('installer ${p.stage}: ${p.message} (${(p.progress * 100).toStringAsFixed(1)}%)');
+    _log(
+      'installer ${p.stage}: ${p.message} (${(p.progress * 100).toStringAsFixed(1)}%)',
+    );
   });
   final ready = await installer.isReady();
   _log('Installer ready=$ready, jreBin=${await installer.javaBinary()}');
   if (!ready) {
     _log('Showing installer UI');
     await windowManager.show();
-    runApp(InstallProgressApp(
-      installer: installer,
-      onComplete: () async {
-        _log('Install complete; booting engine');
-        // Re-resolve config (java/forge paths) now that the install is done.
-        final newConfig = await WorkerConfig.loadOrInit();
-        await windowManager.hide();
-        await _bootEngine(newConfig);
-      },
-    ));
+    runApp(
+      InstallProgressApp(
+        installer: installer,
+        onComplete: () async {
+          _log('Install complete; booting engine');
+          // Re-resolve config (java/forge paths) now that the install is done.
+          final newConfig = await WorkerConfig.loadOrInit();
+          await windowManager.hide();
+          await _bootEngine(newConfig);
+        },
+      ),
+    );
     return;
   }
 
@@ -144,11 +150,18 @@ Future<void> _bootEngine(WorkerConfig config) async {
     firestore: FirebaseFirestore.instance,
   );
 
-  // Tray init disabled for MVP. The tray_manager plugin crashes natively
-  // on cold boot in our sandbox-disabled, unsigned configuration. With the
-  // window visible (LSUIElement=false) the user doesn't need the tray to
-  // interact with the worker. Re-enable in Plan 3 once the app is signed.
-  _log('Boot: skipping tray (deferred to Plan 3)');
+  // Tray init: the historical crash was specific to `LSUIElement=true`
+  // combined with sandbox-disabled entitlements. With LSUIElement=false
+  // (current MVP setting) the crash condition isn't met. Wrap in try/catch
+  // anyway — tray failure must not kill the app since the visible window
+  // is the primary affordance.
+  try {
+    final tray = TraySetup(engine: engine);
+    await tray.init();
+    _log('Boot: tray initialized');
+  } catch (e, st) {
+    _log('Boot: tray init failed (non-fatal): $e\n$st');
+  }
 
   // Run the UI immediately. Start the engine in the background so a
   // Firestore plugin crash (which can throw native NSExceptions that
@@ -189,7 +202,9 @@ void _log(String msg) {
   if (kDebugMode) debugPrint(line);
   try {
     _logFile?.writeAsStringSync(line, mode: FileMode.append);
-  } catch (_) {/* ignore */}
+  } catch (_) {
+    /* ignore */
+  }
 }
 
 /// Shown when Firebase failed to initialize (typically the first run before

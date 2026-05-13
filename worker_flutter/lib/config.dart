@@ -16,21 +16,32 @@ class WorkerConfig {
     required this.javaPath,
     required this.decksPath,
     required this.logsPath,
+    required this.apiUrl,
+    required this.workerSecret,
   });
 
   final String workerId;
   final String workerName;
   final int maxCapacity;
-  final String forgePath;   // Path to extracted Forge install dir (contains forge-gui-desktop-*.jar)
-  final String javaPath;    // Absolute path to `java` binary
-  final String decksPath;   // ~/Library/Application Support/Forge/decks/commander on macOS
-  final String logsPath;    // worker-local logs dir
+  final String
+  forgePath; // Path to extracted Forge install dir (contains forge-gui-desktop-*.jar)
+  final String javaPath; // Absolute path to `java` binary
+  final String
+  decksPath; // ~/Library/Application Support/Forge/decks/commander on macOS
+  final String logsPath; // worker-local logs dir
+  final String apiUrl; // Base URL of the cloud API (for log upload)
+  final String?
+  workerSecret; // Shared secret for cloud-mode API auth; null = skip log upload
 
   static const _kWorkerId = 'worker.id';
   static const _kWorkerName = 'worker.name';
   static const _kCapacity = 'worker.capacity';
   static const _kForgePath = 'worker.forgePath';
   static const _kJavaPath = 'worker.javaPath';
+  static const _kApiUrl = 'worker.apiUrl';
+  static const _kWorkerSecret = 'worker.workerSecret';
+  static const _defaultApiUrl =
+      'https://api--magic-bracket-simulator.us-central1.hosted.app';
 
   static Future<WorkerConfig> loadOrInit({int defaultCapacity = 2}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -52,6 +63,8 @@ class WorkerConfig {
     final javaPath = prefs.getString(_kJavaPath) ?? await _defaultJavaPath();
     final decksPath = await _forgeDecksDir();
     final logsPath = await _logsDir();
+    final apiUrl = prefs.getString(_kApiUrl) ?? _defaultApiUrl;
+    final workerSecret = prefs.getString(_kWorkerSecret);
 
     return WorkerConfig(
       workerId: workerId,
@@ -61,7 +74,23 @@ class WorkerConfig {
       javaPath: javaPath,
       decksPath: decksPath,
       logsPath: logsPath,
+      apiUrl: apiUrl,
+      workerSecret: workerSecret,
     );
+  }
+
+  Future<void> setApiUrl(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kApiUrl, url);
+  }
+
+  Future<void> setWorkerSecret(String? secret) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (secret == null || secret.isEmpty) {
+      await prefs.remove(_kWorkerSecret);
+    } else {
+      await prefs.setString(_kWorkerSecret, secret);
+    }
   }
 
   Future<void> setCapacity(int n) async {
@@ -84,7 +113,9 @@ class WorkerConfig {
       final result = await Process.run('scutil', ['--get', 'ComputerName']);
       final name = (result.stdout as String).trim();
       if (name.isNotEmpty) return name;
-    } catch (_) {/* fall through */}
+    } catch (_) {
+      /* fall through */
+    }
     return Platform.localHostname;
   }
 
