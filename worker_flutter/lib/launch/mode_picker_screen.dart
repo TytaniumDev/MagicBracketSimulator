@@ -147,17 +147,20 @@ class _ModeCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
         decoration: BoxDecoration(
           color: const Color(0xFF111827),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFF374151)),
         ),
+        // mainAxisSize.max + Flexible on the bullet list means the card
+        // grows to fill the Row's height but the bullets shrink (with
+        // ellipsis) if the parent ever clips us.
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: const Color(0xFF60A5FA), size: 36),
-            const SizedBox(height: 12),
+            Icon(icon, color: const Color(0xFF60A5FA), size: 32),
+            const SizedBox(height: 10),
             Text(
               title,
               style: const TextStyle(
@@ -166,28 +169,38 @@ class _ModeCard extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 12),
-            ...bullets.map(
-              (b) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('• ', style: TextStyle(color: Colors.white54)),
-                    Expanded(
-                      child: Text(
-                        b,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                        ),
+            const SizedBox(height: 10),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: [
+                  for (final b in bullets)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '• ',
+                            style: TextStyle(color: Colors.white54),
+                          ),
+                          Expanded(
+                            child: Text(
+                              b,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton(onPressed: onTap, child: Text(cta)),

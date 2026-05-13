@@ -84,5 +84,58 @@ Game Result: Game 1 ended in 16984 ms. Ai(4)-Doran Big Butts has won!
       expect(parsed.winners, ['Ai(4)-Doran Big Butts']);
       expect(parsed.winningTurns, [23]);
     });
+
+    test('turn count is NOT multiplied by 4 — single game with turn 12', () {
+      // Regression guard: a previous bug had us multiplying the turn
+      // count by the player count (4) when aggregating. For one game
+      // ending on turn 12, winningTurns must be [12], never [48].
+      const log = '''
+Game outcome: Turn 12
+Game Result: Game 1 ended in 5000 ms. Ai(2)-Beta has won!
+''';
+      final parsed = parseGameLog(log);
+      expect(parsed.winningTurns, [12]);
+      expect(parsed.winningTurns.first, lessThan(48));
+    });
+
+    test('multi-game logs keep per-game turns independent', () {
+      // Each "has won" line should consume the most recent preceding
+      // turn marker and reset — without that reset, game 2 below
+      // would inherit game 1's turn.
+      const log = '''
+Game outcome: Turn 5
+Game Result: Game 1 ended in 1000 ms. Ai(1)-Alpha has won!
+Game outcome: Turn 11
+Game Result: Game 2 ended in 2000 ms. Ai(2)-Beta has won!
+Game outcome: Turn 19
+Game Result: Game 3 ended in 3000 ms. Ai(3)-Charlie has won!
+''';
+      final parsed = parseGameLog(log);
+      expect(parsed.winners, ['Ai(1)-Alpha', 'Ai(2)-Beta', 'Ai(3)-Charlie']);
+      expect(parsed.winningTurns, [5, 11, 19]);
+    });
+
+    test('winning turns from realistic Commander logs land in turn 4–24', () {
+      // Commander games regularly resolve between turns 4 and 24 in
+      // 4-player random AI play. This test mirrors that band and
+      // doubles as a sanity check that the parser doesn't truncate
+      // single-digit turns or drop the leading "Turn ".
+      final realTurns = [4, 7, 12, 15, 19, 22, 24];
+      for (final t in realTurns) {
+        final log =
+            '''
+Game outcome: Turn $t
+Game Result: Game 1 ended in 1000 ms. Ai(1)-Test has won!
+''';
+        final parsed = parseGameLog(log);
+        expect(parsed.winningTurns, [t], reason: 'expected turn=$t to parse');
+        expect(
+          parsed.winningTurns.first,
+          inInclusiveRange(1, 100),
+          reason:
+              'a 4× multiplication bug would push turn=$t into the hundreds',
+        );
+      }
+    });
   });
 }

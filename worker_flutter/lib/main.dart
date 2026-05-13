@@ -183,10 +183,11 @@ Future<void> _bootMode(WorkerConfig config, LaunchMode mode) async {
 }
 
 Future<void> _bootOffline(WorkerConfig config) async {
-  _log('Boot offline: runApp placeholder');
+  _log('Boot offline: launching local-only deck picker + sim runner');
   await windowManager.show();
   runApp(
     OfflineApp(
+      config: config,
       onSwitchMode: () async {
         // Clear the remembered choice (already done by the button) and
         // re-route. The picker will show again.
