@@ -157,16 +157,20 @@ class WorkerEngine {
   Future<void> _tryClaimLoop() async {
     if (_stopped) return;
     while (_semaphoreActive < _semaphoreCapacity && !_stopped) {
-      final result = await _claimer.tryClaim();
-      if (result is ClaimNoneAvailable) {
-        return;
+      var attempt = 0;
+      ClaimResult result;
+      while (true) {
+        result = await _claimer.tryClaim();
+        // Retry on ClaimLostRace in-place rather than returning: an internal
+        // Firestore txn conflict (no competing worker) won't cause the
+        // listener to refire, so leaving the sim PENDING here would orphan
+        // it. Cap retries to avoid spinning if a real race keeps losing.
+        if (result is! ClaimLostRace || attempt >= 2) break;
+        attempt++;
+        await Future<void>.delayed(Duration(milliseconds: 100 * attempt));
       }
-      if (result is ClaimLostRace) {
-        // Wait briefly and try once more; the listener will fire again
-        // on next state change anyway.
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        return;
-      }
+      if (result is ClaimNoneAvailable) return;
+      if (result is ClaimLostRace) return; // exhausted retries; listener will refire on next change
       if (result is ClaimSucceeded) {
         unawaited(_runSim(result.sim));
       }

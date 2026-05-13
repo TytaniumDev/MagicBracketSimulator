@@ -154,9 +154,13 @@ void main() {
       expect(fresh.data()!['state'], 'FAILED');
       expect(fresh.data()!['errorMessage'], 'java crashed');
 
-      // completedSimCount NOT incremented on failure.
+      // completedSimCount IS incremented on failure: the Flutter worker
+      // writes terminal state directly to Firestore (no API retry path),
+      // so a FAILED sim is final from the worker's perspective. Failing to
+      // increment would leave the job stuck until the API-side stale-sweeper
+      // takes 2h to convert FAILED -> CANCELLED.
       final job = await firestore.collection('jobs').doc('job1').get();
-      expect(job.data()!['completedSimCount'], 0);
+      expect(job.data()!['completedSimCount'], 1);
     });
   });
 }

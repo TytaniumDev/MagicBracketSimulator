@@ -134,13 +134,13 @@ class SimClaimer {
 
     await docRef.set(update, SetOptions(merge: true));
 
-    // Bump the parent job's completedSimCount atomic counter so the
-    // existing API-side aggregation trigger fires when all sims finish.
-    // Same field the Docker worker increments via the API.
-    if (result.success) {
-      await firestore.collection('jobs').doc(sim.jobId).set({
-        'completedSimCount': FieldValue.increment(1),
-      }, SetOptions(merge: true));
-    }
+    // Bump the parent job's completedSimCount atomic counter for every
+    // terminal write (COMPLETED, FAILED, or cancelled) so the aggregation
+    // trigger fires when all sims finish. Otherwise a single FAILED sim
+    // stalls the job forever — no later increment would catch up to
+    // totalSimCount and aggregation would never fire.
+    await firestore.collection('jobs').doc(sim.jobId).set({
+      'completedSimCount': FieldValue.increment(1),
+    }, SetOptions(merge: true));
   }
 }
