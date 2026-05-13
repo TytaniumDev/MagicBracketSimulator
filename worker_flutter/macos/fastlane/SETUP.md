@@ -96,48 +96,87 @@ The worker has two independent update channels:
         push to `main`.
      4. Existing installs see the update within ~1 hour.
 
-### ⚠️ Pre-go-live TODO: EdDSA signing of appcast entries (macOS)
+### EdDSA signing of appcast entries (macOS) — ENABLED
 
-Sparkle 2 *can* fall back to Developer ID code-signing verification
-when `SUPublicEDKey` is absent, but the recommended setup is to also
-EdDSA-sign each appcast entry. To upgrade:
+The macOS release workflow runs `sign_update` against the notarized
+zip and produces a `sparkle-manifest.json` next to it. The host app
+embeds the public key (`SUPublicEDKey`) in `Info.plist`, so Sparkle 2
+will refuse to install any update whose appcast entry lacks a
+matching `sparkle:edSignature`.
 
-1. Generate a key pair with Sparkle's `generate_keys` (ships in the
-   `auto_updater_macos` plugin's Sparkle bundle, or download
-   Sparkle's tools dist).
-2. Add the public key to `worker_flutter/macos/Runner/Info.plist`
-   under `SUPublicEDKey`.
-3. Store the private key in Doppler (`SPARKLE_ED_PRIVATE_KEY`).
-4. Add a CI step that runs `sign_update worker_flutter-macos.zip`
-   and writes the signature into the appcast item's
-   `sparkle:edSignature` attribute before pushing.
+Setup (already done on 2026-05-13):
 
-### ⚠️ Pre-go-live TODO: DSA signing of appcast entries (Windows)
+- The Ed25519 keypair was generated with Sparkle's `generate_keys`
+  (the `mbs-prod` keychain account on the maintainer's machine holds
+  the private half).
+- The public key (`+IEgM5RRA9Fq9nlcBaBaZY1jrKAIYu+XT6uvbfAbCfY=`) is
+  embedded in `worker_flutter/macos/Runner/Info.plist` under
+  `SUPublicEDKey`.
+- The base64-encoded private seed lives in the
+  `SPARKLE_ED_PRIVATE_KEY` GitHub Actions secret.
 
-WinSparkle is stricter than its macOS sibling — it refuses to install
-an update entirely unless the appcast entry carries a DSA signature
-that validates against an embedded public key. The Windows release
-artifact is already produced by the CI workflow; the signing piece is
-not yet wired in. To enable Windows app-updates:
+Per release, the workflow:
 
-1. Generate a DSA keypair locally:
-   ```bash
-   openssl dsaparam -out /tmp/dsaparam.pem 4096
-   openssl gendsa  -out /tmp/dsa_priv.pem /tmp/dsaparam.pem
-   openssl dsa     -in /tmp/dsa_priv.pem -pubout -out /tmp/dsa_pub.pem
-   ```
-2. Embed `dsa_pub.pem` as a Windows resource in
-   `worker_flutter/windows/runner/Runner.rc` (the `auto_updater_windows`
-   plugin docs the exact resource ID; check that package's README).
-3. Store `dsa_priv.pem` in Doppler under `SPARKLE_DSA_PRIVATE_KEY`.
-4. Add a Windows-side CI step that runs `sign_update.bat` (ships with
-   WinSparkle) against `worker_flutter-windows.zip`, then writes the
-   resulting base64 signature into the matching appcast item's
-   `sparkle:dsaSignature` attribute before pushing.
+1. Builds, signs, and notarizes the .app → produces `worker_flutter-macos.zip`.
+2. Runs `sign_update --ed-key-file -` against the zip with the
+   private key streamed via stdin → captures `sparkle:edSignature`
+   and `length`.
+3. Writes `build/sparkle-manifest.json` with `{tag, edSignature, length}`.
+4. Attaches both the zip and the manifest to the GitHub Release.
 
-Until that lands, Windows users see "update available" toasts but the
-install step errors out. Forge auto-update (manifest-driven) works on
-Windows regardless — it doesn't touch WinSparkle.
+To publish the new version to existing installs, add an
+`<enclosure ... sparkle:edSignature="...">` line to `appcast.xml`
+(values from the manifest), then commit + push to `main`.
+
+### ⚠️ Key rotation warning
+
+Existing installs verify update zips against the embedded
+`SUPublicEDKey`. Replacing it before all users have updated past
+the change will permanently strand pre-rotation installs — they
+cannot accept any future update zip signed with the new key.
+Rotation requires a transition release whose update is signed with
+BOTH keys (Sparkle 2 supports `SUPublicEDKey` as a comma-separated
+list during transition windows).
+
+### DSA signing of appcast entries (Windows) — ENABLED
+
+WinSparkle (0.8.x) refuses to install an update unless the appcast
+entry carries a `sparkle:dsaSignature` attribute that validates against
+the DSA public key embedded in the .exe.
+
+Setup (already done on 2026-05-13):
+
+- DSA keypair generated locally with `openssl dsaparam -genkey` (2048
+  bits).
+- The public key (`dsa_pub.pem`) lives at
+  `worker_flutter/windows/runner/dsa_pub.pem` and is referenced from
+  `Runner.rc` as a `DSAPub`/`DSAPEM` resource — Flutter's Windows
+  build embeds it into the .exe automatically.
+- The private half is stored in the `SPARKLE_DSA_PRIVATE_KEY` GitHub
+  Actions secret.
+
+Per release, `release-worker-windows.yml`:
+
+1. Builds the Windows runner and zips it.
+2. Streams the private key from the secret into a tempfile, runs
+   `openssl dgst -sha1 -binary < zip | openssl dgst -sha1 -sign priv
+   | openssl enc -base64` (exactly what WinSparkle's `sign_update.bat`
+   does), and captures the signature.
+3. Writes `build/sparkle-manifest-windows.json` carrying
+   `{tag, dsaSignature, length}`.
+4. Attaches both the zip and the manifest to the GitHub Release.
+
+To publish to existing installs, copy `dsaSignature` and `length`
+from the manifest into the appcast item's `<enclosure>` tag as
+`sparkle:dsaSignature="..." length="..."` and commit + push to `main`.
+
+### ⚠️ Key rotation warning (Windows)
+
+The DSA public key is compiled into the .exe via Runner.rc. Rotating
+the key strands every existing install — they verify against the
+public key from their installed version. Plan rotation through a
+transition release that ships a new .exe carrying the new public key
+before any update is signed only with the new private key.
 
 ### ⚠️ Pre-go-live TODO: Authenticode signing of the .exe
 

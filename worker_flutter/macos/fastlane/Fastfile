@@ -93,9 +93,57 @@ platform :mac do
 
     # Flutter release build. The Xcode project's Release config uses the
     # signing identity match just installed.
-    sh("cd ../.. && flutter build macos --release")
+    #
+    # `with_unbundled_env` is critical: `bundle exec fastlane` exports
+    # GEM_PATH, RUBYOPT, etc. pointing at fastlane's bundle. Without
+    # clearing those, Flutter's child `pod` invocation tries to load
+    # cocoapods from the fastlane bundle (where it isn't), and aborts
+    # with "CocoaPods is installed but broken. Skipping pod install."
+    # mid-build. The brew-installed pod expects to run in a vanilla
+    # env where its own Ruby + gems resolve cleanly.
+    Bundler.with_unbundled_env do
+      sh("cd ../.. && flutter build macos --release")
+    end
 
+    # Resolve the .app path absolutely — fastlane's CWD when executing
+    # actions varies (Fastfile dir vs invocation dir), and `File.exist?`
+    # checks against Ruby's CWD, so a relative path silently fails the
+    # codesign loop below.
+    flutter_root_abs = File.expand_path('../..', __dir__)
+    app_path_abs = File.join(flutter_root_abs, 'build/macos/Build/Products/Release/worker_flutter.app')
+    # Keep a relative form for the fastlane `notarize` action so its
+    # internal logic stays unchanged.
     app_path = "../build/macos/Build/Products/Release/worker_flutter.app"
+
+    # Sparkle's embedded Updater.app, Autoupdate binary, and XPCServices
+    # don't pick up the Hardened Runtime + secure timestamp from Flutter's
+    # default "Embed & Sign" pass, so notarization rejects the package
+    # with "binary is not signed with a valid Developer ID certificate."
+    # Walk the framework and re-sign every nested executable with the
+    # Developer ID identity that match just installed, then re-sign the
+    # framework + outer .app on top so the seal includes the updated
+    # nested signatures.
+    sign_id = "Developer ID Application: Tyler Holland (#{TEAM_ID})"
+    sparkle_root = "#{app_path_abs}/Contents/Frameworks/Sparkle.framework"
+    UI.message("Deep-signing Sparkle.framework at #{sparkle_root}")
+    UI.user_error!("Sparkle.framework not found at #{sparkle_root}") unless Dir.exist?(sparkle_root)
+    [
+      "#{sparkle_root}/Versions/B/Autoupdate",
+      "#{sparkle_root}/Versions/B/Updater.app/Contents/MacOS/Updater",
+      "#{sparkle_root}/Versions/B/Updater.app",
+      "#{sparkle_root}/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer",
+      "#{sparkle_root}/Versions/B/XPCServices/Installer.xpc",
+      "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader",
+      "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc",
+      sparkle_root,
+      app_path_abs,
+    ].each do |target|
+      unless File.exist?(target)
+        UI.message("Skipping #{target} — not present")
+        next
+      end
+      sh("codesign --force --options runtime --timestamp --sign #{sign_id.shellescape} #{target.shellescape}")
+    end
 
     # Notarize the signed .app, then staple the ticket so users without
     # network at first launch don't see the unsigned warning.
