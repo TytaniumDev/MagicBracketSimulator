@@ -93,7 +93,17 @@ platform :mac do
 
     # Flutter release build. The Xcode project's Release config uses the
     # signing identity match just installed.
-    sh("cd ../.. && flutter build macos --release")
+    #
+    # `with_unbundled_env` is critical: `bundle exec fastlane` exports
+    # GEM_PATH, RUBYOPT, etc. pointing at fastlane's bundle. Without
+    # clearing those, Flutter's child `pod` invocation tries to load
+    # cocoapods from the fastlane bundle (where it isn't), and aborts
+    # with "CocoaPods is installed but broken. Skipping pod install."
+    # mid-build. The brew-installed pod expects to run in a vanilla
+    # env where its own Ruby + gems resolve cleanly.
+    Bundler.with_unbundled_env do
+      sh("cd ../.. && flutter build macos --release")
+    end
 
     app_path = "../build/macos/Build/Products/Release/worker_flutter.app"
 
