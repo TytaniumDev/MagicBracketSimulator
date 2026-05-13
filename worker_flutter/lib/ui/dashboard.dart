@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../cloud/cloud_jobs_screen.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import '../worker/worker_engine.dart';
@@ -11,11 +12,7 @@ import '../worker/worker_engine.dart';
 /// visibility (the macOS app has `LSUIElement=true`, so no Dock icon and
 /// no main window unless the user opens one).
 class Dashboard extends StatefulWidget {
-  const Dashboard({
-    super.key,
-    required this.engine,
-    required this.config,
-  });
+  const Dashboard({super.key, required this.engine, required this.config});
 
   final WorkerEngine engine;
   final WorkerConfig config;
@@ -35,44 +32,69 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1F2937),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF111827),
-        foregroundColor: Colors.white,
-        title: const Text('Magic Bracket Worker'),
-        centerTitle: false,
-        elevation: 0,
-      ),
-      body: StreamBuilder<EngineState>(
-        stream: widget.engine.stateStream,
-        initialData: widget.engine.currentState,
-        builder: (context, snapshot) {
-          final state = snapshot.data!;
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _StatusCard(state: state, workerName: widget.config.workerName),
-                const SizedBox(height: 16),
-                _CapacityRow(
-                  current: _capacity,
-                  onChanged: (v) => setState(() => _capacity = v),
-                  onChangeEnd: (v) => widget.config.setCapacity(v),
-                ),
-                const SizedBox(height: 16),
-                Expanded(child: _ActiveSimsList(active: state.activeSims)),
-                const SizedBox(height: 8),
-                _ControlRow(
-                  running: state.running,
-                  onStart: widget.engine.start,
-                  onStop: widget.engine.stop,
-                ),
-              ],
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1F2937),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF111827),
+          foregroundColor: Colors.white,
+          title: const Text('Magic Bracket Worker'),
+          centerTitle: false,
+          elevation: 0,
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.memory), text: 'Worker'),
+              Tab(icon: Icon(Icons.cloud_queue), text: 'Jobs'),
+            ],
+            labelColor: Color(0xFF60A5FA),
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Color(0xFF60A5FA),
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            // Worker tab — engine status / capacity / active sims.
+            StreamBuilder<EngineState>(
+              stream: widget.engine.stateStream,
+              initialData: widget.engine.currentState,
+              builder: (context, snapshot) {
+                final state = snapshot.data!;
+                return Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _StatusCard(
+                        state: state,
+                        workerName: widget.config.workerName,
+                      ),
+                      const SizedBox(height: 16),
+                      _CapacityRow(
+                        current: _capacity,
+                        onChanged: (v) => setState(() => _capacity = v),
+                        onChangeEnd: (v) => widget.config.setCapacity(v),
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: _ActiveSimsList(active: state.activeSims),
+                      ),
+                      const SizedBox(height: 8),
+                      _ControlRow(
+                        running: state.running,
+                        onStart: widget.engine.start,
+                        onStop: widget.engine.stop,
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          );
-        },
+            // Jobs tab — Firestore-backed browser of all jobs (read-only
+            // for now; mutations need auth which the worker lacks).
+            const CloudJobsScreen(),
+          ],
+        ),
       ),
     );
   }
@@ -89,13 +111,13 @@ class _StatusCard extends StatelessWidget {
     final color = !state.running
         ? Colors.grey
         : state.activeSims.isEmpty
-            ? Colors.green
-            : Colors.blue;
+        ? Colors.green
+        : Colors.blue;
     final label = !state.running
         ? 'Stopped'
         : state.activeSims.isEmpty
-            ? 'Idle'
-            : 'Running ${state.activeSims.length} sim(s)';
+        ? 'Idle'
+        : 'Running ${state.activeSims.length} sim(s)';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -157,7 +179,10 @@ class _CapacityRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Text('Max parallel sims', style: TextStyle(color: Colors.white70)),
+          const Text(
+            'Max parallel sims',
+            style: TextStyle(color: Colors.white70),
+          ),
           Expanded(
             child: Slider(
               value: current.toDouble(),
@@ -173,7 +198,10 @@ class _CapacityRow extends StatelessWidget {
             width: 24,
             child: Text(
               '$current',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.right,
             ),
           ),
@@ -200,7 +228,8 @@ class _ActiveSimsList extends StatelessWidget {
     }
     return ListView.separated(
       itemCount: active.length,
-      separatorBuilder: (_, __) => const Divider(color: Colors.white12, height: 1),
+      separatorBuilder: (_, __) =>
+          const Divider(color: Colors.white12, height: 1),
       itemBuilder: (_, i) {
         final sim = active[i];
         return ListTile(
@@ -240,7 +269,9 @@ class _ControlRow extends StatelessWidget {
           icon: Icon(running ? Icons.stop : Icons.play_arrow),
           label: Text(running ? 'Stop worker' : 'Start worker'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: running ? Colors.red.shade700 : Colors.green.shade700,
+            backgroundColor: running
+                ? Colors.red.shade700
+                : Colors.green.shade700,
             foregroundColor: Colors.white,
           ),
           onPressed: running ? onStop : onStart,
