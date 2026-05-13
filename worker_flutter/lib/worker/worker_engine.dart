@@ -124,20 +124,31 @@ class WorkerEngine {
     // Listen to PENDING sims across all jobs. Every time the listener
     // fires (a new PENDING sim appears, or an existing one's state
     // changes) we try to claim if we have capacity.
+    //
+    // Listener errors get printed AND surfaced via lastError on the
+    // engine state. Without the print, a firestore.rules misconfig
+    // shows up as "worker mysteriously idle" with no log trail.
     try {
       _pendingSub = firestore
           .collectionGroup('simulations')
           .where('state', isEqualTo: 'PENDING')
           .snapshots()
           .listen(
-            (_) => _tryClaimLoop(),
+            (snap) {
+              debugPrint(
+                'WorkerEngine: PENDING listener fired with ${snap.docs.length} doc(s)',
+              );
+              _tryClaimLoop();
+            },
             onError: (Object err) {
+              debugPrint('WorkerEngine: PENDING listener error: $err');
               _stateSubject.add(
                 currentState.copyWith(lastError: err.toString()),
               );
             },
           );
     } catch (e) {
+      debugPrint('WorkerEngine: listener setup failed: $e');
       _stateSubject.add(currentState.copyWith(lastError: 'listener setup: $e'));
     }
   }

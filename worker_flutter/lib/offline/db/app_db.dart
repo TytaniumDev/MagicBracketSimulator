@@ -1,0 +1,219 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+part 'app_db.g.dart';
+
+/// Offline-mode local persistence. One SQLite file per install at
+/// `<app-support>/offline.sqlite`. Schema is intentionally narrow for
+/// v1 — Jobs, Sims, Settings. Storage pruner trims oldest jobs when
+/// the on-disk total exceeds `settings.max_storage_bytes`.
+@DataClassName('Job')
+class Jobs extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  IntColumn get totalSims => integer()();
+  IntColumn get completedSims => integer().withDefault(const Constant(0))();
+  TextColumn get state => text().withDefault(const Constant('PENDING'))();
+  TextColumn get deck1Name => text()();
+  TextColumn get deck2Name => text()();
+  TextColumn get deck3Name => text()();
+  TextColumn get deck4Name => text()();
+}
+
+@DataClassName('Sim')
+class Sims extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get jobId => integer().references(Jobs, #id)();
+  IntColumn get simIndex => integer()();
+  TextColumn get state => text().withDefault(const Constant('PENDING'))();
+  TextColumn get winnerDeckName => text().nullable()();
+  IntColumn get winningTurn => integer().nullable()();
+  IntColumn get durationMs => integer().nullable()();
+  TextColumn get errorMessage => text().nullable()();
+  TextColumn get logRelPath => text().nullable()();
+  DateTimeColumn get startedAt => dateTime().nullable()();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+}
+
+class Settings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+@DriftDatabase(tables: [Jobs, Sims, Settings])
+class AppDb extends _$AppDb {
+  AppDb() : super(_openConnection());
+
+  @override
+  int get schemaVersion => 1;
+
+  /// All jobs newest-first. Drives the history list.
+  Future<List<Job>> recentJobs({int limit = 50}) {
+    return (select(jobs)
+          ..orderBy([(j) => OrderingTerm.desc(j.createdAt)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<Job?> jobById(int id) =>
+      (select(jobs)..where((j) => j.id.equals(id))).getSingleOrNull();
+
+  Future<List<Sim>> simsForJob(int jobId) =>
+      (select(sims)
+            ..where((s) => s.jobId.equals(jobId))
+            ..orderBy([(s) => OrderingTerm.asc(s.simIndex)]))
+          .get();
+
+  Stream<Job?> watchJob(int jobId) =>
+      (select(jobs)..where((j) => j.id.equals(jobId))).watchSingleOrNull();
+
+  Stream<List<Sim>> watchSimsForJob(int jobId) =>
+      (select(sims)
+            ..where((s) => s.jobId.equals(jobId))
+            ..orderBy([(s) => OrderingTerm.asc(s.simIndex)]))
+          .watch();
+
+  /// Insert a brand-new job + N PENDING sim rows in one transaction.
+  Future<int> createJob({
+    required List<String> deckNames,
+    required int simCount,
+    String? name,
+  }) async {
+    assert(deckNames.length == 4, 'Commander bracket needs exactly 4 decks');
+    return await transaction(() async {
+      final jobId = await into(jobs).insert(
+        JobsCompanion.insert(
+          name: Value(name),
+          createdAt: DateTime.now(),
+          totalSims: simCount,
+          deck1Name: deckNames[0],
+          deck2Name: deckNames[1],
+          deck3Name: deckNames[2],
+          deck4Name: deckNames[3],
+        ),
+      );
+      for (var i = 0; i < simCount; i++) {
+        await into(
+          sims,
+        ).insert(SimsCompanion.insert(jobId: jobId, simIndex: i));
+      }
+      return jobId;
+    });
+  }
+
+  Future<void> updateJobState(int jobId, String state) =>
+      (update(jobs)..where((j) => j.id.equals(jobId))).write(
+        JobsCompanion(state: Value(state)),
+      );
+
+  Future<void> markSimRunning(int simId) =>
+      (update(sims)..where((s) => s.id.equals(simId))).write(
+        SimsCompanion(
+          state: const Value('RUNNING'),
+          startedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> markSimCompleted(
+    int simId, {
+    required String winnerDeckName,
+    required int? winningTurn,
+    required int durationMs,
+    String? logRelPath,
+  }) async {
+    final sim = await (select(
+      sims,
+    )..where((s) => s.id.equals(simId))).getSingle();
+    await transaction(() async {
+      await (update(sims)..where((s) => s.id.equals(simId))).write(
+        SimsCompanion(
+          state: const Value('COMPLETED'),
+          winnerDeckName: Value(winnerDeckName),
+          winningTurn: Value(winningTurn),
+          durationMs: Value(durationMs),
+          logRelPath: Value(logRelPath),
+          completedAt: Value(DateTime.now()),
+        ),
+      );
+      await _bumpJobCompletedCount(sim.jobId);
+    });
+  }
+
+  Future<void> markSimFailed(
+    int simId, {
+    required String error,
+    required int durationMs,
+    String? logRelPath,
+  }) async {
+    final sim = await (select(
+      sims,
+    )..where((s) => s.id.equals(simId))).getSingle();
+    await transaction(() async {
+      await (update(sims)..where((s) => s.id.equals(simId))).write(
+        SimsCompanion(
+          state: const Value('FAILED'),
+          errorMessage: Value(error),
+          durationMs: Value(durationMs),
+          logRelPath: Value(logRelPath),
+          completedAt: Value(DateTime.now()),
+        ),
+      );
+      await _bumpJobCompletedCount(sim.jobId);
+    });
+  }
+
+  Future<void> _bumpJobCompletedCount(int jobId) async {
+    final job = await (select(
+      jobs,
+    )..where((j) => j.id.equals(jobId))).getSingle();
+    final newCompleted = job.completedSims + 1;
+    final isDone = newCompleted >= job.totalSims;
+    await (update(jobs)..where((j) => j.id.equals(jobId))).write(
+      JobsCompanion(
+        completedSims: Value(newCompleted),
+        state: Value(isDone ? 'COMPLETED' : 'RUNNING'),
+      ),
+    );
+  }
+
+  /// Settings helpers: a thin string-keyed key/value store for things
+  /// that don't justify their own table (storage cap, last-picked decks,
+  /// etc.). Default values live in callers — `getSetting` returns null
+  /// for unknown keys.
+  Future<String?> getSetting(String key) async {
+    final row = await (select(
+      settings,
+    )..where((s) => s.key.equals(key))).getSingleOrNull();
+    return row?.value;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    await into(
+      settings,
+    ).insertOnConflictUpdate(SettingsCompanion.insert(key: key, value: value));
+  }
+
+  /// Delete a single job and its sims. Used by the storage pruner.
+  Future<void> deleteJob(int jobId) async {
+    await transaction(() async {
+      await (delete(sims)..where((s) => s.jobId.equals(jobId))).go();
+      await (delete(jobs)..where((j) => j.id.equals(jobId))).go();
+    });
+  }
+}
+
+LazyDatabase _openConnection() {
+  return LazyDatabase(() async {
+    final dir = await getApplicationSupportDirectory();
+    final file = File(p.join(dir.path, 'offline.sqlite'));
+    return NativeDatabase.createInBackground(file);
+  });
+}
