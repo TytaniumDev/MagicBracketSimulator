@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 /// Writes lease + heartbeat fields to `workers/{workerId}` every 5s.
 ///
@@ -65,13 +66,17 @@ class LeaseWriter {
     _timer?.cancel();
     _timer = null;
     // Best-effort: clear our lease so the sweep won't try to revert anything.
+    // Shutdown errors here are benign (we're stopping anyway) but log so a
+    // truly broken Firestore connection is visible during dev.
     try {
       await firestore.collection('workers').doc(workerId).set({
         'lease': FieldValue.delete(),
         'status': 'idle',
         'activeSimulations': 0,
       }, SetOptions(merge: true));
-    } catch (_) {/* graceful shutdown */}
+    } catch (e) {
+      debugPrint('LeaseWriter.stop() failed to clear lease: $e');
+    }
   }
 
   String _activeStatus() => _activeCompositeIds.isEmpty ? 'idle' : 'busy';

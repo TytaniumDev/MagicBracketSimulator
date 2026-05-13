@@ -58,10 +58,8 @@ class _DashboardState extends State<Dashboard> {
                 const SizedBox(height: 16),
                 _CapacityRow(
                   current: _capacity,
-                  onChanged: (v) async {
-                    setState(() => _capacity = v);
-                    await widget.config.setCapacity(v);
-                  },
+                  onChanged: (v) => setState(() => _capacity = v),
+                  onChangeEnd: (v) => widget.config.setCapacity(v),
                 ),
                 const SizedBox(height: 16),
                 Expanded(child: _ActiveSimsList(active: state.activeSims)),
@@ -139,10 +137,15 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _CapacityRow extends StatelessWidget {
-  const _CapacityRow({required this.current, required this.onChanged});
+  const _CapacityRow({
+    required this.current,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
 
   final int current;
   final ValueChanged<int> onChanged;
+  final ValueChanged<int> onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +166,7 @@ class _CapacityRow extends StatelessWidget {
               divisions: 7,
               label: '$current',
               onChanged: (v) => onChanged(v.round()),
+              onChangeEnd: (v) => onChangeEnd(v.round()),
             ),
           ),
           SizedBox(

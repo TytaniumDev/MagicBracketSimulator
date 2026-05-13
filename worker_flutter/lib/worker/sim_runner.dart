@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import '../installer/installer.dart';
 import '../models/sim.dart';
 
 /// Spawns a Forge `sim` invocation as a child Java process and captures the
@@ -47,7 +49,7 @@ class SimRunner {
       );
     }
 
-    final forgeJar = '$forgePath/forge-gui-desktop-2.0.10-jar-with-dependencies.jar';
+    final forgeJar = '$forgePath/${Installer.forgeJarName}';
     if (!File(forgeJar).existsSync()) {
       return SimResult(
         success: false,
@@ -98,8 +100,10 @@ class SimRunner {
     );
 
     final logBuf = StringBuffer();
-    final stdoutSub = process.stdout.listen((data) => logBuf.write(String.fromCharCodes(data)));
-    final stderrSub = process.stderr.listen((data) => logBuf.write(String.fromCharCodes(data)));
+    // utf8.decoder buffers partial multi-byte chars across chunks so we don't
+    // mangle non-ASCII output (e.g. card names with em-dashes or accents).
+    final stdoutSub = process.stdout.transform(utf8.decoder).listen(logBuf.write);
+    final stderrSub = process.stderr.transform(utf8.decoder).listen(logBuf.write);
 
     var cancelled = false;
     unawaited(cancelSignal?.then((_) {

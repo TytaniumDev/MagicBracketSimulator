@@ -22,8 +22,18 @@ class Installer {
   final http.Client _client;
 
   // Pinned versions. Bump these as needed.
-  static const _forgeVersion = '2.0.10';
+  static const forgeVersion = '2.0.10';
   static const _jreVersionFeature = 17;
+
+  /// Filename of the Forge JAR inside `forgePath`. Public so `SimRunner`
+  /// resolves the same filename the installer downloads — keeps the two
+  /// in lockstep when the version is bumped.
+  static const forgeJarName =
+      'forge-gui-desktop-$forgeVersion-jar-with-dependencies.jar';
+
+  /// Hard cap on redirect follows. Adoptium typically issues one 3xx
+  /// (to a CDN); we allow up to 5 to handle geo-routing chains, then bail.
+  static const _maxRedirects = 5;
 
   /// Reported progress of the current install step.
   final _progress = StreamController<InstallProgress>.broadcast();
@@ -42,7 +52,7 @@ class Installer {
   /// True iff both JRE and Forge are installed and look valid.
   Future<bool> isReady() async {
     final java = await javaBinary();
-    final forgeJar = '${await forgePath()}/forge-gui-desktop-$_forgeVersion-jar-with-dependencies.jar';
+    final forgeJar = '${await forgePath()}/$forgeJarName';
     return File(java).existsSync() && File(forgeJar).existsSync();
   }
 
@@ -51,7 +61,7 @@ class Installer {
     final jre = await jrePath();
     final forge = await forgePath();
     final java = await javaBinary();
-    final forgeJar = '$forge/forge-gui-desktop-$_forgeVersion-jar-with-dependencies.jar';
+    final forgeJar = '$forge/$forgeJarName';
 
     if (!File(java).existsSync()) {
       _emit('jre', 'Downloading Java runtime', 0);
@@ -62,7 +72,7 @@ class Installer {
     }
 
     if (!File(forgeJar).existsSync()) {
-      _emit('forge', 'Downloading Forge $_forgeVersion (~270 MB)', 0);
+      _emit('forge', 'Downloading Forge $forgeVersion (~270 MB)', 0);
       await _installForge(forge);
       _emit('forge', 'Forge ready', 1);
     } else {
@@ -98,7 +108,7 @@ class Installer {
 
   Future<void> _installForge(String destDir) async {
     final url = Uri.parse(
-      'https://github.com/Card-Forge/forge/releases/download/forge-$_forgeVersion/forge-installer-$_forgeVersion.tar.bz2',
+      'https://github.com/Card-Forge/forge/releases/download/forge-$forgeVersion/forge-installer-$forgeVersion.tar.bz2',
     );
     final tmpFile = File('${await _supportDir()}/forge-download.tar.bz2');
     await _downloadWithProgress(url, tmpFile, label: 'forge');
@@ -120,12 +130,20 @@ class Installer {
     Uri url,
     File dest, {
     required String label,
+    int redirectsRemaining = _maxRedirects,
   }) async {
     final req = http.Request('GET', url);
     final resp = await _client.send(req);
     if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers['location'] != null) {
-      // Follow one redirect (Adoptium redirects to a CDN).
-      return _downloadWithProgress(Uri.parse(resp.headers['location']!), dest, label: label);
+      if (redirectsRemaining <= 0) {
+        throw Exception('exceeded $_maxRedirects redirects downloading $url');
+      }
+      return _downloadWithProgress(
+        Uri.parse(resp.headers['location']!),
+        dest,
+        label: label,
+        redirectsRemaining: redirectsRemaining - 1,
+      );
     }
     if (resp.statusCode != 200) {
       throw Exception('download $url returned ${resp.statusCode}');

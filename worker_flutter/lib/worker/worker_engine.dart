@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:rxdart/subjects.dart';
 
 import '../config.dart';
@@ -180,8 +181,10 @@ class WorkerEngine {
     _cancelByComposite[sim.compositeId] = cancelCompleter;
     _publishActiveSims();
 
-    // Subscribe to cancellations for this job.
-    _watchJobCancellation(sim.jobId, cancelCompleter);
+    // Subscribe to cancellations for this job. The listener resolves all
+    // active completers via `_cancelByComposite` at event time, so it picks
+    // up sims claimed after the subscription was set up.
+    _watchJobCancellation(sim.jobId);
 
     try {
       final job = await _loadJobInfo(sim.jobId);
@@ -260,17 +263,29 @@ class WorkerEngine {
     }
   }
 
-  void _watchJobCancellation(String jobId, Completer<void> cancelCompleter) {
+  void _watchJobCancellation(String jobId) {
     if (_cancelSubs.containsKey(jobId)) return;
     final sub = firestore.collection('jobs').doc(jobId).snapshots().listen(
       (snap) {
         if (!snap.exists) return;
         final status = snap.data()?['status'];
-        if (status == 'CANCELLED' && !cancelCompleter.isCompleted) {
-          cancelCompleter.complete();
+        if (status != 'CANCELLED') return;
+        // Signal every active sim for this job. Looking up completers via
+        // `_cancelByComposite` (rather than capturing a single one at
+        // subscription time) handles the multi-sim case where additional
+        // sims are claimed for the same job after the listener was set up.
+        for (final entry in _cancelByComposite.entries) {
+          if (entry.key.startsWith('$jobId:') && !entry.value.isCompleted) {
+            entry.value.complete();
+          }
         }
       },
-      onError: (Object _) {/* swallow; sim will complete or time out */},
+      onError: (Object err) {
+        // Listener errors are non-fatal here — if the cancel signal misses,
+        // the sim still completes or times out on its own. Log so a broken
+        // Firestore connection is at least visible during dev.
+        debugPrint('cancellation listener for job $jobId errored: $err');
+      },
     );
     _cancelSubs[jobId] = sub;
   }
