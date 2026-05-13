@@ -38,6 +38,16 @@ dependencies:
   # macOS app self-update (Sparkle wrapper).
   auto_updater: ^1.0.0
 
+  # Google Sign-In (cloud mode). google_sign_in v6 supports macOS via
+  # the system's keychain-backed OAuth flow; on Windows we fall back
+  # to the manual browser+localhost-callback flow below. The
+  # firebase_auth REST path is the only way to get a Firestore-ready
+  # idToken without invoking firebase_auth_macos's native plugin
+  # (which crashes on boot for several common Firebase configs — see
+  # main.dart#_bootEngine).
+  google_sign_in: ^6.2.1
+  url_launcher: ^6.3.0
+
   # Offline-mode local persistence (drift = type-safe SQLite for Flutter).
   drift: ^2.20.0
   sqlite3_flutter_libs: ^0.5.24
