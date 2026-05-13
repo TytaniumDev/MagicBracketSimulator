@@ -63,6 +63,15 @@ class AppDb extends _$AppDb {
         .get();
   }
 
+  /// Reactive variant of [recentJobs] — emits a new list whenever the
+  /// `jobs` table changes. Avoids per-second polling in the history UI.
+  Stream<List<Job>> watchRecentJobs({int limit = 50}) {
+    return (select(jobs)
+          ..orderBy([(j) => OrderingTerm.desc(j.createdAt)])
+          ..limit(limit))
+        .watch();
+  }
+
   Future<Job?> jobById(int id) =>
       (select(jobs)..where((j) => j.id.equals(id))).getSingleOrNull();
 
@@ -129,10 +138,12 @@ class AppDb extends _$AppDb {
     required int durationMs,
     String? logRelPath,
   }) async {
-    final sim = await (select(
-      sims,
-    )..where((s) => s.id.equals(simId))).getSingle();
+    // The read-sim AND its parent-job bump live inside the transaction
+    // so a concurrent caller can't observe a partially-updated state.
     await transaction(() async {
+      final sim = await (select(
+        sims,
+      )..where((s) => s.id.equals(simId))).getSingle();
       await (update(sims)..where((s) => s.id.equals(simId))).write(
         SimsCompanion(
           state: const Value('COMPLETED'),
@@ -153,10 +164,10 @@ class AppDb extends _$AppDb {
     required int durationMs,
     String? logRelPath,
   }) async {
-    final sim = await (select(
-      sims,
-    )..where((s) => s.id.equals(simId))).getSingle();
     await transaction(() async {
+      final sim = await (select(
+        sims,
+      )..where((s) => s.id.equals(simId))).getSingle();
       await (update(sims)..where((s) => s.id.equals(simId))).write(
         SimsCompanion(
           state: const Value('FAILED'),
@@ -170,16 +181,23 @@ class AppDb extends _$AppDb {
     });
   }
 
+  /// Increment the job's `completedSims` counter and only flip the
+  /// `state` if the job is still in a non-terminal state. Without the
+  /// state guard, a late-arriving sim completion could flip a
+  /// user-CANCELLED or precon-FAILED job back to RUNNING/COMPLETED.
   Future<void> _bumpJobCompletedCount(int jobId) async {
     final job = await (select(
       jobs,
     )..where((j) => j.id.equals(jobId))).getSingle();
     final newCompleted = job.completedSims + 1;
+    final canFlipState = job.state == 'PENDING' || job.state == 'RUNNING';
     final isDone = newCompleted >= job.totalSims;
     await (update(jobs)..where((j) => j.id.equals(jobId))).write(
       JobsCompanion(
         completedSims: Value(newCompleted),
-        state: Value(isDone ? 'COMPLETED' : 'RUNNING'),
+        state: canFlipState
+            ? Value(isDone ? 'COMPLETED' : 'RUNNING')
+            : const Value.absent(),
       ),
     );
   }

@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../config.dart';
 import '../launch/mode_picker_screen.dart';
@@ -34,6 +37,9 @@ class _OfflineAppState extends State<OfflineApp> {
     super.initState();
     _db = AppDb();
     _runner = OfflineRunner(db: _db, config: widget.config);
+    // Pick up any job that was mid-run last session. Sequentially-
+    // queued, runs in the background; the UI doesn't block on it.
+    unawaited(_runner.resumeInFlightJobs());
   }
 
   @override
@@ -120,7 +126,7 @@ class _HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: _HistoryList(db: db, runner: runner, config: config),
+              child: _HistoryList(db: db, runner: runner),
             ),
           ],
         ),
@@ -159,32 +165,24 @@ class _HomeScreen extends StatelessWidget {
     if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _JobScreen(db: db, jobId: jobId),
+        builder: (_) => _JobScreen(db: db, runner: runner, jobId: jobId),
       ),
     );
   }
 }
 
 class _HistoryList extends StatelessWidget {
-  const _HistoryList({
-    required this.db,
-    required this.runner,
-    required this.config,
-  });
+  const _HistoryList({required this.db, required this.runner});
 
   final AppDb db;
   final OfflineRunner runner;
-  final WorkerConfig config;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Job>>(
-      // A 1-second poll is plenty for a small history list — drift
-      // doesn't expose a `watchAll` shortcut on `recentJobs` and we
-      // don't need true reactivity here.
-      stream: Stream.periodic(
-        const Duration(seconds: 1),
-      ).asyncMap((_) => db.recentJobs(limit: 50)),
+      // Drift's table watch fires on every relevant write — no polling,
+      // no 1-second staleness.
+      stream: db.watchRecentJobs(limit: 50),
       initialData: const [],
       builder: (context, snap) {
         final jobs = snap.data ?? const [];
@@ -203,7 +201,8 @@ class _HistoryList extends StatelessWidget {
             job: jobs[i],
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => _JobScreen(db: db, jobId: jobs[i].id),
+                builder: (_) =>
+                    _JobScreen(db: db, runner: runner, jobId: jobs[i].id),
               ),
             ),
           ),
@@ -427,9 +426,14 @@ class _NewJobScreenState extends State<_NewJobScreen> {
 // ── Live progress + results for one job ──────────────────────────
 
 class _JobScreen extends StatelessWidget {
-  const _JobScreen({required this.db, required this.jobId});
+  const _JobScreen({
+    required this.db,
+    required this.runner,
+    required this.jobId,
+  });
 
   final AppDb db;
+  final OfflineRunner runner;
   final int jobId;
 
   @override
@@ -438,6 +442,48 @@ class _JobScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text('Run #$jobId'),
         backgroundColor: const Color(0xFF111827),
+        actions: [
+          StreamBuilder<Job?>(
+            stream: db.watchJob(jobId),
+            builder: (context, snap) {
+              final job = snap.data;
+              if (job == null) return const SizedBox.shrink();
+              final canCancel =
+                  job.state == 'PENDING' || job.state == 'RUNNING';
+              if (!canCancel) return const SizedBox.shrink();
+              return TextButton.icon(
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('Cancel'),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Cancel run?'),
+                      content: const Text(
+                        'Any sim currently running will be killed; '
+                        'remaining queued sims will be marked cancelled.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Keep running'),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFF87171),
+                          ),
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Cancel run'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) await runner.cancel(jobId);
+                },
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<Job?>(
         stream: db.watchJob(jobId),
@@ -471,7 +517,7 @@ class _JobBody extends StatelessWidget {
     final decks = [job.deck1Name, job.deck2Name, job.deck3Name, job.deck4Name];
     final wins = <String, int>{for (final d in decks) d: 0};
     final winTurns = <String, List<int>>{for (final d in decks) d: []};
-    var failures = 0;
+    final failedSims = <Sim>[];
     for (final s in sims) {
       if (s.state == 'COMPLETED' && s.winnerDeckName != null) {
         wins[s.winnerDeckName!] = (wins[s.winnerDeckName!] ?? 0) + 1;
@@ -479,46 +525,168 @@ class _JobBody extends StatelessWidget {
           winTurns[s.winnerDeckName!]!.add(s.winningTurn!);
         }
       } else if (s.state == 'FAILED') {
-        failures++;
+        failedSims.add(s);
       }
     }
     final completed = sims
         .where((s) => s.state == 'COMPLETED' || s.state == 'FAILED')
         .length;
-    return Padding(
+    final failures = failedSims.length;
+    return ListView(
       padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              _StateBadge(state: job.state),
-              const SizedBox(width: 8),
-              Text(
+      children: [
+        Row(
+          children: [
+            _StateBadge(state: job.state),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
                 '$completed / ${job.totalSims} sims complete'
                 '${failures > 0 ? "  •  $failures failed" : ""}',
                 style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
             value: job.totalSims == 0 ? 0 : completed / job.totalSims,
+            minHeight: 6,
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'Win rate by deck',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Win rate by deck',
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        for (final d in decks)
+          _DeckResultRow(
+            name: d,
+            wins: wins[d] ?? 0,
+            completed: completed - failures,
+            winTurns: winTurns[d] ?? const [],
           ),
-          const SizedBox(height: 8),
-          for (final d in decks)
-            _DeckResultRow(
-              name: d,
-              wins: wins[d] ?? 0,
-              completed: completed - failures,
-              winTurns: winTurns[d] ?? const [],
+        if (failedSims.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _FailedSimsCard(failedSims: failedSims),
+        ],
+      ],
+    );
+  }
+}
+
+/// Collapsible card that lists each failed sim's error message + a
+/// "View log" button if the runner persisted stdout. Without this the
+/// user only sees "$N failed" with no path to root-cause.
+class _FailedSimsCard extends StatelessWidget {
+  const _FailedSimsCard({required this.failedSims});
+
+  final List<Sim> failedSims;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFF111827),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFF374151)),
+      ),
+      child: ExpansionTile(
+        iconColor: Colors.white70,
+        collapsedIconColor: Colors.white70,
+        title: Text(
+          '${failedSims.length} failed sim${failedSims.length == 1 ? "" : "s"}',
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+        ),
+        children: [
+          for (final s in failedSims)
+            ListTile(
+              dense: true,
+              title: Text(
+                'Sim #${s.simIndex}',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+              subtitle: Text(
+                s.errorMessage ?? '(no error message)',
+                style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 12),
+              ),
+              trailing: s.logRelPath == null
+                  ? null
+                  : TextButton(
+                      onPressed: () =>
+                          _showLog(context, sim: s, relPath: s.logRelPath!),
+                      child: const Text('View log'),
+                    ),
             ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showLog(
+    BuildContext context, {
+    required Sim sim,
+    required String relPath,
+  }) async {
+    // The logs dir lives at `config.logsPath` — we look it up via the
+    // app-support directory the same way the installer does. Keeps
+    // this widget independent of WorkerConfig.
+    final appSupport = (await getApplicationSupportDirectory()).path;
+    final path = p.join(appSupport, 'sim-logs', relPath);
+    String body;
+    try {
+      body = await File(path).readAsString();
+    } catch (e) {
+      body = 'Failed to read log at $path: $e';
+    }
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF111827),
+        child: Container(
+          width: 800,
+          height: 600,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Sim #${sim.simIndex} log',
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    color: Colors.white70,
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const Divider(color: Color(0xFF374151)),
+              Expanded(
+                child: Scrollbar(
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      body,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontFamily: 'Menlo',
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
