@@ -105,6 +105,14 @@ platform :mac do
       sh("cd ../.. && flutter build macos --release")
     end
 
+    # Resolve the .app path absolutely — fastlane's CWD when executing
+    # actions varies (Fastfile dir vs invocation dir), and `File.exist?`
+    # checks against Ruby's CWD, so a relative path silently fails the
+    # codesign loop below.
+    flutter_root_abs = File.expand_path('../..', __dir__)
+    app_path_abs = File.join(flutter_root_abs, 'build/macos/Build/Products/Release/worker_flutter.app')
+    # Keep a relative form for the fastlane `notarize` action so its
+    # internal logic stays unchanged.
     app_path = "../build/macos/Build/Products/Release/worker_flutter.app"
 
     # Sparkle's embedded Updater.app, Autoupdate binary, and XPCServices
@@ -115,8 +123,10 @@ platform :mac do
     # Developer ID identity that match just installed, then re-sign the
     # framework + outer .app on top so the seal includes the updated
     # nested signatures.
-    sign_id = "Developer ID Application"
-    sparkle_root = "#{app_path}/Contents/Frameworks/Sparkle.framework"
+    sign_id = "Developer ID Application: Tyler Holland (#{TEAM_ID})"
+    sparkle_root = "#{app_path_abs}/Contents/Frameworks/Sparkle.framework"
+    UI.message("Deep-signing Sparkle.framework at #{sparkle_root}")
+    UI.user_error!("Sparkle.framework not found at #{sparkle_root}") unless Dir.exist?(sparkle_root)
     [
       "#{sparkle_root}/Versions/B/Autoupdate",
       "#{sparkle_root}/Versions/B/Updater.app/Contents/MacOS/Updater",
@@ -126,9 +136,12 @@ platform :mac do
       "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader",
       "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc",
       sparkle_root,
-      app_path,
+      app_path_abs,
     ].each do |target|
-      next unless File.exist?(target)
+      unless File.exist?(target)
+        UI.message("Skipping #{target} — not present")
+        next
+      end
       sh("codesign --force --options runtime --timestamp --sign #{sign_id.shellescape} #{target.shellescape}")
     end
 
