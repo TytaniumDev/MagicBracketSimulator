@@ -648,3 +648,15 @@ export function deleteSimulations(jobId: string): void {
   db.prepare('DELETE FROM simulations WHERE job_id = ?').run(jobId);
 }
 
+/**
+ * No-op in LOCAL/SQLite mode. Flutter workers only run in GCP mode where
+ * the Firestore implementation handles this with a transactional check.
+ */
+export function revertSimToPending(
+  _jobId: string,
+  _simId: string,
+  _expectedWorkerId: string,
+): boolean {
+  return false;
+}
+
