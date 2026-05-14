@@ -1,24 +1,16 @@
 name: Release magic-bracket-simulator (Windows)
 
-# Triggered manually or on push of a tag matching `worker-v*`. Builds
-# the Flutter Windows release, zips it, and attaches it to the GitHub
-# Release that the matching macOS workflow also targets.
-#
-# Code signing: NOT done. The .exe ships unsigned; users see a
-# SmartScreen "Windows protected your PC" dialog on first launch and
-# have to click "More info → Run anyway". Buying an Authenticode cert
-# (or building a Microsoft Trusted-Signing reputation) is the long-term
-# fix; see worker_flutter/macos/fastlane/SETUP.md.
-#
-# WinSparkle auto-update: enabled. Each zip gets a DSA signature
-# (SHA1-of-zip signed with the SPARKLE_DSA_PRIVATE_KEY secret) emitted
-# in a `sparkle-manifest-windows.json` next to the zip. The matching
-# DSA public key is baked into the .exe via Runner.rc's `DSAPub`
-# resource — without it WinSparkle would refuse to install updates.
+# Triggered:
+#   - automatically on every push to `main` (so each merged PR produces
+#     a prerelease build that users can install + Sparkle can pick up),
+#   - on push of a tag matching `worker-v*` for official releases,
+#   - manually via the workflow_dispatch button.
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "worker-v*"
 
@@ -33,6 +25,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Compute version + release tag
+        id: version
+        shell: bash
+        env:
+          BUILD_NUM: ${{ github.run_number }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          SHA_SHORT="${SHA:0:7}"
+          BASE=$(awk '/^version:/{print $2}' worker_flutter/pubspec.yaml \
+            | cut -d'+' -f1)
+          NEW="${BASE}+${BUILD_NUM}"
+          sed -i.bak "s/^version: .*/version: ${NEW}/" worker_flutter/pubspec.yaml
+          rm -f worker_flutter/pubspec.yaml.bak
+          echo "version=${NEW}" >> "$GITHUB_OUTPUT"
+          echo "build=${BUILD_NUM}" >> "$GITHUB_OUTPUT"
+          if [[ "${REF}" == refs/tags/* ]]; then
+            echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "name=${REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=build-${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+            echo "name=Build ${BUILD_NUM} (${SHA_SHORT})" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Will publish version ${NEW} on ref ${REF}"
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -62,16 +82,10 @@ jobs:
           Get-ChildItem $dst
 
       - name: Sign zip for WinSparkle (DSA)
-        # WinSparkle 0.8.x verifies update zips against the embedded
-        # DSAPub resource using a SHA1 + DSA signature, base64-encoded.
-        # The recipe matches WinSparkle's sign_update.bat:
-        #   openssl dgst -sha1 -binary < zip
-        #     | openssl dgst -sha1 -sign priv.pem
-        #     | openssl enc -base64
-        # Without this signature on the appcast entry, WinSparkle marks
-        # the update available but refuses to install it.
         env:
           SPARKLE_DSA_PRIVATE_KEY: ${{ secrets.SPARKLE_DSA_PRIVATE_KEY }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VER: ${{ steps.version.outputs.version }}
         shell: bash
         working-directory: worker_flutter
         run: |
@@ -92,12 +106,13 @@ jobs:
             exit 1
           fi
           echo "WinSparkle signature: $SIG (length: $LEN)"
-          jq -n --arg sig "$SIG" --arg len "$LEN" --arg ref "$GITHUB_REF_NAME" \
-            '{tag: $ref, dsaSignature: $sig, length: ($len|tonumber)}' \
+          jq -n --arg sig "$SIG" --arg len "$LEN" \
+                --arg ref "$TAG" --arg ver "$VER" \
+            '{tag: $ref, version: $ver, dsaSignature: $sig, length: ($len|tonumber)}' \
             > build/sparkle-manifest-windows.json
           cat build/sparkle-manifest-windows.json
 
-      - name: Upload artifact
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: magic-bracket-simulator-windows
@@ -106,10 +121,12 @@ jobs:
             worker_flutter/build/sparkle-manifest-windows.json
           if-no-files-found: error
 
-      - name: Attach to release (tag pushes only)
-        if: startsWith(github.ref, 'refs/tags/worker-v')
+      - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.name }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
           files: |
             worker_flutter/build/worker_flutter-windows.zip
             worker_flutter/build/sparkle-manifest-windows.json
