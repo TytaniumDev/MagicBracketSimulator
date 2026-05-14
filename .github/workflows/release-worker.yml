@@ -1,17 +1,8 @@
-name: Release magic-bracket-simulator (macOS)
+name: Release magic-bracket-simulator
 
-# Triggered manually or on push of a tag matching `worker-v*` (e.g.
-# `worker-v0.1.0`). Builds, signs, and notarizes the .app, then
-# uploads the zipped artifact to the workflow run and attaches it to
-# the GitHub Release for the tag.
-#
-# Secrets pattern mirrors BlinkBreak's deploy-testflight.yml: only
-# DOPPLER_BLINKBREAK_TOKEN is a GitHub Actions secret (a service token
-# scoped to Doppler project "blinkbreak", config "prd"). Everything
-# else (match password, ASC API key, certs-repo SSH key) comes from
-# Doppler. The repo's other workflows use DOPPLER_TOKEN scoped to
-# magic-bracket-simulator — this workflow needs a separately-scoped
-# token because the signing secrets live in BlinkBreak's Doppler config.
+# One workflow, two platform builds, one GitHub Release. The publish
+# step only fires if both builds succeed — there's no scenario where
+# macOS and Windows users see different "latest" versions.
 
 on:
   workflow_dispatch:
@@ -25,37 +16,33 @@ permissions:
   contents: write
 
 jobs:
-  release-macos:
-    # macos-15 ships Xcode 16 (Swift 6); FirebaseSharedSwift pods built
-    # against the latest iOS SDK use the Swift 6 `sending` keyword and
-    # fail to compile on macos-14's Swift 5.10.
-    runs-on: macos-15
-    timeout-minutes: 45
-
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      tag: ${{ steps.compute.outputs.tag }}
+      name: ${{ steps.compute.outputs.name }}
+      prerelease: ${{ steps.compute.outputs.prerelease }}
+      sha_short: ${{ steps.compute.outputs.sha_short }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 1
       - name: Compute version + release tag
-        id: version
+        id: compute
         env:
           BUILD_NUM: ${{ github.run_number }}
           REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
-        # Bump pubspec build number to the workflow run number so each
-        # merge produces a strictly newer build than the prior one —
-        # Sparkle keys off this for "is this update newer than what I
-        # have installed" decisions.
         run: |
           SHA_SHORT="${SHA:0:7}"
           BASE=$(awk '/^version:/{print $2}' worker_flutter/pubspec.yaml \
             | cut -d'+' -f1)
           NEW="${BASE}+${BUILD_NUM}"
-          sed -i.bak "s/^version: .*/version: ${NEW}/" worker_flutter/pubspec.yaml
-          rm -f worker_flutter/pubspec.yaml.bak
           echo "version=${NEW}" >> "$GITHUB_OUTPUT"
-          echo "build=${BUILD_NUM}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
           if [[ "${REF}" == refs/tags/* ]]; then
             echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
             echo "name=${REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -65,7 +52,22 @@ jobs:
             echo "name=Build ${BUILD_NUM} (${SHA_SHORT})" >> "$GITHUB_OUTPUT"
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "Will publish version ${NEW} on ref ${REF}"
+
+  build-macos:
+    needs: version
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bump pubspec version
+        env:
+          NEW_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          sed -i.bak "s/^version: .*/version: ${NEW_VERSION}/" worker_flutter/pubspec.yaml
+          rm -f worker_flutter/pubspec.yaml.bak
+          grep '^version:' worker_flutter/pubspec.yaml
 
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
@@ -75,10 +77,6 @@ jobs:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_BLINKBREAK_TOKEN }}
         run: |
           DELIM=$(openssl rand -hex 16)
-          # Service token is scoped to blinkbreak/prd, but still pass the
-          # flags explicitly — without them, the CLI tries to use a local
-          # Doppler config that doesn't exist on a fresh runner and the
-          # request 401s as "Invalid Auth token".
           SECRETS=$(doppler secrets download --project blinkbreak --config prd --no-file --format json)
           KEYS='[
             "MATCH_PASSWORD",
@@ -89,14 +87,11 @@ jobs:
             "ASC_API_KEY_CONTENT",
             "ASC_API_KEY_IS_BASE64"
           ]'
-          # Mask every value before using it.
           echo "$SECRETS" | jq -r --argjson keys "$KEYS" '
             to_entries[] | select(.key | IN($keys[])) | .value
           ' | while IFS= read -r val; do
             [ -n "$val" ] && echo "::add-mask::$val"
           done
-          # Write into $GITHUB_ENV with a random heredoc delimiter so multi-line
-          # values (RSA/ED25519 private key, base64 .p8, etc.) survive intact.
           echo "$SECRETS" | jq -r --argjson keys "$KEYS" --arg d "$DELIM" '
             to_entries[] | select(.key | IN($keys[])) | "\(.key)<<\($d)\n\(.value)\n\($d)"
           ' >> "$GITHUB_ENV"
@@ -119,20 +114,11 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          # 3.3+ required: fastlane 2.234.0 fails ES256 key parsing on
-          # Ruby 3.2's bundled OpenSSL with "invalid curve name", and
-          # fastlane upstream is dropping 3.2 support shortly anyway.
           ruby-version: "3.3"
           bundler-cache: true
           working-directory: worker_flutter/macos
 
       - name: Install CocoaPods via Homebrew
-        # macos-14 runners ship a CocoaPods tied to the system Ruby.
-        # ruby/setup-ruby switches PATH to a different Ruby, leaving
-        # that system pod unusable — Flutter then aborts mid-build with
-        # "CocoaPods is installed but broken." Homebrew bundles its own
-        # Ruby with cocoapods, so it works regardless of which Ruby
-        # ruby/setup-ruby is currently presenting.
         run: brew list cocoapods >/dev/null 2>&1 || brew install cocoapods
 
       - name: flutter pub get
@@ -155,16 +141,14 @@ jobs:
           FASTLANE_HIDE_CHANGELOG: "1"
           FASTLANE_SKIP_UPDATE_CHECK: "1"
           FASTLANE_DISABLE_COLORS: "1"
-          # Force match's git operations to use the deploy key, regardless of
-          # the runner's default SSH config.
           GIT_SSH_COMMAND: "ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
         run: bundle exec fastlane release
 
       - name: Sign zip for Sparkle (EdDSA)
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-          TAG: ${{ steps.version.outputs.tag }}
-          VER: ${{ steps.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VER: ${{ needs.version.outputs.version }}
         working-directory: worker_flutter
         run: |
           if [ -z "$SPARKLE_ED_PRIVATE_KEY" ]; then
@@ -187,25 +171,126 @@ jobs:
             > build/sparkle-manifest.json
           cat build/sparkle-manifest.json
 
-      - name: Upload workflow artifact
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: magic-bracket-simulator-macos
+          name: macos
           path: |
             worker_flutter/build/worker_flutter-macos.zip
             worker_flutter/build/sparkle-manifest.json
           if-no-files-found: error
 
+  build-windows:
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bump pubspec version
+        shell: bash
+        env:
+          NEW_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          sed -i.bak "s/^version: .*/version: ${NEW_VERSION}/" worker_flutter/pubspec.yaml
+          rm -f worker_flutter/pubspec.yaml.bak
+          grep '^version:' worker_flutter/pubspec.yaml
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        working-directory: worker_flutter
+        run: flutter pub get
+
+      - name: flutter build windows --release
+        working-directory: worker_flutter
+        run: flutter build windows --release
+
+      - name: Package release as zip
+        working-directory: worker_flutter
+        shell: pwsh
+        run: |
+          $src = "build/windows/x64/runner/Release"
+          if (-not (Test-Path $src)) {
+            $src = "build/windows/runner/Release"
+          }
+          $dst = "build/worker_flutter-windows.zip"
+          if (Test-Path $dst) { Remove-Item $dst }
+          Compress-Archive -Path "$src/*" -DestinationPath $dst
+          Get-ChildItem $dst
+
+      - name: Sign zip for WinSparkle (DSA)
+        env:
+          SPARKLE_DSA_PRIVATE_KEY: ${{ secrets.SPARKLE_DSA_PRIVATE_KEY }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VER: ${{ needs.version.outputs.version }}
+        shell: bash
+        working-directory: worker_flutter
+        run: |
+          if [ -z "$SPARKLE_DSA_PRIVATE_KEY" ]; then
+            echo "::error::SPARKLE_DSA_PRIVATE_KEY is unset" >&2
+            exit 1
+          fi
+          KEY_FILE=$(mktemp)
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s' "$SPARKLE_DSA_PRIVATE_KEY" > "$KEY_FILE"
+          ZIP=build/worker_flutter-windows.zip
+          LEN=$(wc -c < "$ZIP")
+          SIG=$(openssl dgst -sha1 -binary < "$ZIP" \
+            | openssl dgst -sha1 -sign "$KEY_FILE" \
+            | openssl enc -base64 -A)
+          if [ -z "$SIG" ]; then
+            echo "::error::DSA signing produced an empty signature" >&2
+            exit 1
+          fi
+          echo "WinSparkle signature: $SIG (length: $LEN)"
+          jq -n --arg sig "$SIG" --arg len "$LEN" \
+                --arg ref "$TAG" --arg ver "$VER" \
+            '{tag: $ref, version: $ver, dsaSignature: $sig, length: ($len|tonumber)}' \
+            > build/sparkle-manifest-windows.json
+          cat build/sparkle-manifest-windows.json
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            worker_flutter/build/worker_flutter-windows.zip
+            worker_flutter/build/sparkle-manifest-windows.json
+          if-no-files-found: error
+
+  publish:
+    needs: [version, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: artifacts/macos
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: artifacts/windows
+      - name: Inspect artifacts
+        run: |
+          ls -lah artifacts/macos
+          ls -lah artifacts/windows
       - name: Publish to GitHub Release
-        # softprops/action-gh-release upserts on tag_name, so the
-        # Windows workflow from the same commit lands its artifacts in
-        # the same release.
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.name }}
-          prerelease: ${{ steps.version.outputs.prerelease }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.name }}
+          prerelease: ${{ needs.version.outputs.prerelease }}
           files: |
-            worker_flutter/build/worker_flutter-macos.zip
-            worker_flutter/build/sparkle-manifest.json
+            artifacts/macos/worker_flutter-macos.zip
+            artifacts/macos/sparkle-manifest.json
+            artifacts/windows/worker_flutter-windows.zip
+            artifacts/windows/sparkle-manifest-windows.json
           fail_on_unmatched_files: true
