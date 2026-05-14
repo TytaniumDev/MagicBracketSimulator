@@ -24,12 +24,23 @@ import 'forge_manifest.dart';
 /// the bundled JRE binary is missing. Adoptium's JRE is generally
 /// API-stable within a feature release, so this is intentional.
 class Installer {
-  Installer({http.Client? client, ForgeManifestClient? manifestClient})
-    : _client = client ?? http.Client(),
-      _manifestClient = manifestClient ?? ForgeManifestClient();
+  Installer({
+    http.Client? client,
+    ForgeManifestClient? manifestClient,
+    Future<String> Function()? supportDirOverride,
+  }) : _client = client ?? http.Client(),
+       _manifestClient = manifestClient ?? ForgeManifestClient(),
+       _supportDirOverride = supportDirOverride;
 
   final http.Client _client;
   final ForgeManifestClient _manifestClient;
+
+  /// Test seam: override the support-dir lookup. Production callers
+  /// resolve it through `path_provider`, which requires Flutter's
+  /// platform channels and therefore can't run under `flutter test`.
+  /// Tests pass a tempdir-resolving closure to exercise the install +
+  /// download + verify pipeline without depending on Flutter bindings.
+  final Future<String> Function()? _supportDirOverride;
 
   static const _jreVersionFeature = 17;
 
@@ -46,6 +57,7 @@ class Installer {
   ForgeManifest? _lastManifest;
 
   Future<String> _supportDir() async {
+    if (_supportDirOverride != null) return _supportDirOverride();
     final dir = await getApplicationSupportDirectory();
     if (!dir.existsSync()) dir.createSync(recursive: true);
     return dir.path;
