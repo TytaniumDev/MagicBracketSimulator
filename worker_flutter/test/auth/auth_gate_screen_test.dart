@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:worker_flutter/auth/auth_gate_screen.dart';
 import 'package:worker_flutter/auth/auth_service.dart';
 
@@ -170,7 +169,7 @@ void main() {
 /// mocks but never get called.
 class _StubAuthService extends AuthService {
   _StubAuthService({this.result, this.error})
-    : super(googleSignIn: GoogleSignIn(), firebaseAuth: MockFirebaseAuth());
+    : super(firebaseAuth: MockFirebaseAuth());
 
   AuthedUser? result;
   Object? error;

@@ -1,14 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 /// Stable identifier for the currently-signed-in user, plus a small
-/// shim to make the rest of the worker tolerant to either being
-/// signed in (Firestore rules will recognize `request.auth.uid`) or
-/// running anonymously during the v0.1.0 transition window.
+/// shim to keep the rest of the worker decoupled from the
+/// `firebase_auth.User` API surface.
 class AuthedUser {
   AuthedUser({
     required this.uid,
@@ -22,10 +19,13 @@ class AuthedUser {
 
 /// Cloud-mode authentication.
 ///
-/// This wraps two concerns the worker needs to keep separate:
-///   1. The OAuth handshake with Google to get an idToken/accessToken.
-///   2. Exchanging that token for a Firebase Auth session so Firestore
-///      sees `request.auth.uid` on subsequent writes.
+/// `signInWithProvider(GoogleAuthProvider())` is the single API that
+/// drives Google Sign-In on every platform we ship:
+///   - macOS: native `ASWebAuthenticationSession` (system keychain
+///     credentials available).
+///   - Windows / Linux: system default browser + a one-shot localhost
+///     listener for the OAuth callback.
+///   - Web: standard popup OAuth dance.
 ///
 /// firebase_auth_macos's native plugin historically crashed at boot
 /// for several Firebase configs (uncaught NSExceptions that bypass
@@ -36,21 +36,11 @@ class AuthedUser {
 /// at native cold-boot time. The class is constructed as a field on
 /// `_WorkerAppState`, so the `FirebaseAuth.instance` lookup in the
 /// constructor fires during `State.initState`, not during
-/// `main()`'s top-level setup. That's enough to keep the crash off
-/// the cold-launch path: any native NSException now lands inside
-/// `Future`/`Stream` callbacks Dart can catch.
+/// `main()`'s top-level setup.
 class AuthService {
-  AuthService({GoogleSignIn? googleSignIn, FirebaseAuth? firebaseAuth})
-    : _googleSignIn =
-          googleSignIn ??
-          GoogleSignIn(
-            // scopes intentionally minimal — we only need to identify
-            // the user, not read their drive/calendar/etc.
-            scopes: const ['email'],
-          ),
-      _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  AuthService({FirebaseAuth? firebaseAuth})
+    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
 
-  final GoogleSignIn _googleSignIn;
   final FirebaseAuth _firebaseAuth;
 
   /// Stream of the current Firebase user, mapped to our `AuthedUser`
@@ -73,50 +63,58 @@ class AuthService {
     );
   }
 
-  /// Trigger the Google Sign-In flow and exchange the result for a
-  /// Firebase session. Returns the signed-in user on success.
+  /// Trigger the Google Sign-In flow and return the signed-in user.
   ///
-  /// Throws on platform-not-supported or user cancellation.
+  /// Throws [AuthCancelledException] if the user closes the OAuth
+  /// browser tab without completing sign-in. Other errors bubble as
+  /// the underlying `FirebaseAuthException` so the gate UI can
+  /// display the provider's message verbatim.
   Future<AuthedUser> signIn() async {
     if (kDebugMode) {
-      debugPrint('AuthService.signIn() — starting Google Sign-In');
+      debugPrint('AuthService.signIn() — starting signInWithProvider');
     }
+    final provider = GoogleAuthProvider()
+      // Minimal scope: we only need to identify the user. No drive,
+      // calendar, contacts. Keep the consent screen short.
+      ..addScope('email');
 
-    // google_sign_in v6 supports macOS natively; on Windows it falls
-    // back to the system browser via url_launcher. Either path returns
-    // a GoogleSignInAccount carrying an idToken + accessToken.
-    final account = await _googleSignIn.signIn();
-    if (account == null) {
-      throw const AuthCancelledException();
+    final UserCredential credential;
+    try {
+      credential = await _firebaseAuth.signInWithProvider(provider);
+    } on FirebaseAuthException catch (e) {
+      // The user-closed-the-tab path comes back as a few different
+      // error codes depending on platform; normalize them so the
+      // AuthGate UI gets a single cancellation signal to render.
+      const cancelCodes = {
+        'web-context-canceled',
+        'popup-closed-by-user',
+        'cancelled-popup-request',
+        'user-canceled',
+      };
+      if (cancelCodes.contains(e.code)) {
+        throw const AuthCancelledException();
+      }
+      rethrow;
     }
-    final auth = await account.authentication;
-    final credential = GoogleAuthProvider.credential(
-      idToken: auth.idToken,
-      accessToken: auth.accessToken,
-    );
-
-    final fbUser = (await _firebaseAuth.signInWithCredential(credential)).user;
-    if (fbUser == null) {
+    final user = credential.user;
+    if (user == null) {
       throw StateError('Firebase returned a null user after sign-in');
     }
     return AuthedUser(
-      uid: fbUser.uid,
-      email: fbUser.email ?? account.email,
-      displayName: fbUser.displayName ?? account.displayName,
+      uid: user.uid,
+      email: user.email ?? '<no email>',
+      displayName: user.displayName,
     );
   }
 
-  Future<void> signOut() async {
-    await _googleSignIn.signOut();
-    await _firebaseAuth.signOut();
-  }
+  Future<void> signOut() => _firebaseAuth.signOut();
 
-  /// True if google_sign_in supports this platform out of the box.
-  /// Windows currently doesn't — sign_in_button reflects that.
-  static bool get isSupported {
-    if (kIsWeb) return true;
-    return Platform.isMacOS || Platform.isIOS || Platform.isAndroid;
-  }
+  /// firebase_auth's `signInWithProvider` works on every desktop
+  /// platform we target, so unlike the prior `google_sign_in`-backed
+  /// implementation, sign-in is universally supported. Kept as a
+  /// static getter for API stability — callers can still gate UI on
+  /// it if a future platform needs an exception.
+  static bool get isSupported => true;
 }
 
 class AuthCancelledException implements Exception {
