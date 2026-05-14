@@ -4,17 +4,20 @@ This document describes the REST API for the Magic Bracket Simulator.
 
 **Base URL:** `/api`
 **Authentication:**
+
 - Most endpoints are public or use Firebase Auth (Bearer Token).
 - Worker endpoints use `X-Worker-Secret` header or `Authorization: Bearer <token>` if configured.
 
 ## Jobs
 
 ### List Jobs
+
 `GET /jobs`
 
 Returns a list of recent jobs with summary information.
 
 **Response:**
+
 ```json
 {
   "jobs": [
@@ -36,11 +39,13 @@ Returns a list of recent jobs with summary information.
 ```
 
 ### Create Job
+
 `POST /jobs`
 
 Creates a new simulation job. Requires authentication (Firebase Auth).
 
 **Body:**
+
 ```json
 {
   "deckIds": ["id1", "id2", "id3", "id4"],
@@ -51,6 +56,7 @@ Creates a new simulation job. Requires authentication (Firebase Auth).
 ```
 
 **Response:**
+
 ```json
 {
   "id": "new-job-id",
@@ -59,11 +65,13 @@ Creates a new simulation job. Requires authentication (Firebase Auth).
 ```
 
 ### Get Job Details
+
 `GET /jobs/:id`
 
 Returns detailed information about a specific job.
 
 **Response:**
+
 ```json
 {
   "id": "job-id",
@@ -79,31 +87,37 @@ Returns detailed information about a specific job.
 ```
 
 ### Stream Job Updates (SSE)
+
 `GET /jobs/:id/stream`
 
 Server-Sent Events stream for real-time job updates.
 
 **Events:**
+
 - `data`: Job status update (JSON)
 - `event: simulations`: List of simulation statuses (JSON)
 
 ### Get Next Job (Worker)
+
 `GET /jobs/next`
 
 Used by the worker in polling mode to claim the next QUEUED job.
 **Auth:** `X-Worker-Secret` header required.
 
 **Response:**
+
 - `200 OK`: Job object (same as `GET /jobs/:id`)
 - `204 No Content`: No jobs available
 
 ### Cancel Job
+
 `POST /jobs/:id/cancel`
 
 Cancels a QUEUED or RUNNING job.
 **Auth:** Firebase Auth required.
 
 **Response:**
+
 ```json
 {
   "id": "job-id",
@@ -112,12 +126,14 @@ Cancels a QUEUED or RUNNING job.
 ```
 
 ### Recover Job
+
 `POST /jobs/:id/recover`
 
 One-shot recovery check for a stuck job. Called by Cloud Tasks after a scheduled delay.
 **Auth:** `X-Worker-Secret` header required.
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -126,14 +142,49 @@ One-shot recovery check for a stuck job. Called by Cloud Tasks after a scheduled
 }
 ```
 
+### Bulk Delete Jobs
+
+`POST /jobs/bulk-delete`
+
+Bulk deletes jobs and their associated artifacts (max 50 per request).
+**Auth:** Admin access required.
+
+**Body:**
+
+```json
+{
+  "jobIds": ["job-1", "job-2"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "deletedCount": 2,
+  "results": [
+    {
+      "id": "job-1",
+      "deleted": true
+    },
+    {
+      "id": "job-2",
+      "deleted": true
+    }
+  ]
+}
+```
+
 ## Simulations
 
 ### List Simulations
+
 `GET /jobs/:id/simulations`
 
 Returns the status of all individual simulations for a job.
 
 **Response:**
+
 ```json
 {
   "simulations": [
@@ -151,12 +202,14 @@ Returns the status of all individual simulations for a job.
 ```
 
 ### Initialize Simulations (Worker)
+
 `POST /jobs/:id/simulations`
 
 Initializes simulation tracking for a job.
 **Auth:** Worker auth required.
 
 **Body:**
+
 ```json
 {
   "count": 25
@@ -164,12 +217,14 @@ Initializes simulation tracking for a job.
 ```
 
 ### Update Simulation Status (Worker)
+
 `PATCH /jobs/:id/simulations/:simId`
 
 Updates the status of a single simulation.
 **Auth:** Worker auth required.
 
 **Body:**
+
 ```json
 {
   "state": "COMPLETED", // PENDING, RUNNING, COMPLETED, FAILED, CANCELLED
@@ -183,12 +238,14 @@ Updates the status of a single simulation.
 ```
 
 ### Upload Simulation Log (Worker)
+
 `POST /jobs/:id/logs/simulation`
 
 Uploads the raw log for a completed simulation.
 **Auth:** Worker auth required.
 
 **Body:**
+
 ```json
 {
   "filename": "raw/game_001.txt",
@@ -199,12 +256,14 @@ Uploads the raw log for a completed simulation.
 ## Workers
 
 ### List Workers
+
 `GET /workers`
 
 Lists all active workers and the current queue depth.
 **Auth:** Firebase Auth required.
 
 **Response:**
+
 ```json
 {
   "workers": [
@@ -223,12 +282,14 @@ Lists all active workers and the current queue depth.
 ```
 
 ### Update Worker Config
+
 `PATCH /workers/:id`
 
 Updates per-worker configuration. Only the worker's owner can modify its configuration.
 **Auth:** Firebase Auth required.
 
 **Body:**
+
 ```json
 {
   "maxConcurrentOverride": 4 // null to clear override
@@ -236,6 +297,7 @@ Updates per-worker configuration. Only the worker's owner can modify its configu
 ```
 
 **Response:**
+
 ```json
 {
   "ok": true,
@@ -245,12 +307,14 @@ Updates per-worker configuration. Only the worker's owner can modify its configu
 ```
 
 ### Worker Heartbeat
+
 `POST /workers/heartbeat`
 
 Reports worker status and retrieves dynamic configuration overrides.
 **Auth:** Worker auth required.
 
 **Body:**
+
 ```json
 {
   "workerId": "worker-1",
@@ -264,6 +328,7 @@ Reports worker status and retrieves dynamic configuration overrides.
 ```
 
 **Response:**
+
 ```json
 {
   "ok": true,
@@ -274,12 +339,14 @@ Reports worker status and retrieves dynamic configuration overrides.
 ## Worker Setup
 
 ### Generate Setup Token
+
 `POST /worker-setup/token`
 
 Generates a time-limited setup token for bootstrapping a remote worker.
 **Auth:** Firebase Auth required.
 
 **Response:**
+
 ```json
 {
   "token": "base64-encoded-token",
@@ -290,6 +357,7 @@ Generates a time-limited setup token for bootstrapping a remote worker.
 ```
 
 ### Get Worker Config
+
 `POST /worker-setup/config`
 
 Returns AES-256-GCM encrypted worker configuration.
@@ -297,6 +365,7 @@ Returns AES-256-GCM encrypted worker configuration.
 **Headers:** Requires `X-Encryption-Key` header with 64-char hex string.
 
 **Response:**
+
 ```json
 {
   "iv": "base64-iv",
@@ -308,12 +377,14 @@ Returns AES-256-GCM encrypted worker configuration.
 ## System
 
 ### Health Check
+
 `GET /health`
 
 Unauthenticated system health check. Evaluates stuck jobs, leaderboard ratings, and worker connectivity.
 **Auth:** None required.
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -326,12 +397,14 @@ Unauthenticated system health check. Evaluates stuck jobs, leaderboard ratings, 
 ```
 
 ### Broadcast Pull Image
+
 `POST /admin/pull-image`
 
 Broadcasts a `pull-image` command to all active workers.
 **Auth:** `X-Worker-Secret` header required.
 
 **Response:**
+
 ```json
 {
   "ok": true,
@@ -339,14 +412,34 @@ Broadcasts a `pull-image` command to all active workers.
 }
 ```
 
+### Backfill Win Turns
+
+`POST /admin/backfill-win-turns`
+
+Rebuilds `winTurnSum`, `winTurnWins`, and `winTurnHistogram` for every deck from the match results store.
+**Auth:** Admin access required.
+
+**Response:**
+
+```json
+{
+  "updated": 50,
+  "missingRatings": 2,
+  "missingRatingsIds": ["deck-id-missing"],
+  "totalMatchResults": 1000
+}
+```
+
 ## Decks
 
 ### List Decks
+
 `GET /decks`
 
 Lists all decks (precons and user submissions).
 
 **Response:**
+
 ```json
 {
   "decks": [
@@ -363,6 +456,7 @@ Lists all decks (precons and user submissions).
 ```
 
 ### Create Deck
+
 `POST /decks`
 
 Creates a new deck from a URL (Moxfield, Archidekt, ManaBox) or raw text.
@@ -370,12 +464,15 @@ Creates a new deck from a URL (Moxfield, Archidekt, ManaBox) or raw text.
 **Auth:** User auth required.
 
 **Body:**
+
 ```json
 {
   "deckUrl": "https://moxfield.com/..."
 }
 ```
+
 OR
+
 ```json
 {
   "deckText": "1 Sol Ring\n1 Command Tower...",
@@ -384,7 +481,35 @@ OR
 }
 ```
 
+### Get Deck Content
+
+`GET /decks/:id/content`
+
+Gets the raw deck content (`name` and `dck` text) for a specific deck.
+**Auth:** `X-Worker-Secret` header required.
+
+**Response:**
+
+```json
+{
+  "name": "My Deck",
+  "dck": "1 Sol Ring\n..."
+}
+```
+
+### Delete Deck
+
+`DELETE /decks/:id`
+
+Deletes a deck.
+**Auth:** User auth required. User must be the owner of the deck.
+
+**Response:**
+
+- `204 No Content`: Deck deleted successfully
+
 ### List Precons
+
 `GET /precons`
 
 Legacy endpoint to list precon decks. Use `GET /decks` with client-side filtering instead.
