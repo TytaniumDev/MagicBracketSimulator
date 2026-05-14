@@ -32,11 +32,24 @@ class DefaultFirebaseOptions {
   }
 
   // OAuth client ID (iOS-type in GCP Console). `firebase_auth.signIn-
-  // WithProvider` picks this up automatically on macOS; on Windows /
-  // Linux the desktop implementation reuses the same Firebase project's
-  // federated config and falls back to a system-browser OAuth flow.
+  // WithProvider` picks this up automatically on macOS.
   static const _iosClientId =
       '14286370379-echlkrv6jd11ep7341irajaf8anr3f1i.apps.googleusercontent.com';
+
+  /// OAuth client ID for the Windows/Linux PKCE flow. Must be a
+  /// "Desktop application" client in GCP Console — distinct from the
+  /// iOS-type client above, which doesn't accept `http://127.0.0.1`
+  /// loopback redirect URIs. PKCE-only, no client secret.
+  ///
+  /// Create the client at:
+  ///   https://console.cloud.google.com/apis/credentials
+  ///   → + CREATE CREDENTIALS → OAuth client ID → Application type:
+  ///     Desktop app → Name: "Magic Bracket worker (desktop OAuth)"
+  ///
+  /// Until this constant is replaced with the real value, the Windows
+  /// AuthGate will surface a clearly-named "missing client id" error
+  /// instead of attempting (and silently failing) the OAuth dance.
+  static const desktopOAuthClientId = 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID';
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDevBZ3RfwNtrqW7L2ICgmV8QkvoDDvNbc',

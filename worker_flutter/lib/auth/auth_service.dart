@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+
+import '../firebase_options.dart';
+import 'desktop_oauth.dart';
 
 /// Stable identifier for the currently-signed-in user, plus a small
 /// shim to keep the rest of the worker decoupled from the
@@ -19,29 +23,30 @@ class AuthedUser {
 
 /// Cloud-mode authentication.
 ///
-/// `signInWithProvider(GoogleAuthProvider())` is the single API that
-/// drives Google Sign-In on every platform we ship:
-///   - macOS: native `ASWebAuthenticationSession` (system keychain
-///     credentials available).
-///   - Windows / Linux: system default browser + a one-shot localhost
-///     listener for the OAuth callback.
-///   - Web: standard popup OAuth dance.
+/// Two code paths depending on platform — both produce a Firebase
+/// session usable by `cloud_firestore`:
 ///
-/// firebase_auth_macos's native plugin historically crashed at boot
-/// for several Firebase configs (uncaught NSExceptions that bypass
-/// Dart try/catch). The fix has been merged upstream as of 5.x. The
-/// invariant this service preserves regardless: every `FirebaseAuth`
-/// access happens inside Flutter's event loop — i.e., AFTER `runApp`
-/// has returned and the framework is processing frames — rather than
-/// at native cold-boot time. The class is constructed as a field on
-/// `_WorkerAppState`, so the `FirebaseAuth.instance` lookup in the
-/// constructor fires during `State.initState`, not during
-/// `main()`'s top-level setup.
+///   - **macOS / iOS / Android / Web**: use
+///     `FirebaseAuth.signInWithProvider(GoogleAuthProvider())`. The
+///     native SDKs drive the OAuth UI (ASWebAuthenticationSession on
+///     macOS, system popup on web, etc.).
+///   - **Windows / Linux**: `signInWithProvider` throws
+///     "Operation is not supported on non-mobile systems" on those
+///     ports, so we drive an OAuth2 PKCE flow ourselves via
+///     `DesktopOAuth`, then hand the resulting Google `idToken` /
+///     `accessToken` to `signInWithCredential`. The session that
+///     lands in firebase_auth is identical to the native flow's.
+///
+/// firebase_auth's `signInWithCredential` IS supported on Windows
+/// (unlike the all-in-one `signInWithProvider`), so cloud_firestore
+/// reads `request.auth.uid` on subsequent writes either way.
 class AuthService {
-  AuthService({FirebaseAuth? firebaseAuth})
-    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  AuthService({FirebaseAuth? firebaseAuth, DesktopOAuth? desktopOAuth})
+    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+      _desktopOAuth = desktopOAuth;
 
   final FirebaseAuth _firebaseAuth;
+  final DesktopOAuth? _desktopOAuth;
 
   /// Stream of the current Firebase user, mapped to our `AuthedUser`
   /// shape. Emits `null` while signed out.
@@ -49,9 +54,7 @@ class AuthService {
       _firebaseAuth.authStateChanges().map(_mapUser);
 
   /// Synchronous snapshot of the currently signed-in user, if any.
-  /// Used at boot to restore a persisted session — firebase_auth
-  /// caches tokens on disk, so a user who signed in last launch
-  /// shouldn't have to OAuth again on this one.
+  /// Used at boot to restore a persisted session.
   AuthedUser? get currentUserSnapshot => _mapUser(_firebaseAuth.currentUser);
 
   AuthedUser? _mapUser(User? user) {
@@ -66,36 +69,66 @@ class AuthService {
   /// Trigger the Google Sign-In flow and return the signed-in user.
   ///
   /// Throws [AuthCancelledException] if the user closes the OAuth
-  /// browser tab without completing sign-in. Other errors bubble as
-  /// the underlying `FirebaseAuthException` so the gate UI can
-  /// display the provider's message verbatim.
+  /// browser/tab without completing sign-in. Other errors bubble.
   Future<AuthedUser> signIn() async {
-    if (kDebugMode) {
-      debugPrint('AuthService.signIn() — starting signInWithProvider');
+    if (_useDesktopFlow) {
+      return _signInWindows();
     }
-    final provider = GoogleAuthProvider()
-      // Minimal scope: we only need to identify the user. No drive,
-      // calendar, contacts. Keep the consent screen short.
-      ..addScope('email');
+    return _signInNative();
+  }
 
+  /// Native `signInWithProvider` — macOS, iOS, Android, Web.
+  Future<AuthedUser> _signInNative() async {
+    if (kDebugMode) {
+      debugPrint('AuthService.signIn() — using signInWithProvider');
+    }
+    final provider = GoogleAuthProvider()..addScope('email');
     final UserCredential credential;
     try {
       credential = await _firebaseAuth.signInWithProvider(provider);
     } on FirebaseAuthException catch (e) {
-      // The user-closed-the-tab path comes back as a few different
-      // error codes depending on platform; normalize them so the
-      // AuthGate UI gets a single cancellation signal to render.
-      const cancelCodes = {
-        'web-context-canceled',
-        'popup-closed-by-user',
-        'cancelled-popup-request',
-        'user-canceled',
-      };
-      if (cancelCodes.contains(e.code)) {
+      if (_cancelCodes.contains(e.code)) {
         throw const AuthCancelledException();
       }
       rethrow;
     }
+    return _requireUser(credential);
+  }
+
+  /// Windows / Linux: drive OAuth2 PKCE ourselves, then exchange the
+  /// resulting Google idToken for a Firebase session.
+  Future<AuthedUser> _signInWindows() async {
+    if (kDebugMode) {
+      debugPrint('AuthService.signIn() — using PKCE + signInWithCredential');
+    }
+    final clientId = DefaultFirebaseOptions.desktopOAuthClientId;
+    if (clientId == 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID') {
+      throw StateError(
+        'Windows sign-in needs a Desktop OAuth Client ID. Create one at '
+        'https://console.cloud.google.com/apis/credentials (Application '
+        'type: Desktop app) and paste it into '
+        'DefaultFirebaseOptions.desktopOAuthClientId in firebase_options.dart.',
+      );
+    }
+    final oauth = _desktopOAuth ?? DesktopOAuth(clientId: clientId);
+    final tokens = await oauth.signIn();
+    final cred = GoogleAuthProvider.credential(
+      idToken: tokens.idToken,
+      accessToken: tokens.accessToken,
+    );
+    final UserCredential credential;
+    try {
+      credential = await _firebaseAuth.signInWithCredential(cred);
+    } on FirebaseAuthException catch (e) {
+      if (_cancelCodes.contains(e.code)) {
+        throw const AuthCancelledException();
+      }
+      rethrow;
+    }
+    return _requireUser(credential);
+  }
+
+  AuthedUser _requireUser(UserCredential credential) {
     final user = credential.user;
     if (user == null) {
       throw StateError('Firebase returned a null user after sign-in');
@@ -109,12 +142,26 @@ class AuthService {
 
   Future<void> signOut() => _firebaseAuth.signOut();
 
-  /// firebase_auth's `signInWithProvider` works on every desktop
-  /// platform we target, so unlike the prior `google_sign_in`-backed
-  /// implementation, sign-in is universally supported. Kept as a
-  /// static getter for API stability — callers can still gate UI on
-  /// it if a future platform needs an exception.
+  /// Sign-in is supported on every desktop target — macOS via the
+  /// native provider, Windows/Linux via the PKCE fallback.
   static bool get isSupported => true;
+
+  /// Whether to take the desktop PKCE path. We can't ship `Platform.is*`
+  /// from a const context, so the check is a runtime read.
+  bool get _useDesktopFlow {
+    if (kIsWeb) return false;
+    return Platform.isWindows || Platform.isLinux;
+  }
+
+  /// firebase_auth's "user closed the tab / cancelled" errors come
+  /// back as several codes depending on platform; collapse them so
+  /// the gate UI gets a single cancellation signal.
+  static const _cancelCodes = {
+    'web-context-canceled',
+    'popup-closed-by-user',
+    'cancelled-popup-request',
+    'user-canceled',
+  };
 }
 
 class AuthCancelledException implements Exception {
