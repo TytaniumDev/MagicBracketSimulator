@@ -49,7 +49,8 @@ class DefaultFirebaseOptions {
   /// Until this constant is replaced with the real value, the Windows
   /// AuthGate will surface a clearly-named "missing client id" error
   /// instead of attempting (and silently failing) the OAuth dance.
-  static const desktopOAuthClientId = 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID';
+  static const desktopOAuthClientId =
+      '14286370379-t5bj865bhp31k4170lh03cre44b7r1e2.apps.googleusercontent.com';
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDevBZ3RfwNtrqW7L2ICgmV8QkvoDDvNbc',
