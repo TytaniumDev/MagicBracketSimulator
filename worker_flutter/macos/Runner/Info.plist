@@ -22,14 +22,22 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<!-- LSUIElement set to false for MVP. With LSUIElement=true the
-	     tray_manager and cloud_firestore native plugins crash on init
-	     (uncaught NSExceptions bypass Dart try/catch). Plan 3 fixes this
-	     by either signing the app properly or using Swift AppDelegate
-	     glue to set up the menu-bar status item without involving
-	     tray_manager during cold boot. -->
+	<!-- LSUIElement=true makes this a menu-bar-only app: no Dock icon,
+	     no Cmd-Tab entry. The tray icon is the user's primary affordance
+	     for re-opening the dashboard window after closing it.
+
+	     Historical note: under earlier code the combination of
+	     LSUIElement=true + tray_manager + cloud_firestore crashed on
+	     cold boot (uncaught NSExceptions bypassed Dart try/catch). The
+	     three things that made that path safe:
+	       1. firebase_auth.instance access is deferred until inside the
+	          Flutter event loop (see lib/auth/auth_service.dart).
+	       2. tray init runs after runApp (lib/main.dart).
+	       3. The app is now Developer-ID signed + notarized, so the
+	          OS doesn't kill it for unsigned-plugin-load violations.
+	     Revert to <false/> here if menu-bar mode regresses. -->
 	<key>LSUIElement</key>
-	<false/>
+	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>

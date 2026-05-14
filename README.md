@@ -4,7 +4,7 @@
 
 [ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
-**Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge and Docker.**
+**Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge.**
 
 <br>
 
@@ -21,32 +21,29 @@
 
 ## Quick Start
 
-Run the full stack locally.
-See [Deployment Guide](docs/DEPLOYMENT.md) for detailed setup.
+**Just want to run simulations?** Download the desktop worker for your platform from the [latest release](https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest) and double-click. macOS builds are Developer-ID signed + notarized; Windows builds will trip SmartScreen the first time — click *More info → Run anyway*. The worker self-updates from then on.
 
-1. **Install dependencies:**
-   ```bash
-   npm run install:all
-   ```
+The worker has two modes:
+- **Cloud:** signs in with Google, picks up jobs from the shared Firestore queue. Results show on the [web leaderboard](https://magic-bracket-simulator.web.app).
+- **Offline:** picks 4 bundled Commander precons, runs the bracket locally, keeps results on your machine.
 
-2. **Start the App (Frontend & API):**
-   ```bash
-   npm run dev
-   ```
+**Want to run the whole stack locally for development?** See the [Deployment Guide](docs/DEPLOYMENT.md). The legacy Docker worker (`worker/`) is still in the repo and works, but the desktop worker (`worker_flutter/`) is the path going forward.
 
-3. **Start the Worker (in a new terminal):**
-   *Note: Requires Docker to be running.*
-   ```bash
-   cd worker && npm run dev
-   ```
+```bash
+# Frontend + API
+npm run install:all && npm run dev
+# → http://localhost:5173
 
-Visit **http://localhost:5173** to start simulating.
+# Desktop worker (Flutter)
+cd worker_flutter && flutter run -d macos    # or: -d windows
+```
 
 ## Key Features
 
-*   **⚡ Parallel Simulation:** Runs multiple Forge instances concurrently via Docker.
+*   **⚡ Parallel Simulation:** Runs multiple Forge instances concurrently. Capacity scales to your machine's CPU.
 *   **📊 Win Rate Analysis:** Tracks per-deck win rates and game statistics across simulations.
-*   **☁️ Hybrid Architecture:** Runs fully locally or on Google Cloud Platform.
+*   **☁️ Cloud or Offline:** Sign in with Google to share compute across friends, or run a private bracket entirely on your laptop with the bundled precons.
+*   **🖥️ Cross-platform desktop:** macOS (signed + notarized) and Windows. Auto-updates via Sparkle / WinSparkle.
 
 ## Documentation Map
 
