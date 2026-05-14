@@ -68,9 +68,14 @@ void main() {
     // Pre-populate a fake JRE so install() jumps straight to Forge.
     // Otherwise the JRE download would fire first and fail on the same
     // mock client setup, masking the SHA check we want to exercise.
-    final fakeJre = File(
-      p.join(supportDir.path, 'jre', 'Contents', 'Home', 'bin', 'java'),
-    );
+    // Match the platform-specific JRE layout the installer looks for
+    // (`Contents/Home/bin/java` on macOS/Linux, `bin\java.exe` on
+    // Windows) — otherwise this test fails on whichever runner doesn't
+    // match the hard-coded path.
+    final jreBin = Platform.isWindows
+        ? p.join(supportDir.path, 'jre', 'bin', 'java.exe')
+        : p.join(supportDir.path, 'jre', 'Contents', 'Home', 'bin', 'java');
+    final fakeJre = File(jreBin);
     fakeJre.parent.createSync(recursive: true);
     fakeJre.writeAsStringSync('#!/bin/sh\nexit 0\n');
 
