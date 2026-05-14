@@ -1,6 +1,5 @@
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:worker_flutter/auth/auth_service.dart';
 
 /// Unit tests for `AuthService`. The `currentUserSnapshot` accessor is
@@ -10,10 +9,7 @@ import 'package:worker_flutter/auth/auth_service.dart';
 void main() {
   group('AuthService.currentUserSnapshot', () {
     test('returns null when firebase_auth has no signed-in user', () {
-      final auth = AuthService(
-        firebaseAuth: MockFirebaseAuth(),
-        googleSignIn: GoogleSignIn(),
-      );
+      final auth = AuthService(firebaseAuth: MockFirebaseAuth());
       expect(auth.currentUserSnapshot, isNull);
     });
 
@@ -30,7 +26,6 @@ void main() {
             displayName: 'Test Player',
           ),
         ),
-        googleSignIn: GoogleSignIn(),
       );
 
       final snap = auth.currentUserSnapshot;
@@ -50,7 +45,6 @@ void main() {
           signedIn: true,
           mockUser: MockUser(uid: 'u'),
         ),
-        googleSignIn: GoogleSignIn(),
       );
       expect(auth.currentUserSnapshot!.email, '<no email>');
     });
@@ -68,7 +62,6 @@ void main() {
             signedIn: true,
             mockUser: MockUser(uid: 'u-stream', email: 'stream@example.com'),
           ),
-          googleSignIn: GoogleSignIn(),
         );
 
         final first = await auth.currentUser.first;
@@ -77,5 +70,14 @@ void main() {
         expect(first.email, 'stream@example.com');
       },
     );
+  });
+
+  group('AuthService.isSupported', () {
+    test('is true on every platform now that signInWithProvider works', () {
+      // signInWithProvider works on macOS/Windows/Linux/Web — the
+      // getter exists so callers can keep the gating site even if a
+      // future platform regresses.
+      expect(AuthService.isSupported, isTrue);
+    });
   });
 }
