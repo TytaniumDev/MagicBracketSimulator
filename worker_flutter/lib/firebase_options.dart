@@ -33,8 +33,13 @@ class DefaultFirebaseOptions {
     projectId: 'magic-bracket-simulator',
     databaseURL: 'https://magic-bracket-simulator-default-rtdb.firebaseio.com',
     storageBucket: 'magic-bracket-simulator.firebasestorage.app',
-    iosClientId: '14286370379-lfs99gcgmrv03rhpbijdev0bfd2r5u6s.apps.googleusercontent.com',
-    iosBundleId: 'com.tytaniumdev.workerFlutter',
+    // OAuth client for Google Sign-In on macOS. Created as an iOS-type
+    // client in GCP Console because Flutter's `google_sign_in` package
+    // routes macOS through the iOS SDK and looks up `iosClientId` by
+    // convention. Bundle ID must match the post-rename identifier.
+    iosClientId:
+        '14286370379-echlkrv6jd11ep7341irajaf8anr3f1i.apps.googleusercontent.com',
+    iosBundleId: 'com.tytaniumdev.magicBracketSimulator',
   );
 
   // The `flutterfire configure` CLI will overwrite this whole file.
