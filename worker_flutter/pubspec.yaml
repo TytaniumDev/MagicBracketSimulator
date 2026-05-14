@@ -38,12 +38,25 @@ dependencies:
   # macOS app self-update (Sparkle wrapper).
   auto_updater: ^1.0.0
 
-  # Google Sign-In runs through `firebase_auth.signInWithProvider` —
-  # works on every platform (macOS via ASWebAuthenticationSession,
-  # Windows/Linux via system-browser + localhost callback) without a
-  # separate `google_sign_in` dep. The iOS-type OAuth Client ID in
-  # `firebase_options.dart` serves the macOS native flow; Windows
-  # reuses the same Firebase project's federated config.
+  # Launch-at-login: macOS Login Items + Windows Startup folder.
+  # Cross-platform; uses each OS's native auto-start mechanism so the
+  # worker comes back online after a reboot without user intervention.
+  launch_at_startup: ^0.5.1
+  # Read appName/packageName at runtime so launch_at_startup's setup
+  # call doesn't need hardcoded strings that drift from the Xcode /
+  # Runner.rc metadata.
+  package_info_plus: ^8.0.2
+
+  # Google Sign-In:
+  # - macOS: `firebase_auth.signInWithProvider(GoogleAuthProvider())`
+  #   uses ASWebAuthenticationSession natively.
+  # - Windows: firebase_auth's `signInWithProvider` throws
+  #   "Operation is not supported on non-mobile systems", so we drive
+  #   the OAuth2 PKCE flow ourselves through the system browser via
+  #   `url_launcher` and hand the resulting Google ID token back to
+  #   firebase_auth via `signInWithCredential`. Needs a Desktop-type
+  #   OAuth Client ID in addition to the iOS one.
+  url_launcher: ^6.3.0
 
   # Offline-mode local persistence (drift = type-safe SQLite for Flutter).
   drift: ^2.20.0
@@ -62,6 +75,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # Bundled Forge precons — copied verbatim from
+    # `worker/forge-engine/decks/` so offline mode works out of the
+    # box without a Forge install or a network round-trip. The
+    # offline runner extracts these to the user's app-support dir on
+    # demand (see `lib/offline/deck_source.dart`).
+    - assets/precons/
   # Tray icon asset goes here once you have a 16x16 PNG ready:
-  # assets:
   #   - assets/tray_icon.png

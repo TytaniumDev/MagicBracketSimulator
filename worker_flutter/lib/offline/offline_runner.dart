@@ -209,10 +209,16 @@ class OfflineRunner {
   }
 
   /// Stage a precon .dck into `config.decksPath` (idempotent).
+  /// Handles both filesystem-sourced precons (Forge install) and
+  /// asset-bundled precons (the default, ships inside the app).
   Future<String> _stageDeck(PreconDeck precon) async {
     final dest = File(p.join(config.decksPath, precon.filename));
-    if (!dest.existsSync()) {
-      dest.parent.createSync(recursive: true);
+    if (dest.existsSync()) return precon.filename;
+    dest.parent.createSync(recursive: true);
+    if (precon.isBundled) {
+      // materializePrecon does the asset bundle read + write for us.
+      await materializePrecon(precon, config.decksPath);
+    } else {
       File(precon.path).copySync(dest.path);
     }
     return precon.filename;

@@ -88,7 +88,13 @@ Future<void> _appMain() async {
     _log('waitUntilReadyToShow callback');
     await windowManager.show();
     await windowManager.focus();
-    await windowManager.setPreventClose(true);
+    // Only intercept close on macOS — the tray icon is the user's
+    // way back to the window there. Windows ships without a tray
+    // entry, so hiding would lose the only way to interact with the
+    // app. Let X actually close the process on Windows/Linux.
+    if (Platform.isMacOS) {
+      await windowManager.setPreventClose(true);
+    }
   });
   _log('window ready, shown');
 
@@ -438,8 +444,16 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
 
   @override
   void onWindowClose() async {
-    // Window close button → hide instead of quit. Engine keeps running.
-    await windowManager.hide();
+    // Only macOS gets the hide-to-tray treatment (see _initWindow
+    // where setPreventClose is mac-only). On Windows the listener
+    // still fires before the OS-default close because window_manager
+    // installs its own hook, so quit explicitly to match the user's
+    // expectation that X actually closes the app.
+    if (Platform.isMacOS) {
+      await windowManager.hide();
+    } else {
+      await windowManager.destroy();
+    }
   }
 
   Future<void> _onAuthed(AuthedUser user) async {
