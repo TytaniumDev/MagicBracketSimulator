@@ -45,6 +45,28 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 
+	<!-- OAuth callback URL scheme. firebase_auth's macOS plugin drives
+	     the Google Sign-In flow via `ASWebAuthenticationSession`, which
+	     hands the OAuth response back through a custom URL scheme equal
+	     to the REVERSED_CLIENT_ID of the iOS-type OAuth client. Without
+	     this entry the callback can't route back into the app and the
+	     signInWithProvider call returns null — surfaced to the user as
+	     [firebase_auth/null-error]. Must match GoogleService-Info.plist's
+	     REVERSED_CLIENT_ID exactly. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.tytaniumdev.magicBracketSimulator</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.14286370379-echlkrv6jd11ep7341irajaf8anr3f1i</string>
+			</array>
+		</dict>
+	</array>
+
 	<!-- Sparkle (auto_updater) configuration.
 	     SUFeedURL points at the appcast in this repo on `main`. Updates
 	     are surfaced by Sparkle itself; the worker just calls
