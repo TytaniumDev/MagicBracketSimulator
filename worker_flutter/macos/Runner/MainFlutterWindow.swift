@@ -23,9 +23,16 @@ class MainFlutterWindow: NSWindow {
       case "launchAtStartupIsEnabled":
         result(LaunchAtLogin.isEnabled)
       case "launchAtStartupSetEnabled":
-        if let arguments = call.arguments as? [String: Any] {
-          LaunchAtLogin.isEnabled = arguments["setEnabledValue"] as! Bool
+        guard let arguments = call.arguments as? [String: Any],
+              let enabled = arguments["setEnabledValue"] as? Bool else {
+          result(FlutterError(
+            code: "BAD_ARGS",
+            message: "launchAtStartupSetEnabled requires setEnabledValue: Bool",
+            details: nil
+          ))
+          return
         }
+        LaunchAtLogin.isEnabled = enabled
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
