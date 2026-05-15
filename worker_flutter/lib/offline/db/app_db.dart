@@ -48,7 +48,30 @@ class Settings extends Table {
   Set<Column> get primaryKey => {key};
 }
 
-@DriftDatabase(tables: [Jobs, Sims, Settings])
+/// User-created decks. Bundled precons are NOT stored here — they're
+/// always listed live from the asset bundle so a `flutter run` after
+/// adding a new precon file picks it up without a DB migration.
+@DataClassName('DeckRow')
+class Decks extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  // Name is also unique. The offline runner resolves declared job
+  // decks by name; the repo's pre-insert check guards the happy
+  // path, but the SQL-level UNIQUE makes a race or external write
+  // physically impossible.
+  TextColumn get name => text().unique()();
+  // Slugified filename incl. `.dck` — also the path under
+  // `<config.decksPath>/` where the materialized deck lives.
+  TextColumn get filename => text().unique()();
+  TextColumn get dckContent => text()();
+  // Stored as a packed string like "WUB" — null when Scryfall lookup
+  // failed or was skipped.
+  TextColumn get colorIdentity => text().nullable()();
+  TextColumn get link => text().nullable()();
+  TextColumn get primaryCommander => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+@DriftDatabase(tables: [Jobs, Sims, Settings, Decks])
 class AppDb extends _$AppDb {
   AppDb() : super(_openConnection());
 
@@ -59,7 +82,68 @@ class AppDb extends _$AppDb {
   AppDb.forTesting(QueryExecutor e) : super(e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      await m.createAll();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(decks);
+      }
+    },
+  );
+
+  // ── Deck CRUD ────────────────────────────────────────────────────
+
+  /// All user decks newest-first. Caller merges with bundled precons.
+  Stream<List<DeckRow>> watchDecks() {
+    return (select(decks)..orderBy([
+          (d) => OrderingTerm.desc(d.createdAt),
+          (d) => OrderingTerm.desc(d.id),
+        ]))
+        .watch();
+  }
+
+  Future<int> insertDeck({
+    required String name,
+    required String filename,
+    required String dckContent,
+    String? colorIdentity,
+    String? link,
+    String? primaryCommander,
+  }) {
+    return into(decks).insert(
+      DecksCompanion.insert(
+        name: name,
+        filename: filename,
+        dckContent: dckContent,
+        colorIdentity: Value(colorIdentity),
+        link: Value(link),
+        primaryCommander: Value(primaryCommander),
+      ),
+    );
+  }
+
+  Future<DeckRow?> deckById(int id) =>
+      (select(decks)..where((d) => d.id.equals(id))).getSingleOrNull();
+
+  Future<DeckRow?> deckByFilename(String filename) => (select(
+    decks,
+  )..where((d) => d.filename.equals(filename))).getSingleOrNull();
+
+  /// First user deck that matches [name]. Used by the offline runner
+  /// to resolve job-declared deck names. The repo enforces name
+  /// uniqueness at insert time, so callers can trust there is at most
+  /// one match.
+  Future<DeckRow?> deckByName(String name) =>
+      (select(decks)..where((d) => d.name.equals(name))).getSingleOrNull();
+
+  Future<void> deleteDeckById(int id) async {
+    await (delete(decks)..where((d) => d.id.equals(id))).go();
+  }
 
   /// All jobs newest-first. Drives the history list.
   ///

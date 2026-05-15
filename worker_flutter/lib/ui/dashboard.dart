@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../api_client.dart';
+import '../cloud/cloud_job_detail_screen.dart';
 import '../cloud/cloud_jobs_screen.dart';
 import '../cloud/cloud_leaderboard_screen.dart';
 import '../config.dart';
+import '../decks/cloud_deck_repo.dart';
+import '../decks/deck_repo.dart';
+import '../decks/decks_screen.dart';
 import '../launch/auto_start_service.dart';
 import '../models/sim.dart';
+import '../sims/new_sim_screen.dart';
 import '../worker/worker_engine.dart';
 
 /// Single dashboard window for the worker.
@@ -25,17 +31,24 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   late int _capacity;
+  late final ApiClient _api;
+  late final DeckRepo _deckRepo;
 
   @override
   void initState() {
     super.initState();
     _capacity = widget.config.maxCapacity;
+    // Single ApiClient (and its underlying http.Client) for the
+    // dashboard's lifetime — allocating per-submission leaks socket
+    // resources in a long-running tray app.
+    _api = ApiClient(baseUrl: widget.config.apiUrl);
+    _deckRepo = CloudDeckRepo(api: _api);
   }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 5,
       child: Scaffold(
         backgroundColor: const Color(0xFF1F2937),
         appBar: AppBar(
@@ -45,10 +58,13 @@ class _DashboardState extends State<Dashboard> {
           centerTitle: false,
           elevation: 0,
           bottom: const TabBar(
+            isScrollable: true,
             tabs: [
               Tab(icon: Icon(Icons.memory), text: 'Worker'),
               Tab(icon: Icon(Icons.cloud_queue), text: 'Jobs'),
               Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Leaderboard'),
+              Tab(icon: Icon(Icons.style_outlined), text: 'Decks'),
+              Tab(icon: Icon(Icons.play_arrow), text: 'New'),
             ],
             labelColor: Color(0xFF60A5FA),
             unselectedLabelColor: Colors.white70,
@@ -102,6 +118,39 @@ class _DashboardState extends State<Dashboard> {
             // recent completed jobs. Client-side because the
             // /api/leaderboard endpoint requires auth.
             const CloudLeaderboardScreen(),
+            // Decks tab — user's saved decks plus precons, live from
+            // Firestore. Add/delete go through the MBS API.
+            DecksScreen(repo: _deckRepo),
+            // New simulation tab — pick 4 decks and submit via
+            // POST /api/jobs.
+            NewSimScreen(
+              repo: _deckRepo,
+              onStart: (decks, simCount) async {
+                final resp = await _api.postJson('/api/jobs', {
+                  'deckIds': decks.map((d) => d.id).toList(),
+                  'simulations': simCount,
+                });
+                final job = resp['job'];
+                if (job is Map && job['id'] != null) {
+                  return job['id'].toString();
+                }
+                final id = resp['id']?.toString();
+                if (id == null || id.isEmpty) {
+                  throw StateError(
+                    'POST /api/jobs returned no job id; '
+                    'the API response shape may have changed.',
+                  );
+                }
+                return id;
+              },
+              onJobCreated: (ctx, jobId) {
+                Navigator.of(ctx).push(
+                  MaterialPageRoute(
+                    builder: (_) => CloudJobDetailScreen(jobId: jobId),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
