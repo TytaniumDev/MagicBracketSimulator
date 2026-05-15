@@ -9,6 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_core
   firebase_storage
   screen_retriever_windows
+  sentry_flutter
   sqlite3_flutter_libs
   tray_manager
   url_launcher_windows

@@ -63,6 +63,11 @@ dependencies:
   sqlite3_flutter_libs: ^0.5.24
   path: ^1.9.0
 
+  # Crash + session reporting. DSN is provided at build time via
+  # --dart-define=SENTRY_DSN=... — empty DSN puts the SDK in no-op
+  # mode, which is exactly what dev builds want.
+  sentry_flutter: ^8.10.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -72,6 +77,10 @@ dev_dependencies:
   drift_dev: ^2.20.0
   fake_cloud_firestore: ^3.1.0
   firebase_auth_mocks: ^0.14.1
+  # Uploads Dart obfuscation debug-info + sources to Sentry so
+  # production stack traces deobfuscate. Driven by the
+  # `sentry:` config block below; no-ops without $SENTRY_AUTH_TOKEN.
+  sentry_dart_plugin: ^2.0.0
 
 flutter:
   uses-material-design: true
@@ -84,3 +93,16 @@ flutter:
     - assets/precons/
   # Tray icon asset goes here once you have a 16x16 PNG ready:
   #   - assets/tray_icon.png
+
+# sentry_dart_plugin config — runs during CI release builds to upload
+# the obfuscation debug-info directory + Dart sources to Sentry so
+# stack traces deobfuscate. `release` is read from the
+# $SENTRY_RELEASE env var the release workflow sets; `auth_token`
+# from $SENTRY_AUTH_TOKEN. Both unset locally → plugin no-ops.
+sentry:
+  project: magic-bracket-worker
+  org: tytaniumdev
+  upload_debug_symbols: true
+  upload_source_maps: false
+  upload_sources: true
+  log_level: info
