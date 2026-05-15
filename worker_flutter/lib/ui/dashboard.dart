@@ -258,9 +258,13 @@ class _LaunchAtLoginRowState extends State<_LaunchAtLoginRow> {
       }
       if (!mounted) return;
       setState(() => _enabled = next);
-    } catch (_) {
+    } catch (e, st) {
       // Re-read the actual state — the OS may have rejected the
       // change (sandbox restriction, locked Startup folder, etc.).
+      // Log the underlying error so the diagnostic file shows what
+      // actually went wrong; without it the user just sees the
+      // switch silently flip back to its prior value.
+      debugPrint('AutoStart toggle failed: $e\n$st');
       await _refresh();
     } finally {
       if (mounted) setState(() => _busy = false);
