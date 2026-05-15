@@ -7,6 +7,7 @@ import 'package:rxdart/subjects.dart';
 
 import '../config.dart';
 import '../models/sim.dart';
+import '../telemetry.dart';
 import 'job_aggregator.dart';
 import 'lease_writer.dart';
 import 'log_uploader.dart';
@@ -123,8 +124,14 @@ class WorkerEngine {
 
     try {
       await _leaseWriter.start();
-    } catch (e) {
+    } catch (e, st) {
       _stateSubject.add(currentState.copyWith(lastError: 'lease writer: $e'));
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.engineRuntime,
+        extra: {'phase': 'lease_writer_start'},
+      );
     }
 
     // Listen to PENDING sims across all jobs. Every time the listener
@@ -153,9 +160,15 @@ class WorkerEngine {
               );
             },
           );
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('WorkerEngine: listener setup failed: $e');
       _stateSubject.add(currentState.copyWith(lastError: 'listener setup: $e'));
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.engineRuntime,
+        extra: {'phase': 'pending_listener_setup'},
+      );
     }
   }
 
@@ -287,7 +300,13 @@ class WorkerEngine {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, st) {
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.engineRuntime,
+        extra: {'phase': 'sim_run', 'jobId': sim.jobId, 'simId': sim.simId},
+      );
       await _claimer.reportTerminal(
         sim: sim,
         result: SimResult(

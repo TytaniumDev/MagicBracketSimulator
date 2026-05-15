@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../firebase_options.dart';
+import '../telemetry.dart';
 import 'desktop_oauth.dart';
 
 /// Stable identifier for the currently-signed-in user, plus a small
@@ -89,10 +90,21 @@ class AuthService {
     final UserCredential credential;
     try {
       credential = await _firebaseAuth.signInWithProvider(provider);
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (e, st) {
       if (_cancelCodes.contains(e.code)) {
         throw const AuthCancelledException();
       }
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.signIn,
+        tags: {
+          'platform': Platform.operatingSystem,
+          'provider': 'google',
+          'error_code': e.code,
+          'phase': 'native_provider',
+        },
+      );
       rethrow;
     }
     return _requireUser(credential);
@@ -126,7 +138,7 @@ class AuthService {
     final oauth =
         _desktopOAuth ??
         DesktopOAuth(clientId: clientId, clientSecret: clientSecret);
-    final tokens = await oauth.signIn();
+    final tokens = await _runPkce(oauth);
     final cred = GoogleAuthProvider.credential(
       idToken: tokens.idToken,
       accessToken: tokens.accessToken,
@@ -134,13 +146,47 @@ class AuthService {
     final UserCredential credential;
     try {
       credential = await _firebaseAuth.signInWithCredential(cred);
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (e, st) {
       if (_cancelCodes.contains(e.code)) {
         throw const AuthCancelledException();
       }
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.signIn,
+        tags: {
+          'platform': Platform.operatingSystem,
+          'provider': 'google',
+          'error_code': e.code,
+          'phase': 'firebase_credential',
+        },
+      );
       rethrow;
     }
     return _requireUser(credential);
+  }
+
+  /// Run the PKCE flow with capture-on-failure. `AuthCancelledException`
+  /// is passed through so the gate UI keeps treating cancellation as a
+  /// non-error.
+  Future<DesktopOAuthResult> _runPkce(DesktopOAuth oauth) async {
+    try {
+      return await oauth.signIn();
+    } on AuthCancelledException {
+      rethrow;
+    } catch (e, st) {
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.signIn,
+        tags: {
+          'platform': Platform.operatingSystem,
+          'provider': 'google',
+          'phase': 'pkce',
+        },
+      );
+      rethrow;
+    }
   }
 
   AuthedUser _requireUser(UserCredential credential) {
