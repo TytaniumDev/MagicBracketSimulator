@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../telemetry.dart';
 import 'installer.dart';
 
 /// First-run installer screen. Shown while the JRE and Forge are being
@@ -62,8 +63,14 @@ class _InstallScreenState extends State<_InstallScreen> {
   Future<void> _run() async {
     try {
       await widget.installer.install();
-    } catch (e) {
+    } catch (e, st) {
       if (mounted) setState(() => _error = e);
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.installer,
+        extra: {'stage': _last.stage, 'message': _last.message},
+      );
     }
   }
 
@@ -134,7 +141,8 @@ class _StagePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isThisStage = last.stage == stage;
-    final isDone = !isThisStage &&
+    final isDone =
+        !isThisStage &&
         (stage == 'jre' && (last.stage == 'forge' || last.stage == 'done') ||
             stage == 'forge' && last.stage == 'done');
     final progress = isThisStage ? last.progress : (isDone ? 1.0 : 0.0);
@@ -158,7 +166,10 @@ class _StagePanel extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 label,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -166,7 +177,9 @@ class _StagePanel extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
-              value: isThisStage && progress > 0 ? progress : (isDone ? 1.0 : null),
+              value: isThisStage && progress > 0
+                  ? progress
+                  : (isDone ? 1.0 : null),
               minHeight: 4,
               backgroundColor: Colors.white12,
             ),
