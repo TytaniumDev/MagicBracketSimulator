@@ -86,7 +86,9 @@ jobs:
             "ASC_ISSUER_ID",
             "ASC_API_KEY_CONTENT",
             "ASC_API_KEY_IS_BASE64",
-            "GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET"
+            "GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET",
+            "SENTRY_DSN_WORKER",
+            "SENTRY_AUTH_TOKEN_WORKER"
           ]'
           echo "$SECRETS" | jq -r --argjson keys "$KEYS" '
             to_entries[] | select(.key | IN($keys[])) | .value
@@ -141,11 +143,28 @@ jobs:
           ASC_API_KEY_IS_BASE64: ${{ env.ASC_API_KEY_IS_BASE64 }}
           # Forwarded into Flutter via --dart-define inside the Fastfile.
           GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
+          # Sentry build-time wiring. Empty SENTRY_DSN_WORKER → no-op.
+          SENTRY_DSN_WORKER: ${{ env.SENTRY_DSN_WORKER }}
+          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          # GITHUB_SHA is already set by Actions; surface it explicitly
+          # so the Fastfile's ENV.fetch is reading the canonical value.
+          GITHUB_SHA: ${{ github.sha }}
           FASTLANE_HIDE_CHANGELOG: "1"
           FASTLANE_SKIP_UPDATE_CHECK: "1"
           FASTLANE_DISABLE_COLORS: "1"
           GIT_SSH_COMMAND: "ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
         run: bundle exec fastlane release
+
+      - name: Upload Dart debug symbols to Sentry (macOS)
+        if: env.SENTRY_AUTH_TOKEN_WORKER != ''
+        working-directory: worker_flutter
+        env:
+          SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN_WORKER }}
+          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+        # continue-on-error: a Sentry outage shouldn't fail the release.
+        # Symbols can be re-uploaded later from build/debug-info/macos.
+        continue-on-error: true
+        run: dart run sentry_dart_plugin
 
       - name: Sign zip for Sparkle (EdDSA)
         env:
@@ -203,22 +222,37 @@ jobs:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
 
-      - name: Load Desktop OAuth secret from Doppler
+      - name: Load secrets from Doppler
         shell: bash
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_BLINKBREAK_TOKEN }}
         run: |
-          # Single-value fetch keeps the surface narrow — the Windows
-          # build only needs the OAuth client_secret. Mask it before
-          # forwarding to subsequent steps via GITHUB_ENV.
-          SECRET=$(doppler secrets get GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET \
-            --project blinkbreak --config prd --plain)
+          # OAuth client_secret is required; Sentry DSN + auth token are
+          # optional (empty DSN → SDK no-ops; empty token → plugin
+          # upload step is skipped).
+          fetch_secret() {
+            doppler secrets get "$1" --project blinkbreak --config prd --plain
+          }
+          SECRET=$(fetch_secret GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET)
           if [ -z "$SECRET" ]; then
             echo "::error::Doppler returned empty GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET" >&2
             exit 1
           fi
           echo "::add-mask::$SECRET"
           echo "GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=$SECRET" >> "$GITHUB_ENV"
+
+          # || true so a missing Sentry secret (e.g. before the operator
+          # has populated Doppler) doesn't fail the release.
+          SENTRY_DSN=$(fetch_secret SENTRY_DSN_WORKER || true)
+          if [ -n "$SENTRY_DSN" ]; then
+            echo "::add-mask::$SENTRY_DSN"
+            echo "SENTRY_DSN_WORKER=$SENTRY_DSN" >> "$GITHUB_ENV"
+          fi
+          SENTRY_TOKEN=$(fetch_secret SENTRY_AUTH_TOKEN_WORKER || true)
+          if [ -n "$SENTRY_TOKEN" ]; then
+            echo "::add-mask::$SENTRY_TOKEN"
+            echo "SENTRY_AUTH_TOKEN_WORKER=$SENTRY_TOKEN" >> "$GITHUB_ENV"
+          fi
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -238,9 +272,28 @@ jobs:
           # OAuth token endpoint requires client_secret even with PKCE,
           # so it gets baked into the binary at build time.
           DESKTOP_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
+          # Sentry build-time inputs. SENTRY_DSN_WORKER may be empty (no-op).
+          SENTRY_DSN: ${{ env.SENTRY_DSN_WORKER }}
+          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          GIT_SHA: ${{ github.sha }}
         run: |
           flutter build windows --release \
-            --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET="$DESKTOP_SECRET"
+            --obfuscate \
+            --split-debug-info=build/debug-info/windows \
+            --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET="$DESKTOP_SECRET" \
+            --dart-define=SENTRY_DSN="$SENTRY_DSN" \
+            --dart-define=SENTRY_RELEASE="$SENTRY_RELEASE" \
+            --dart-define=GIT_SHA="$GIT_SHA"
+
+      - name: Upload Dart debug symbols to Sentry (Windows)
+        if: env.SENTRY_AUTH_TOKEN_WORKER != ''
+        working-directory: worker_flutter
+        shell: bash
+        env:
+          SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN_WORKER }}
+          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+        continue-on-error: true
+        run: dart run sentry_dart_plugin
 
       - name: Package release as zip
         working-directory: worker_flutter

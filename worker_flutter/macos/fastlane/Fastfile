@@ -107,9 +107,23 @@ platform :mac do
       # Doppler (blinkbreak/prd); local dev needs to set the same
       # env var, e.g. via `doppler run -- bundle exec fastlane release`.
       desktop_secret = ENV.fetch("GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET", "")
+      # Sentry DSN + release metadata travel the same path. Empty
+      # values turn Sentry into a no-op, which is what local builds
+      # want until an operator wires the new project up.
+      sentry_dsn     = ENV.fetch("SENTRY_DSN_WORKER", "")
+      sentry_release = ENV.fetch("SENTRY_RELEASE", "worker_flutter@dev")
+      git_sha        = ENV.fetch("GITHUB_SHA", "local")
+      # `--obfuscate --split-debug-info` is what makes sentry_dart_plugin
+      # useful: it strips Dart symbols from the binary and writes the
+      # symbol map to build/debug-info/macos. The plugin then uploads
+      # that map so stack traces in Sentry deobfuscate.
       sh(
         "cd ../.. && flutter build macos --release " \
-        "--dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=#{desktop_secret.shellescape}"
+        "--obfuscate --split-debug-info=build/debug-info/macos " \
+        "--dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=#{desktop_secret.shellescape} " \
+        "--dart-define=SENTRY_DSN=#{sentry_dsn.shellescape} " \
+        "--dart-define=SENTRY_RELEASE=#{sentry_release.shellescape} " \
+        "--dart-define=GIT_SHA=#{git_sha.shellescape}"
       )
     end
 
