@@ -44,7 +44,8 @@ class ScryfallClient {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            'User-Agent': 'MagicBracketSimulator (https://github.com/)',
+            'User-Agent':
+                'MagicBracketSimulator (https://github.com/TytaniumDev/MagicBracketSimulator)',
           },
           body: body,
         );

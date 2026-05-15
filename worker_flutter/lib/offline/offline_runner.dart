@@ -216,17 +216,10 @@ class OfflineRunner {
     return null;
   }
 
-  /// Look up a user-created deck by display name. Falls through to
-  /// null when nothing matches — the caller surfaces a clearer error
-  /// than Drift's "no row" exception.
-  Future<DeckRow?> _findUserDeckByName(String name) async {
-    final rows =
-        await (db.select(db.decks)
-              ..where((d) => d.name.equals(name))
-              ..limit(1))
-            .get();
-    return rows.isEmpty ? null : rows.first;
-  }
+  /// Look up a user-created deck by display name. Uniqueness is
+  /// enforced by `OfflineDeckRepo._save`, so at most one user deck
+  /// matches a given name.
+  Future<DeckRow?> _findUserDeckByName(String name) => db.deckByName(name);
 
   /// Materialize a user-created deck's `.dck` content to
   /// `config.decksPath/<filename>` if it isn't already on disk.

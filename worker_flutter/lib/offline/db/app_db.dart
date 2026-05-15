@@ -130,6 +130,13 @@ class AppDb extends _$AppDb {
     decks,
   )..where((d) => d.filename.equals(filename))).getSingleOrNull();
 
+  /// First user deck that matches [name]. Used by the offline runner
+  /// to resolve job-declared deck names. The repo enforces name
+  /// uniqueness at insert time, so callers can trust there is at most
+  /// one match.
+  Future<DeckRow?> deckByName(String name) =>
+      (select(decks)..where((d) => d.name.equals(name))).getSingleOrNull();
+
   Future<void> deleteDeckById(int id) async {
     await (delete(decks)..where((d) => d.id.equals(id))).go();
   }

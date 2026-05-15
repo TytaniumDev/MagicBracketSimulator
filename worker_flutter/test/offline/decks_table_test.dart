@@ -58,4 +58,12 @@ void main() {
       throwsA(isA<Exception>()),
     );
   });
+
+  test('deckByName returns the matching row', () async {
+    await db.insertDeck(name: 'My Atraxa', filename: 'a.dck', dckContent: 'x');
+    final found = await db.deckByName('My Atraxa');
+    expect(found, isNotNull);
+    expect(found!.filename, 'a.dck');
+    expect(await db.deckByName('Missing'), isNull);
+  });
 }

@@ -114,6 +114,24 @@ class OfflineDeckRepo implements DeckRepo {
   }
 
   Future<DeckRecord> _save(ParsedDeck parsed, {String? link}) async {
+    // Name uniqueness — the offline runner resolves declared deck
+    // names against bundled precons first, then this table. A
+    // duplicate name with a precon (precon wins) or another user
+    // deck (nondeterministic pick) silently sends the wrong deck to
+    // Forge, so reject up front with a clear message instead.
+    final precons = await _loadPrecons();
+    if (precons.any((p) => p.displayName == parsed.name)) {
+      throw StateError(
+        'A bundled precon is already named "${parsed.name}". '
+        'Rename the deck and try again.',
+      );
+    }
+    if (await db.deckByName(parsed.name) != null) {
+      throw StateError(
+        'You already have a deck named "${parsed.name}". '
+        'Rename the deck and try again.',
+      );
+    }
     final filename = await _uniqueFilename(parsed.name);
     final dck = toDck(parsed);
     final cardNames = <String>[for (final c in parsed.commanders) c.name];
