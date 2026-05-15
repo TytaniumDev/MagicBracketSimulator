@@ -14,6 +14,7 @@ import 'config.dart';
 import 'firebase_options.dart';
 import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
+import 'launch/auto_start_service.dart';
 import 'launch/mode_picker_screen.dart';
 import 'offline/offline_app.dart';
 import 'ui/dashboard.dart';
@@ -103,6 +104,12 @@ Future<void> _appMain() async {
   // old build see the update offer on next launch and again every hour
   // while running. Non-fatal on failure (e.g. offline / appcast 404).
   await _initAutoUpdater();
+
+  // Launch-at-login: pre-resolve the package metadata so the
+  // Dashboard toggle's first read is a no-op rather than a multi-
+  // hundred-ms wait while package_info_plus inspects the binary.
+  // Non-fatal; toggle UI surfaces its own errors if setup couldn't.
+  await AutoStartService.setup();
 
   // Persistent worker identity + paths.
   final config = await WorkerConfig.loadOrInit();

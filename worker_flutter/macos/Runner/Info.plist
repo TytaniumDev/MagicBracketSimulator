@@ -22,20 +22,52 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<!-- LSUIElement set to false for MVP. With LSUIElement=true the
-	     tray_manager and cloud_firestore native plugins crash on init
-	     (uncaught NSExceptions bypass Dart try/catch). Plan 3 fixes this
-	     by either signing the app properly or using Swift AppDelegate
-	     glue to set up the menu-bar status item without involving
-	     tray_manager during cold boot. -->
+	<!-- LSUIElement=true makes this a menu-bar-only app: no Dock icon,
+	     no Cmd-Tab entry. The tray icon is the user's primary affordance
+	     for re-opening the dashboard window after closing it.
+
+	     Historical note: under earlier code the combination of
+	     LSUIElement=true + tray_manager + cloud_firestore crashed on
+	     cold boot (uncaught NSExceptions bypassed Dart try/catch). The
+	     things that made that path safe now:
+	       1. firebase_auth.instance access is deferred until inside the
+	          Flutter event loop (see lib/auth/auth_service.dart). Even
+	          though tray init happens before `runApp` (lib/main.dart:238),
+	          tray init itself doesn't touch FirebaseAuth, so the
+	          documented native crash condition no longer materializes.
+	       2. The app is now Developer-ID signed + notarized, so the
+	          OS doesn't kill it for unsigned-plugin-load violations.
+	     Revert to <false/> here if menu-bar mode regresses. -->
 	<key>LSUIElement</key>
-	<false/>
+	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+
+	<!-- OAuth callback URL scheme. firebase_auth's macOS plugin drives
+	     the Google Sign-In flow via `ASWebAuthenticationSession`, which
+	     hands the OAuth response back through a custom URL scheme equal
+	     to the REVERSED_CLIENT_ID of the iOS-type OAuth client. Without
+	     this entry the callback can't route back into the app and the
+	     signInWithProvider call returns null — surfaced to the user as
+	     [firebase_auth/null-error]. Must match GoogleService-Info.plist's
+	     REVERSED_CLIENT_ID exactly. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.tytaniumdev.magicBracketSimulator</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.14286370379-echlkrv6jd11ep7341irajaf8anr3f1i</string>
+			</array>
+		</dict>
+	</array>
 
 	<!-- Sparkle (auto_updater) configuration.
 	     SUFeedURL points at the appcast in this repo on `main`. Updates

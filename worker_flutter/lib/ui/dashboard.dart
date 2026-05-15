@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../cloud/cloud_jobs_screen.dart';
 import '../cloud/cloud_leaderboard_screen.dart';
 import '../config.dart';
+import '../launch/auto_start_service.dart';
 import '../models/sim.dart';
 import '../worker/worker_engine.dart';
 
@@ -77,6 +78,8 @@ class _DashboardState extends State<Dashboard> {
                         onChanged: (v) => setState(() => _capacity = v),
                         onChangeEnd: (v) => widget.config.setCapacity(v),
                       ),
+                      const SizedBox(height: 8),
+                      const _LaunchAtLoginRow(),
                       const SizedBox(height: 16),
                       Expanded(
                         child: _ActiveSimsList(active: state.activeSims),
@@ -211,6 +214,86 @@ class _CapacityRow extends StatelessWidget {
               textAlign: TextAlign.right,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Toggle that flips the OS's "launch this app at login" registration.
+/// macOS writes a Login Items entry; Windows drops a .lnk shortcut in
+/// the user's Startup folder. Both are reversible — flipping back
+/// removes the entry.
+class _LaunchAtLoginRow extends StatefulWidget {
+  const _LaunchAtLoginRow();
+
+  @override
+  State<_LaunchAtLoginRow> createState() => _LaunchAtLoginRowState();
+}
+
+class _LaunchAtLoginRowState extends State<_LaunchAtLoginRow> {
+  bool? _enabled;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final on = await AutoStartService.isEnabled();
+    if (!mounted) return;
+    setState(() => _enabled = on);
+  }
+
+  Future<void> _toggle(bool next) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      if (next) {
+        await AutoStartService.enable();
+      } else {
+        await AutoStartService.disable();
+      }
+      if (!mounted) return;
+      setState(() => _enabled = next);
+    } catch (e, st) {
+      // Re-read the actual state — the OS may have rejected the
+      // change (sandbox restriction, locked Startup folder, etc.).
+      // Log the underlying error so the diagnostic file shows what
+      // actually went wrong; without it the user just sees the
+      // switch silently flip back to its prior value.
+      debugPrint('AutoStart toggle failed: $e\n$st');
+      await _refresh();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Launch at login',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          if (_enabled == null)
+            const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Switch(value: _enabled!, onChanged: _busy ? null : _toggle),
         ],
       ),
     );
