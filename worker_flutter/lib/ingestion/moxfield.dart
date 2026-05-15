@@ -65,13 +65,20 @@ class MoxfieldClient {
   }
 
   Future<void> _throttle() async {
-    final elapsed = DateTime.now().difference(_lastRequest).inMilliseconds;
-    if (elapsed < _kMinIntervalMs) {
-      await Future<void>.delayed(
-        Duration(milliseconds: _kMinIntervalMs - elapsed),
-      );
+    // Reserve the next slot BEFORE awaiting. A concurrent caller
+    // landing in the suspension window then sees the reservation and
+    // queues behind it, instead of racing for the same one-second
+    // bucket and double-firing.
+    final now = DateTime.now();
+    final earliest = _lastRequest.add(
+      const Duration(milliseconds: _kMinIntervalMs),
+    );
+    final start = now.isAfter(earliest) ? now : earliest;
+    _lastRequest = start;
+    final wait = start.difference(now);
+    if (wait > Duration.zero) {
+      await Future<void>.delayed(wait);
     }
-    _lastRequest = DateTime.now();
   }
 
   List<DeckCard> _boardCards(dynamic raw, {required bool isCommander}) {

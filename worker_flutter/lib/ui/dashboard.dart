@@ -134,7 +134,14 @@ class _DashboardState extends State<Dashboard> {
                 if (job is Map && job['id'] != null) {
                   return job['id'].toString();
                 }
-                return resp['id']?.toString() ?? '';
+                final id = resp['id']?.toString();
+                if (id == null || id.isEmpty) {
+                  throw StateError(
+                    'POST /api/jobs returned no job id; '
+                    'the API response shape may have changed.',
+                  );
+                }
+                return id;
               },
               onJobCreated: (ctx, jobId) {
                 Navigator.of(ctx).push(
