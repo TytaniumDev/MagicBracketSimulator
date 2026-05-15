@@ -102,7 +102,15 @@ platform :mac do
     # mid-build. The brew-installed pod expects to run in a vanilla
     # env where its own Ruby + gems resolve cleanly.
     Bundler.with_unbundled_env do
-      sh("cd ../.. && flutter build macos --release")
+      # GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET is forwarded into the
+      # binary at build time via --dart-define. CI gets it from
+      # Doppler (blinkbreak/prd); local dev needs to set the same
+      # env var, e.g. via `doppler run -- bundle exec fastlane release`.
+      desktop_secret = ENV.fetch("GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET", "")
+      sh(
+        "cd ../.. && flutter build macos --release " \
+        "--dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=#{desktop_secret.shellescape}"
+      )
     end
 
     # Resolve the .app path absolutely — fastlane's CWD when executing

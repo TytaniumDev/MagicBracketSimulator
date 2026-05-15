@@ -102,15 +102,26 @@ class AuthService {
       debugPrint('AuthService.signIn() — using PKCE + signInWithCredential');
     }
     final clientId = DefaultFirebaseOptions.desktopOAuthClientId;
+    final clientSecret = DefaultFirebaseOptions.desktopOAuthClientSecret;
     if (clientId == 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID') {
       throw StateError(
-        'Windows sign-in needs a Desktop OAuth Client ID. Create one at '
+        'Desktop sign-in needs a Desktop OAuth Client ID. Create one at '
         'https://console.cloud.google.com/apis/credentials (Application '
         'type: Desktop app) and paste it into '
         'DefaultFirebaseOptions.desktopOAuthClientId in firebase_options.dart.',
       );
     }
-    final oauth = _desktopOAuth ?? DesktopOAuth(clientId: clientId);
+    if (clientSecret.isEmpty) {
+      throw StateError(
+        'Desktop sign-in is missing GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET. '
+        'Release builds load it from Doppler (blinkbreak/prd). For local '
+        'dev, run: doppler run --project blinkbreak --config prd -- sh -c '
+        "'flutter run -d macos --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=\$GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET'",
+      );
+    }
+    final oauth =
+        _desktopOAuth ??
+        DesktopOAuth(clientId: clientId, clientSecret: clientSecret);
     final tokens = await oauth.signIn();
     final cred = GoogleAuthProvider.credential(
       idToken: tokens.idToken,
