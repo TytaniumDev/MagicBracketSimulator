@@ -36,21 +36,41 @@ class DefaultFirebaseOptions {
   static const _iosClientId =
       '14286370379-echlkrv6jd11ep7341irajaf8anr3f1i.apps.googleusercontent.com';
 
-  /// OAuth client ID for the Windows/Linux PKCE flow. Must be a
-  /// "Desktop application" client in GCP Console — distinct from the
-  /// iOS-type client above, which doesn't accept `http://127.0.0.1`
-  /// loopback redirect URIs. PKCE-only, no client secret.
-  ///
-  /// Create the client at:
-  ///   https://console.cloud.google.com/apis/credentials
-  ///   → + CREATE CREDENTIALS → OAuth client ID → Application type:
-  ///     Desktop app → Name: "Magic Bracket worker (desktop OAuth)"
-  ///
-  /// Until this constant is replaced with the real value, the Windows
-  /// AuthGate will surface a clearly-named "missing client id" error
-  /// instead of attempting (and silently failing) the OAuth dance.
+  /// OAuth client ID for the macOS + Windows + Linux PKCE flow. A
+  /// "Desktop application" type client in GCP Console — distinct
+  /// from the iOS-type client above, which doesn't accept
+  /// `http://127.0.0.1` loopback redirect URIs.
   static const desktopOAuthClientId =
       '14286370379-t5bj865bhp31k4170lh03cre44b7r1e2.apps.googleusercontent.com';
+
+  /// Google requires a `client_secret` on Desktop OAuth token
+  /// exchange even when PKCE is in use — RFC 7636 was meant to make
+  /// this optional but Google enforces it for the Desktop client
+  /// type. Per their own "Native App" docs, the value isn't a real
+  /// secret; it just identifies the app to Google. Safe to embed in
+  /// the binary.
+  ///
+  /// If this is empty the macOS/Windows AuthGate sees
+  /// "client_secret is missing" from Google's token endpoint.
+  /// Google requires `client_secret` on Desktop OAuth token exchange
+  /// even with PKCE — RFC 7636 was meant to make this optional, but
+  /// Google enforces it on Desktop client types. Per Google's own
+  /// "Native App" docs the value isn't a real secret, but we keep
+  /// it out of source anyway. Release builds + local dev inject it
+  /// via `--dart-define` from Doppler (`blinkbreak/prd`, key
+  /// `GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET`).
+  ///
+  /// Local dev:
+  ///   doppler run --project blinkbreak --config prd -- sh -c \
+  ///     'flutter run -d macos \
+  ///        --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET="$GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET"'
+  ///
+  /// Empty here → AuthService surfaces a clearly-named error before
+  /// touching Google's token endpoint (which would otherwise return
+  /// the cryptic 400 "client_secret is missing").
+  static const desktopOAuthClientSecret = String.fromEnvironment(
+    'GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET',
+  );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDevBZ3RfwNtrqW7L2ICgmV8QkvoDDvNbc',

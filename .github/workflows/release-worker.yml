@@ -85,7 +85,8 @@ jobs:
             "ASC_KEY_ID",
             "ASC_ISSUER_ID",
             "ASC_API_KEY_CONTENT",
-            "ASC_API_KEY_IS_BASE64"
+            "ASC_API_KEY_IS_BASE64",
+            "GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET"
           ]'
           echo "$SECRETS" | jq -r --argjson keys "$KEYS" '
             to_entries[] | select(.key | IN($keys[])) | .value
@@ -138,6 +139,8 @@ jobs:
           ASC_ISSUER_ID: ${{ env.ASC_ISSUER_ID }}
           ASC_API_KEY_CONTENT: ${{ env.ASC_API_KEY_CONTENT }}
           ASC_API_KEY_IS_BASE64: ${{ env.ASC_API_KEY_IS_BASE64 }}
+          # Forwarded into Flutter via --dart-define inside the Fastfile.
+          GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
           FASTLANE_HIDE_CHANGELOG: "1"
           FASTLANE_SKIP_UPDATE_CHECK: "1"
           FASTLANE_DISABLE_COLORS: "1"
@@ -197,6 +200,26 @@ jobs:
           rm -f worker_flutter/pubspec.yaml.bak
           grep '^version:' worker_flutter/pubspec.yaml
 
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Load Desktop OAuth secret from Doppler
+        shell: bash
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_BLINKBREAK_TOKEN }}
+        run: |
+          # Single-value fetch keeps the surface narrow — the Windows
+          # build only needs the OAuth client_secret. Mask it before
+          # forwarding to subsequent steps via GITHUB_ENV.
+          SECRET=$(doppler secrets get GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET \
+            --project blinkbreak --config prd --plain)
+          if [ -z "$SECRET" ]; then
+            echo "::error::Doppler returned empty GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET" >&2
+            exit 1
+          fi
+          echo "::add-mask::$SECRET"
+          echo "GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=$SECRET" >> "$GITHUB_ENV"
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -209,7 +232,15 @@ jobs:
 
       - name: flutter build windows --release
         working-directory: worker_flutter
-        run: flutter build windows --release
+        shell: bash
+        env:
+          # Loaded from Doppler by the earlier step. Google's Desktop
+          # OAuth token endpoint requires client_secret even with PKCE,
+          # so it gets baked into the binary at build time.
+          DESKTOP_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
+        run: |
+          flutter build windows --release \
+            --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET="$DESKTOP_SECRET"
 
       - name: Package release as zip
         working-directory: worker_flutter

@@ -26,20 +26,23 @@ class AuthedUser {
 /// Two code paths depending on platform — both produce a Firebase
 /// session usable by `cloud_firestore`:
 ///
-///   - **macOS / iOS / Android / Web**: use
+///   - **iOS / Android / Web**: use
 ///     `FirebaseAuth.signInWithProvider(GoogleAuthProvider())`. The
-///     native SDKs drive the OAuth UI (ASWebAuthenticationSession on
-///     macOS, system popup on web, etc.).
-///   - **Windows / Linux**: `signInWithProvider` throws
-///     "Operation is not supported on non-mobile systems" on those
-///     ports, so we drive an OAuth2 PKCE flow ourselves via
+///     native SDKs drive the OAuth UI (system popup on web, native
+///     OAuth on mobile).
+///   - **macOS / Windows / Linux**: `signInWithProvider` is mobile-
+///     only on every desktop port of firebase_auth — macOS throws
+///     "signInWithProvider is not supported on the MacOS platform"
+///     and Windows throws "Operation is not supported on non-mobile
+///     systems". We drive an OAuth2 PKCE flow ourselves via
 ///     `DesktopOAuth`, then hand the resulting Google `idToken` /
 ///     `accessToken` to `signInWithCredential`. The session that
 ///     lands in firebase_auth is identical to the native flow's.
 ///
-/// firebase_auth's `signInWithCredential` IS supported on Windows
-/// (unlike the all-in-one `signInWithProvider`), so cloud_firestore
-/// reads `request.auth.uid` on subsequent writes either way.
+/// firebase_auth's `signInWithCredential` IS supported on every
+/// desktop target (unlike the all-in-one `signInWithProvider`), so
+/// cloud_firestore reads `request.auth.uid` on subsequent writes
+/// either way.
 class AuthService {
   AuthService({FirebaseAuth? firebaseAuth, DesktopOAuth? desktopOAuth})
     : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
@@ -72,12 +75,12 @@ class AuthService {
   /// browser/tab without completing sign-in. Other errors bubble.
   Future<AuthedUser> signIn() async {
     if (_useDesktopFlow) {
-      return _signInWindows();
+      return _signInDesktop();
     }
     return _signInNative();
   }
 
-  /// Native `signInWithProvider` — macOS, iOS, Android, Web.
+  /// Native `signInWithProvider` — iOS, Android, Web.
   Future<AuthedUser> _signInNative() async {
     if (kDebugMode) {
       debugPrint('AuthService.signIn() — using signInWithProvider');
@@ -95,22 +98,34 @@ class AuthService {
     return _requireUser(credential);
   }
 
-  /// Windows / Linux: drive OAuth2 PKCE ourselves, then exchange the
-  /// resulting Google idToken for a Firebase session.
-  Future<AuthedUser> _signInWindows() async {
+  /// Desktop (macOS / Windows / Linux): drive OAuth2 PKCE ourselves,
+  /// then exchange the resulting Google idToken for a Firebase
+  /// session via `signInWithCredential`.
+  Future<AuthedUser> _signInDesktop() async {
     if (kDebugMode) {
       debugPrint('AuthService.signIn() — using PKCE + signInWithCredential');
     }
     final clientId = DefaultFirebaseOptions.desktopOAuthClientId;
+    final clientSecret = DefaultFirebaseOptions.desktopOAuthClientSecret;
     if (clientId == 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID') {
       throw StateError(
-        'Windows sign-in needs a Desktop OAuth Client ID. Create one at '
+        'Desktop sign-in needs a Desktop OAuth Client ID. Create one at '
         'https://console.cloud.google.com/apis/credentials (Application '
         'type: Desktop app) and paste it into '
         'DefaultFirebaseOptions.desktopOAuthClientId in firebase_options.dart.',
       );
     }
-    final oauth = _desktopOAuth ?? DesktopOAuth(clientId: clientId);
+    if (clientSecret.isEmpty) {
+      throw StateError(
+        'Desktop sign-in is missing GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET. '
+        'Release builds load it from Doppler (blinkbreak/prd). For local '
+        'dev, run: doppler run --project blinkbreak --config prd -- sh -c '
+        "'flutter run -d macos --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=\$GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET'",
+      );
+    }
+    final oauth =
+        _desktopOAuth ??
+        DesktopOAuth(clientId: clientId, clientSecret: clientSecret);
     final tokens = await oauth.signIn();
     final cred = GoogleAuthProvider.credential(
       idToken: tokens.idToken,
@@ -142,15 +157,17 @@ class AuthService {
 
   Future<void> signOut() => _firebaseAuth.signOut();
 
-  /// Sign-in is supported on every desktop target — macOS via the
-  /// native provider, Windows/Linux via the PKCE fallback.
+  /// Sign-in is supported on every desktop target via the PKCE flow.
   static bool get isSupported => true;
 
-  /// Whether to take the desktop PKCE path. We can't ship `Platform.is*`
-  /// from a const context, so the check is a runtime read.
+  /// Whether to take the desktop PKCE path. firebase_auth's
+  /// `signInWithProvider` is mobile-only — it throws on macOS
+  /// ("signInWithProvider is not supported on the MacOS platform")
+  /// AND on Windows ("Operation is not supported on non-mobile
+  /// systems"), so every desktop target needs the PKCE fallback.
   bool get _useDesktopFlow {
     if (kIsWeb) return false;
-    return Platform.isWindows || Platform.isLinux;
+    return Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   }
 
   /// firebase_auth's "user closed the tab / cancelled" errors come
