@@ -108,3 +108,49 @@ export async function cancelRecoveryCheck(jobId: string): Promise<void> {
     console.warn(`[CloudTasks] Failed to cancel recovery for job ${jobId}:`, err);
   }
 }
+
+/**
+ * Schedule the next lease-sweep run. Used by the sweep endpoint to
+ * self-reschedule after each invocation. Default delay 12 seconds —
+ * combined with the 15s lease window, this gives ~27s worst-case
+ * detection of a crashed Flutter worker.
+ *
+ * Lets Cloud Tasks auto-generate a unique task name (no `name` field).
+ * A fixed name is unusable here because Cloud Tasks tombstones names for
+ * ~1 hour after a task fires, which would break the self-reschedule chain
+ * on every cycle. Manual invocations of the sweep endpoint can therefore
+ * create parallel scheduling chains, but the sweep is idempotent, so the
+ * duplicate work is benign.
+ */
+export async function scheduleLeaseSweep(delaySeconds = 12): Promise<void> {
+  const client = getClient();
+  const queuePath = getQueuePath();
+  if (!client || !queuePath) return;
+
+  const apiBase = getApiBaseUrl();
+
+  try {
+    const scheduleTime = new Date(Date.now() + delaySeconds * 1000);
+
+    await client.createTask({
+      parent: queuePath,
+      task: {
+        scheduleTime: {
+          seconds: Math.floor(scheduleTime.getTime() / 1000),
+          nanos: 0,
+        },
+        httpRequest: {
+          httpMethod: 'POST',
+          url: `${apiBase}/api/admin/sweep-leases`,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.WORKER_SECRET ? { 'X-Worker-Secret': process.env.WORKER_SECRET } : {}),
+          },
+          body: Buffer.from(JSON.stringify({})).toString('base64'),
+        },
+      },
+    });
+  } catch (err: unknown) {
+    console.error('[CloudTasks] lease-sweep schedule failed:', err);
+  }
+}

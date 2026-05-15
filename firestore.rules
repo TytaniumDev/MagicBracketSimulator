@@ -16,17 +16,50 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Jobs: public reads, writes require allowlist
+    // Jobs: public reads, writes require allowlist.
+    // SOLO-DEV (Plan 2): the unauthenticated Flutter desktop worker bumps
+    // `completedSimCount` on the parent job after each successful sim. The
+    // unauth path is scoped to: only that one field may change AND the new
+    // value must be exactly the existing value + 1 (matches the worker's
+    // `FieldValue.increment(1)` call). Tighten to `if isAllowedUser()` once
+    // Plan 3 enables auth in the worker.
     match /jobs/{jobId} {
       allow read: if true;
       allow create: if isAllowedUser();
-      allow update: if isAllowedUser();
+      allow update: if isAllowedUser()
+        || (request.auth == null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedSimCount'])
+            && request.resource.data.completedSimCount is int
+            && request.resource.data.completedSimCount == resource.data.completedSimCount + 1);
       allow delete: if isAllowedUser();
 
-      // Per-simulation tracking subcollection: public reads
+      // Per-simulation tracking subcollection: public reads.
+      // SOLO-DEV (Plan 2): Flutter worker claims PENDING sims and writes
+      // terminal results without auth. Creates/deletes still go through the
+      // API. Unauth updates are constrained to two specific state
+      // transitions, each with an exact allowed-field-set:
+      //   1. Claim: PENDING -> RUNNING (worker assigns itself).
+      //   2. Terminal: RUNNING -> COMPLETED or FAILED (worker reports result).
+      // Tighten once Plan 3 enables auth.
       match /simulations/{simId} {
         allow read: if true;
-        allow write: if isAllowedUser();
+        allow create, delete: if isAllowedUser();
+        allow update: if isAllowedUser()
+          || (request.auth == null && (
+               // 1. Claim: PENDING -> RUNNING. Worker assigns workerId/Name/startedAt/updatedAt.
+               (resource.data.state == 'PENDING'
+                && request.resource.data.state == 'RUNNING'
+                && request.resource.data.diff(resource.data).affectedKeys()
+                     .hasOnly(['state', 'workerId', 'workerName', 'startedAt', 'updatedAt']))
+            || // 2. Terminal: RUNNING -> COMPLETED/FAILED. Result fields optional.
+               (resource.data.state == 'RUNNING'
+                && (request.resource.data.state == 'COMPLETED'
+                    || request.resource.data.state == 'FAILED')
+                && request.resource.data.diff(resource.data).affectedKeys()
+                     .hasOnly(['state', 'completedAt', 'durationMs', 'updatedAt',
+                               'winners', 'winner', 'winningTurns', 'winningTurn',
+                               'errorMessage']))
+          ));
       }
     }
 
@@ -46,10 +79,45 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Workers collection: public reads (worker status), writes via Admin SDK only
+    // Workers collection: public reads (worker status).
+    // SOLO-DEV (Plan 2): the unauthenticated Flutter desktop worker writes its
+    // own status/lease doc (workerType == 'flutter'). Other writes go through
+    // Admin SDK. The unauth UPDATE branch:
+    //   - checks `resource.data.workerType` (the EXISTING doc) so an attacker
+    //     can't overwrite a Docker worker by smuggling `workerType: 'flutter'`
+    //     into the payload.
+    //   - constrains the affected field set so an attacker can't tamper with
+    //     a legitimate Flutter worker's lease/capacity/status fields. The
+    //     allowed list matches what `LeaseWriter._writeOnce()` and `stop()`
+    //     touch.
+    // Creates remain limited to flutter-typed docs (we accept that an attacker
+    // without auth can still create fake flutter-worker docs; mitigated only
+    // by Plan 3 auth). Tighten the unauth branch once Plan 3 enables auth.
     match /workers/{workerId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if isAllowedUser()
+        || (request.auth == null && request.resource.data.workerType == 'flutter');
+      allow update: if isAllowedUser()
+        || (request.auth == null
+            && resource.data.workerType == 'flutter'
+            && request.resource.data.workerType == 'flutter'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['workerName', 'workerType', 'status', 'capacity',
+                           'activeSimulations', 'uptimeMs', 'lastHeartbeat', 'lease']));
+      allow delete: if isAllowedUser();
+    }
+
+    // Allow `collectionGroup('simulations')` reads for the Flutter worker.
+    // Firestore looks up rules by the top-level path for collection-group
+    // queries, so the nested `match /jobs/{jobId}/simulations/{simId}`
+    // rule above doesn't apply to listener queries. Without this match,
+    // the Flutter worker's `where state == PENDING` listener silently
+    // returns empty and never picks up jobs.
+    //
+    // Reads only — actual write paths still flow through the nested
+    // rule's stricter state-transition checks.
+    match /{path=**}/simulations/{simId} {
+      allow read: if true;
     }
 
     // Catch-all: deny everything else not explicitly matched

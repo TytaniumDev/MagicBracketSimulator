@@ -1,0 +1,12 @@
+#include "../../Flutter/Flutter-Release.xcconfig"
+#include "Warnings.xcconfig"
+
+// Required by Apple's notarization service.
+//   - ENABLE_HARDENED_RUNTIME=YES: opts into Apple's hardened runtime. The
+//     specific entitlement allowances we need (JIT, unsigned executable memory,
+//     library validation disable) live in Runner/Release.entitlements.
+//   - OTHER_CODE_SIGN_FLAGS=--timestamp: makes codesign embed an RFC3161
+//     timestamp from Apple's timestamping server. Notarization rejects builds
+//     without it.
+ENABLE_HARDENED_RUNTIME = YES
+OTHER_CODE_SIGN_FLAGS = --timestamp

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string></string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<!-- LSUIElement=true makes this a menu-bar-only app: no Dock icon,
+	     no Cmd-Tab entry. The tray icon is the user's primary affordance
+	     for re-opening the dashboard window after closing it.
+
+	     Historical note: under earlier code the combination of
+	     LSUIElement=true + tray_manager + cloud_firestore crashed on
+	     cold boot (uncaught NSExceptions bypassed Dart try/catch). The
+	     things that made that path safe now:
+	       1. firebase_auth.instance access is deferred until inside the
+	          Flutter event loop (see lib/auth/auth_service.dart). Even
+	          though tray init happens before `runApp` (lib/main.dart:238),
+	          tray init itself doesn't touch FirebaseAuth, so the
+	          documented native crash condition no longer materializes.
+	       2. The app is now Developer-ID signed + notarized, so the
+	          OS doesn't kill it for unsigned-plugin-load violations.
+	     Revert to <false/> here if menu-bar mode regresses. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>$(PRODUCT_COPYRIGHT)</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+
+	<!-- OAuth callback URL scheme. firebase_auth's macOS plugin drives
+	     the Google Sign-In flow via `ASWebAuthenticationSession`, which
+	     hands the OAuth response back through a custom URL scheme equal
+	     to the REVERSED_CLIENT_ID of the iOS-type OAuth client. Without
+	     this entry the callback can't route back into the app and the
+	     signInWithProvider call returns null — surfaced to the user as
+	     [firebase_auth/null-error]. Must match GoogleService-Info.plist's
+	     REVERSED_CLIENT_ID exactly. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.tytaniumdev.magicBracketSimulator</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.14286370379-echlkrv6jd11ep7341irajaf8anr3f1i</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Sparkle (auto_updater) configuration.
+	     SUFeedURL points at the appcast in this repo on `main`. Updates
+	     are surfaced by Sparkle itself; the worker just calls
+	     checkForUpdates() at boot + every hour.
+
+	     SUEnableInstallerLauncherService=YES: required by Sparkle 2 when
+	     the host app has app-sandbox=NO (which is our case — see
+	     Release.entitlements).
+
+	     SUEnableAutomaticChecks=YES: lets Sparkle's scheduled-check
+	     timer run.
+
+	     SUPublicEDKey is the public half of the Ed25519 keypair the
+	     release workflow uses to sign each update zip. Without this,
+	     Sparkle 2 refuses to install updates whose appcast entry lacks
+	     `sparkle:edSignature`. The private half lives in the
+	     `SPARKLE_ED_PRIVATE_KEY` GitHub Actions secret; the matching
+	     local copy is in the macOS Keychain under account `mbs-prod`.
+
+	     ⚠️ Never rotate this without preparing a transition release:
+	     existing installs verify against THIS embedded public key, so a
+	     change here breaks update install for everyone on the prior
+	     version. See worker_flutter/macos/fastlane/SETUP.md. -->
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/worker_flutter/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>+IEgM5RRA9Fq9nlcBaBaZY1jrKAIYu+XT6uvbfAbCfY=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+</dict>
+</plist>

@@ -844,3 +844,44 @@ export async function deleteSimulations(jobId: string): Promise<void> {
   }
 }
 
+/**
+ * Atomically revert a sim from RUNNING → PENDING if and only if it is
+ * currently RUNNING and owned by expectedWorkerId. Returns true if the
+ * revert happened, false if the precondition was not met (sim already
+ * terminal, or claimed by a different worker, or otherwise no longer ours).
+ *
+ * The expectedWorkerId guard prevents double-revert if two sweep ticks
+ * race, and prevents touching sims that have already been re-claimed by
+ * a healthy worker.
+ */
+export async function revertSimToPending(
+  jobId: string,
+  simId: string,
+  expectedWorkerId: string,
+): Promise<boolean> {
+  const simRef = simulationsCollection(jobId).doc(simId);
+
+  return await firestore.runTransaction(async (tx) => {
+    const snap = await tx.get(simRef);
+    if (!snap.exists) return false;
+    const data = snap.data();
+    if (!data) return false;
+    if (data.state !== 'RUNNING') return false;
+    if (data.workerId !== expectedWorkerId) return false;
+
+    tx.update(simRef, {
+      state: 'PENDING',
+      workerId: FieldValue.delete(),
+      workerName: FieldValue.delete(),
+      startedAt: FieldValue.delete(),
+      completedAt: FieldValue.delete(),
+      durationMs: FieldValue.delete(),
+      errorMessage: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+      revertedAt: new Date().toISOString(),
+      revertReason: 'lease-expired',
+    });
+    return true;
+  });
+}
+
