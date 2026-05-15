@@ -142,15 +142,17 @@ class AuthService {
 
   Future<void> signOut() => _firebaseAuth.signOut();
 
-  /// Sign-in is supported on every desktop target — macOS via the
-  /// native provider, Windows/Linux via the PKCE fallback.
+  /// Sign-in is supported on every desktop target via the PKCE flow.
   static bool get isSupported => true;
 
-  /// Whether to take the desktop PKCE path. We can't ship `Platform.is*`
-  /// from a const context, so the check is a runtime read.
+  /// Whether to take the desktop PKCE path. firebase_auth's
+  /// `signInWithProvider` is mobile-only — it throws on macOS
+  /// ("signInWithProvider is not supported on the MacOS platform")
+  /// AND on Windows ("Operation is not supported on non-mobile
+  /// systems"), so every desktop target needs the PKCE fallback.
   bool get _useDesktopFlow {
     if (kIsWeb) return false;
-    return Platform.isWindows || Platform.isLinux;
+    return Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   }
 
   /// firebase_auth's "user closed the tab / cancelled" errors come
