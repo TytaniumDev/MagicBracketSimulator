@@ -7,6 +7,7 @@ import 'package:rxdart/subjects.dart';
 
 import '../config.dart';
 import '../models/sim.dart';
+import 'job_aggregator.dart';
 import 'lease_writer.dart';
 import 'log_uploader.dart';
 import 'sim_claim.dart';
@@ -78,6 +79,10 @@ class WorkerEngine {
        _logUploader = LogUploader(
          apiUrl: config.apiUrl,
          workerSecret: config.workerSecret,
+       ),
+       _jobAggregator = JobAggregator(
+         apiUrl: config.apiUrl,
+         workerSecret: config.workerSecret,
        );
 
   final WorkerConfig config;
@@ -86,6 +91,7 @@ class WorkerEngine {
   final LeaseWriter _leaseWriter;
   final SimClaimer _claimer;
   final LogUploader _logUploader;
+  final JobAggregator _jobAggregator;
 
   final _stateSubject = BehaviorSubject<EngineState>.seeded(
     EngineState.initial(),
@@ -225,6 +231,7 @@ class WorkerEngine {
             errorMessage: 'job ${sim.jobId} not found',
           ),
         );
+        unawaited(_jobAggregator.triggerIfDone(sim.jobId));
         return;
       }
 
@@ -247,6 +254,7 @@ class WorkerEngine {
             errorMessage: 'missing deck files: ${missingDecks.join(', ')}',
           ),
         );
+        unawaited(_jobAggregator.triggerIfDone(sim.jobId));
         return;
       }
 
@@ -265,6 +273,12 @@ class WorkerEngine {
           logText: result.logText,
         ),
       );
+
+      // Fast-path: ask the API to aggregate the parent job NOW if
+      // every sim is terminal. Without this the job sits in RUNNING
+      // until the 15-minute stale-sweeper picks it up — see
+      // `JobAggregator` docstring. Idempotent + non-fatal.
+      unawaited(_jobAggregator.triggerIfDone(sim.jobId));
 
       if (result.success) {
         _stateSubject.add(
@@ -285,6 +299,7 @@ class WorkerEngine {
           errorMessage: e.toString(),
         ),
       );
+      unawaited(_jobAggregator.triggerIfDone(sim.jobId));
     } finally {
       _semaphoreActive--;
       _cancelByComposite.remove(sim.compositeId);
