@@ -59,6 +59,14 @@ void main() {
     );
   });
 
+  test('name uniqueness is enforced at SQL level', () async {
+    await db.insertDeck(name: 'Same', filename: 'a.dck', dckContent: 'x');
+    expect(
+      () => db.insertDeck(name: 'Same', filename: 'b.dck', dckContent: 'y'),
+      throwsA(isA<Exception>()),
+    );
+  });
+
   test('deckByName returns the matching row', () async {
     await db.insertDeck(name: 'My Atraxa', filename: 'a.dck', dckContent: 'x');
     final found = await db.deckByName('My Atraxa');

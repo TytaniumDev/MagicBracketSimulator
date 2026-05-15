@@ -54,7 +54,11 @@ class Settings extends Table {
 @DataClassName('DeckRow')
 class Decks extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text()();
+  // Name is also unique. The offline runner resolves declared job
+  // decks by name; the repo's pre-insert check guards the happy
+  // path, but the SQL-level UNIQUE makes a race or external write
+  // physically impossible.
+  TextColumn get name => text().unique()();
   // Slugified filename incl. `.dck` — also the path under
   // `<config.decksPath>/` where the materialized deck lives.
   TextColumn get filename => text().unique()();

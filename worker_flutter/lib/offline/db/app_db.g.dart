@@ -1505,6 +1505,7 @@ class $DecksTable extends Decks with TableInfo<$DecksTable, DeckRow> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
   );
   static const VerificationMeta _filenameMeta = const VerificationMeta(
     'filename',

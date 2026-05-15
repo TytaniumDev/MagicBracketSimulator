@@ -31,13 +31,18 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   late int _capacity;
+  late final ApiClient _api;
   late final DeckRepo _deckRepo;
 
   @override
   void initState() {
     super.initState();
     _capacity = widget.config.maxCapacity;
-    _deckRepo = CloudDeckRepo(api: ApiClient(baseUrl: widget.config.apiUrl));
+    // Single ApiClient (and its underlying http.Client) for the
+    // dashboard's lifetime — allocating per-submission leaks socket
+    // resources in a long-running tray app.
+    _api = ApiClient(baseUrl: widget.config.apiUrl);
+    _deckRepo = CloudDeckRepo(api: _api);
   }
 
   @override
@@ -121,8 +126,7 @@ class _DashboardState extends State<Dashboard> {
             NewSimScreen(
               repo: _deckRepo,
               onStart: (decks, simCount) async {
-                final api = ApiClient(baseUrl: widget.config.apiUrl);
-                final resp = await api.postJson('/api/jobs', {
+                final resp = await _api.postJson('/api/jobs', {
                   'deckIds': decks.map((d) => d.id).toList(),
                   'simulations': simCount,
                 });
