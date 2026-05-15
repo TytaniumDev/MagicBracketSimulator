@@ -26,20 +26,23 @@ class AuthedUser {
 /// Two code paths depending on platform — both produce a Firebase
 /// session usable by `cloud_firestore`:
 ///
-///   - **macOS / iOS / Android / Web**: use
+///   - **iOS / Android / Web**: use
 ///     `FirebaseAuth.signInWithProvider(GoogleAuthProvider())`. The
-///     native SDKs drive the OAuth UI (ASWebAuthenticationSession on
-///     macOS, system popup on web, etc.).
-///   - **Windows / Linux**: `signInWithProvider` throws
-///     "Operation is not supported on non-mobile systems" on those
-///     ports, so we drive an OAuth2 PKCE flow ourselves via
+///     native SDKs drive the OAuth UI (system popup on web, native
+///     OAuth on mobile).
+///   - **macOS / Windows / Linux**: `signInWithProvider` is mobile-
+///     only on every desktop port of firebase_auth — macOS throws
+///     "signInWithProvider is not supported on the MacOS platform"
+///     and Windows throws "Operation is not supported on non-mobile
+///     systems". We drive an OAuth2 PKCE flow ourselves via
 ///     `DesktopOAuth`, then hand the resulting Google `idToken` /
 ///     `accessToken` to `signInWithCredential`. The session that
 ///     lands in firebase_auth is identical to the native flow's.
 ///
-/// firebase_auth's `signInWithCredential` IS supported on Windows
-/// (unlike the all-in-one `signInWithProvider`), so cloud_firestore
-/// reads `request.auth.uid` on subsequent writes either way.
+/// firebase_auth's `signInWithCredential` IS supported on every
+/// desktop target (unlike the all-in-one `signInWithProvider`), so
+/// cloud_firestore reads `request.auth.uid` on subsequent writes
+/// either way.
 class AuthService {
   AuthService({FirebaseAuth? firebaseAuth, DesktopOAuth? desktopOAuth})
     : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
@@ -72,12 +75,12 @@ class AuthService {
   /// browser/tab without completing sign-in. Other errors bubble.
   Future<AuthedUser> signIn() async {
     if (_useDesktopFlow) {
-      return _signInWindows();
+      return _signInDesktop();
     }
     return _signInNative();
   }
 
-  /// Native `signInWithProvider` — macOS, iOS, Android, Web.
+  /// Native `signInWithProvider` — iOS, Android, Web.
   Future<AuthedUser> _signInNative() async {
     if (kDebugMode) {
       debugPrint('AuthService.signIn() — using signInWithProvider');
@@ -95,9 +98,10 @@ class AuthService {
     return _requireUser(credential);
   }
 
-  /// Windows / Linux: drive OAuth2 PKCE ourselves, then exchange the
-  /// resulting Google idToken for a Firebase session.
-  Future<AuthedUser> _signInWindows() async {
+  /// Desktop (macOS / Windows / Linux): drive OAuth2 PKCE ourselves,
+  /// then exchange the resulting Google idToken for a Firebase
+  /// session via `signInWithCredential`.
+  Future<AuthedUser> _signInDesktop() async {
     if (kDebugMode) {
       debugPrint('AuthService.signIn() — using PKCE + signInWithCredential');
     }
