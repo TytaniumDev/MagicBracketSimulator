@@ -378,8 +378,11 @@ jobs:
   update-appcast:
     needs: [version, publish]
     runs-on: ubuntu-latest
+    # `contents: write` to push the side branch; `pull-requests: write`
+    # for `gh pr create` + `gh pr merge --auto`.
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -407,31 +410,38 @@ jobs:
             --build-number "$BUILD_NUMBER" \
             --enclosure-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/worker_flutter-macos.zip"
 
-      - name: Commit and push
+      # We can't push directly to `main` because branch protection
+      # requires PRs and required-status-checks. `bypass_pull_request_
+      # allowances` (the legacy mechanism for "let github-actions
+      # bypass") is org-only and not available on personal-account
+      # repos. The pattern used by release-please / Dependabot / etc.
+      # is to push to a side branch, open a PR, and enable auto-merge
+      # — that respects protection (CI runs, then GitHub merges) while
+      # keeping the release fully automatic. The appcast PR has zero
+      # code changes (just one XML file), so its CI run is ~30 seconds.
+      - name: Push branch, open PR, enable auto-merge
         env:
           TAG: ${{ needs.version.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet worker_flutter/appcast.xml; then
             echo "No appcast change to commit (script produced no diff)."
             exit 0
           fi
+          BRANCH="appcast/${TAG}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add worker_flutter/appcast.xml
-          git commit -m "chore(appcast): publish ${TAG} [skip ci]"
-          # Retry push to tolerate concurrent commits to main from other
-          # workflows. Build + notarize can run 30-45 minutes, so plenty
-          # of opportunity for main to move forward. On non-fast-forward,
-          # pull --rebase and try again. Cap at 5 attempts; if we're
-          # still racing after that, something else is wrong.
-          for attempt in 1 2 3 4 5; do
-            if git push origin main; then
-              echo "Pushed on attempt $attempt."
-              exit 0
-            fi
-            echo "Push attempt $attempt failed; rebasing on origin/main and retrying..."
-            git pull --rebase --autostash origin main
-          done
-          echo "::error::Failed to push appcast update after 5 attempts." >&2
-          exit 1
+          git commit -m "chore(appcast): publish ${TAG}"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(appcast): publish ${TAG}" \
+            --body "Auto-generated appcast update for ${TAG}. Will auto-merge once required checks pass."
+          # --squash so the appcast history stays linear (one commit per
+          # release on main, not "merge appcast/X.Y.Z + chore commit").
+          # --delete-branch cleans up the side branch on merge.
+          gh pr merge "$BRANCH" --auto --squash --delete-branch
