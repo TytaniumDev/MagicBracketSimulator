@@ -1,8 +1,9 @@
 name: Release magic-bracket-simulator
 
-# One workflow, two platform builds, one GitHub Release. The publish
-# step only fires if both builds succeed — there's no scenario where
-# macOS and Windows users see different "latest" versions.
+# One workflow, two platform builds, one GitHub Release, one appcast
+# update. Runs on every merge to main (auto-bumped patch), on a manual
+# `workflow_dispatch`, or on a hand-pushed `worker-v*` tag (for
+# deliberate minor/major bumps that should jump past the auto-bump).
 
 on:
   workflow_dispatch:
@@ -21,37 +22,44 @@ jobs:
     outputs:
       version: ${{ steps.compute.outputs.version }}
       tag: ${{ steps.compute.outputs.tag }}
-      name: ${{ steps.compute.outputs.name }}
-      prerelease: ${{ steps.compute.outputs.prerelease }}
-      sha_short: ${{ steps.compute.outputs.sha_short }}
+      build_number: ${{ steps.compute.outputs.build_number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
-      - name: Compute version + release tag
+          fetch-depth: 0  # need full history so `git tag --list` sees everything
+
+      - name: Compute version + tag
         id: compute
         env:
-          BUILD_NUM: ${{ github.run_number }}
           REF: ${{ github.ref }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
+          BUILD_NUM: ${{ github.run_number }}
         run: |
-          SHA_SHORT="${SHA:0:7}"
-          BASE=$(awk '/^version:/{print $2}' worker_flutter/pubspec.yaml \
-            | cut -d'+' -f1)
-          NEW="${BASE}+${BUILD_NUM}"
-          echo "version=${NEW}" >> "$GITHUB_OUTPUT"
-          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
-          if [[ "${REF}" == refs/tags/* ]]; then
-            echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "name=${REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          if [[ "${REF}" == refs/tags/worker-v* ]]; then
+            # Tag-push trigger: use the ref name verbatim, skip computation.
+            TAG="${REF#refs/tags/}"
+            VERSION="${TAG#worker-v}"
           else
-            echo "tag=build-${SHA_SHORT}" >> "$GITHUB_OUTPUT"
-            echo "name=Build ${BUILD_NUM} (${SHA_SHORT})" >> "$GITHUB_OUTPUT"
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            # main-push or workflow_dispatch: read pubspec + latest tag,
+            # compute the next version, and tag the current commit.
+            PUBSPEC_MM=$(awk -F'[ .+]' '/^version:/{print $2"."$3}' worker_flutter/pubspec.yaml)
+            LATEST_TAG=$(git tag --list 'worker-v*' --sort=-v:refname | head -1 || true)
+            VERSION=$(python3 .github/scripts/compute_worker_version.py \
+              --pubspec-major-minor "$PUBSPEC_MM" \
+              --latest-tag "$LATEST_TAG")
+            TAG="worker-v${VERSION}"
+
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
           fi
+
+          echo "version=${VERSION}"              >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"                      >> "$GITHUB_OUTPUT"
+          echo "build_number=${BUILD_NUM}"       >> "$GITHUB_OUTPUT"
 
   build-macos:
     needs: version
@@ -60,14 +68,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Bump pubspec version
-        env:
-          NEW_VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          sed -i.bak "s/^version: .*/version: ${NEW_VERSION}/" worker_flutter/pubspec.yaml
-          rm -f worker_flutter/pubspec.yaml.bak
-          grep '^version:' worker_flutter/pubspec.yaml
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
@@ -141,14 +143,13 @@ jobs:
           ASC_ISSUER_ID: ${{ env.ASC_ISSUER_ID }}
           ASC_API_KEY_CONTENT: ${{ env.ASC_API_KEY_CONTENT }}
           ASC_API_KEY_IS_BASE64: ${{ env.ASC_API_KEY_IS_BASE64 }}
-          # Forwarded into Flutter via --dart-define inside the Fastfile.
           GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
-          # Sentry build-time wiring. Empty SENTRY_DSN_WORKER → no-op.
           SENTRY_DSN_WORKER: ${{ env.SENTRY_DSN_WORKER }}
           SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
-          # GITHUB_SHA is already set by Actions; surface it explicitly
-          # so the Fastfile's ENV.fetch is reading the canonical value.
           GITHUB_SHA: ${{ github.sha }}
+          # New: drive --build-name / --build-number from the version job.
+          BUILD_NAME: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
           FASTLANE_HIDE_CHANGELOG: "1"
           FASTLANE_SKIP_UPDATE_CHECK: "1"
           FASTLANE_DISABLE_COLORS: "1"
@@ -161,8 +162,6 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN_WORKER }}
           SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
-        # continue-on-error: a Sentry outage shouldn't fail the release.
-        # Symbols can be re-uploaded later from build/debug-info/macos.
         continue-on-error: true
         run: dart run sentry_dart_plugin
 
@@ -209,15 +208,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Bump pubspec version
-        shell: bash
-        env:
-          NEW_VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          sed -i.bak "s/^version: .*/version: ${NEW_VERSION}/" worker_flutter/pubspec.yaml
-          rm -f worker_flutter/pubspec.yaml.bak
-          grep '^version:' worker_flutter/pubspec.yaml
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v3
@@ -227,9 +219,6 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_BLINKBREAK_TOKEN }}
         run: |
-          # OAuth client_secret is required; Sentry DSN + auth token are
-          # optional (empty DSN → SDK no-ops; empty token → plugin
-          # upload step is skipped).
           fetch_secret() {
             doppler secrets get "$1" --project blinkbreak --config prd --plain
           }
@@ -241,8 +230,6 @@ jobs:
           echo "::add-mask::$SECRET"
           echo "GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=$SECRET" >> "$GITHUB_ENV"
 
-          # || true so a missing Sentry secret (e.g. before the operator
-          # has populated Doppler) doesn't fail the release.
           SENTRY_DSN=$(fetch_secret SENTRY_DSN_WORKER || true)
           if [ -n "$SENTRY_DSN" ]; then
             echo "::add-mask::$SENTRY_DSN"
@@ -268,18 +255,18 @@ jobs:
         working-directory: worker_flutter
         shell: bash
         env:
-          # Loaded from Doppler by the earlier step. Google's Desktop
-          # OAuth token endpoint requires client_secret even with PKCE,
-          # so it gets baked into the binary at build time.
           DESKTOP_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
-          # Sentry build-time inputs. SENTRY_DSN_WORKER may be empty (no-op).
           SENTRY_DSN: ${{ env.SENTRY_DSN_WORKER }}
           SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
           GIT_SHA: ${{ github.sha }}
+          BUILD_NAME: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
         run: |
           flutter build windows --release \
             --obfuscate \
             --split-debug-info=build/debug-info/windows \
+            --build-name="$BUILD_NAME" \
+            --build-number="$BUILD_NUMBER" \
             --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET="$DESKTOP_SECRET" \
             --dart-define=SENTRY_DSN="$SENTRY_DSN" \
             --dart-define=SENTRY_RELEASE="$SENTRY_RELEASE" \
@@ -370,11 +357,56 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
-          name: ${{ needs.version.outputs.name }}
-          prerelease: ${{ needs.version.outputs.prerelease }}
+          name: ${{ needs.version.outputs.tag }}
           files: |
             artifacts/macos/worker_flutter-macos.zip
             artifacts/macos/sparkle-manifest.json
             artifacts/windows/worker_flutter-windows.zip
             artifacts/windows/sparkle-manifest-windows.json
           fail_on_unmatched_files: true
+
+  update-appcast:
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: artifacts/macos
+
+      - name: Prepend appcast item
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          python3 .github/scripts/prepend_appcast_item.py \
+            --appcast worker_flutter/appcast.xml \
+            --manifest artifacts/macos/sparkle-manifest.json \
+            --version "$VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --enclosure-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/worker_flutter-macos.zip"
+
+      - name: Commit and push
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet worker_flutter/appcast.xml; then
+            echo "No appcast change to commit (script produced no diff)."
+            exit 0
+          fi
+          git add worker_flutter/appcast.xml
+          git commit -m "chore(appcast): publish ${TAG} [skip ci]"
+          git push origin main
