@@ -411,6 +411,7 @@ jobs:
         env:
           TAG: ${{ needs.version.outputs.tag }}
         run: |
+          set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet worker_flutter/appcast.xml; then
@@ -419,4 +420,18 @@ jobs:
           fi
           git add worker_flutter/appcast.xml
           git commit -m "chore(appcast): publish ${TAG} [skip ci]"
-          git push origin main
+          # Retry push to tolerate concurrent commits to main from other
+          # workflows. Build + notarize can run 30-45 minutes, so plenty
+          # of opportunity for main to move forward. On non-fast-forward,
+          # pull --rebase and try again. Cap at 5 attempts; if we're
+          # still racing after that, something else is wrong.
+          for attempt in 1 2 3 4 5; do
+            if git push origin main; then
+              echo "Pushed on attempt $attempt."
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; rebasing on origin/main and retrying..."
+            git pull --rebase --autostash origin main
+          done
+          echo "::error::Failed to push appcast update after 5 attempts." >&2
+          exit 1

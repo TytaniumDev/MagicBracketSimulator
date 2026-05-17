@@ -5,31 +5,17 @@
   Fetched at runtime from this file on `main`:
     https://raw.githubusercontent.com/TytaniumDev/MagicBracketSimulator/main/worker_flutter/appcast.xml
 
-  Each release adds an <item> below the most recent. Sparkle picks the
-  highest sparkle:version and offers it as the update.
+  This file is updated automatically by .github/workflows/release-worker.yml
+  on every release. On each main push the workflow:
+    1. Auto-tags a `worker-v*` version (bumps patch).
+    2. Builds + signs + notarizes the macOS app, signs the Windows zip.
+    3. Publishes the GitHub Release with the signed artifacts.
+    4. Prepends a new <item> to this file (with the EdDSA signature
+       pulled from the build's sparkle-manifest.json) and commits the
+       change back to main.
 
-  Release flow (manual for now):
-    1. Tag a new `worker-v*` commit. CI signs + notarizes + attaches the
-       zip AND a `sparkle-manifest.json` containing the EdDSA signature
-       to the GitHub Release.
-    2. Download `sparkle-manifest.json` from the release — copy the
-       `edSignature` and `length` fields.
-    3. Add a new <item> block above the v0.1.0 entry with:
-         - sparkle:version       = build number, monotonic (e.g. 2, 3, ...)
-         - sparkle:shortVersionString = display version (e.g. "0.2.0")
-         - enclosure url         = GitHub Release download URL
-         - enclosure length      = byte size (from manifest)
-         - enclosure sparkle:edSignature = EdDSA signature (from manifest)
-         - pubDate               = RFC 822 date
-    4. Commit + push to `main`. Existing installs notice within ~1 hour.
-
-  Without `sparkle:edSignature`, Sparkle 2 refuses to install the update
-  (the host app has `SUPublicEDKey` in Info.plist). The CI release step
-  fails loudly if SPARKLE_ED_PRIVATE_KEY is unset to prevent producing
-  unsignable releases.
-
-  Automating the appcast.xml update in CI is in the TODO list — see
-  worker_flutter/macos/fastlane/SETUP.md.
+  Sparkle picks the highest sparkle:version and offers it as the update.
+  The host app's SUPublicEDKey in Info.plist verifies every signature.
 -->
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
@@ -37,9 +23,12 @@
     <description>Desktop worker for the Magic Bracket Simulator project.</description>
     <language>en</language>
 
-    <!-- Windows (WinSparkle) — entries get added once the first Windows
-         release is tagged. Until DSA-signing is wired into CI (see
-         macos/fastlane/SETUP.md → "Auto-update flow"), WinSparkle will
-         detect Windows updates but refuse to install them. -->
+    <!-- Windows (WinSparkle) — separate entries for Windows updates
+         will land here once the Windows update flow is verified
+         end-to-end. The Windows zip is signed (DSA) on every release
+         and attached to the GitHub Release as
+         `worker_flutter-windows.zip`, but adding Windows <item> entries
+         to this feed is deferred until a Windows install is confirmed
+         to install + relaunch cleanly via WinSparkle. -->
   </channel>
 </rss>
