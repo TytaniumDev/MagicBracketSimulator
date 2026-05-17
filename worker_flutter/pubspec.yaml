@@ -1,7 +1,13 @@
 name: worker_flutter
 description: "Magic Bracket Simulator desktop worker (macOS)."
 publish_to: 'none'
-version: 0.1.0+1
+# MAJOR.MINOR (`0.2`) is read by .github/workflows/release-worker.yml
+# to drive the next release version — CI bumps the PATCH automatically
+# from the most recent `worker-v*` git tag. Bump MAJOR or MINOR here
+# when you want the next release to start a new line (e.g. 0.3.0).
+# The `+1` build number is cosmetic; CI overrides it with the workflow
+# run number via `--build-number`.
+version: 0.2.0+1
 
 environment:
   sdk: ^3.11.5
