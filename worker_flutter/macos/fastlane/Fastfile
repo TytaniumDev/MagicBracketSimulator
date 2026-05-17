@@ -113,13 +113,27 @@ platform :mac do
       sentry_dsn     = ENV.fetch("SENTRY_DSN_WORKER", "")
       sentry_release = ENV.fetch("SENTRY_RELEASE", "worker_flutter@dev")
       git_sha        = ENV.fetch("GITHUB_SHA", "local")
+      # BUILD_NAME + BUILD_NUMBER come from the release-worker.yml `version`
+      # job. Required for CI builds (the workflow always sets them); for
+      # local `bundle exec fastlane release` invocations they fall back to
+      # whatever pubspec.yaml says, matching the historical behavior.
+      build_name   = ENV.fetch("BUILD_NAME", "")
+      build_number = ENV.fetch("BUILD_NUMBER", "")
+      version_flags = ""
+      unless build_name.empty?
+        version_flags += " --build-name=#{build_name.shellescape}"
+      end
+      unless build_number.empty?
+        version_flags += " --build-number=#{build_number.shellescape}"
+      end
       # `--obfuscate --split-debug-info` is what makes sentry_dart_plugin
       # useful: it strips Dart symbols from the binary and writes the
       # symbol map to build/debug-info/macos. The plugin then uploads
       # that map so stack traces in Sentry deobfuscate.
       sh(
         "cd ../.. && flutter build macos --release " \
-        "--obfuscate --split-debug-info=build/debug-info/macos " \
+        "--obfuscate --split-debug-info=build/debug-info/macos" \
+        "#{version_flags} " \
         "--dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=#{desktop_secret.shellescape} " \
         "--dart-define=SENTRY_DSN=#{sentry_dsn.shellescape} " \
         "--dart-define=SENTRY_RELEASE=#{sentry_release.shellescape} " \
