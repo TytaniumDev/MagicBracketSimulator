@@ -16,6 +16,16 @@ on:
 permissions:
   contents: write
 
+# Serialize release runs so two near-simultaneous main pushes (or a
+# manual workflow_dispatch fired while a main-push run is mid-flight)
+# can't race on the `git tag $TAG && git push origin $TAG` step. We
+# explicitly use `cancel-in-progress: false` so an in-flight release
+# always finishes — cancelling halfway would leave a tag pushed without
+# a corresponding GitHub Release.
+concurrency:
+  group: release-worker
+  cancel-in-progress: false
+
 jobs:
   version:
     runs-on: ubuntu-latest
