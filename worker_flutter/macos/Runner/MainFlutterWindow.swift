@@ -160,9 +160,13 @@ class MainFlutterWindow: NSWindow {
     // Index 0 is "About <AppName>" in the Flutter-generated XIB. Slot
     // the new item + a separator immediately after it so the layout
     // matches the macOS HIG convention (About / Check for Updates /
-    // separator / Settings / Services / …).
-    appMenu.insertItem(item, at: 1)
-    appMenu.insertItem(NSMenuItem.separator(), at: 2)
+    // separator / Settings / Services / …). `min(numberOfItems, …)`
+    // is defensive against a future MainMenu.xib rewrite that ships
+    // with an empty app menu — `insertItem(at:)` would crash on an
+    // out-of-range index, but clamping keeps it valid even then.
+    let itemIndex = min(appMenu.numberOfItems, 1)
+    appMenu.insertItem(item, at: itemIndex)
+    appMenu.insertItem(NSMenuItem.separator(), at: min(appMenu.numberOfItems, itemIndex + 1))
   }
 
   @objc private func handleCheckForUpdates(_ sender: Any?) {
