@@ -72,14 +72,16 @@ export async function cleanupOrphanedContainers(): Promise<void> {
     }
     const names = output.split('\n').filter(Boolean);
     log.info('Startup cleanup: removing orphaned sim containers', { count: names.length });
-    for (const name of names) {
-      try {
-        await execDockerCommand(['rm', '-f', name]);
-        console.log(`  Removed: ${name}`);
-      } catch (err) {
-        console.warn(`  Warning: failed to remove ${name}:`, err instanceof Error ? err.message : err);
-      }
-    }
+    await Promise.allSettled(
+      names.map(async (name) => {
+        try {
+          await execDockerCommand(['rm', '-f', '--', name]);
+          console.log(`  Removed: ${name}`);
+        } catch (err) {
+          console.warn(`  Warning: failed to remove ${name}:`, err instanceof Error ? err.message : err);
+        }
+      })
+    );
   } catch (err) {
     console.warn('Startup cleanup: failed to list orphaned containers:', err instanceof Error ? err.message : err);
   }
@@ -115,7 +117,7 @@ export async function pruneDockerResources(): Promise<void> {
 async function getContainerState(containerName: string): Promise<'running' | 'stopped' | 'none'> {
   try {
     const status = await execDockerCommand([
-      'inspect', '--format', '{{.State.Running}}', containerName,
+      'inspect', '--format', '{{.State.Running}}', '--', containerName,
     ]);
     return status === 'true' ? 'running' : 'stopped';
   } catch {
@@ -134,6 +136,13 @@ export async function runSimulationContainer(
   deckContents: [string, string, string, string],
   signal?: AbortSignal,
 ): Promise<SimulationResult> {
+  if (
+    !/^[a-zA-Z0-9_-]+$/.test(jobId) || jobId.startsWith('-') ||
+    !/^[a-zA-Z0-9_-]+$/.test(simId) || simId.startsWith('-')
+  ) {
+    return { simId, index, exitCode: 1, durationMs: 0, logText: '', error: 'Invalid jobId or simId format' };
+  }
+
   const startTime = Date.now();
   const containerName = `sim-${jobId.slice(0, 8)}-${simId}`;
 
@@ -145,7 +154,7 @@ export async function runSimulationContainer(
   }
   if (existing === 'stopped') {
     console.log(`[${simId}] Removing stopped container ${containerName}`);
-    try { await execDockerCommand(['rm', '-f', containerName]); } catch { /* ignore */ }
+    try { await execDockerCommand(['rm', '-f', '--', containerName]); } catch { /* ignore */ }
   }
 
   const deckFilenames: [string, string, string, string] = ['deck_0.dck', 'deck_1.dck', 'deck_2.dck', 'deck_3.dck'];
@@ -241,7 +250,7 @@ export async function runSimulationContainer(
       // Kill the docker run process
       proc.kill('SIGTERM');
       // Also force-remove the container in case SIGTERM doesn't propagate
-      spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
+      spawn('docker', ['rm', '-f', '--', containerName], { stdio: 'ignore' });
     }, CONTAINER_TIMEOUT_MS);
 
     // AbortSignal: kill the container if the job is cancelled
@@ -250,7 +259,7 @@ export async function runSimulationContainer(
       cancelled = true;
       console.log(`[${simId}] Cancellation signal received, killing container ${containerName}...`);
       proc.kill('SIGTERM');
-      spawn('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
+      spawn('docker', ['rm', '-f', '--', containerName], { stdio: 'ignore' });
     };
     if (signal) {
       if (signal.aborted) {
