@@ -40,7 +40,7 @@ doppler run --project blinkbreak --config prd -- bundle exec fastlane release
 
 `release` does: `sync_certs` → flutter macos release build → codesign →
 notarize (waits on Apple ~1–3 min) → staple → zip. Output ends up at
-`worker_flutter/build/worker_flutter-macos.zip`.
+`worker_flutter/build/MagicBracketWorker-macos.zip`.
 
 ## Releasing via CI
 
@@ -88,9 +88,9 @@ The worker has two independent update channels:
      2. Tag the commit (e.g. `worker-v0.2.0`) and push. Both
         release workflows fire:
         - `release-worker-macos.yml` (macos-14): signs, notarizes,
-          attaches `worker_flutter-macos.zip`.
+          attaches `MagicBracketWorker-macos.zip`.
         - `release-worker-windows.yml` (windows-latest): builds
-          unsigned, attaches `worker_flutter-windows.zip`.
+          unsigned, attaches `MagicBracketWorker-windows.zip`.
      3. Add new `<item>` entries to `appcast.xml` (one per OS;
         `<sparkle:os>macos</sparkle:os>` or `windows`). Commit +
         push to `main`.
@@ -117,7 +117,7 @@ Setup (already done on 2026-05-13):
 
 Per release, the workflow:
 
-1. Builds, signs, and notarizes the .app → produces `worker_flutter-macos.zip`.
+1. Builds, signs, and notarizes the .app → produces `MagicBracketWorker-macos.zip`.
 2. Runs `sign_update --ed-key-file -` against the zip with the
    private key streamed via stdin → captures `sparkle:edSignature`
    and `length`.
@@ -191,7 +191,7 @@ Long-term fixes:
 
 Whichever route, the GitHub Actions step that signs is the same shape
 as macOS Fastlane: pull cert (typically a `.pfx` blob) from Doppler,
-run `signtool sign /f cert.pfx /p $PASS /t http://timestamp.digicert.com worker_flutter.exe` before zipping.
+run `signtool sign /f cert.pfx /p $PASS /t http://timestamp.digicert.com MagicBracketWorker.exe` before zipping.
 
 ## Known issue: fastlane G2 cert preference
 

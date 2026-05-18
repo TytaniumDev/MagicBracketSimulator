@@ -146,10 +146,10 @@ platform :mac do
     # checks against Ruby's CWD, so a relative path silently fails the
     # codesign loop below.
     flutter_root_abs = File.expand_path('../..', __dir__)
-    app_path_abs = File.join(flutter_root_abs, 'build/macos/Build/Products/Release/worker_flutter.app')
+    app_path_abs = File.join(flutter_root_abs, 'build/macos/Build/Products/Release/MagicBracketWorker.app')
     # Keep a relative form for the fastlane `notarize` action so its
     # internal logic stays unchanged.
-    app_path = "../build/macos/Build/Products/Release/worker_flutter.app"
+    app_path = "../build/macos/Build/Products/Release/MagicBracketWorker.app"
 
     # Sparkle's embedded Updater.app, Autoupdate binary, and XPCServices
     # don't pick up the Hardened Runtime + secure timestamp from Flutter's
@@ -196,10 +196,10 @@ platform :mac do
     # quirks don't bite.
     flutter_root = File.expand_path('../..', __dir__)
     release_dir = File.join(flutter_root, 'build/macos/Build/Products/Release')
-    zip_path = File.join(flutter_root, 'build/worker_flutter-macos.zip')
+    zip_path = File.join(flutter_root, 'build/MagicBracketWorker-macos.zip')
     FileUtils.rm_f(zip_path)
     Dir.chdir(release_dir) do
-      sh("zip -ry #{zip_path.shellescape} worker_flutter.app")
+      sh("zip -ry #{zip_path.shellescape} MagicBracketWorker.app")
     end
   end
 end

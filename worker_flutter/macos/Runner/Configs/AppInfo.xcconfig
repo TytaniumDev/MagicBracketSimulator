@@ -4,8 +4,10 @@
 // future. If not, the values below would default to using the project name when this becomes a
 // 'flutter create' template.
 
-// The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = worker_flutter
+// The application's name — also the .app bundle filename and the
+// CFBundleName surfaced by Finder/Dock. Window titles are set
+// explicitly in main.dart and don't read from this.
+PRODUCT_NAME = MagicBracketWorker
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.tytaniumdev.magicBracketSimulator

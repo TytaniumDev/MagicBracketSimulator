@@ -10,11 +10,11 @@ in offline mode with bundled precons — no cloud account needed.
 Grab the latest build for your platform from
 **https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest**.
 
-- **macOS** (`worker_flutter-macos.zip`): unzip, drag the .app to
-  /Applications. Developer-ID signed + notarized so Gatekeeper
-  accepts it cleanly.
-- **Windows** (`worker_flutter-windows.zip`): unzip, run
-  `worker_flutter.exe`. First launch trips SmartScreen ("Windows
+- **macOS** (`MagicBracketWorker-macos.zip`): unzip, drag
+  `MagicBracketWorker.app` to /Applications. Developer-ID signed +
+  notarized so Gatekeeper accepts it cleanly.
+- **Windows** (`MagicBracketWorker-windows.zip`): unzip, run
+  `MagicBracketWorker.exe`. First launch trips SmartScreen ("Windows
   protected your PC") — click *More info → Run anyway*. Subsequent
   launches go directly.
 

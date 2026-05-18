@@ -70,7 +70,7 @@ class PrependAppcastItemTest(unittest.TestCase):
                 "--build-number",
                 "8",
                 "--enclosure-url",
-                "https://github.com/Org/Repo/releases/download/worker-v0.2.1/worker_flutter-macos.zip",
+                "https://github.com/Org/Repo/releases/download/worker-v0.2.1/MagicBracketWorker-macos.zip",
                 *extra_args,
             ],
             capture_output=True,
@@ -103,7 +103,7 @@ class PrependAppcastItemTest(unittest.TestCase):
         self.run_script()
         text = self.appcast.read_text()
         self.assertIn(
-            'url="https://github.com/Org/Repo/releases/download/worker-v0.2.1/worker_flutter-macos.zip"',
+            'url="https://github.com/Org/Repo/releases/download/worker-v0.2.1/MagicBracketWorker-macos.zip"',
             text,
         )
 
