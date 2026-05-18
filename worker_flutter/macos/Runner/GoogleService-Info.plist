@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>14286370379-lfs99gcgmrv03rhpbijdev0bfd2r5u6s.apps.googleusercontent.com</string>
+	<string>14286370379-echlkrv6jd11ep7341irajaf8anr3f1i.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.14286370379-lfs99gcgmrv03rhpbijdev0bfd2r5u6s</string>
+	<string>com.googleusercontent.apps.14286370379-echlkrv6jd11ep7341irajaf8anr3f1i</string>
 	<key>API_KEY</key>
 	<string>AIzaSyDevBZ3RfwNtrqW7L2ICgmV8QkvoDDvNbc</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.tytaniumdev.workerFlutter</string>
+	<string>com.tytaniumdev.magicBracketSimulator</string>
 	<key>PROJECT_ID</key>
 	<string>magic-bracket-simulator</string>
 	<key>STORAGE_BUCKET</key>

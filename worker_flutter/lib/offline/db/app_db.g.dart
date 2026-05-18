@@ -1479,17 +1479,537 @@ class SettingsCompanion extends UpdateCompanion<Setting> {
   }
 }
 
+class $DecksTable extends Decks with TableInfo<$DecksTable, DeckRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DecksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _filenameMeta = const VerificationMeta(
+    'filename',
+  );
+  @override
+  late final GeneratedColumn<String> filename = GeneratedColumn<String>(
+    'filename',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _dckContentMeta = const VerificationMeta(
+    'dckContent',
+  );
+  @override
+  late final GeneratedColumn<String> dckContent = GeneratedColumn<String>(
+    'dck_content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorIdentityMeta = const VerificationMeta(
+    'colorIdentity',
+  );
+  @override
+  late final GeneratedColumn<String> colorIdentity = GeneratedColumn<String>(
+    'color_identity',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _linkMeta = const VerificationMeta('link');
+  @override
+  late final GeneratedColumn<String> link = GeneratedColumn<String>(
+    'link',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _primaryCommanderMeta = const VerificationMeta(
+    'primaryCommander',
+  );
+  @override
+  late final GeneratedColumn<String> primaryCommander = GeneratedColumn<String>(
+    'primary_commander',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    filename,
+    dckContent,
+    colorIdentity,
+    link,
+    primaryCommander,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'decks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DeckRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('filename')) {
+      context.handle(
+        _filenameMeta,
+        filename.isAcceptableOrUnknown(data['filename']!, _filenameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filenameMeta);
+    }
+    if (data.containsKey('dck_content')) {
+      context.handle(
+        _dckContentMeta,
+        dckContent.isAcceptableOrUnknown(data['dck_content']!, _dckContentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dckContentMeta);
+    }
+    if (data.containsKey('color_identity')) {
+      context.handle(
+        _colorIdentityMeta,
+        colorIdentity.isAcceptableOrUnknown(
+          data['color_identity']!,
+          _colorIdentityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('link')) {
+      context.handle(
+        _linkMeta,
+        link.isAcceptableOrUnknown(data['link']!, _linkMeta),
+      );
+    }
+    if (data.containsKey('primary_commander')) {
+      context.handle(
+        _primaryCommanderMeta,
+        primaryCommander.isAcceptableOrUnknown(
+          data['primary_commander']!,
+          _primaryCommanderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DeckRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DeckRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      filename: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}filename'],
+      )!,
+      dckContent: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dck_content'],
+      )!,
+      colorIdentity: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}color_identity'],
+      ),
+      link: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}link'],
+      ),
+      primaryCommander: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}primary_commander'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DecksTable createAlias(String alias) {
+    return $DecksTable(attachedDatabase, alias);
+  }
+}
+
+class DeckRow extends DataClass implements Insertable<DeckRow> {
+  final int id;
+  final String name;
+  final String filename;
+  final String dckContent;
+  final String? colorIdentity;
+  final String? link;
+  final String? primaryCommander;
+  final DateTime createdAt;
+  const DeckRow({
+    required this.id,
+    required this.name,
+    required this.filename,
+    required this.dckContent,
+    this.colorIdentity,
+    this.link,
+    this.primaryCommander,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['filename'] = Variable<String>(filename);
+    map['dck_content'] = Variable<String>(dckContent);
+    if (!nullToAbsent || colorIdentity != null) {
+      map['color_identity'] = Variable<String>(colorIdentity);
+    }
+    if (!nullToAbsent || link != null) {
+      map['link'] = Variable<String>(link);
+    }
+    if (!nullToAbsent || primaryCommander != null) {
+      map['primary_commander'] = Variable<String>(primaryCommander);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  DecksCompanion toCompanion(bool nullToAbsent) {
+    return DecksCompanion(
+      id: Value(id),
+      name: Value(name),
+      filename: Value(filename),
+      dckContent: Value(dckContent),
+      colorIdentity: colorIdentity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorIdentity),
+      link: link == null && nullToAbsent ? const Value.absent() : Value(link),
+      primaryCommander: primaryCommander == null && nullToAbsent
+          ? const Value.absent()
+          : Value(primaryCommander),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory DeckRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DeckRow(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      filename: serializer.fromJson<String>(json['filename']),
+      dckContent: serializer.fromJson<String>(json['dckContent']),
+      colorIdentity: serializer.fromJson<String?>(json['colorIdentity']),
+      link: serializer.fromJson<String?>(json['link']),
+      primaryCommander: serializer.fromJson<String?>(json['primaryCommander']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'filename': serializer.toJson<String>(filename),
+      'dckContent': serializer.toJson<String>(dckContent),
+      'colorIdentity': serializer.toJson<String?>(colorIdentity),
+      'link': serializer.toJson<String?>(link),
+      'primaryCommander': serializer.toJson<String?>(primaryCommander),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  DeckRow copyWith({
+    int? id,
+    String? name,
+    String? filename,
+    String? dckContent,
+    Value<String?> colorIdentity = const Value.absent(),
+    Value<String?> link = const Value.absent(),
+    Value<String?> primaryCommander = const Value.absent(),
+    DateTime? createdAt,
+  }) => DeckRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    filename: filename ?? this.filename,
+    dckContent: dckContent ?? this.dckContent,
+    colorIdentity: colorIdentity.present
+        ? colorIdentity.value
+        : this.colorIdentity,
+    link: link.present ? link.value : this.link,
+    primaryCommander: primaryCommander.present
+        ? primaryCommander.value
+        : this.primaryCommander,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  DeckRow copyWithCompanion(DecksCompanion data) {
+    return DeckRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      filename: data.filename.present ? data.filename.value : this.filename,
+      dckContent: data.dckContent.present
+          ? data.dckContent.value
+          : this.dckContent,
+      colorIdentity: data.colorIdentity.present
+          ? data.colorIdentity.value
+          : this.colorIdentity,
+      link: data.link.present ? data.link.value : this.link,
+      primaryCommander: data.primaryCommander.present
+          ? data.primaryCommander.value
+          : this.primaryCommander,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DeckRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('filename: $filename, ')
+          ..write('dckContent: $dckContent, ')
+          ..write('colorIdentity: $colorIdentity, ')
+          ..write('link: $link, ')
+          ..write('primaryCommander: $primaryCommander, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    filename,
+    dckContent,
+    colorIdentity,
+    link,
+    primaryCommander,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DeckRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.filename == this.filename &&
+          other.dckContent == this.dckContent &&
+          other.colorIdentity == this.colorIdentity &&
+          other.link == this.link &&
+          other.primaryCommander == this.primaryCommander &&
+          other.createdAt == this.createdAt);
+}
+
+class DecksCompanion extends UpdateCompanion<DeckRow> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String> filename;
+  final Value<String> dckContent;
+  final Value<String?> colorIdentity;
+  final Value<String?> link;
+  final Value<String?> primaryCommander;
+  final Value<DateTime> createdAt;
+  const DecksCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.filename = const Value.absent(),
+    this.dckContent = const Value.absent(),
+    this.colorIdentity = const Value.absent(),
+    this.link = const Value.absent(),
+    this.primaryCommander = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  DecksCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required String filename,
+    required String dckContent,
+    this.colorIdentity = const Value.absent(),
+    this.link = const Value.absent(),
+    this.primaryCommander = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : name = Value(name),
+       filename = Value(filename),
+       dckContent = Value(dckContent);
+  static Insertable<DeckRow> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? filename,
+    Expression<String>? dckContent,
+    Expression<String>? colorIdentity,
+    Expression<String>? link,
+    Expression<String>? primaryCommander,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (filename != null) 'filename': filename,
+      if (dckContent != null) 'dck_content': dckContent,
+      if (colorIdentity != null) 'color_identity': colorIdentity,
+      if (link != null) 'link': link,
+      if (primaryCommander != null) 'primary_commander': primaryCommander,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  DecksCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? filename,
+    Value<String>? dckContent,
+    Value<String?>? colorIdentity,
+    Value<String?>? link,
+    Value<String?>? primaryCommander,
+    Value<DateTime>? createdAt,
+  }) {
+    return DecksCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      filename: filename ?? this.filename,
+      dckContent: dckContent ?? this.dckContent,
+      colorIdentity: colorIdentity ?? this.colorIdentity,
+      link: link ?? this.link,
+      primaryCommander: primaryCommander ?? this.primaryCommander,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (filename.present) {
+      map['filename'] = Variable<String>(filename.value);
+    }
+    if (dckContent.present) {
+      map['dck_content'] = Variable<String>(dckContent.value);
+    }
+    if (colorIdentity.present) {
+      map['color_identity'] = Variable<String>(colorIdentity.value);
+    }
+    if (link.present) {
+      map['link'] = Variable<String>(link.value);
+    }
+    if (primaryCommander.present) {
+      map['primary_commander'] = Variable<String>(primaryCommander.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DecksCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('filename: $filename, ')
+          ..write('dckContent: $dckContent, ')
+          ..write('colorIdentity: $colorIdentity, ')
+          ..write('link: $link, ')
+          ..write('primaryCommander: $primaryCommander, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDb extends GeneratedDatabase {
   _$AppDb(QueryExecutor e) : super(e);
   $AppDbManager get managers => $AppDbManager(this);
   late final $JobsTable jobs = $JobsTable(this);
   late final $SimsTable sims = $SimsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $DecksTable decks = $DecksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [jobs, sims, settings];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    jobs,
+    sims,
+    settings,
+    decks,
+  ];
 }
 
 typedef $$JobsTableCreateCompanionBuilder =
@@ -2435,6 +2955,254 @@ typedef $$SettingsTableProcessedTableManager =
       Setting,
       PrefetchHooks Function()
     >;
+typedef $$DecksTableCreateCompanionBuilder =
+    DecksCompanion Function({
+      Value<int> id,
+      required String name,
+      required String filename,
+      required String dckContent,
+      Value<String?> colorIdentity,
+      Value<String?> link,
+      Value<String?> primaryCommander,
+      Value<DateTime> createdAt,
+    });
+typedef $$DecksTableUpdateCompanionBuilder =
+    DecksCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> filename,
+      Value<String> dckContent,
+      Value<String?> colorIdentity,
+      Value<String?> link,
+      Value<String?> primaryCommander,
+      Value<DateTime> createdAt,
+    });
+
+class $$DecksTableFilterComposer extends Composer<_$AppDb, $DecksTable> {
+  $$DecksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filename => $composableBuilder(
+    column: $table.filename,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dckContent => $composableBuilder(
+    column: $table.dckContent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get colorIdentity => $composableBuilder(
+    column: $table.colorIdentity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get link => $composableBuilder(
+    column: $table.link,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get primaryCommander => $composableBuilder(
+    column: $table.primaryCommander,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DecksTableOrderingComposer extends Composer<_$AppDb, $DecksTable> {
+  $$DecksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filename => $composableBuilder(
+    column: $table.filename,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dckContent => $composableBuilder(
+    column: $table.dckContent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get colorIdentity => $composableBuilder(
+    column: $table.colorIdentity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get link => $composableBuilder(
+    column: $table.link,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get primaryCommander => $composableBuilder(
+    column: $table.primaryCommander,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DecksTableAnnotationComposer extends Composer<_$AppDb, $DecksTable> {
+  $$DecksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get filename =>
+      $composableBuilder(column: $table.filename, builder: (column) => column);
+
+  GeneratedColumn<String> get dckContent => $composableBuilder(
+    column: $table.dckContent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get colorIdentity => $composableBuilder(
+    column: $table.colorIdentity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get link =>
+      $composableBuilder(column: $table.link, builder: (column) => column);
+
+  GeneratedColumn<String> get primaryCommander => $composableBuilder(
+    column: $table.primaryCommander,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$DecksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDb,
+          $DecksTable,
+          DeckRow,
+          $$DecksTableFilterComposer,
+          $$DecksTableOrderingComposer,
+          $$DecksTableAnnotationComposer,
+          $$DecksTableCreateCompanionBuilder,
+          $$DecksTableUpdateCompanionBuilder,
+          (DeckRow, BaseReferences<_$AppDb, $DecksTable, DeckRow>),
+          DeckRow,
+          PrefetchHooks Function()
+        > {
+  $$DecksTableTableManager(_$AppDb db, $DecksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DecksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DecksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DecksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> filename = const Value.absent(),
+                Value<String> dckContent = const Value.absent(),
+                Value<String?> colorIdentity = const Value.absent(),
+                Value<String?> link = const Value.absent(),
+                Value<String?> primaryCommander = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => DecksCompanion(
+                id: id,
+                name: name,
+                filename: filename,
+                dckContent: dckContent,
+                colorIdentity: colorIdentity,
+                link: link,
+                primaryCommander: primaryCommander,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required String filename,
+                required String dckContent,
+                Value<String?> colorIdentity = const Value.absent(),
+                Value<String?> link = const Value.absent(),
+                Value<String?> primaryCommander = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => DecksCompanion.insert(
+                id: id,
+                name: name,
+                filename: filename,
+                dckContent: dckContent,
+                colorIdentity: colorIdentity,
+                link: link,
+                primaryCommander: primaryCommander,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DecksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDb,
+      $DecksTable,
+      DeckRow,
+      $$DecksTableFilterComposer,
+      $$DecksTableOrderingComposer,
+      $$DecksTableAnnotationComposer,
+      $$DecksTableCreateCompanionBuilder,
+      $$DecksTableUpdateCompanionBuilder,
+      (DeckRow, BaseReferences<_$AppDb, $DecksTable, DeckRow>),
+      DeckRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDbManager {
   final _$AppDb _db;
@@ -2443,4 +3211,6 @@ class $AppDbManager {
   $$SimsTableTableManager get sims => $$SimsTableTableManager(_db, _db.sims);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$DecksTableTableManager get decks =>
+      $$DecksTableTableManager(_db, _db.decks);
 }

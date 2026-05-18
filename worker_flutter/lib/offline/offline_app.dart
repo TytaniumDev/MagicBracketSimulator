@@ -6,9 +6,12 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../config.dart';
+import '../decks/decks_screen.dart';
+import '../decks/deck_repo.dart';
+import '../decks/offline_deck_repo.dart';
 import '../launch/mode_picker_screen.dart';
+import '../sims/new_sim_screen.dart';
 import 'db/app_db.dart';
-import 'deck_source.dart';
 import 'offline_runner.dart';
 
 /// Top-level offline-mode shell. Owns the AppDb + WorkerConfig and
@@ -70,9 +73,9 @@ class _OfflineAppState extends State<OfflineApp> {
   }
 }
 
-// ── Home: new run + history ──────────────────────────────────────
+// ── Home: tabbed History | Decks | New ───────────────────────────
 
-class _HomeScreen extends StatelessWidget {
+class _HomeScreen extends StatefulWidget {
   const _HomeScreen({
     required this.db,
     required this.runner,
@@ -86,86 +89,80 @@ class _HomeScreen extends StatelessWidget {
   final VoidCallback onSwitchMode;
 
   @override
+  State<_HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<_HomeScreen> {
+  late final DeckRepo _deckRepo;
+
+  @override
+  void initState() {
+    super.initState();
+    _deckRepo = OfflineDeckRepo(db: widget.db, config: widget.config);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Magic Bracket — Offline'),
-        backgroundColor: const Color(0xFF111827),
-        actions: [
-          IconButton(
-            tooltip: 'Switch to Cloud Sync',
-            icon: const Icon(Icons.cloud_sync_outlined),
-            onPressed: () async {
-              await clearRememberedLaunchMode();
-              onSwitchMode();
-            },
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Magic Bracket — Offline'),
+          backgroundColor: const Color(0xFF111827),
+          actions: [
+            IconButton(
+              tooltip: 'Switch to Cloud Sync',
+              icon: const Icon(Icons.cloud_sync_outlined),
+              onPressed: () async {
+                await clearRememberedLaunchMode();
+                widget.onSwitchMode();
+              },
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.history), text: 'History'),
+              Tab(icon: Icon(Icons.style_outlined), text: 'Decks'),
+              Tab(icon: Icon(Icons.play_arrow), text: 'New'),
+            ],
+            labelColor: Color(0xFF60A5FA),
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Color(0xFF60A5FA),
           ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        ),
+        body: TabBarView(
           children: [
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('New simulation run'),
-                onPressed: () => _startNewRun(context),
-              ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: _HistoryList(db: widget.db, runner: widget.runner),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              'Recent runs',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _HistoryList(db: db, runner: runner),
+            DecksScreen(repo: _deckRepo),
+            NewSimScreen(
+              repo: _deckRepo,
+              onStart: (decks, simCount) async {
+                final jobId = await widget.db.createJob(
+                  deckNames: decks.map((d) => d.name).toList(),
+                  simCount: simCount,
+                );
+                unawaited(widget.runner.run(jobId));
+                return jobId.toString();
+              },
+              onJobCreated: (ctx, jobId) {
+                final id = int.tryParse(jobId);
+                if (id == null) return;
+                Navigator.of(ctx).push(
+                  MaterialPageRoute(
+                    builder: (_) => _JobScreen(
+                      db: widget.db,
+                      runner: widget.runner,
+                      jobId: id,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<void> _startNewRun(BuildContext context) async {
-    final precons = await loadBundledPrecons(config.forgePath);
-    if (!context.mounted) return;
-    if (precons.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Only ${precons.length} precons found in ${config.forgePath}/res/Decks/Commander. Need at least 4.',
-          ),
-        ),
-      );
-      return;
-    }
-    final picked = await Navigator.of(context).push<List<PreconDeck>>(
-      MaterialPageRoute(builder: (_) => _DeckPickerScreen(precons: precons)),
-    );
-    if (picked == null || picked.length != 4) return;
-    if (!context.mounted) return;
-    final simCount = await Navigator.of(context).push<int>(
-      MaterialPageRoute(builder: (_) => _NewJobScreen(decks: picked)),
-    );
-    if (simCount == null || simCount <= 0) return;
-    final jobId = await db.createJob(
-      deckNames: picked.map((d) => d.displayName).toList(),
-      simCount: simCount,
-    );
-    // Fire-and-forget the run; the progress screen streams from the DB.
-    unawaited(runner.run(jobId));
-    if (!context.mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _JobScreen(db: db, runner: runner, jobId: jobId),
       ),
     );
   }
@@ -269,152 +266,6 @@ class _JobRow extends StatelessWidget {
             SizedBox(
               width: 60,
               child: LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Deck picker (multi-select 4) ─────────────────────────────────
-
-class _DeckPickerScreen extends StatefulWidget {
-  const _DeckPickerScreen({required this.precons});
-
-  final List<PreconDeck> precons;
-
-  @override
-  State<_DeckPickerScreen> createState() => _DeckPickerScreenState();
-}
-
-class _DeckPickerScreenState extends State<_DeckPickerScreen> {
-  final Set<String> _picked = {};
-  String _search = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = widget.precons
-        .where(
-          (d) => d.displayName.toLowerCase().contains(_search.toLowerCase()),
-        )
-        .toList(growable: false);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Pick 4 decks (${_picked.length}/4)'),
-        backgroundColor: const Color(0xFF111827),
-        actions: [
-          TextButton(
-            onPressed: _picked.length == 4
-                ? () {
-                    final result = widget.precons
-                        .where((d) => _picked.contains(d.displayName))
-                        .toList(growable: false);
-                    Navigator.of(context).pop(result);
-                  }
-                : null,
-            child: const Text('Next'),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'Search precons',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
-              onChanged: (v) => setState(() => _search = v),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: filtered.length,
-              itemBuilder: (context, i) {
-                final d = filtered[i];
-                final picked = _picked.contains(d.displayName);
-                return CheckboxListTile(
-                  value: picked,
-                  title: Text(d.displayName),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  onChanged: (v) {
-                    setState(() {
-                      if (v == true && _picked.length < 4) {
-                        _picked.add(d.displayName);
-                      } else {
-                        _picked.remove(d.displayName);
-                      }
-                    });
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── New job confirm (sim count) ──────────────────────────────────
-
-class _NewJobScreen extends StatefulWidget {
-  const _NewJobScreen({required this.decks});
-
-  final List<PreconDeck> decks;
-
-  @override
-  State<_NewJobScreen> createState() => _NewJobScreenState();
-}
-
-class _NewJobScreenState extends State<_NewJobScreen> {
-  int _sims = 10;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Confirm run'),
-        backgroundColor: const Color(0xFF111827),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Decks',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            const SizedBox(height: 6),
-            for (final d in widget.decks)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '• ${d.displayName}',
-                  style: const TextStyle(color: Colors.white, fontSize: 15),
-                ),
-              ),
-            const SizedBox(height: 24),
-            Text(
-              'Simulations: $_sims',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            Slider(
-              value: _sims.toDouble(),
-              min: 1,
-              max: 200,
-              divisions: 199,
-              label: '$_sims',
-              onChanged: (v) => setState(() => _sims = v.round()),
-            ),
-            const Spacer(),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(_sims),
-              child: const Text('Start'),
             ),
           ],
         ),

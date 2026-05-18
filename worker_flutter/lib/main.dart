@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'auth/auth_gate_screen.dart';
@@ -14,8 +15,11 @@ import 'config.dart';
 import 'firebase_options.dart';
 import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
+import 'launch/auto_start_service.dart';
 import 'launch/mode_picker_screen.dart';
 import 'offline/offline_app.dart';
+import 'sentry_setup.dart';
+import 'telemetry.dart';
 import 'ui/dashboard.dart';
 import 'ui/tray_setup.dart';
 import 'worker/worker_engine.dart';
@@ -35,22 +39,42 @@ import 'worker/worker_engine.dart';
 /// and hides instead of exiting — the engine keeps running.
 Future<void> main() async {
   await _initFileLogger();
-  WidgetsFlutterBinding.ensureInitialized();
   _log('main() started');
-  FlutterError.onError = (details) {
-    _log('FlutterError: ${details.exception}\n${details.stack}');
-    FlutterError.dumpErrorToConsole(details);
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    _log('PlatformDispatcher onError: $error\n$stack');
-    return true;
-  };
-  await runZonedGuarded(_appMain, (error, stack) {
-    _log('UNCAUGHT (zone): $error\n$stack');
-  });
+
+  // Crash reporting. The DSN is empty by default — local `flutter run`
+  // builds don't pass --dart-define=SENTRY_DSN=... so the SDK runs in
+  // no-op mode. Release builds wire the DSN through Doppler in
+  // .github/workflows/release-worker.yml. Sentry's `appRunner` installs
+  // its own FlutterError.onError / PlatformDispatcher.onError / zone
+  // guard, replacing the manual hooks we used to set here.
+  const dsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+  const release = String.fromEnvironment(
+    'SENTRY_RELEASE',
+    defaultValue: 'worker_flutter@dev',
+  );
+  const gitSha = String.fromEnvironment('GIT_SHA', defaultValue: 'local');
+
+  await SentryFlutter.init((options) {
+    configureSentryOptions(options, dsn: dsn, release: release, gitSha: gitSha);
+    // Tee Sentry-captured events into the local file log so a user
+    // grabbing ~/Library/Logs/... still sees them. Wrap the existing
+    // PII scrubber so both run.
+    final upstream = options.beforeSend;
+    options.beforeSend = (event, hint) {
+      final summary =
+          event.message?.formatted ??
+          event.throwable?.toString() ??
+          event.exceptions?.firstOrNull?.value ??
+          '(no detail)';
+      _log('Sentry capture: $summary');
+      return upstream != null ? upstream(event, hint) : event;
+    };
+  }, appRunner: _appMain);
 }
 
 Future<void> _appMain() async {
+  Telemetry.breadcrumb(TelemetryCategory.boot, 'appMain started');
+
   // Detect placeholder firebase_options.dart values BEFORE calling
   // initializeApp — the native FirebaseCore plugin throws an uncaught
   // NSException on bad credentials that bypasses Dart try/catch.
@@ -64,9 +88,15 @@ Future<void> _appMain() async {
     try {
       await Firebase.initializeApp(options: fbOpts);
       _log('Firebase ready');
-    } catch (e) {
+    } catch (e, st) {
       firebaseInitError = e.toString();
       _log('Firebase init failed: $e');
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.firebaseInit,
+        extra: {'projectId': fbOpts.projectId},
+      );
     }
   }
 
@@ -103,6 +133,12 @@ Future<void> _appMain() async {
   // old build see the update offer on next launch and again every hour
   // while running. Non-fatal on failure (e.g. offline / appcast 404).
   await _initAutoUpdater();
+
+  // Launch-at-login: pre-resolve the package metadata so the
+  // Dashboard toggle's first read is a no-op rather than a multi-
+  // hundred-ms wait while package_info_plus inspects the binary.
+  // Non-fatal; toggle UI surfaces its own errors if setup couldn't.
+  await AutoStartService.setup();
 
   // Persistent worker identity + paths.
   final config = await WorkerConfig.loadOrInit();
@@ -232,6 +268,11 @@ Future<void> _bootEngine(WorkerConfig config) async {
     _log('Boot: tray initialized');
   } catch (e, st) {
     _log('Boot: tray init failed (non-fatal): $e\n$st');
+    Telemetry.breadcrumb(
+      TelemetryCategory.tray,
+      'Tray init failed',
+      data: {'error': e.toString()},
+    );
   }
 
   // Run the UI immediately. Start the engine *after* sign-in so
@@ -254,6 +295,11 @@ Future<void> _startEngineSafe(WorkerEngine engine) async {
     _log('Boot: engine running');
   } catch (e, st) {
     _log('Engine start FAILED (caught): $e\n$st');
+    await Telemetry.captureError(
+      e,
+      st,
+      category: TelemetryCategory.engineStart,
+    );
   }
 }
 
@@ -289,6 +335,11 @@ Future<void> _initAutoUpdater() async {
     // not fatal — the worker still runs, just without self-update. Log
     // so we notice in the diagnostic file.
     _log('AutoUpdater init failed (non-fatal): $e\n$st');
+    Telemetry.breadcrumb(
+      TelemetryCategory.autoUpdater,
+      'AutoUpdater init failed',
+      data: {'error': e.toString()},
+    );
   }
 }
 

@@ -92,38 +92,46 @@ class OfflineRunner {
     await db.updateJobState(jobId, 'RUNNING');
 
     final precons = await loadBundledPrecons(config.forgePath);
-    final byName = {for (final d in precons) d.displayName: d};
+    final preconByName = {for (final d in precons) d.displayName: d};
 
-    // Resolve all four decks first so a missing precon fails the whole
+    // Resolve all four decks first so missing decks fail the whole
     // job atomically rather than producing partial results.
-    final picked = <PreconDeck>[];
+    // Each declared name resolves to either a bundled precon (asset
+    // bundle / Forge install) or a user-created deck stored in Drift.
     final declared = [
       job.deck1Name,
       job.deck2Name,
       job.deck3Name,
       job.deck4Name,
     ];
-    for (final name in declared) {
-      final precon = byName[name];
-      if (precon == null) {
-        await _failJob(jobId, 'precon not installed: $name');
-        return;
-      }
-      picked.add(precon);
-    }
-
-    // Stage decks into Forge's user decks dir (idempotent).
     final deckFilenames = <String>[];
-    for (final precon in picked) {
-      deckFilenames.add(await _stageDeck(precon));
+    final filenameToDisplay = <String, String>{};
+    for (final name in declared) {
+      final precon = preconByName[name];
+      if (precon != null) {
+        final fn = await _stageDeck(precon);
+        deckFilenames.add(fn);
+        filenameToDisplay[fn.replaceAll(
+              RegExp(r'\.dck$', caseSensitive: false),
+              '',
+            )] =
+            precon.displayName;
+        continue;
+      }
+      final userDeck = await _findUserDeckByName(name);
+      if (userDeck != null) {
+        final fn = await _stageUserDeck(userDeck);
+        deckFilenames.add(fn);
+        filenameToDisplay[fn.replaceAll(
+              RegExp(r'\.dck$', caseSensitive: false),
+              '',
+            )] =
+            userDeck.name;
+        continue;
+      }
+      await _failJob(jobId, 'deck not found: $name');
+      return;
     }
-    final filenameToDisplay = {
-      for (var i = 0; i < picked.length; i++)
-        deckFilenames[i].replaceAll(
-          RegExp(r'\.dck$', caseSensitive: false),
-          '',
-        ): picked[i].displayName,
-    };
 
     final sims = await db.simsForJob(jobId);
     for (final sim in sims.where((s) => s.state == 'PENDING')) {
@@ -206,6 +214,24 @@ class OfflineRunner {
       if (entry.key.toLowerCase() == low) return entry.value;
     }
     return null;
+  }
+
+  /// Look up a user-created deck by display name. Uniqueness is
+  /// enforced by `OfflineDeckRepo._save`, so at most one user deck
+  /// matches a given name.
+  Future<DeckRow?> _findUserDeckByName(String name) => db.deckByName(name);
+
+  /// Materialize a user-created deck's `.dck` content to
+  /// `config.decksPath/<filename>` if it isn't already on disk.
+  /// Drift stores the dck text verbatim, so this is a simple write.
+  Future<String> _stageUserDeck(DeckRow row) async {
+    final dest = File(p.join(config.decksPath, row.filename));
+    if (dest.existsSync()) return row.filename;
+    dest.parent.createSync(recursive: true);
+    final tmp = File('${dest.path}.tmp');
+    await tmp.writeAsString(row.dckContent);
+    await tmp.rename(dest.path);
+    return row.filename;
   }
 
   /// Stage a precon .dck into `config.decksPath` (idempotent).

@@ -32,15 +32,24 @@ import 'auth_service.dart' show AuthCancelledException;
 class DesktopOAuth {
   DesktopOAuth({
     required this.clientId,
+    this.clientSecret = '',
     this.scopes = const ['openid', 'email', 'profile'],
     http.Client? httpClient,
   }) : _http = httpClient ?? http.Client();
 
   /// Google OAuth client ID of type "Desktop app". Different from the
   /// iOS-type client `signInWithProvider` consumes on macOS — desktop
-  /// clients use PKCE without a secret, which is the only flow safe
-  /// to ship in a native binary.
+  /// clients accept loopback redirects but Google's token endpoint
+  /// also requires the matching client_secret even with PKCE in play.
   final String clientId;
+
+  /// Google's "Desktop app" client secret. Despite the name it isn't
+  /// a security boundary — Google's own docs note it's
+  /// code-distributable. Required because Google's token endpoint
+  /// returns "client_secret is missing" without it (PKCE alone
+  /// doesn't satisfy them for the Desktop client type).
+  final String clientSecret;
+
   final List<String> scopes;
   final http.Client _http;
 
@@ -90,13 +99,15 @@ class DesktopOAuth {
         state,
       ).timeout(const Duration(minutes: 5));
 
-      // Exchange the auth code for tokens. Desktop clients omit the
-      // client secret — the PKCE verifier proves possession instead.
+      // Exchange the auth code for tokens. Google requires the
+      // client_secret on Desktop clients even with PKCE in play —
+      // see the field doc on `clientSecret`.
       final resp = await _http.post(
         Uri.parse(_tokenEndpoint),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'client_id': clientId,
+          if (clientSecret.isNotEmpty) 'client_secret': clientSecret,
           'code': code,
           'code_verifier': verifier,
           'grant_type': 'authorization_code',

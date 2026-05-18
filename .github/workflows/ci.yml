@@ -63,3 +63,18 @@ jobs:
             worker/package-lock.json
 
       - run: ./scripts/test.sh
+
+  release-scripts:
+    name: CI / Release scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run unit tests
+        # Stdlib-only — no pip install needed.
+        run: python3 -m unittest discover -s .github/scripts -p '*_test.py' -v

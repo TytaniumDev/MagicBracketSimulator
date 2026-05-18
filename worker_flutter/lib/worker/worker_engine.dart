@@ -7,6 +7,8 @@ import 'package:rxdart/subjects.dart';
 
 import '../config.dart';
 import '../models/sim.dart';
+import '../telemetry.dart';
+import 'job_aggregator.dart';
 import 'lease_writer.dart';
 import 'log_uploader.dart';
 import 'sim_claim.dart';
@@ -78,6 +80,10 @@ class WorkerEngine {
        _logUploader = LogUploader(
          apiUrl: config.apiUrl,
          workerSecret: config.workerSecret,
+       ),
+       _jobAggregator = JobAggregator(
+         apiUrl: config.apiUrl,
+         workerSecret: config.workerSecret,
        );
 
   final WorkerConfig config;
@@ -86,6 +92,7 @@ class WorkerEngine {
   final LeaseWriter _leaseWriter;
   final SimClaimer _claimer;
   final LogUploader _logUploader;
+  final JobAggregator _jobAggregator;
 
   final _stateSubject = BehaviorSubject<EngineState>.seeded(
     EngineState.initial(),
@@ -117,8 +124,14 @@ class WorkerEngine {
 
     try {
       await _leaseWriter.start();
-    } catch (e) {
+    } catch (e, st) {
       _stateSubject.add(currentState.copyWith(lastError: 'lease writer: $e'));
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.engineRuntime,
+        extra: {'phase': 'lease_writer_start'},
+      );
     }
 
     // Listen to PENDING sims across all jobs. Every time the listener
@@ -147,9 +160,15 @@ class WorkerEngine {
               );
             },
           );
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('WorkerEngine: listener setup failed: $e');
       _stateSubject.add(currentState.copyWith(lastError: 'listener setup: $e'));
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.engineRuntime,
+        extra: {'phase': 'pending_listener_setup'},
+      );
     }
   }
 
@@ -225,6 +244,7 @@ class WorkerEngine {
             errorMessage: 'job ${sim.jobId} not found',
           ),
         );
+        unawaited(_jobAggregator.triggerIfDone(sim.jobId));
         return;
       }
 
@@ -247,6 +267,7 @@ class WorkerEngine {
             errorMessage: 'missing deck files: ${missingDecks.join(', ')}',
           ),
         );
+        unawaited(_jobAggregator.triggerIfDone(sim.jobId));
         return;
       }
 
@@ -266,6 +287,12 @@ class WorkerEngine {
         ),
       );
 
+      // Fast-path: ask the API to aggregate the parent job NOW if
+      // every sim is terminal. Without this the job sits in RUNNING
+      // until the 15-minute stale-sweeper picks it up — see
+      // `JobAggregator` docstring. Idempotent + non-fatal.
+      unawaited(_jobAggregator.triggerIfDone(sim.jobId));
+
       if (result.success) {
         _stateSubject.add(
           currentState.copyWith(
@@ -273,7 +300,13 @@ class WorkerEngine {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, st) {
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.engineRuntime,
+        extra: {'phase': 'sim_run', 'jobId': sim.jobId, 'simId': sim.simId},
+      );
       await _claimer.reportTerminal(
         sim: sim,
         result: SimResult(
@@ -285,6 +318,7 @@ class WorkerEngine {
           errorMessage: e.toString(),
         ),
       );
+      unawaited(_jobAggregator.triggerIfDone(sim.jobId));
     } finally {
       _semaphoreActive--;
       _cancelByComposite.remove(sim.compositeId);
