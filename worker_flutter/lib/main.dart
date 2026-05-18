@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -325,12 +326,35 @@ const _kAppcastUrl =
 /// surface a "new version available" dialog itself; we don't render UI.
 const _kAutoUpdateCheckIntervalSeconds = 3600;
 
+/// Channel paired with the "Check for Updates…" NSMenuItem installed
+/// by `MainFlutterWindow.swift`. The Swift side fires "checkForUpdates"
+/// when the user clicks the menu item; we forward to
+/// `autoUpdater.checkForUpdates(inBackground: false)` so Sparkle shows
+/// its UI even when there's no update available — the interactive
+/// "You're up to date" alert is the expected affordance when the user
+/// explicitly asks. The background poll set up below keeps using
+/// `inBackground: true` to stay silent on the no-update path.
+const _kAutoUpdaterChannel = MethodChannel('magic_bracket/auto_updater');
+
 Future<void> _initAutoUpdater() async {
   try {
     await autoUpdater.setFeedURL(_kAppcastUrl);
     await autoUpdater.setScheduledCheckInterval(
       _kAutoUpdateCheckIntervalSeconds,
     );
+    // Listen for the menu-item-triggered check from Swift. Set the
+    // handler BEFORE kicking off the initial background poll so a
+    // user mashing the menu item during cold boot is still handled.
+    _kAutoUpdaterChannel.setMethodCallHandler((call) async {
+      if (call.method == 'checkForUpdates') {
+        _log('AutoUpdater: user-initiated check from menu');
+        try {
+          await autoUpdater.checkForUpdates(inBackground: false);
+        } catch (e, st) {
+          _log('AutoUpdater: user-initiated check failed: $e\n$st');
+        }
+      }
+    });
     // Background check so the user doesn't see a "no update available" toast
     // when nothing is new.
     await autoUpdater.checkForUpdates(inBackground: true);

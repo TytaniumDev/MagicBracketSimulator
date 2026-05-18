@@ -3,6 +3,12 @@ import FlutterMacOS
 import LaunchAtLogin
 
 class MainFlutterWindow: NSWindow {
+  /// Retained reference so the "Check for Updates…" menu item action
+  /// can route through it. The auto_updater plugin owns Sparkle's
+  /// SPUStandardUpdaterController internally and only exposes a Dart
+  /// API, so the menu item round-trips Swift → Dart → autoUpdater.
+  private var autoUpdaterChannel: FlutterMethodChannel?
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -111,8 +117,59 @@ class MainFlutterWindow: NSWindow {
       }
     }
 
+    // "Check for Updates…" menu item.
+    //
+    // Sparkle 2 doesn't install a menu item for you — host apps wire
+    // one up themselves and bind it to SPUStandardUpdaterController's
+    // `checkForUpdates:` IBAction. The auto_updater Flutter plugin
+    // owns its updater controller privately, so we can't bind a menu
+    // item directly to it. Instead we route the click back through a
+    // FlutterMethodChannel and let the Dart side call
+    // `autoUpdater.checkForUpdates(inBackground: false)`, which
+    // eventually reaches the same controller. One extra hop, no extra
+    // cost the user can feel.
+    autoUpdaterChannel = FlutterMethodChannel(
+      name: "magic_bracket/auto_updater",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    installCheckForUpdatesMenuItem()
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  /// Insert "Check for Updates…" into the app menu, right after
+  /// "About <AppName>". The app menu (`MagicBracketWorker`) is always
+  /// the first entry in `NSApp.mainMenu` — the system-rendered Apple
+  /// menu isn't part of the app's NSMenu structure.
+  private func installCheckForUpdatesMenuItem() {
+    guard let mainMenu = NSApp.mainMenu,
+          let appMenu = mainMenu.items.first?.submenu else {
+      // Defensive: if the standard MainMenu.xib didn't load (e.g.
+      // somebody rewrites it later), don't crash — just skip and let
+      // the dashboard's in-app update button be the only affordance.
+      return
+    }
+    let item = NSMenuItem(
+      title: "Check for Updates…",
+      action: #selector(handleCheckForUpdates(_:)),
+      keyEquivalent: ""
+    )
+    item.target = self
+    // Index 0 is "About <AppName>" in the Flutter-generated XIB. Slot
+    // the new item + a separator immediately after it so the layout
+    // matches the macOS HIG convention (About / Check for Updates /
+    // separator / Settings / Services / …).
+    appMenu.insertItem(item, at: 1)
+    appMenu.insertItem(NSMenuItem.separator(), at: 2)
+  }
+
+  @objc private func handleCheckForUpdates(_ sender: Any?) {
+    // inBackground: false on the Dart side — this is an interactive
+    // user-initiated check, so Sparkle should surface a "You're up to
+    // date" dialog when there's no new version, instead of staying
+    // silent the way the scheduled hourly poll does.
+    autoUpdaterChannel?.invokeMethod("checkForUpdates", arguments: nil)
   }
 }
