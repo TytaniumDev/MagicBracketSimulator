@@ -12,9 +12,9 @@ Usage:
   prepend_appcast_item.py \\
     --appcast worker_flutter/appcast.xml \\
     --manifest artifacts/macos/sparkle-manifest.json \\
-    --version 0.2.1 \\
-    --build-number 8 \\
-    --enclosure-url https://github.com/.../worker-v0.2.1/worker_flutter-macos.zip
+    --version 0.2.5 \\
+    --build-number 12 \\
+    --enclosure-url https://github.com/.../worker-v0.2.5/MagicBracketWorker-macos.zip
 """
 
 from __future__ import annotations

@@ -18,5 +18,12 @@
 	<true/>
 	<key>com.apple.security.inherit</key>
 	<false/>
+	<!-- Mirrors Release.entitlements — keeps the FirebaseAuth keychain
+	     codepath identical in `flutter run --debug` and in signed
+	     release builds so we don't ship a fix that only works in CI. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.tytaniumdev.magicBracketSimulator</string>
+	</array>
 </dict>
 </plist>

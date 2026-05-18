@@ -1,0 +1,10 @@
+# Dependencies for the helper scripts in this directory.
+#
+# generate_app_icon.py uses Pillow's Image / ImageDraw / ImageFilter
+# APIs. Pin to >=10 because the script uses Image.Resampling.LANCZOS,
+# which is the only available form after the deprecated bare-attribute
+# aliases were removed in Pillow 10.
+#
+# Install:
+#   pip install -r worker_flutter/scripts/requirements.txt
+Pillow>=10

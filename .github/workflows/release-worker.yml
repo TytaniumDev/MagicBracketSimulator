@@ -155,7 +155,7 @@ jobs:
           ASC_API_KEY_IS_BASE64: ${{ env.ASC_API_KEY_IS_BASE64 }}
           GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
           SENTRY_DSN_WORKER: ${{ env.SENTRY_DSN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
           GITHUB_SHA: ${{ github.sha }}
           # New: drive --build-name / --build-number from the version job.
           BUILD_NAME: ${{ needs.version.outputs.version }}
@@ -171,7 +171,7 @@ jobs:
         working-directory: worker_flutter
         env:
           SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
         continue-on-error: true
         run: dart run sentry_dart_plugin
 
@@ -186,7 +186,7 @@ jobs:
             echo "::error::SPARKLE_ED_PRIVATE_KEY is unset" >&2
             exit 1
           fi
-          ZIP=build/worker_flutter-macos.zip
+          ZIP=build/MagicBracketWorker-macos.zip
           SIGN_UPDATE=macos/Pods/Sparkle/bin/sign_update
           SIG_LINE=$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$ZIP")
           echo "Sparkle signature line: $SIG_LINE"
@@ -207,7 +207,7 @@ jobs:
         with:
           name: macos
           path: |
-            worker_flutter/build/worker_flutter-macos.zip
+            worker_flutter/build/MagicBracketWorker-macos.zip
             worker_flutter/build/sparkle-manifest.json
           if-no-files-found: error
 
@@ -267,7 +267,7 @@ jobs:
         env:
           DESKTOP_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
           SENTRY_DSN: ${{ env.SENTRY_DSN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
           GIT_SHA: ${{ github.sha }}
           BUILD_NAME: ${{ needs.version.outputs.version }}
           BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
@@ -288,7 +288,7 @@ jobs:
         shell: bash
         env:
           SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
         continue-on-error: true
         run: dart run sentry_dart_plugin
 
@@ -300,7 +300,7 @@ jobs:
           if (-not (Test-Path $src)) {
             $src = "build/windows/runner/Release"
           }
-          $dst = "build/worker_flutter-windows.zip"
+          $dst = "build/MagicBracketWorker-windows.zip"
           if (Test-Path $dst) { Remove-Item $dst }
           Compress-Archive -Path "$src/*" -DestinationPath $dst
           Get-ChildItem $dst
@@ -320,7 +320,7 @@ jobs:
           KEY_FILE=$(mktemp)
           trap 'rm -f "$KEY_FILE"' EXIT
           printf '%s' "$SPARKLE_DSA_PRIVATE_KEY" > "$KEY_FILE"
-          ZIP=build/worker_flutter-windows.zip
+          ZIP=build/MagicBracketWorker-windows.zip
           LEN=$(wc -c < "$ZIP")
           SIG=$(openssl dgst -sha1 -binary < "$ZIP" \
             | openssl dgst -sha1 -sign "$KEY_FILE" \
@@ -341,7 +341,7 @@ jobs:
         with:
           name: windows
           path: |
-            worker_flutter/build/worker_flutter-windows.zip
+            worker_flutter/build/MagicBracketWorker-windows.zip
             worker_flutter/build/sparkle-manifest-windows.json
           if-no-files-found: error
 
@@ -369,9 +369,9 @@ jobs:
           tag_name: ${{ needs.version.outputs.tag }}
           name: ${{ needs.version.outputs.tag }}
           files: |
-            artifacts/macos/worker_flutter-macos.zip
+            artifacts/macos/MagicBracketWorker-macos.zip
             artifacts/macos/sparkle-manifest.json
-            artifacts/windows/worker_flutter-windows.zip
+            artifacts/windows/MagicBracketWorker-windows.zip
             artifacts/windows/sparkle-manifest-windows.json
           fail_on_unmatched_files: true
 
@@ -419,7 +419,7 @@ jobs:
             --manifest artifacts/macos/sparkle-manifest.json \
             --version "$VERSION" \
             --build-number "$BUILD_NUMBER" \
-            --enclosure-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/worker_flutter-macos.zip"
+            --enclosure-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/MagicBracketWorker-macos.zip"
 
       # Push the appcast change to a side branch, open a PR via the
       # PAT, and enable auto-merge. The PAT is what makes CI trigger on

@@ -24,5 +24,19 @@
 	<true/>
 	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>
+
+	<!-- Firebase Auth on macOS persists the signed-in session through
+	     SecItemAdd/Update. With sandbox disabled + hardened runtime,
+	     macOS 26 (Tahoe) returns errSecMissingEntitlement (-34018) on
+	     those calls unless the app declares a keychain access group,
+	     surfaced to Dart as [firebase_auth/keychain-error]. The single
+	     entry here is the app's own per-bundle-id keychain group
+	     (the $(AppIdentifierPrefix) prefix expands to "<Team ID>." at
+	     codesign time — F2HXQGU2CC for our Developer ID). Firebase Auth
+	     uses this first entry as its default access group. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.tytaniumdev.magicBracketSimulator</string>
+	</array>
 </dict>
 </plist>
