@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -20,6 +18,12 @@ class TraySetup with TrayListener {
   TraySetup({required this.engine});
 
   final WorkerEngine engine;
+
+  /// Guard against double-firing the show-window flow on rapid tray
+  /// clicks. `setRegular` + `show` + `focus` are individually
+  /// idempotent, but interleaving two calls can produce a visible
+  /// Dock-icon flicker as the second call races the first.
+  bool _showingDashboard = false;
 
   Future<void> init() async {
     trayManager.addListener(this);
@@ -86,37 +90,51 @@ class TraySetup with TrayListener {
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
-    switch (menuItem.key) {
-      case 'show':
-        await _showDashboard();
-        break;
-      case 'toggle':
-        if (engine.currentState.running) {
+    // tray_manager's listener has a `void` return type, so a throw
+    // from any of the awaited calls would be silently dropped. Wrap
+    // the body so engine.stop/start or a bridge transition failure at
+    // least surfaces in the log file.
+    try {
+      switch (menuItem.key) {
+        case 'show':
+          await _showDashboard();
+          break;
+        case 'toggle':
+          if (engine.currentState.running) {
+            await engine.stop();
+          } else {
+            await engine.start();
+          }
+          break;
+        case 'quit':
           await engine.stop();
-        } else {
-          await engine.start();
-        }
-        break;
-      case 'quit':
-        await engine.stop();
-        await dispose();
-        await windowManager.destroy();
-        break;
+          await dispose();
+          await windowManager.destroy();
+          break;
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('tray menu "${menuItem.key}" failed: $e\n$st');
+      }
     }
   }
 
   Future<void> _showDashboard() async {
-    // Order matters: promote to `.regular` first so the Dock icon and
-    // menu bar are already in place when the window animates in,
-    // otherwise the user sees a brief flicker where the window is up
-    // but the Dock icon is still missing. The native bridge also
-    // calls `NSApp.activate` for us, so we don't need to focus
-    // separately — but call focus() anyway as a no-op safety net for
-    // edge cases where activate raced.
-    if (Platform.isMacOS) {
+    if (_showingDashboard) return;
+    _showingDashboard = true;
+    try {
+      // Order matters: promote to `.regular` first so the Dock icon
+      // and menu bar are already in place when the window animates
+      // in, otherwise the user sees a brief flicker where the window
+      // is up but the Dock icon is still missing. The native bridge
+      // is a no-op on non-macOS and also calls `NSApp.activate` for
+      // us on macOS — we still call focus() afterwards as a safety
+      // net for any edge case where activate raced the show.
       await MacActivationPolicyBridge.setRegular();
+      await windowManager.show();
+      await windowManager.focus();
+    } finally {
+      _showingDashboard = false;
     }
-    await windowManager.show();
-    await windowManager.focus();
   }
 }

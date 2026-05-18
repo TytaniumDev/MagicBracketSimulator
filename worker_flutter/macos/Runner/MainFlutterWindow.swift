@@ -92,8 +92,17 @@ class MainFlutterWindow: NSWindow {
           // menu bar reflects the new policy immediately. We always
           // activate here; the Dart caller decides when to invoke this,
           // so the activation is intentional.
+          //
+          // `activate(ignoringOtherApps:)` was deprecated in macOS 14
+          // (Sonoma) in favor of the no-arg `activate()` which respects
+          // the OS's cooperative activation rules. Fall back to the old
+          // signature for 10.13–13.x deployment targets.
           if target == .regular {
-            NSApp.activate(ignoringOtherApps: true)
+            if #available(macOS 14.0, *) {
+              NSApp.activate()
+            } else {
+              NSApp.activate(ignoringOtherApps: true)
+            }
           }
           result(nil)
         }

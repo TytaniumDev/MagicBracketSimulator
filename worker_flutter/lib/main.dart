@@ -506,16 +506,27 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
     // setPreventClose). On Windows we keep historical behavior: the X
     // really quits since there's no tray icon there and no NSApp
     // activation-policy equivalent to fold the app away gracefully.
-    _log('onWindowClose: hiding window, demoting to accessory');
-    if (Platform.isMacOS) {
-      // Hide the window first, then demote to `.accessory` so the
-      // Dock icon and menu bar disappear in a single visual beat. Tray
-      // icon stays around as the way back. Engine keeps running — the
-      // activation policy only affects UI affordances.
-      await windowManager.hide();
-      await MacActivationPolicyBridge.setAccessory();
-    } else {
-      await windowManager.destroy();
+    //
+    // The listener has a `void` return type, so any throw here would
+    // be silently dropped by the framework. Wrap the whole body in
+    // try/catch so a bridge failure (PlatformException) is at least
+    // visible in the log file — the user might otherwise see "window
+    // hides but Dock icon still showing" with no clue why.
+    try {
+      if (Platform.isMacOS) {
+        _log('onWindowClose: hiding window, demoting to accessory');
+        // Hide the window first, then demote to `.accessory` so the
+        // Dock icon and menu bar disappear in a single visual beat.
+        // Tray icon stays around as the way back. Engine keeps running
+        // — the activation policy only affects UI affordances.
+        await windowManager.hide();
+        await MacActivationPolicyBridge.setAccessory();
+      } else {
+        _log('onWindowClose: destroying window (non-macOS quit-on-close)');
+        await windowManager.destroy();
+      }
+    } catch (e, st) {
+      _log('onWindowClose: transition failed: $e\n$st');
     }
   }
 

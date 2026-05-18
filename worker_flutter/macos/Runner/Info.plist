@@ -45,7 +45,10 @@
 	          Flutter event loop (see lib/auth/auth_service.dart).
 	       2. The app is Developer-ID signed + notarized so the OS
 	          doesn't kill it for unsigned-plugin-load violations. -->
-	<!-- LSUIElement intentionally omitted (defaults to false). -->
+	<!-- Explicitly false rather than omitted: keeping the key present
+	     and visible documents the cold-launch state alongside the
+	     comment above, instead of relying on the OS default behavior
+	     of an absent key. -->
 	<key>LSUIElement</key>
 	<false/>
 	<key>NSHumanReadableCopyright</key>
