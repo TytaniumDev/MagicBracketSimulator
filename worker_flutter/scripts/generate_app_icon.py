@@ -121,7 +121,10 @@ def render_master() -> Image.Image:
 def write_macos_pngs(master: Image.Image, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for size in MACOS_SIZES:
-        small = master.resize((size, size), Image.LANCZOS)
+        # Image.Resampling.LANCZOS is the modern form — the bare
+        # Image.LANCZOS alias was deprecated in Pillow 9.1 and is
+        # slated for removal in a future major.
+        small = master.resize((size, size), Image.Resampling.LANCZOS)
         path = out_dir / f"app_icon_{size}.png"
         small.save(path, "PNG")
         print(f"  wrote {path} ({size}x{size})")

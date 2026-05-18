@@ -155,7 +155,7 @@ jobs:
           ASC_API_KEY_IS_BASE64: ${{ env.ASC_API_KEY_IS_BASE64 }}
           GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
           SENTRY_DSN_WORKER: ${{ env.SENTRY_DSN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
           GITHUB_SHA: ${{ github.sha }}
           # New: drive --build-name / --build-number from the version job.
           BUILD_NAME: ${{ needs.version.outputs.version }}
@@ -171,7 +171,7 @@ jobs:
         working-directory: worker_flutter
         env:
           SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
         continue-on-error: true
         run: dart run sentry_dart_plugin
 
@@ -267,7 +267,7 @@ jobs:
         env:
           DESKTOP_SECRET: ${{ env.GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET }}
           SENTRY_DSN: ${{ env.SENTRY_DSN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
           GIT_SHA: ${{ github.sha }}
           BUILD_NAME: ${{ needs.version.outputs.version }}
           BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
@@ -288,7 +288,7 @@ jobs:
         shell: bash
         env:
           SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN_WORKER }}
-          SENTRY_RELEASE: worker_flutter@${{ needs.version.outputs.version }}
+          SENTRY_RELEASE: MagicBracketWorker@${{ needs.version.outputs.version }}
         continue-on-error: true
         run: dart run sentry_dart_plugin
 

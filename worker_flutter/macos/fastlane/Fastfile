@@ -111,7 +111,7 @@ platform :mac do
       # values turn Sentry into a no-op, which is what local builds
       # want until an operator wires the new project up.
       sentry_dsn     = ENV.fetch("SENTRY_DSN_WORKER", "")
-      sentry_release = ENV.fetch("SENTRY_RELEASE", "worker_flutter@dev")
+      sentry_release = ENV.fetch("SENTRY_RELEASE", "MagicBracketWorker@dev")
       git_sha        = ENV.fetch("GITHUB_SHA", "local")
       # BUILD_NAME + BUILD_NUMBER come from the release-worker.yml `version`
       # job. Required for CI builds (the workflow always sets them); for
