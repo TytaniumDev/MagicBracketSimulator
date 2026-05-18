@@ -22,24 +22,35 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<!-- LSUIElement=true makes this a menu-bar-only app: no Dock icon,
-	     no Cmd-Tab entry. The tray icon is the user's primary affordance
-	     for re-opening the dashboard window after closing it.
+	<!-- Activation policy is NOT pinned via LSUIElement. The app
+	     launches as a normal Mac app (Dock icon + menu bar) and Dart
+	     code toggles `NSApp.setActivationPolicy(.accessory)` on
+	     window-close so the worker folds into a menu-bar-only state
+	     while still running, then back to `.regular` when the user
+	     re-opens the dashboard from the tray icon. See
+	     `MainFlutterWindow.swift` for the native handler and
+	     `lib/macos/activation_policy.dart` for the Dart bridge.
 
-	     Historical note: under earlier code the combination of
-	     LSUIElement=true + tray_manager + cloud_firestore crashed on
-	     cold boot (uncaught NSExceptions bypassed Dart try/catch). The
-	     things that made that path safe now:
+	     Why not LSUIElement=true: that flag locks the launch state to
+	     Accessory, which suppresses the menu bar even when a window is
+	     focused and was confusing for active monitoring of the worker.
+
+	     Historical note: a previous combination of LSUIElement=true +
+	     tray_manager + cloud_firestore crashed on cold boot (uncaught
+	     NSExceptions bypassed Dart try/catch). That crash path is now
+	     irrelevant since boot starts as `.regular`, but two fixes from
+	     that era remain load-bearing for the runtime `.accessory`
+	     toggle:
 	       1. firebase_auth.instance access is deferred until inside the
-	          Flutter event loop (see lib/auth/auth_service.dart). Even
-	          though tray init happens before `runApp` (lib/main.dart:238),
-	          tray init itself doesn't touch FirebaseAuth, so the
-	          documented native crash condition no longer materializes.
-	       2. The app is now Developer-ID signed + notarized, so the
-	          OS doesn't kill it for unsigned-plugin-load violations.
-	     Revert to <false/> here if menu-bar mode regresses. -->
+	          Flutter event loop (see lib/auth/auth_service.dart).
+	       2. The app is Developer-ID signed + notarized so the OS
+	          doesn't kill it for unsigned-plugin-load violations. -->
+	<!-- Explicitly false rather than omitted: keeping the key present
+	     and visible documents the cold-launch state alongside the
+	     comment above, instead of relying on the OS default behavior
+	     of an absent key. -->
 	<key>LSUIElement</key>
-	<true/>
+	<false/>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>

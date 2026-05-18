@@ -17,6 +17,7 @@ import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
 import 'launch/auto_start_service.dart';
 import 'launch/mode_picker_screen.dart';
+import 'macos/activation_policy.dart';
 import 'offline/offline_app.dart';
 import 'sentry_setup.dart';
 import 'telemetry.dart';
@@ -29,14 +30,18 @@ import 'worker/worker_engine.dart';
 /// On launch:
 ///   1. Initialize Firebase (cloud_firestore listener target)
 ///   2. Load persistent worker config (workerId, capacity, paths)
-///   3. Set up an invisible window (LSUIElement=true hides the Dock icon
-///      already; we additionally `hide()` the window so it doesn't flash)
-///   4. Set up the tray icon; left-click shows the dashboard
+///   3. Show the dashboard window as a normal Mac app (Dock + menu bar)
+///   4. Set up the tray icon as a secondary affordance
 ///   5. Start the worker engine (Firestore listener + lease + sim runner)
 ///
-/// The window starts hidden. The user opens it from the tray. Closing the
-/// window via the red dot is intercepted by window_manager.setPreventClose
-/// and hides instead of exiting — the engine keeps running.
+/// Hybrid Dock/tray model on macOS: the app launches as `.regular`
+/// (full Mac app). Closing the window via the red dot is intercepted —
+/// `windowManager.setPreventClose(true)` keeps the engine alive, then
+/// `MacActivationPolicyBridge.setAccessory()` drops the Dock icon and
+/// menu bar so the only remaining affordance is the tray icon. A tray
+/// click promotes back to `.regular` and re-shows the window. Windows
+/// and Linux keep the historical "X actually quits" behavior since
+/// there's no equivalent of NSApp.activationPolicy.
 Future<void> main() async {
   await _initFileLogger();
   _log('main() started');
@@ -100,10 +105,12 @@ Future<void> _appMain() async {
     }
   }
 
-  // Native window setup. With LSUIElement=false (MVP fallback) the app
-  // appears in the Dock with a regular window. The user can minimize-to-
-  // tray-style behavior via the tray icon; closing the window hides it
-  // (setPreventClose=true) so the engine keeps running.
+  // Native window setup. The app launches as `.regular` (default in
+  // Info.plist) so the user sees a Dock icon + menu bar + window
+  // immediately. The close button is intercepted on macOS — see
+  // _WorkerAppState.onWindowClose, which hides the window AND demotes
+  // the app to `.accessory` so the Dock icon disappears while the
+  // worker keeps running behind the tray icon.
   _log('Initializing window_manager');
   await windowManager.ensureInitialized();
   _log('window_manager initialized');
@@ -495,15 +502,31 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
 
   @override
   void onWindowClose() async {
-    // Only macOS gets the hide-to-tray treatment (see _initWindow
-    // where setPreventClose is mac-only). On Windows the listener
-    // still fires before the OS-default close because window_manager
-    // installs its own hook, so quit explicitly to match the user's
-    // expectation that X actually closes the app.
-    if (Platform.isMacOS) {
-      await windowManager.hide();
-    } else {
-      await windowManager.destroy();
+    // Only macOS gets the hide-to-tray treatment (see _appMain's
+    // setPreventClose). On Windows we keep historical behavior: the X
+    // really quits since there's no tray icon there and no NSApp
+    // activation-policy equivalent to fold the app away gracefully.
+    //
+    // The listener has a `void` return type, so any throw here would
+    // be silently dropped by the framework. Wrap the whole body in
+    // try/catch so a bridge failure (PlatformException) is at least
+    // visible in the log file — the user might otherwise see "window
+    // hides but Dock icon still showing" with no clue why.
+    try {
+      if (Platform.isMacOS) {
+        _log('onWindowClose: hiding window, demoting to accessory');
+        // Hide the window first, then demote to `.accessory` so the
+        // Dock icon and menu bar disappear in a single visual beat.
+        // Tray icon stays around as the way back. Engine keeps running
+        // — the activation policy only affects UI affordances.
+        await windowManager.hide();
+        await MacActivationPolicyBridge.setAccessory();
+      } else {
+        _log('onWindowClose: destroying window (non-macOS quit-on-close)');
+        await windowManager.destroy();
+      }
+    } catch (e, st) {
+      _log('onWindowClose: transition failed: $e\n$st');
     }
   }
 
