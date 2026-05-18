@@ -48,7 +48,7 @@ npm run test:ingestion --prefix api    # ingestion.test.ts
 
 **Worker** (Docker, `worker/`):
 ```bash
-# GCP mode (Pub/Sub)
+# GCP mode (HTTP polling via claim-sim)
 docker compose -f worker/docker-compose.yml up --build
 
 # Local mode (polls api on localhost:3000)
@@ -71,13 +71,13 @@ CI runs on PRs to `main` (.github/workflows/ci.yml): frontend lint+build, api li
 
 Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 - **LOCAL mode** (unset): SQLite, local filesystem, polling worker, no Firebase auth
-- **GCP mode** (set): Firestore, Cloud Storage, Pub/Sub queue, unified Docker worker
+- **GCP mode** (set): Firestore, Cloud Storage, unified Docker worker (HTTP polling via `GET /api/jobs/claim-sim`)
 
 ### Service Boundaries
 
 - **frontend/** — Vite + React + Tailwind v4 + Firebase Auth (Google sign-in). Calls the API over HTTP. Config in `frontend/public/config.json` (committed, not secret).
 - **api/** — Next.js 15 app: API routes under `app/api/`. Handles deck ingestion (Moxfield URLs, precon names, raw deck text), job lifecycle, and simulation tracking. Uses factory pattern (`job-store-factory.ts`, `deck-store-factory.ts`) to swap SQLite/Firestore backends.
-- **worker/** — Slim Node.js Docker image (~100MB). Pulls jobs via Pub/Sub (GCP) or HTTP polling (local). Orchestrates simulation containers via Docker socket, reports per-simulation progress, aggregates logs, POSTs results to API. Runs an HTTP server (port 9090) for push-based control: config updates, cancellation, job notification, and drain.
+- **worker/** — Slim Node.js Docker image (~100MB). Pulls jobs via HTTP polling (`GET /api/jobs/claim-sim`) in both Local and GCP modes. Orchestrates simulation containers via Docker socket, reports per-simulation progress, aggregates logs, POSTs results to API. Runs an HTTP server (port 9090) for push-based control: config updates, cancellation, job notification, and drain.
   - **worker/forge-engine/** — Headless Forge simulator assets: `run_sim.sh` entrypoint, precon decks in `precons/`.
 - **simulation/** — Standalone Docker image (~750MB, Java 17 + Forge + xvfb). Runs exactly 1 game, writes log file, exits. Spawned by the worker via `docker run --rm`.
 
@@ -124,7 +124,7 @@ Routes live under `api/app/api/`. Key endpoints:
 
 - `.env` files are gitignored; see `docs/MODE_SETUP.md` for required variables per mode
 - `frontend/.env` needs Firebase config vars (see `frontend/.env.example`)
-- `api/.env` needs for GCP mode: `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `PUBSUB_TOPIC`, `WORKER_SECRET`
+- `api/.env` needs for GCP mode: `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `WORKER_SECRET`
 - Worker env: `WORKER_API_PORT` (default 9090) and `WORKER_API_URL` (externally reachable URL for push-based API control)
 - Firebase deploy requires `FIREBASE_TOKEN` in GitHub Actions secrets
 - `npm run populate-worker-secret` and `npm run populate-frontend-secret` manage GCP Secret Manager entries
