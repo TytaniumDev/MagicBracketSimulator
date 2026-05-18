@@ -378,17 +378,28 @@ jobs:
   update-appcast:
     needs: [version, publish]
     runs-on: ubuntu-latest
-    # `contents: write` to push the side branch; `pull-requests: write`
-    # for `gh pr create` + `gh pr merge --auto`.
+    # All git/gh operations in this job use APPCAST_PR_TOKEN (a fine-
+    # grained PAT scoped to this repo with `contents: write` +
+    # `pull-requests: write`). Why not GITHUB_TOKEN: PRs created via
+    # GITHUB_TOKEN don't trigger workflows, so required-status-checks
+    # never run on the appcast PR and `--auto` merge stays BLOCKED
+    # forever. A user-owned PAT bypasses the recursive-trigger rule —
+    # the PR fires CI like any other, checks pass quickly (XML-only
+    # diff), auto-merge fires. This matches the workaround documented
+    # by release-please and is the same pattern used by other release
+    # bots that auto-publish to a protected branch.
+    #
+    # The `permissions:` block below scopes GITHUB_TOKEN for any actions
+    # that still implicitly use it (e.g. actions/download-artifact).
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      actions: read
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.APPCAST_PR_TOKEN }}
           fetch-depth: 1
 
       - name: Download macOS artifact
@@ -410,19 +421,15 @@ jobs:
             --build-number "$BUILD_NUMBER" \
             --enclosure-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/worker_flutter-macos.zip"
 
-      # We can't push directly to `main` because branch protection
-      # requires PRs and required-status-checks. `bypass_pull_request_
-      # allowances` (the legacy mechanism for "let github-actions
-      # bypass") is org-only and not available on personal-account
-      # repos. The pattern used by release-please / Dependabot / etc.
-      # is to push to a side branch, open a PR, and enable auto-merge
-      # — that respects protection (CI runs, then GitHub merges) while
-      # keeping the release fully automatic. The appcast PR has zero
-      # code changes (just one XML file), so its CI run is ~30 seconds.
+      # Push the appcast change to a side branch, open a PR via the
+      # PAT, and enable auto-merge. The PAT is what makes CI trigger on
+      # the new PR (GITHUB_TOKEN-created PRs don't fire workflows). CI
+      # passes in ~30s on this XML-only diff and the PR squash-merges
+      # itself. See the job-level comment for the full rationale.
       - name: Push branch, open PR, enable auto-merge
         env:
           TAG: ${{ needs.version.outputs.tag }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.APPCAST_PR_TOKEN }}
         run: |
           set -euo pipefail
           if git diff --quiet worker_flutter/appcast.xml; then
