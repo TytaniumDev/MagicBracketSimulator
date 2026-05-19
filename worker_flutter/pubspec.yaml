@@ -90,6 +90,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  config:
+    # Force CocoaPods — sentry_flutter 8.14.2's Package.swift uses `from: "8.46.0"` and resolves a newer Sentry-Cocoa missing SentryBinaryImageCache.image(byAddress:); its Podspec pins exactly 8.46.0.
+    enable-swift-package-manager: false
   assets:
     # Bundled Forge precons — copied verbatim from
     # `worker/forge-engine/decks/` so offline mode works out of the
