@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -325,7 +326,38 @@ const _kAppcastUrl =
 /// surface a "new version available" dialog itself; we don't render UI.
 const _kAutoUpdateCheckIntervalSeconds = 3600;
 
+/// Channel paired with the "Check for Updates…" NSMenuItem installed
+/// by `MainFlutterWindow.swift`. The Swift side fires "checkForUpdates"
+/// when the user clicks the menu item; we forward to
+/// `autoUpdater.checkForUpdates(inBackground: false)` so Sparkle shows
+/// its UI even when there's no update available — the interactive
+/// "You're up to date" alert is the expected affordance when the user
+/// explicitly asks. The background poll set up below keeps using
+/// `inBackground: true` to stay silent on the no-update path.
+const _kAutoUpdaterChannel = MethodChannel('magic_bracket/auto_updater');
+
 Future<void> _initAutoUpdater() async {
+  // Register the menu-item channel handler FIRST — before any await
+  // that could throw and skip the rest of the setup. If `setFeedURL`
+  // or `setScheduledCheckInterval` fails, Sparkle's appcast polling
+  // is disabled, but the menu item should still respond (with the
+  // failure surfaced in the log) instead of clicking into the void.
+  _kAutoUpdaterChannel.setMethodCallHandler((call) async {
+    if (call.method != 'checkForUpdates') {
+      // Unknown method on a channel we control both ends of — bubble
+      // a real error so a wiring mistake surfaces during development
+      // rather than getting silently swallowed.
+      throw MissingPluginException(
+        'magic_bracket/auto_updater: unknown method "${call.method}"',
+      );
+    }
+    _log('AutoUpdater: user-initiated check from menu');
+    try {
+      await autoUpdater.checkForUpdates(inBackground: false);
+    } catch (e, st) {
+      _log('AutoUpdater: user-initiated check failed: $e\n$st');
+    }
+  });
   try {
     await autoUpdater.setFeedURL(_kAppcastUrl);
     await autoUpdater.setScheduledCheckInterval(
