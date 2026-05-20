@@ -460,15 +460,7 @@ export function initializeSimulations(jobId: string, count: number): void {
   tx();
 }
 
-/**
- * Update a single simulation's status fields.
- */
-export function updateSimulationStatus(
-  jobId: string,
-  simId: string,
-  update: Partial<SimulationStatus>
-): boolean {
-  const db = getDb();
+function buildSimulationUpdateClause(update: Partial<SimulationStatus>): { sets: string[]; values: unknown[] } {
   const sets: string[] = [];
   const values: unknown[] = [];
 
@@ -517,6 +509,20 @@ export function updateSimulationStatus(
     values.push(JSON.stringify(update.winningTurns));
   }
 
+  return { sets, values };
+}
+
+/**
+ * Update a single simulation's status fields.
+ */
+export function updateSimulationStatus(
+  jobId: string,
+  simId: string,
+  update: Partial<SimulationStatus>
+): boolean {
+  const db = getDb();
+  const { sets, values } = buildSimulationUpdateClause(update);
+
   if (sets.length === 0) return false;
 
   values.push(jobId, simId);
@@ -538,20 +544,7 @@ export function conditionalUpdateSimulationStatus(
   update: Partial<SimulationStatus>
 ): boolean {
   const db = getDb();
-  const sets: string[] = [];
-  const values: unknown[] = [];
-
-  if (update.state !== undefined) { sets.push('state = ?'); values.push(update.state); }
-  if (update.workerId !== undefined) { sets.push('worker_id = ?'); values.push(update.workerId); }
-  if (update.workerName !== undefined) { sets.push('worker_name = ?'); values.push(update.workerName); }
-  if (update.startedAt !== undefined) { sets.push('started_at = ?'); values.push(update.startedAt); }
-  if (update.completedAt !== undefined) { sets.push('completed_at = ?'); values.push(update.completedAt); }
-  if (update.durationMs !== undefined) { sets.push('duration_ms = ?'); values.push(update.durationMs); }
-  if (update.errorMessage !== undefined) { sets.push('error_message = ?'); values.push(update.errorMessage); }
-  if (update.winner !== undefined) { sets.push('winner = ?'); values.push(update.winner); }
-  if (update.winningTurn !== undefined) { sets.push('winning_turn = ?'); values.push(update.winningTurn); }
-  if (update.winners !== undefined) { sets.push('winners_json = ?'); values.push(JSON.stringify(update.winners)); }
-  if (update.winningTurns !== undefined) { sets.push('winning_turns_json = ?'); values.push(JSON.stringify(update.winningTurns)); }
+  const { sets, values } = buildSimulationUpdateClause(update);
 
   if (sets.length === 0) return false;
 

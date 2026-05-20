@@ -4,6 +4,7 @@
  */
 import { listAllDecks, type DeckListItem } from './deck-store-factory';
 import { getFirestore } from './firestore-client';
+import { listActiveJobs } from './job-store-factory';
 
 import { USE_FIRESTORE } from './env';
 
@@ -234,22 +235,8 @@ export async function generateNextPod(targetGamesPerPair: number): Promise<strin
  * Used to prevent race conditions when multiple workers request coverage work.
  */
 export async function hasActiveCoverageJob(): Promise<boolean> {
-  if (USE_FIRESTORE) {
-    const snapshot = await getFirestoreClient()
-      .collection('jobs')
-      .where('source', '==', 'coverage')
-      .where('status', 'in', ['QUEUED', 'RUNNING'])
-      .limit(1)
-      .get();
-    return !snapshot.empty;
-  }
-
-  const { getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
-  const db = getDb();
-  const row = db
-    .prepare("SELECT 1 FROM jobs WHERE source = 'coverage' AND status IN ('QUEUED', 'RUNNING') LIMIT 1")
-    .get();
-  return row !== undefined;
+  const activeJobs = await listActiveJobs();
+  return activeJobs.some((job) => job.source === 'coverage');
 }
 
 /**
