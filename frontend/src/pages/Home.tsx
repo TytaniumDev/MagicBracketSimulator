@@ -392,6 +392,7 @@ function SimulationForm() {
             value={deckUrl}
             onChange={(e) => setDeckUrl(e.target.value)}
             placeholder="https://moxfield.com/decks/... or https://archidekt.com/decks/..."
+            aria-label="Deck URL"
             className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -429,6 +430,7 @@ function SimulationForm() {
                 value={deckName}
                 onChange={(e) => setDeckName(e.target.value)}
                 placeholder="Deck name (optional)"
+                aria-label="Deck name (optional)"
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -437,6 +439,7 @@ function SimulationForm() {
               value={deckText}
               onChange={(e) => setDeckText(e.target.value)}
               placeholder={`Paste your deck list here...\n\nExample:\n1 Sol Ring\n1 Command Tower\n1 Arcane Signet`}
+              aria-label="Deck list text"
               rows={8}
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-y"
             />
@@ -502,6 +505,7 @@ function SimulationForm() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, set, or commander..."
+            aria-label="Search decks"
             className="w-full mb-2 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           />
 
@@ -534,70 +538,69 @@ function SimulationForm() {
                 <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
                   Community Decks
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {communityDecks.map((deck) => (
-                    <div
+                    <li
                       key={deck.id}
-                      role="checkbox"
-                      aria-checked={selectedDeckIds.includes(deck.id)}
-                      tabIndex={0}
-                      className={`flex items-center justify-between p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-                        selectedDeckIds.includes(deck.id)
-                          ? 'bg-blue-600/30 border border-blue-500'
-                          : 'bg-gray-600 hover:bg-gray-500 border border-transparent'
+                      className={`flex items-center gap-2 bg-gray-600 rounded border border-transparent hover:bg-gray-500 transition-colors ${
+                        selectedDeckIds.includes(deck.id) ? 'bg-blue-600/30 border-blue-500' : ''
                       }`}
-                      onClick={() => handleDeckToggle(deck.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === ' ' || e.key === 'Enter') {
-                          e.preventDefault();
-                          handleDeckToggle(deck.id);
-                        }
-                      }}
                     >
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm flex items-center">
-                          <span className="truncate">{deck.name}</span>
-                          <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
-                        </span>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          {deck.ownerEmail ?? 'unknown'}
-                          {deck.link && (
-                            <>
-                              {' · '}
-                              <a
-                                href={deck.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-blue-400 hover:underline"
-                              >
-                                View source
-                              </a>
-                            </>
-                          )}
+                      <div
+                        role="checkbox"
+                        aria-checked={selectedDeckIds.includes(deck.id)}
+                        aria-label={`Select deck ${deck.name}`}
+                        tabIndex={0}
+                        onClick={() => handleDeckToggle(deck.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === ' ' || e.key === 'Enter') {
+                            e.preventDefault();
+                            handleDeckToggle(deck.id);
+                          }
+                        }}
+                        className="flex-1 flex items-center p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 text-white"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm flex items-center">
+                            <span className="truncate">{deck.name}</span>
+                            <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
+                          </span>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            {deck.ownerEmail ?? 'unknown'}
+                          </div>
                         </div>
                       </div>
-                      {deck.ownerId === user?.uid && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteDeck(deck);
-                          }}
-                          disabled={isDeleting === deck.id}
-                          aria-label={`Delete deck ${deck.name}`}
-                          className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                            isDeleting === deck.id
-                              ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                              : 'bg-red-600/50 text-red-200 hover:bg-red-600'
-                          }`}
-                        >
-                          {isDeleting === deck.id ? '...' : 'X'}
-                        </button>
-                      )}
-                    </div>
+                      <div className="flex items-center gap-1.5 pr-2">
+                        {deck.link && (
+                          <a
+                            href={deck.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-400 hover:underline"
+                            aria-label={`View source for ${deck.name}`}
+                          >
+                            Source
+                          </a>
+                        )}
+                        {deck.ownerId === user?.uid && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDeck(deck)}
+                            disabled={isDeleting === deck.id}
+                            aria-label={`Delete deck ${deck.name}`}
+                            className={`px-2 py-0.5 rounded text-xs ${
+                              isDeleting === deck.id
+                                ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                                : 'bg-red-600/50 text-red-200 hover:bg-red-600'
+                            }`}
+                          >
+                            {isDeleting === deck.id ? '...' : 'X'}
+                          </button>
+                        )}
+                      </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
 
@@ -606,52 +609,54 @@ function SimulationForm() {
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
                 Preconstructed Decks
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {precons.map((deck) => (
-                  <div
+                  <li
                     key={deck.id}
-                    role="checkbox"
-                    aria-checked={selectedDeckIds.includes(deck.id)}
-                    tabIndex={0}
-                    className={`flex items-center p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-                      selectedDeckIds.includes(deck.id)
-                        ? 'bg-blue-600/30 border border-blue-500'
-                        : 'bg-gray-600 hover:bg-gray-500 border border-transparent'
+                    className={`flex items-center gap-2 bg-gray-600 rounded border border-transparent hover:bg-gray-500 transition-colors ${
+                      selectedDeckIds.includes(deck.id) ? 'bg-blue-600/30 border-blue-500' : ''
                     }`}
-                    onClick={() => handleDeckToggle(deck.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === ' ' || e.key === 'Enter') {
-                        e.preventDefault();
-                        handleDeckToggle(deck.id);
-                      }
-                    }}
                   >
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm flex items-center">
-                        <span className="truncate">{deck.name}</span>
-                        <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
-                      </span>
-                      <div className="text-xs text-gray-400 mt-0.5">
-                        {deck.setName ?? 'precon'}
-                        {deck.link && (
-                          <>
-                            {' · '}
-                            <a
-                              href={deck.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-blue-400 hover:underline"
-                            >
-                              Archidekt
-                            </a>
-                          </>
-                        )}
+                    <div
+                      role="checkbox"
+                      aria-checked={selectedDeckIds.includes(deck.id)}
+                      aria-label={`Select deck ${deck.name}`}
+                      tabIndex={0}
+                      onClick={() => handleDeckToggle(deck.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault();
+                          handleDeckToggle(deck.id);
+                        }
+                      }}
+                      className="flex-1 flex items-center p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 text-white"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm flex items-center">
+                          <span className="truncate">{deck.name}</span>
+                          <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
+                        </span>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          {deck.setName ?? 'precon'}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                    {deck.link && (
+                      <div className="flex items-center pr-2">
+                        <a
+                          href={deck.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-400 hover:underline"
+                          aria-label={`View Archidekt for ${deck.name}`}
+                        >
+                          Archidekt
+                        </a>
+                      </div>
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
             </>
             )}

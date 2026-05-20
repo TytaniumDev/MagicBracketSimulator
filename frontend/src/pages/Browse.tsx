@@ -118,9 +118,11 @@ export default function Browse() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const toggleSelectJob = (id: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const toggleSelectJob = (id: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setSelectedJobs((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -370,77 +372,86 @@ export default function Browse() {
       )}
 
       {!isLoading && !error && visibleJobs.length > 0 && (
-        <div className="space-y-3">
+        <ul className="space-y-3">
           {visibleJobs.map((run) => (
-            <Link
+            <li
               key={run.id}
-              to={`/jobs/${run.id}`}
-              className={`block bg-gray-800 rounded-lg p-4 border transition-colors relative ${
+              className={`relative bg-gray-800 rounded-lg border transition-colors ${
                 selectedJobs.has(run.id)
                   ? 'border-blue-500'
                   : 'border-gray-700 hover:border-gray-600'
-              } ${isAdmin ? 'pl-10' : ''}`}
+              }`}
             >
               {isAdmin && (
-                <input
-                  type="checkbox"
-                  checked={selectedJobs.has(run.id)}
-                  onClick={(e) => toggleSelectJob(run.id, e)}
-                  onChange={() => {}}
-                  className="absolute left-3 top-5 w-4 h-4 accent-blue-500 cursor-pointer"
-                  aria-label={`Select job ${run.name}`}
-                />
-              )}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-white truncate">
-                      {run.name}
-                    </h3>
-                    <StatusBadge status={run.status} />
-                  </div>
-                  <p className="text-sm text-gray-400 truncate">
-                    {run.deckNames.join(', ')}
-                  </p>
+                <div className="absolute left-3 top-5 z-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedJobs.has(run.id)}
+                    onChange={() => toggleSelectJob(run.id)}
+                    className="w-4 h-4 accent-blue-500 cursor-pointer"
+                    aria-label={`Select job ${run.name}`}
+                  />
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="text-sm font-medium text-gray-300">
-                    {run.status === 'COMPLETED'
-                      ? `${run.simulations} / ${run.simulations} games`
-                      : `${run.gamesCompleted ?? 0} / ${run.simulations} games`}
-                  </div>
-                  {run.durationMs != null && run.durationMs >= 0 && (
-                    <div className="text-xs text-gray-400">
-                      Run time: {formatDurationMs(run.durationMs)}
+              )}
+              <Link
+                to={`/jobs/${run.id}`}
+                className={`block p-4 ${isAdmin ? 'pl-10' : ''}`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-white truncate">
+                        {run.name}
+                      </h3>
+                      <StatusBadge status={run.status} />
                     </div>
-                  )}
-                  <div className="text-xs text-gray-500">
-                    {formatDate(run.createdAt)}
+                    <p className="text-sm text-gray-400 truncate">
+                      {run.deckNames.join(', ')}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-medium text-gray-300">
+                      {run.status === 'COMPLETED'
+                        ? `${run.simulations} / ${run.simulations} games`
+                        : `${run.gamesCompleted ?? 0} / ${run.simulations} games`}
+                    </div>
+                    {run.durationMs != null && run.durationMs >= 0 && (
+                      <div className="text-xs text-gray-400">
+                        Run time: {formatDurationMs(run.durationMs)}
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-500">
+                      {formatDate(run.createdAt)}
+                    </div>
                   </div>
                 </div>
-              </div>
-              {run.status === 'RUNNING' && (
-                <div className="mt-2">
-                  <div
-                    className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden"
-                    role="progressbar"
-                    aria-valuenow={run.gamesCompleted}
-                    aria-valuemin={0}
-                    aria-valuemax={run.simulations}
-                  >
+                {run.status === 'RUNNING' && (
+                  <div className="mt-2">
                     <div
-                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.min(100, (run.gamesCompleted / run.simulations) * 100)}%`,
-                      }}
-                    />
+                      className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden"
+                      role="progressbar"
+                      aria-valuenow={run.gamesCompleted}
+                      aria-valuemin={0}
+                      aria-valuemax={run.simulations}
+                    >
+                      <div
+                        className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, (run.gamesCompleted / run.simulations) * 100)}%`,
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-            </Link>
+                )}
+              </Link>
+            </li>
           ))}
+        </ul>
+      )}
 
-          {/* Load More / end-of-history */}
+      {/* Load More / end-of-history */}
+      {!isLoading && !error && visibleJobs.length > 0 && (
+        <>
           {hasMoreHistory && (
             <div className="pt-2 flex flex-col items-center gap-2">
               <button
@@ -460,7 +471,7 @@ export default function Browse() {
           {!hasMoreHistory && visibleJobs.length >= 100 && (
             <p className="pt-2 text-center text-xs text-gray-500">End of history.</p>
           )}
-        </div>
+        </>
       )}
     </div>
   );
