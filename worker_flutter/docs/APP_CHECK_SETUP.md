@@ -22,15 +22,41 @@ entirely.
   request and attaches it as `X-Firebase-AppCheck`. Soft-fails on
   platforms or environments where activation didn't succeed.
 
-## One-time Firebase Console setup
+## Firebase Console state — already configured
+
+App Attest and DeviceCheck are already enabled on the Apple Firebase
+app entry (`1:14286370379:ios:eb91598352257eef6d7fce`, shared by the
+iOS-type and macOS targets — Firebase treats them as one app). No
+further Firebase Console action is required for release builds.
+
+To verify with `gcloud`:
+
+```bash
+TOKEN=$(gcloud auth print-access-token)
+APP=1:14286370379:ios:eb91598352257eef6d7fce
+BASE=https://firebaseappcheck.googleapis.com/v1/projects/magic-bracket-simulator/apps/$APP
+
+# App Attest (macOS 11+ / signed release builds):
+curl -s -H "Authorization: Bearer $TOKEN" \
+     -H "X-Goog-User-Project: magic-bracket-simulator" \
+     "$BASE/appAttestConfig"
+
+# DeviceCheck (macOS <11 fallback):
+curl -s -H "Authorization: Bearer $TOKEN" \
+     -H "X-Goog-User-Project: magic-bracket-simulator" \
+     "$BASE/deviceCheckConfig"
+```
+
+Each non-empty response with `tokenTtl` set means that provider is
+active.
+
+If you ever need to re-register from scratch (e.g. for a new Firebase
+project), the Console flow is:
 
 1. Open
    https://console.firebase.google.com/project/magic-bracket-simulator/appcheck/apps
-2. Find the macOS app entry (bundle ID
-   `com.tytaniumdev.magicBracketSimulator`). If it isn't listed yet, the
-   parent Firebase app (the iOS-type one registered for `firebase_auth`)
-   doesn't have App Check enabled — click **Register** to enable.
-3. Under **Apple App Attest**, click **Register** and save. No keys or
+2. Find the Apple app entry.
+3. Under **Apple App Attest**, click **Activate** and save. No keys or
    secrets to paste; Firebase coordinates with Apple's attestation
    service directly.
 4. Optionally enable **DeviceCheck** as a fallback for macOS <11 / when
@@ -65,12 +91,24 @@ token requirement. Two acceptable options:
 
 Production app bundles (signed + notarized via the
 `.github/workflows/release-worker.yml` pipeline) work with App Attest
-out of the box once the Firebase Console registration above is done.
+out of the box — the Firebase Console registration is already in place.
 
-## Once registered, monitor before enforcing
+## API enforcement vs. Firebase enforcement
 
-App Check ships in "monitor only" mode on the API side by default. Once
-the macOS app has been live for a release cycle without surfacing
-unexpected 401s in Sentry, you can flip enforcement on in Firebase
-Console → App Check → APIs → Cloud Run (or Cloud Functions, depending
-on where the API runs) → **Enforce**.
+Two different layers control what happens when a request lacks
+`X-Firebase-AppCheck`:
+
+- **API-level (the actual gate today):** `api/lib/auth.ts#verifyAppCheck`
+  throws as soon as the header is missing. There is no "monitor mode"
+  here — the request returns 401 immediately. This is what surfaces as
+  the desktop worker's "Auth token rejected" error.
+- **Firebase service-level (Firestore + Identity Toolkit):** controlled
+  by `enforcementMode` on each service under
+  `projects/magic-bracket-simulator/services/*` (Firebase Console →
+  App Check → APIs → Cloud Firestore / Identity Toolkit → **Enforce**).
+  Currently both are `UNENFORCED`, which means direct Firestore client
+  calls (e.g. the run-locally Firestore mirror in
+  `lib/offline/cloud_mirror.dart`) work without an App Check token.
+  Flip these to `ENFORCED` only after every supported platform —
+  including Windows — sends a real token; Windows currently can't, so
+  leaving them `UNENFORCED` is correct.
