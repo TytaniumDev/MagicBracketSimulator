@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { sendAccessRequestEmail } from '@/lib/email-notification';
 import { createHmac } from 'node:crypto';
 import { getFirestore } from '@/lib/firestore-client';
@@ -25,8 +25,8 @@ function generateApprovalToken(uid: string, requestId: string): string {
  * POST /api/access-requests — Submit an access request.
  * Any authenticated user can request access (no allowlist check).
  */
-export async function POST(request: NextRequest) {
-  let user;
+export async function POST(request: NextRequest): Promise<NextResponse | Response> {
+  let user: AuthUser;
   try {
     user = await verifyAuth(request);
   } catch {
@@ -101,8 +101,8 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/access-requests — Check if the current user has a pending request.
  */
-export async function GET(request: NextRequest) {
-  let user;
+export async function GET(request: NextRequest): Promise<NextResponse | Response> {
+  let user: AuthUser;
   try {
     user = await verifyAuth(request);
   } catch {

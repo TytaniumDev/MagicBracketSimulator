@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { getDeckById } from '@/lib/deck-store-factory';
@@ -74,7 +74,7 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
  * Query params: ?limit=N (default 100, max 200), ?cursor=<opaque>
  * Returns: { jobs: JobSummary[], nextCursor: string | null }
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse | Response> {
   try {
     await verifyAuth(request);
   } catch {
@@ -116,8 +116,8 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/jobs - Create a new job
  */
-export async function POST(request: NextRequest) {
-  let user;
+export async function POST(request: NextRequest): Promise<NextResponse | Response> {
+  let user: AuthUser;
   try {
     user = await verifyAllowedUser(request);
   } catch {
