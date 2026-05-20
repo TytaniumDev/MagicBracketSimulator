@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -7,15 +5,13 @@ import 'package:window_manager/window_manager.dart';
 import '../macos/activation_policy.dart';
 import '../worker/worker_engine.dart';
 
-/// Sets up the system-tray icon and click-to-open-window behavior.
+/// Sets up the menu-bar tray icon and click-to-open-window behavior.
 ///
 /// The tray icon is the user's way back to the dashboard after they
-/// close the window. Closing hides the window while the worker engine
-/// keeps running:
-///   - macOS: demotes the app to `.accessory` (no Dock icon, no menu
-///     bar). A tray click promotes back to `.regular`.
-///   - Windows: hides the window; the tray icon is the only remaining
-///     affordance. A tray click re-shows the window.
+/// close the window: closing demotes the app to `.accessory` (no Dock
+/// icon, no menu bar) while keeping the engine alive. A tray click —
+/// or the "Show dashboard" menu item — promotes back to `.regular` and
+/// re-shows the window. See `lib/macos/activation_policy.dart`.
 ///
 /// Right-click menu has: Show, Start/Stop worker, Quit.
 class TraySetup with TrayListener {
@@ -32,11 +28,7 @@ class TraySetup with TrayListener {
   Future<void> init() async {
     trayManager.addListener(this);
     try {
-      // Windows requires .ico; macOS/Linux use .png.
-      final iconPath = Platform.isWindows
-          ? 'assets/tray_icon.ico'
-          : 'assets/tray_icon.png';
-      await trayManager.setIcon(iconPath);
+      await trayManager.setIcon('assets/tray_icon.png');
     } catch (e) {
       if (kDebugMode) {
         // Asset may be missing on first run; system tray still works without
@@ -131,14 +123,14 @@ class TraySetup with TrayListener {
     if (_showingDashboard) return;
     _showingDashboard = true;
     try {
-      // macOS: promote to `.regular` first so the Dock icon and menu
-      // bar are already in place when the window animates in,
-      // otherwise the user sees a brief flicker where the window is
-      // up but the Dock icon is still missing.
-      // Windows: no activation-policy equivalent; just show + focus.
-      if (Platform.isMacOS) {
-        await MacActivationPolicyBridge.setRegular();
-      }
+      // Order matters: promote to `.regular` first so the Dock icon
+      // and menu bar are already in place when the window animates
+      // in, otherwise the user sees a brief flicker where the window
+      // is up but the Dock icon is still missing. The native bridge
+      // is a no-op on non-macOS and also calls `NSApp.activate` for
+      // us on macOS — we still call focus() afterwards as a safety
+      // net for any edge case where activate raced the show.
+      await MacActivationPolicyBridge.setRegular();
       await windowManager.show();
       await windowManager.focus();
     } finally {
