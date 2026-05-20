@@ -5,9 +5,7 @@
 import { listAllDecks, type DeckListItem } from './deck-store-factory';
 import { getFirestore } from './firestore-client';
 
-const USE_FIRESTORE =
-  typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
-  process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+import { USE_FIRESTORE } from './env';
 
 const getFirestoreClient = getFirestore;
 

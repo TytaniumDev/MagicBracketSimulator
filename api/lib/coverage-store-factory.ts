@@ -4,10 +4,7 @@
  */
 import type { CoverageStore } from './coverage-store';
 import { firestoreCoverageStore } from './coverage-store-firestore';
-
-const USE_FIRESTORE =
-  typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
-  process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+import { USE_FIRESTORE } from './env';
 
 // Lazy dynamic import of the SQLite-backed coverage store.
 // See job-store-factory.ts for rationale.

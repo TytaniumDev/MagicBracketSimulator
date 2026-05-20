@@ -4,8 +4,10 @@ import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { NextRequest } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
+import { isLocalMode } from './env';
+
 // Local mode: skip Firebase Auth entirely when GOOGLE_CLOUD_PROJECT is not set
-const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
+const IS_LOCAL_MODE = isLocalMode();
 
 const LOCAL_MOCK_USER: AuthUser = { uid: 'local-user', email: 'local@dev' };
 

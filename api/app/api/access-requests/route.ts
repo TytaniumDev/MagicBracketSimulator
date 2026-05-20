@@ -5,7 +5,9 @@ import { createHmac } from 'node:crypto';
 import { getFirestore } from '@/lib/firestore-client';
 import { errorResponse } from '@/lib/api-response';
 
-const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
+import { isLocalMode } from '@/lib/env';
+
+const IS_LOCAL_MODE = isLocalMode();
 
 const getDb = getFirestore;
 

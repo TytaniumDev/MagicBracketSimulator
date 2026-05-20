@@ -18,8 +18,7 @@ import {
 import { revertSimToPending } from '@/lib/job-store-factory';
 import { scheduleLeaseSweep } from '@/lib/cloud-tasks';
 
-const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string'
-  && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+import { USE_FIRESTORE } from '@/lib/env';
 
 export async function POST(req: NextRequest) {
   if (!isWorkerRequest(req)) {
