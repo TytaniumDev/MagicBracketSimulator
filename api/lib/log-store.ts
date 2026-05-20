@@ -7,7 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { isGcpMode } from './job-store-factory';
+import { isGcpMode } from './env';
 import * as gcs from './gcs-storage';
 import { condenseGames, structureGames, splitConcatenatedGames } from './condenser/index';
 import type { CondensedGame, StructuredGame } from './types';

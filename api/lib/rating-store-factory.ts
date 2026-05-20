@@ -3,10 +3,7 @@
  * otherwise to SQLite.
  */
 import type { RatingStore } from './rating-store';
-
-const USE_FIRESTORE =
-  typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' &&
-  process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+import { USE_FIRESTORE } from './env';
 
 let _store: RatingStore | null = null;
 

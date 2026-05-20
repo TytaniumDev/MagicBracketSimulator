@@ -8,8 +8,7 @@ import { getColorIdentityByKey } from './deck-metadata';
 import * as firestoreDecks from './firestore-decks';
 import { lruTouch, lruEvictIfFull } from './lru';
 
-const USE_FIRESTORE =
-  typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+import { USE_FIRESTORE, isGcpMode } from './env';
 
 // Log mode detection at startup
 console.log(`[Deck Store] Running in ${USE_FIRESTORE ? 'GCP' : 'LOCAL'} mode`);
@@ -44,9 +43,7 @@ export interface CreateDeckInput {
   colorIdentity?: string[];
 }
 
-export function isGcpMode(): boolean {
-  return USE_FIRESTORE;
-}
+export { isGcpMode };
 
 interface PreconRow {
   id: string;

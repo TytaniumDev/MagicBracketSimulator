@@ -7,7 +7,9 @@ import { isWorkerRequest } from '@/lib/auth';
 import { syncPrecons } from '@/lib/archidekt-sync';
 import { errorResponse } from '@/lib/api-response';
 
-const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
+import { isLocalMode } from '@/lib/env';
+
+const IS_LOCAL_MODE = isLocalMode();
 
 export async function POST(req: NextRequest) {
   // In GCP mode, require worker secret

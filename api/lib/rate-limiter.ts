@@ -1,4 +1,4 @@
-import { isGcpMode } from './job-store-factory';
+import { isGcpMode } from './env';
 
 const MAX_ACTIVE_JOBS = 3;
 const MAX_JOBS_PER_DAY = 20;
