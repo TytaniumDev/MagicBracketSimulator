@@ -15,6 +15,9 @@ class SimulationControls extends StatelessWidget {
     required this.busy,
     required this.onUnpick,
     required this.onStart,
+    this.showRunLocally = false,
+    this.runLocally = false,
+    this.onRunLocallyChanged,
   });
 
   /// Currently-picked decks, in the order the user picked them.
@@ -31,6 +34,14 @@ class SimulationControls extends StatelessWidget {
 
   /// Called when the user taps Start. Only enabled when picked.length == 4.
   final VoidCallback onStart;
+
+  /// Render the "Run locally" checkbox. Cloud-mode passes true so the
+  /// user can opt out of the cloud job queue and run on this machine
+  /// instead. Offline-mode leaves this false — every run is local there
+  /// by definition.
+  final bool showRunLocally;
+  final bool runLocally;
+  final ValueChanged<bool>? onRunLocallyChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +89,31 @@ class SimulationControls extends StatelessWidget {
             label: '$sims',
             onChanged: busy ? null : (v) => onSimsChanged(v.round()),
           ),
+          if (showRunLocally)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: InkWell(
+                onTap: busy
+                    ? null
+                    : () => onRunLocallyChanged?.call(!runLocally),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: runLocally,
+                      onChanged: busy
+                          ? null
+                          : (v) => onRunLocallyChanged?.call(v ?? false),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Run locally on this machine',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           if (error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
@@ -97,7 +133,7 @@ class SimulationControls extends StatelessWidget {
                       color: Colors.white,
                     ),
                   )
-                : const Text('Start simulation'),
+                : Text(runLocally ? 'Run locally' : 'Start simulation'),
           ),
         ],
       ),

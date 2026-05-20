@@ -22,6 +22,11 @@ dependencies:
   firebase_auth: ^5.4.0
   cloud_firestore: ^5.6.0
   firebase_storage: ^12.3.0
+  # App Check attests that API requests come from the legitimate app
+  # rather than a script with a stolen ID token. Only macOS is wired up
+  # — firebase_app_check has no Windows desktop support, so the Windows
+  # build skips activation and falls back to the run-locally path.
+  firebase_app_check: ^0.3.2
 
   # Native window + tray
   tray_manager: ^0.5.2

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
@@ -6,9 +9,14 @@ import '../cloud/cloud_jobs_screen.dart';
 import '../cloud/cloud_leaderboard_screen.dart';
 import '../config.dart';
 import '../decks/cloud_deck_repo.dart';
+import '../decks/deck_record.dart';
 import '../decks/deck_repo.dart';
 import '../launch/auto_start_service.dart';
 import '../models/sim.dart';
+import '../offline/cloud_mirror.dart';
+import '../offline/db/app_db.dart';
+import '../offline/local_job_screen.dart';
+import '../offline/offline_runner.dart';
 import '../sims/simulate_screen.dart';
 import '../worker/worker_engine.dart';
 
@@ -32,6 +40,20 @@ class _DashboardState extends State<Dashboard> {
   late int _capacity;
   late final ApiClient _api;
   late final DeckRepo _deckRepo;
+  late final AppDb _localDb;
+  late final OfflineRunner _localRunner;
+
+  /// One mirror per active local job. Kept around until the dashboard
+  /// is disposed so terminal-state writes for late-finishing sims still
+  /// reach Firestore. Skipped entirely when the user is signed out.
+  final Map<int, CloudJobMirror> _mirrors = {};
+
+  /// Set by `_startCloud`/`_startLocal` before they return so the
+  /// follow-up `onJobCreated` callback knows which detail screen to
+  /// push. Local job ids and Firestore doc ids are both opaque strings
+  /// from the typedef's perspective; this flag is the unambiguous
+  /// signal.
+  bool _lastRunLocal = false;
 
   @override
   void initState() {
@@ -42,6 +64,109 @@ class _DashboardState extends State<Dashboard> {
     // resources in a long-running tray app.
     _api = ApiClient(baseUrl: widget.config.apiUrl);
     _deckRepo = CloudDeckRepo(api: _api);
+    // Local-run infrastructure. AppDb is also instantiated by
+    // OfflineApp, but cloud-mode dashboard and offline-mode app are
+    // never alive at the same time (LaunchMode routes one or the
+    // other), so the SQLite file is owned single-writer here.
+    _localDb = AppDb();
+    _localRunner = OfflineRunner(db: _localDb, config: widget.config);
+    // Pick up any local job left mid-run from a previous session so
+    // closing the app mid-simulation doesn't permanently strand it.
+    unawaited(_localRunner.resumeInFlightJobs());
+  }
+
+  @override
+  void dispose() {
+    for (final mirror in _mirrors.values) {
+      unawaited(mirror.dispose());
+    }
+    _mirrors.clear();
+    _localDb.close();
+    super.dispose();
+  }
+
+  /// Cloud submit: POST /api/jobs and return the Firestore job id.
+  Future<String> _startCloud(List<DeckRecord> decks, int simCount) async {
+    _lastRunLocal = false;
+    final resp = await _api.postJson('/api/jobs', {
+      'deckIds': decks.map((d) => d.id).toList(),
+      'simulations': simCount,
+    });
+    final job = resp['job'];
+    if (job is Map && job['id'] != null) return job['id'].toString();
+    final id = resp['id']?.toString();
+    if (id == null || id.isEmpty) {
+      throw StateError(
+        'POST /api/jobs returned no job id; '
+        'the API response shape may have changed.',
+      );
+    }
+    return id;
+  }
+
+  /// Local run: stage non-precon deck content into AppDb (precons are
+  /// bundled and resolved by name by OfflineRunner) and kick off the
+  /// offline runner. Returns the stringified AppDb row id; the matching
+  /// `onJobCreated` parses it back to navigate to `LocalJobScreen`.
+  Future<String> _startLocal(List<DeckRecord> decks, int simCount) async {
+    _lastRunLocal = true;
+    await _stageCloudDecksLocally(decks);
+    final jobId = await _localDb.createJob(
+      deckNames: decks.map((d) => d.name).toList(),
+      simCount: simCount,
+    );
+    // Best-effort cloud mirror — runs in the background so a Firestore
+    // hiccup never delays the local run kickoff. Skipped silently when
+    // the user is signed out (which is the whole point of "no auth
+    // needed"). Multiple back-to-back local runs each get their own
+    // mirror; the disposal loop in `dispose()` cleans them up.
+    final mirror = CloudJobMirror(db: _localDb);
+    _mirrors[jobId] = mirror;
+    unawaited(
+      mirror.start(localJobId: jobId, decks: decks, simulations: simCount).then(
+        (firestoreId) {
+          if (firestoreId == null) {
+            // Either signed-out or the mirror failed — drop the
+            // entry so it doesn't pin the empty CloudJobMirror.
+            _mirrors.remove(jobId);
+          }
+        },
+      ),
+    );
+    unawaited(_localRunner.run(jobId));
+    return jobId.toString();
+  }
+
+  /// Insert each non-precon cloud deck's .dck content into AppDb so
+  /// `OfflineRunner._findUserDeckByName` resolves it. Precons are
+  /// resolved against the bundled asset set inside the runner and don't
+  /// need staging. Firestore `/decks/{id}` is publicly readable per
+  /// `firestore.rules`, so this works without auth — keeping the
+  /// "no auth needed" promise of the Run-locally path.
+  Future<void> _stageCloudDecksLocally(List<DeckRecord> decks) async {
+    final firestore = FirebaseFirestore.instance;
+    for (final deck in decks) {
+      if (deck.isPrecon) continue;
+      // Cache by name: re-staging on every run would write the same
+      // .dck to disk repeatedly and add a Firestore read per sim.
+      if (await _localDb.deckByName(deck.name) != null) continue;
+      final snap = await firestore.collection('decks').doc(deck.id).get();
+      final dck = snap.data()?['dck'] as String?;
+      if (dck == null || dck.isEmpty) {
+        throw StateError(
+          'Deck "${deck.name}" is missing .dck content in Firestore '
+          '— can\'t run it locally.',
+        );
+      }
+      await _localDb.insertDeck(
+        name: deck.name,
+        filename: deck.filename,
+        dckContent: dck,
+        colorIdentity: deck.colorIdentity?.join(''),
+        link: deck.link,
+        primaryCommander: deck.primaryCommander,
+      );
+    }
   }
 
   @override
@@ -118,28 +243,33 @@ class _DashboardState extends State<Dashboard> {
             const CloudLeaderboardScreen(),
             // Simulate tab — combined deck management + simulation
             // picker. Streams user's saved decks plus precons from
-            // Firestore; add/delete via MBS API; submit to /api/jobs.
+            // Firestore. By default submits to /api/jobs; when the user
+            // ticks "Run locally" the picker dispatches to the local
+            // OfflineRunner instead — same Forge engine, no API auth /
+            // App Check required.
             SimulateScreen(
               repo: _deckRepo,
-              onStart: (decks, simCount) async {
-                final resp = await _api.postJson('/api/jobs', {
-                  'deckIds': decks.map((d) => d.id).toList(),
-                  'simulations': simCount,
-                });
-                final job = resp['job'];
-                if (job is Map && job['id'] != null) {
-                  return job['id'].toString();
-                }
-                final id = resp['id']?.toString();
-                if (id == null || id.isEmpty) {
-                  throw StateError(
-                    'POST /api/jobs returned no job id; '
-                    'the API response shape may have changed.',
-                  );
-                }
-                return id;
+              showRunLocally: true,
+              onStart: (decks, simCount, {required bool runLocally}) {
+                return runLocally
+                    ? _startLocal(decks, simCount)
+                    : _startCloud(decks, simCount);
               },
               onJobCreated: (ctx, jobId) {
+                if (_lastRunLocal) {
+                  final id = int.tryParse(jobId);
+                  if (id == null) return;
+                  Navigator.of(ctx).push(
+                    MaterialPageRoute(
+                      builder: (_) => LocalJobScreen(
+                        db: _localDb,
+                        runner: _localRunner,
+                        jobId: id,
+                      ),
+                    ),
+                  );
+                  return;
+                }
                 Navigator.of(ctx).push(
                   MaterialPageRoute(
                     builder: (_) => CloudJobDetailScreen(jobId: jobId),
