@@ -143,13 +143,15 @@ class _DashboardState extends State<Dashboard> {
   /// need staging. Firestore `/decks/{id}` is publicly readable per
   /// `firestore.rules`, so this works without auth — keeping the
   /// "no auth needed" promise of the Run-locally path.
+  ///
+  /// Re-fetches and overwrites on every call: caching by name silently
+  /// served stale `.dck` when a user edited the deck in the cloud
+  /// between runs. The cost is one Firestore read per non-precon deck
+  /// per Run-locally kickoff (≤4), well below noticeable.
   Future<void> _stageCloudDecksLocally(List<DeckRecord> decks) async {
     final firestore = FirebaseFirestore.instance;
     for (final deck in decks) {
       if (deck.isPrecon) continue;
-      // Cache by name: re-staging on every run would write the same
-      // .dck to disk repeatedly and add a Firestore read per sim.
-      if (await _localDb.deckByName(deck.name) != null) continue;
       final snap = await firestore.collection('decks').doc(deck.id).get();
       final dck = snap.data()?['dck'] as String?;
       if (dck == null || dck.isEmpty) {
@@ -157,6 +159,14 @@ class _DashboardState extends State<Dashboard> {
           'Deck "${deck.name}" is missing .dck content in Firestore '
           '— can\'t run it locally.',
         );
+      }
+      final existing = await _localDb.deckByName(deck.name);
+      if (existing != null) {
+        // Delete + reinsert rather than UPDATE: the decks table
+        // enforces UNIQUE(name), and AppDb has no in-place updater
+        // today. Jobs reference deck names as strings (no FK), so
+        // dropping the row doesn't strand historical runs.
+        await _localDb.deleteDeckById(existing.id);
       }
       await _localDb.insertDeck(
         name: deck.name,

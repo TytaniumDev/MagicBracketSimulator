@@ -152,12 +152,20 @@ class CloudJobMirror {
     ref.set(update, SetOptions(merge: true)).catchError((_) {});
   }
 
+  // Terminal states a local sim can land in. OfflineRunner currently
+  // marks cancelled sims as FAILED with errorMessage='cancelled', but
+  // CANCELLED is included defensively so a future schema change (or a
+  // pre-upgrade row already in AppDb) still reaches the Firestore
+  // mirror — without it those sims would stick in PENDING forever even
+  // after the parent job transitioned to CANCELLED.
+  static const _terminalSimStates = {'COMPLETED', 'FAILED', 'CANCELLED'};
+
   void _onLocalSims(List<Sim> sims) {
     final refs = _simRefsByIndex;
     if (refs == null) return;
     for (final sim in sims) {
       if (_reportedTerminalIndexes.contains(sim.simIndex)) continue;
-      if (sim.state != 'COMPLETED' && sim.state != 'FAILED') continue;
+      if (!_terminalSimStates.contains(sim.state)) continue;
       final ref = refs[sim.simIndex];
       if (ref == null) continue;
       _reportedTerminalIndexes.add(sim.simIndex);
