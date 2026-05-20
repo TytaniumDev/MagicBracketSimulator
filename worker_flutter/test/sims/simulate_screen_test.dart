@@ -149,4 +149,44 @@ void main() {
     expect(find.text('Your decks (0)'), findsOneWidget);
     expect(find.text('Precons (1)'), findsOneWidget);
   });
+
+  testWidgets('tapping a 5th deck does not exceed the 4-pick cap', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final repo = _FakeRepo([
+      for (var i = 0; i < 5; i++) _deck('d$i', 'Deck $i'),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SimulateScreen(
+          repo: repo,
+          onStart: (_, _) async => '1',
+          onJobCreated: (_, _) {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(find.text('Deck $i'));
+      await tester.pump();
+    }
+    expect(find.text('Pick 4 decks (4/4)'), findsOneWidget);
+
+    // 5th tap: should be a no-op (no badge appears on Deck 4, count
+    // stays at 4/4).
+    await tester.tap(find.text('Deck 4'));
+    await tester.pump();
+    expect(find.text('Pick 4 decks (4/4)'), findsOneWidget);
+    // Pick badges are 1..4 inclusive; "5" must not appear.
+    expect(find.text('5'), findsNothing);
+  });
 }

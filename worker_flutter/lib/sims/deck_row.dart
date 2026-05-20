@@ -30,16 +30,20 @@ class DeckRow extends StatelessWidget {
 
   /// Whether the trailing delete icon is allowed. Even when true, the
   /// icon is hidden while the row is picked to avoid accidental
-  /// destruction during selection.
+  /// destruction during selection. Also gated on [onDelete] being
+  /// non-null.
   final bool canDelete;
 
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+
+  /// Null disables the delete icon outright. Required when [canDelete]
+  /// is true.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final picked = pickIndex != null;
-    final showDelete = canDelete && !picked;
+    final showDelete = canDelete && !picked && onDelete != null;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -130,7 +134,7 @@ class DeckRow extends StatelessWidget {
                   color: Color(0xFFF87171),
                   size: 18,
                 ),
-                onPressed: onDelete,
+                onPressed: onDelete!,
               ),
           ],
         ),

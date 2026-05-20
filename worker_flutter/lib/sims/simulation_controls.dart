@@ -71,7 +71,7 @@ class SimulationControls extends StatelessWidget {
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           Slider(
-            value: sims.toDouble().clamp(1, 200),
+            value: sims.toDouble(),
             min: 1,
             max: 200,
             divisions: 199,

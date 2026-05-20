@@ -72,7 +72,7 @@ class _OfflineAppState extends State<OfflineApp> {
   }
 }
 
-// ── Home: tabbed History | Decks | New ───────────────────────────
+// ── Home: tabbed History | Simulate ──────────────────────────────
 
 class _HomeScreen extends StatefulWidget {
   const _HomeScreen({

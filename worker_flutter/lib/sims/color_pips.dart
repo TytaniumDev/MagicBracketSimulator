@@ -10,6 +10,9 @@ class ColorPips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Magic's "B" (black) is a dark color, but our card backgrounds
+    // are dark too; a lighter outline keeps the pip visible against
+    // both `0xFF111827` (unpicked card) and `0xFF1E3A8A` (picked).
     const map = {
       'W': Color(0xFFFEF3C7),
       'U': Color(0xFF60A5FA),
@@ -29,7 +32,7 @@ class ColorPips extends StatelessWidget {
               decoration: BoxDecoration(
                 color: map[c] ?? Colors.grey,
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF111827)),
+                border: Border.all(color: const Color(0xFF6B7280)),
               ),
             ),
           ),

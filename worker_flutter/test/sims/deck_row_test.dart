@@ -96,6 +96,23 @@ void main() {
       ),
     );
     expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+
+    // onDelete null hides the icon even when canDelete is true.
+    await tester.pumpWidget(
+      _wrap(
+        DeckRow(
+          name: 'E',
+          colorIdentity: const [],
+          subtitle: null,
+          isPrecon: false,
+          pickIndex: null,
+          canDelete: true,
+          onTap: () {},
+          onDelete: null,
+        ),
+      ),
+    );
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
   });
 
   testWidgets('delete icon tap fires onDelete, not onTap', (tester) async {

@@ -60,7 +60,6 @@ class _SimulateScreenState extends State<SimulateScreen> {
   bool _matches(DeckRecord d, String q) {
     if (d.name.toLowerCase().contains(q)) return true;
     if (d.primaryCommander?.toLowerCase().contains(q) ?? false) return true;
-    if (d.ownerEmail?.toLowerCase().contains(q) ?? false) return true;
     return false;
   }
 
@@ -176,17 +175,14 @@ class _SimulateScreenState extends State<SimulateScreen> {
             });
           }
 
-          final pickedRecords = [
+          // Skip unresolved ids rather than rendering a "?" placeholder
+          // chip — there's a one-frame window between a stream emission
+          // that drops the deck and the post-frame callback above that
+          // cleans _picked.
+          final pickedRecords = <DeckRecord>[
             for (final id in _picked)
-              all.firstWhere(
-                (d) => d.id == id,
-                orElse: () => DeckRecord(
-                  id: id,
-                  name: '?',
-                  filename: '',
-                  isPrecon: false,
-                ),
-              ),
+              for (final d in all)
+                if (d.id == id) d,
           ];
 
           final searching = q.isNotEmpty;
@@ -290,7 +286,7 @@ class _SimulateScreenState extends State<SimulateScreen> {
                                   : null,
                               canDelete: false,
                               onTap: () => _toggle(d.id),
-                              onDelete: () {},
+                              onDelete: null,
                             ),
                           ),
                       ],
