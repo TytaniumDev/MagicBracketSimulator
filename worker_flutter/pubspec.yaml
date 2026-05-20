@@ -90,9 +90,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  config:
-    # Force CocoaPods — sentry_flutter 8.14.2's Package.swift uses `from: "8.46.0"` and resolves a newer Sentry-Cocoa missing SentryBinaryImageCache.image(byAddress:); its Podspec pins exactly 8.46.0.
-    enable-swift-package-manager: false
   assets:
     # Bundled Forge precons — copied verbatim from
     # `worker/forge-engine/decks/` so offline mode works out of the
@@ -100,8 +97,8 @@ flutter:
     # offline runner extracts these to the user's app-support dir on
     # demand (see `lib/offline/deck_source.dart`).
     - assets/precons/
-  # Tray icon asset goes here once you have a 16x16 PNG ready:
-  #   - assets/tray_icon.png
+  # Tray icons: .ico for Windows, .png for macOS/Linux.
+    - assets/tray_icon.ico
 
 # sentry_dart_plugin config — runs during CI release builds to upload
 # the obfuscation debug-info directory + Dart sources to Sentry so

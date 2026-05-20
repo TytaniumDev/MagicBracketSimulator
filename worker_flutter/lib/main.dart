@@ -31,18 +31,19 @@ import 'worker/worker_engine.dart';
 /// On launch:
 ///   1. Initialize Firebase (cloud_firestore listener target)
 ///   2. Load persistent worker config (workerId, capacity, paths)
-///   3. Show the dashboard window as a normal Mac app (Dock + menu bar)
+///   3. Show the dashboard window as a normal app
 ///   4. Set up the tray icon as a secondary affordance
 ///   5. Start the worker engine (Firestore listener + lease + sim runner)
 ///
-/// Hybrid Dock/tray model on macOS: the app launches as `.regular`
-/// (full Mac app). Closing the window via the red dot is intercepted —
-/// `windowManager.setPreventClose(true)` keeps the engine alive, then
-/// `MacActivationPolicyBridge.setAccessory()` drops the Dock icon and
-/// menu bar so the only remaining affordance is the tray icon. A tray
-/// click promotes back to `.regular` and re-shows the window. Windows
-/// and Linux keep the historical "X actually quits" behavior since
-/// there's no equivalent of NSApp.activationPolicy.
+/// Hybrid window/tray model: the app launches with a visible window.
+/// Closing the window is intercepted — `windowManager.setPreventClose(true)`
+/// keeps the engine alive:
+///   - macOS: `MacActivationPolicyBridge.setAccessory()` drops the Dock
+///     icon and menu bar. A tray click promotes back to `.regular`.
+///   - Windows: `windowManager.hide()` hides the window. The tray icon
+///     is the only remaining affordance.
+/// The only way to fully quit is the tray icon's right-click → "Quit"
+/// menu item, which stops the engine and destroys the window.
 Future<void> main() async {
   await _initFileLogger();
   _log('main() started');
@@ -126,11 +127,11 @@ Future<void> _appMain() async {
     _log('waitUntilReadyToShow callback');
     await windowManager.show();
     await windowManager.focus();
-    // Only intercept close on macOS — the tray icon is the user's
-    // way back to the window there. Windows ships without a tray
-    // entry, so hiding would lose the only way to interact with the
-    // app. Let X actually close the process on Windows/Linux.
-    if (Platform.isMacOS) {
+    // Intercept close on macOS and Windows — the tray icon is the
+    // user's way back to the window. Pressing X hides the window
+    // rather than quitting so the worker engine keeps running.
+    // The only way to fully quit is the tray icon's "Quit" menu item.
+    if (Platform.isMacOS || Platform.isWindows) {
       await windowManager.setPreventClose(true);
     }
   });
@@ -534,16 +535,15 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
 
   @override
   void onWindowClose() async {
-    // Only macOS gets the hide-to-tray treatment (see _appMain's
-    // setPreventClose). On Windows we keep historical behavior: the X
-    // really quits since there's no tray icon there and no NSApp
-    // activation-policy equivalent to fold the app away gracefully.
+    // Both macOS and Windows get the hide-to-tray treatment (see
+    // _appMain's setPreventClose). Pressing X hides the window while
+    // the worker engine keeps running. The tray icon is the user's
+    // way back; right-click → Quit is the only way to fully exit.
     //
-    // The listener has a `void` return type, so any throw here would
+    // The listener has a `void` return type, so a throw here would
     // be silently dropped by the framework. Wrap the whole body in
     // try/catch so a bridge failure (PlatformException) is at least
-    // visible in the log file — the user might otherwise see "window
-    // hides but Dock icon still showing" with no clue why.
+    // visible in the log file.
     try {
       if (Platform.isMacOS) {
         _log('onWindowClose: hiding window, demoting to accessory');
@@ -553,8 +553,14 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
         // — the activation policy only affects UI affordances.
         await windowManager.hide();
         await MacActivationPolicyBridge.setAccessory();
+      } else if (Platform.isWindows) {
+        _log('onWindowClose: hiding window to tray (Windows)');
+        // On Windows there's no activation-policy equivalent; just
+        // hide the window. The tray icon remains as the sole
+        // affordance. The taskbar entry disappears when hidden.
+        await windowManager.hide();
       } else {
-        _log('onWindowClose: destroying window (non-macOS quit-on-close)');
+        _log('onWindowClose: destroying window (Linux quit-on-close)');
         await windowManager.destroy();
       }
     } catch (e, st) {
