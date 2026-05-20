@@ -6,11 +6,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../config.dart';
-import '../decks/decks_screen.dart';
 import '../decks/deck_repo.dart';
 import '../decks/offline_deck_repo.dart';
 import '../launch/mode_picker_screen.dart';
-import '../sims/new_sim_screen.dart';
+import '../sims/simulate_screen.dart';
 import 'db/app_db.dart';
 import 'offline_runner.dart';
 
@@ -104,7 +103,7 @@ class _HomeScreenState extends State<_HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Magic Bracket — Offline'),
@@ -122,8 +121,7 @@ class _HomeScreenState extends State<_HomeScreen> {
           bottom: const TabBar(
             tabs: [
               Tab(icon: Icon(Icons.history), text: 'History'),
-              Tab(icon: Icon(Icons.style_outlined), text: 'Decks'),
-              Tab(icon: Icon(Icons.play_arrow), text: 'New'),
+              Tab(icon: Icon(Icons.play_arrow), text: 'Simulate'),
             ],
             labelColor: Color(0xFF60A5FA),
             unselectedLabelColor: Colors.white70,
@@ -136,8 +134,7 @@ class _HomeScreenState extends State<_HomeScreen> {
               padding: const EdgeInsets.all(20),
               child: _HistoryList(db: widget.db, runner: widget.runner),
             ),
-            DecksScreen(repo: _deckRepo),
-            NewSimScreen(
+            SimulateScreen(
               repo: _deckRepo,
               onStart: (decks, simCount) async {
                 final jobId = await widget.db.createJob(
