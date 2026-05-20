@@ -33,14 +33,22 @@ To verify with `gcloud`:
 
 ```bash
 TOKEN=$(gcloud auth print-access-token)
+APP=1:14286370379:ios:eb91598352257eef6d7fce
+BASE=https://firebaseappcheck.googleapis.com/v1/projects/magic-bracket-simulator/apps/$APP
+
+# App Attest (macOS 11+ / signed release builds):
 curl -s -H "Authorization: Bearer $TOKEN" \
      -H "X-Goog-User-Project: magic-bracket-simulator" \
-     "https://firebaseappcheck.googleapis.com/v1/projects/magic-bracket-simulator/apps/1:14286370379:ios:eb91598352257eef6d7fce/appAttestConfig"
+     "$BASE/appAttestConfig"
+
+# DeviceCheck (macOS <11 fallback):
+curl -s -H "Authorization: Bearer $TOKEN" \
+     -H "X-Goog-User-Project: magic-bracket-simulator" \
+     "$BASE/deviceCheckConfig"
 ```
 
-A non-empty response with `tokenTtl` set means App Attest is active.
-The matching `deviceCheckConfig` endpoint confirms the macOS <11
-fallback is wired up too.
+Each non-empty response with `tokenTtl` set means that provider is
+active.
 
 If you ever need to re-register from scratch (e.g. for a new Firebase
 project), the Console flow is:
@@ -95,10 +103,12 @@ Two different layers control what happens when a request lacks
   here — the request returns 401 immediately. This is what surfaces as
   the desktop worker's "Auth token rejected" error.
 - **Firebase service-level (Firestore + Identity Toolkit):** controlled
-  by `enforcementMode` on each service in
-  `projects/14286370379/services/*`. Currently both are `UNENFORCED`,
-  which means direct Firestore client calls (e.g. the run-locally
-  Firestore mirror in `lib/offline/cloud_mirror.dart`) work without an
-  App Check token. Flip these to `ENFORCED` only after every supported
-  platform — including Windows — sends a real token; Windows currently
-  can't, so leaving them `UNENFORCED` is correct.
+  by `enforcementMode` on each service under
+  `projects/magic-bracket-simulator/services/*` (Firebase Console →
+  App Check → APIs → Cloud Firestore / Identity Toolkit → **Enforce**).
+  Currently both are `UNENFORCED`, which means direct Firestore client
+  calls (e.g. the run-locally Firestore mirror in
+  `lib/offline/cloud_mirror.dart`) work without an App Check token.
+  Flip these to `ENFORCED` only after every supported platform —
+  including Windows — sends a real token; Windows currently can't, so
+  leaving them `UNENFORCED` is correct.
