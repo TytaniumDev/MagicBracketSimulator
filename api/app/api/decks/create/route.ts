@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { createDeck } from '@/lib/deck-store-factory';
 import { parseCommanderFromContent } from '@/lib/saved-decks';
 import { getColorIdentity } from '@/lib/scryfall';
@@ -10,8 +10,8 @@ import { errorResponse, badRequestResponse } from '@/lib/api-response';
  * POST /api/decks/create - Create a deck from URL or pasted text
  * Body: { deckUrl: string } OR { deckText: string, deckName?: string }
  */
-export async function POST(request: NextRequest) {
-  let user;
+export async function POST(request: NextRequest): Promise<NextResponse | Response> {
+  let user: AuthUser;
   try {
     user = await verifyAllowedUser(request);
   } catch {
