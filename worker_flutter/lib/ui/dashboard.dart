@@ -7,10 +7,9 @@ import '../cloud/cloud_leaderboard_screen.dart';
 import '../config.dart';
 import '../decks/cloud_deck_repo.dart';
 import '../decks/deck_repo.dart';
-import '../decks/decks_screen.dart';
 import '../launch/auto_start_service.dart';
 import '../models/sim.dart';
-import '../sims/new_sim_screen.dart';
+import '../sims/simulate_screen.dart';
 import '../worker/worker_engine.dart';
 
 /// Single dashboard window for the worker.
@@ -48,7 +47,7 @@ class _DashboardState extends State<Dashboard> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 4,
       child: Scaffold(
         backgroundColor: const Color(0xFF1F2937),
         appBar: AppBar(
@@ -63,8 +62,7 @@ class _DashboardState extends State<Dashboard> {
               Tab(icon: Icon(Icons.memory), text: 'Worker'),
               Tab(icon: Icon(Icons.cloud_queue), text: 'Jobs'),
               Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Leaderboard'),
-              Tab(icon: Icon(Icons.style_outlined), text: 'Decks'),
-              Tab(icon: Icon(Icons.play_arrow), text: 'New'),
+              Tab(icon: Icon(Icons.play_arrow), text: 'Simulate'),
             ],
             labelColor: Color(0xFF60A5FA),
             unselectedLabelColor: Colors.white70,
@@ -118,12 +116,10 @@ class _DashboardState extends State<Dashboard> {
             // recent completed jobs. Client-side because the
             // /api/leaderboard endpoint requires auth.
             const CloudLeaderboardScreen(),
-            // Decks tab — user's saved decks plus precons, live from
-            // Firestore. Add/delete go through the MBS API.
-            DecksScreen(repo: _deckRepo),
-            // New simulation tab — pick 4 decks and submit via
-            // POST /api/jobs.
-            NewSimScreen(
+            // Simulate tab — combined deck management + simulation
+            // picker. Streams user's saved decks plus precons from
+            // Firestore; add/delete via MBS API; submit to /api/jobs.
+            SimulateScreen(
               repo: _deckRepo,
               onStart: (decks, simCount) async {
                 final resp = await _api.postJson('/api/jobs', {
