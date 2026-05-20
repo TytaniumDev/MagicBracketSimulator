@@ -205,7 +205,19 @@ platform :mac do
     # verification didn't catch it (Debug builds skip this re-signing
     # pass). Fail the lane loudly here so a future Fastfile edit can't
     # break Firebase Auth sign-in on macOS without CI noticing.
-    entitlements_dump = `codesign -d --entitlements - #{app_path_abs.shellescape} 2>&1`
+    #
+    # `sh` (not backticks) so a non-zero codesign exit fails the lane
+    # by itself, and so the command + output land in the fastlane CI
+    # log. `log: false` suppresses fastlane's "$ codesign ..." prefix
+    # to keep the log focused. We search for the bare
+    # `keychain-access-groups` substring rather than the XML key tag —
+    # `codesign -d --entitlements -` switched output format somewhere
+    # between Sequoia and Tahoe (XML plist vs `[Key] foo` bracketed),
+    # and the substring is the one token present in both.
+    entitlements_dump = sh(
+      "codesign -d --entitlements - #{app_path_abs.shellescape} 2>&1",
+      log: false
+    )
     unless entitlements_dump.include?("keychain-access-groups")
       UI.user_error!(
         "Outer .app is missing keychain-access-groups after re-sign. " \
