@@ -100,8 +100,8 @@ flutter:
     # offline runner extracts these to the user's app-support dir on
     # demand (see `lib/offline/deck_source.dart`).
     - assets/precons/
-  # Tray icon asset goes here once you have a 16x16 PNG ready:
-  #   - assets/tray_icon.png
+  # Tray icons: .ico for Windows, .png for macOS/Linux.
+    - assets/tray_icon.ico
 
 # sentry_dart_plugin config — runs during CI release builds to upload
 # the obfuscation debug-info directory + Dart sources to Sentry so
