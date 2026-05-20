@@ -172,13 +172,58 @@ platform :mac do
       "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader",
       "#{sparkle_root}/Versions/B/XPCServices/Downloader.xpc",
       sparkle_root,
-      app_path_abs,
     ].each do |target|
       unless File.exist?(target)
         UI.message("Skipping #{target} — not present")
         next
       end
       sh("codesign --force --options runtime --timestamp --sign #{sign_id.shellescape} #{target.shellescape}")
+    end
+
+    # Re-seal the outer .app last, AFTER nested Sparkle components have
+    # been re-signed (changing nested signatures invalidates the parent
+    # seal). The `--preserve-metadata=entitlements,requirements` is what
+    # makes Firebase Auth's keychain access work on macOS Tahoe: without
+    # it, `codesign --force --sign` regenerates the signature from
+    # scratch and discards the entitlements Xcode applied from
+    # Release.entitlements during `flutter build` (notably
+    # `keychain-access-groups`, plus the JIT / library-validation /
+    # network entitlements). The shipped v0.2.43 binary had an empty
+    # entitlements dictionary, surfaced as
+    # `[firebase_auth/keychain-error]` from
+    # `FirebaseAuthHostApi.signInWithCredential` because Firebase Auth's
+    # SecItemAdd call returns errSecMissingEntitlement (-34018) on
+    # hardened-runtime + sandbox-disabled bundles with no keychain
+    # access group declared.
+    sh("codesign --force --options runtime --timestamp " \
+       "--preserve-metadata=entitlements,requirements " \
+       "--sign #{sign_id.shellescape} #{app_path_abs.shellescape}")
+
+    # Guardrail: assert the outer .app still carries the keychain
+    # entitlement after the re-sign. v0.2.43 shipped without it because
+    # the loop above stripped entitlements silently — local Debug
+    # verification didn't catch it (Debug builds skip this re-signing
+    # pass). Fail the lane loudly here so a future Fastfile edit can't
+    # break Firebase Auth sign-in on macOS without CI noticing.
+    #
+    # `sh` (not backticks) so a non-zero codesign exit fails the lane
+    # by itself, and so the command + output land in the fastlane CI
+    # log. `log: false` suppresses fastlane's "$ codesign ..." prefix
+    # to keep the log focused. We search for the bare
+    # `keychain-access-groups` substring rather than the XML key tag —
+    # `codesign -d --entitlements -` switched output format somewhere
+    # between Sequoia and Tahoe (XML plist vs `[Key] foo` bracketed),
+    # and the substring is the one token present in both.
+    entitlements_dump = sh(
+      "codesign -d --entitlements - #{app_path_abs.shellescape} 2>&1",
+      log: false
+    )
+    unless entitlements_dump.include?("keychain-access-groups")
+      UI.user_error!(
+        "Outer .app is missing keychain-access-groups after re-sign. " \
+        "Firebase Auth would fail with [firebase_auth/keychain-error] " \
+        "on macOS Tahoe. codesign output:\n#{entitlements_dump}"
+      )
     end
 
     # Notarize the signed .app, then staple the ticket so users without
