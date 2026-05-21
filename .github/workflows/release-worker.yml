@@ -1,3 +1,5 @@
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 name: Release magic-bracket-simulator
 
 # One workflow, two platform builds, one GitHub Release, one appcast
