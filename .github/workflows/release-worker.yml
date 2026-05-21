@@ -26,6 +26,9 @@ concurrency:
   group: release-worker
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   version:
     runs-on: ubuntu-latest

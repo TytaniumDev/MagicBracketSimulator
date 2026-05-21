@@ -27,6 +27,9 @@ permissions:
   contents: read
   id-token: write # Required for Workload Identity Federation OIDC exchange
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ── Gate: reuse the CI workflow for lint / build / test ────────────────
   ci:
