@@ -2,7 +2,7 @@
 
 # Magic Bracket Simulator
 
-[ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐞 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
+[ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
 **Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge.**
 
@@ -47,18 +47,32 @@ cd worker_flutter && flutter run -d macos    # or: -d windows
 
 ## Documentation Map
 
+**Architecture & Core**
 *   [Architecture Overview](docs/ARCHITECTURE.md)
 *   [Architecture Issues](docs/ARCHITECTURE_ISSUES.md)
-*   [API Reference](API.md)
 *   [Data Flow](DATA_FLOW.md)
+*   [API Reference](API.md)
+
+**Setup & Deployment**
 *   [Deployment Guide](docs/DEPLOYMENT.md)
-*   [Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md)
 *   [Mode Setup](docs/MODE_SETUP.md)
-*   [Precon Sync](docs/PRECON_SYNC.md)
 *   [Secrets Setup](docs/SECRETS_SETUP.md)
+
+**Features & Systems**
+*   [Precon Sync](docs/PRECON_SYNC.md)
 *   [Stale Sweeper](docs/STALE_SWEEPER.md)
 *   [Sweeper Alerting](docs/SWEEPER_ALERTING.md)
 *   [Sweeper Alert Policy](docs/sweeper-alert-policy.yaml)
+*   [Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md)
+
+**Workspaces**
+*   [API Workspace](api/README.md)
+*   [Frontend Workspace](frontend/README.md)
+*   [Worker Workspace (Legacy Docker)](worker/README.md)
+*   [Worker Workspace (Flutter Desktop)](worker_flutter/README.md)
+
+**Superpowers (Specs & Plans)**
+*   [Superpowers Directory](docs/superpowers/)
 
 ## Contributing
 
