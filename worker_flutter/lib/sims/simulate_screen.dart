@@ -53,7 +53,7 @@ class _SimulateScreenState extends State<SimulateScreen> {
   final _searchCtrl = TextEditingController();
   String _search = '';
   final List<String> _picked = []; // deck ids, insertion order
-  int _sims = 10;
+  int _sims = 100;
 
   // User-controlled section state, honored only when search is empty.
   bool _customOpen = true;
