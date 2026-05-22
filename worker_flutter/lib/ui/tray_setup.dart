@@ -5,6 +5,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../macos/activation_policy.dart';
+import '../telemetry.dart';
 import '../worker/worker_engine.dart';
 
 /// Sets up the system-tray icon and click-to-open-window behavior.
@@ -18,10 +19,10 @@ import '../worker/worker_engine.dart';
 ///     affordance. A tray click re-shows the window.
 ///
 /// Right-click menu has: Show, Start/Stop worker, Quit.
-class TraySetup with TrayListener {
-  TraySetup({required this.engine});
+class TraySetup with TrayListener, WindowListener {
+  TraySetup({this.engine});
 
-  final WorkerEngine engine;
+  WorkerEngine? engine;
 
   /// Guard against double-firing the show-window flow on rapid tray
   /// clicks. `setRegular` + `show` + `focus` are individually
@@ -29,8 +30,16 @@ class TraySetup with TrayListener {
   /// Dock-icon flicker as the second call races the first.
   bool _showingDashboard = false;
 
+  void _log(String msg) {
+    if (kDebugMode) {
+      debugPrint('${DateTime.now().toIso8601String()} [TraySetup] $msg');
+    }
+    Telemetry.breadcrumb(TelemetryCategory.tray, msg);
+  }
+
   Future<void> init() async {
     trayManager.addListener(this);
+    windowManager.addListener(this);
     try {
       // Windows requires .ico; macOS/Linux use .png.
       final iconPath = Platform.isWindows
@@ -45,14 +54,27 @@ class TraySetup with TrayListener {
       }
     }
     await trayManager.setToolTip('Magic Bracket Worker');
-    await _rebuildMenu();
-    engine.stateStream.listen((_) => _rebuildMenu());
+    await updateMenu();
   }
 
-  Future<void> _rebuildMenu() async {
-    final running = engine.currentState.running;
-    final active = engine.currentState.activeSims.length;
-    final completed = engine.currentState.completedCount;
+  Future<void> updateMenu() async {
+    final eng = engine;
+    if (eng == null) {
+      await trayManager.setContextMenu(
+        Menu(
+          items: [
+            MenuItem(key: 'show', label: 'Show dashboard'),
+            MenuItem.separator(),
+            MenuItem(key: 'quit', label: 'Quit Magic Bracket Worker'),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final running = eng.currentState.running;
+    final active = eng.currentState.activeSims.length;
+    final completed = eng.currentState.completedCount;
 
     await trayManager.setContextMenu(
       Menu(
@@ -81,7 +103,45 @@ class TraySetup with TrayListener {
 
   Future<void> dispose() async {
     trayManager.removeListener(this);
+    windowManager.removeListener(this);
     await trayManager.destroy();
+  }
+
+  // ── WindowListener ───────────────────────────────────────────
+
+  @override
+  void onWindowClose() async {
+    // Both macOS and Windows get the hide-to-tray treatment (see
+    // _appMain's setPreventClose). Pressing X hides the window while
+    // the worker engine keeps running. The tray icon is the user's
+    // way back; right-click → Quit is the only way to fully exit.
+    //
+    // The listener has a `void` return type, so a throw here would
+    // be silently dropped by the framework. Wrap the whole body in
+    // try/catch so a bridge failure (PlatformException) is at least
+    // visible in the log file.
+    try {
+      if (Platform.isMacOS) {
+        _log('onWindowClose: hiding window, demoting to accessory');
+        // Hide the window first, then demote to `.accessory` so the
+        // Dock icon and menu bar disappear in a single visual beat.
+        // Tray icon stays around as the way back. Engine keeps running
+        // — the activation policy only affects UI affordances.
+        await windowManager.hide();
+        await MacActivationPolicyBridge.setAccessory();
+      } else if (Platform.isWindows) {
+        _log('onWindowClose: hiding window to tray (Windows)');
+        // On Windows there's no activation-policy equivalent; just
+        // hide the window. The tray icon remains as the sole
+        // affordance. The taskbar entry disappears when hidden.
+        await windowManager.hide();
+      } else {
+        _log('onWindowClose: destroying window (Linux quit-on-close)');
+        await windowManager.destroy();
+      }
+    } catch (e, st) {
+      _log('onWindowClose: transition failed: $e\n$st');
+    }
   }
 
   // ── TrayListener ─────────────────────────────────────────────
@@ -108,14 +168,20 @@ class TraySetup with TrayListener {
           await _showDashboard();
           break;
         case 'toggle':
-          if (engine.currentState.running) {
-            await engine.stop();
-          } else {
-            await engine.start();
+          final eng = engine;
+          if (eng != null) {
+            if (eng.currentState.running) {
+              await eng.stop();
+            } else {
+              await eng.start();
+            }
           }
           break;
         case 'quit':
-          await engine.stop();
+          final eng = engine;
+          if (eng != null) {
+            await eng.stop();
+          }
           await dispose();
           await windowManager.destroy();
           break;

@@ -112,7 +112,7 @@ Future<void> _appMain() async {
   // Native window setup. The app launches as `.regular` (default in
   // Info.plist) so the user sees a Dock icon + menu bar + window
   // immediately. The close button is intercepted on macOS — see
-  // _WorkerAppState.onWindowClose, which hides the window AND demotes
+  // TraySetup.onWindowClose, which hides the window AND demotes
   // the app to `.accessory` so the Dock icon disappears while the
   // worker keeps running behind the tray icon.
   _log('Initializing window_manager');
@@ -138,6 +138,22 @@ Future<void> _appMain() async {
     }
   });
   _log('window ready, shown');
+
+  // Initialize global system tray on supported platforms (macOS/Windows)
+  if (Platform.isMacOS || Platform.isWindows) {
+    try {
+      _globalTray = TraySetup();
+      await _globalTray!.init();
+      _log('Boot: global tray initialized');
+    } catch (e, st) {
+      _log('Boot: global tray init failed (non-fatal): $e\n$st');
+      Telemetry.breadcrumb(
+        TelemetryCategory.tray,
+        'Global tray init failed',
+        data: {'error': e.toString()},
+      );
+    }
+  }
 
   // Self-update: ask Sparkle (via auto_updater) to check the appcast in
   // the repo. New `worker-v*` tags add an entry there; users running the
@@ -268,22 +284,16 @@ Future<void> _bootEngine(WorkerConfig config) async {
     firestore: FirebaseFirestore.instance,
   );
 
-  // Tray init: the historical crash was specific to `LSUIElement=true`
-  // combined with sandbox-disabled entitlements. With LSUIElement=false
-  // (current MVP setting) the crash condition isn't met. Wrap in try/catch
-  // anyway — tray failure must not kill the app since the visible window
-  // is the primary affordance.
-  try {
-    final tray = TraySetup(engine: engine);
-    await tray.init();
-    _log('Boot: tray initialized');
-  } catch (e, st) {
-    _log('Boot: tray init failed (non-fatal): $e\n$st');
-    Telemetry.breadcrumb(
-      TelemetryCategory.tray,
-      'Tray init failed',
-      data: {'error': e.toString()},
-    );
+  // Connect the constructed WorkerEngine to the global tray
+  if (_globalTray != null) {
+    _globalTray!.engine = engine;
+    try {
+      await _globalTray!.updateMenu();
+      engine.stateStream.listen((_) => _globalTray?.updateMenu());
+      _log('Boot: engine linked to global tray');
+    } catch (e, st) {
+      _log('Boot: linking engine to global tray failed: $e\n$st');
+    }
   }
 
   // Run the UI immediately. Start the engine *after* sign-in so
@@ -313,6 +323,9 @@ Future<void> _startEngineSafe(WorkerEngine engine) async {
     );
   }
 }
+
+// ── Global Tray Setup ─────────────────────────────────────────────
+TraySetup? _globalTray;
 
 // ── Simple file logger ────────────────────────────────────────────
 // Tray-only apps have no stderr console visible to the user; we write
@@ -543,7 +556,7 @@ class _WorkerApp extends StatefulWidget {
   State<_WorkerApp> createState() => _WorkerAppState();
 }
 
-class _WorkerAppState extends State<_WorkerApp> with WindowListener {
+class _WorkerAppState extends State<_WorkerApp> {
   final AuthService _auth = AuthService();
   AuthedUser? _user;
   bool _engineStarted = false;
@@ -552,7 +565,6 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
   @override
   void initState() {
     super.initState();
-    windowManager.addListener(this);
     _performSilentSignIn();
   }
 
@@ -576,47 +588,6 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
           _restoringSession = false;
         });
       }
-    }
-  }
-
-  @override
-  void dispose() {
-    windowManager.removeListener(this);
-    super.dispose();
-  }
-
-  @override
-  void onWindowClose() async {
-    // Both macOS and Windows get the hide-to-tray treatment (see
-    // _appMain's setPreventClose). Pressing X hides the window while
-    // the worker engine keeps running. The tray icon is the user's
-    // way back; right-click → Quit is the only way to fully exit.
-    //
-    // The listener has a `void` return type, so a throw here would
-    // be silently dropped by the framework. Wrap the whole body in
-    // try/catch so a bridge failure (PlatformException) is at least
-    // visible in the log file.
-    try {
-      if (Platform.isMacOS) {
-        _log('onWindowClose: hiding window, demoting to accessory');
-        // Hide the window first, then demote to `.accessory` so the
-        // Dock icon and menu bar disappear in a single visual beat.
-        // Tray icon stays around as the way back. Engine keeps running
-        // — the activation policy only affects UI affordances.
-        await windowManager.hide();
-        await MacActivationPolicyBridge.setAccessory();
-      } else if (Platform.isWindows) {
-        _log('onWindowClose: hiding window to tray (Windows)');
-        // On Windows there's no activation-policy equivalent; just
-        // hide the window. The tray icon remains as the sole
-        // affordance. The taskbar entry disappears when hidden.
-        await windowManager.hide();
-      } else {
-        _log('onWindowClose: destroying window (Linux quit-on-close)');
-        await windowManager.destroy();
-      }
-    } catch (e, st) {
-      _log('onWindowClose: transition failed: $e\n$st');
     }
   }
 
