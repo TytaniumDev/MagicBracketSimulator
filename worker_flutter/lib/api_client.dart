@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
@@ -54,11 +56,30 @@ class ApiClient {
       throw const ApiAuthException('Not signed in');
     }
     final token = await user.getIdToken();
-    return {
+    final headers = <String, String>{
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
+    final appCheckToken = await _appCheckToken();
+    if (appCheckToken != null) headers['X-Firebase-AppCheck'] = appCheckToken;
+    return headers;
+  }
+
+  /// Fetch a Firebase App Check token to attest this request comes from
+  /// the legitimate app rather than a script with a stolen ID token.
+  /// Returns `null` on platforms where App Check isn't wired up (Windows
+  /// desktop has no `firebase_app_check` support) or when the underlying
+  /// fetch fails — letting the request proceed unattested mirrors the
+  /// web client's soft-fail. The API then surfaces the missing token as
+  /// a 401 the user sees as "Auth token rejected".
+  Future<String?> _appCheckToken() async {
+    if (!Platform.isMacOS) return null;
+    try {
+      return await FirebaseAppCheck.instance.getToken();
+    } catch (_) {
+      return null;
+    }
   }
 
   Map<String, dynamic> _decode(http.Response resp, String path) {

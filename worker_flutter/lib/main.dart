@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:auto_updater/auto_updater.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -95,6 +96,7 @@ Future<void> _appMain() async {
     try {
       await Firebase.initializeApp(options: fbOpts);
       _log('Firebase ready');
+      await _activateAppCheck();
     } catch (e, st) {
       firebaseInitError = e.toString();
       _log('Firebase init failed: $e');
@@ -337,6 +339,41 @@ const _kAutoUpdateCheckIntervalSeconds = 3600;
 /// `inBackground: true` to stay silent on the no-update path.
 const _kAutoUpdaterChannel = MethodChannel('magic_bracket/auto_updater');
 
+/// Initialize Firebase App Check so API calls carry an
+/// `X-Firebase-AppCheck` token alongside the Firebase ID token —
+/// without it the cloud API returns 401 "Auth token rejected" on every
+/// request that goes through `verifyAllowedUser`/`verifyAuth`.
+///
+/// macOS uses Apple's App Attest in release builds and a debug provider
+/// in `flutter run` so a locally-running app can be paired with the
+/// debug token surfaced via Firebase Console → App Check → Apps.
+/// Windows is a no-op: `firebase_app_check` has no Windows desktop
+/// support yet, so the Windows worker relies on the "Run locally"
+/// path (which bypasses the API entirely) for end-user workflows.
+Future<void> _activateAppCheck() async {
+  if (!Platform.isMacOS) {
+    _log('AppCheck: skipping (unsupported platform)');
+    return;
+  }
+  try {
+    await FirebaseAppCheck.instance.activate(
+      appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.appAttest,
+    );
+    _log('AppCheck: activated (${kDebugMode ? "debug" : "appAttest"})');
+  } catch (e, st) {
+    // Non-fatal: leaves API calls unauthenticated against App Check,
+    // which the user will see as "Auth token rejected". Capturing the
+    // failure lets us see why before the user-facing error surfaces.
+    _log('AppCheck: activation failed (non-fatal): $e\n$st');
+    await Telemetry.captureError(
+      e,
+      st,
+      category: TelemetryCategory.firebaseInit,
+      extra: {'step': 'appCheckActivate'},
+    );
+  }
+}
+
 Future<void> _initAutoUpdater() async {
   // Register the menu-item channel handler FIRST — before any await
   // that could throw and skip the rest of the setup. If `setFeedURL`
@@ -510,20 +547,35 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
   final AuthService _auth = AuthService();
   AuthedUser? _user;
   bool _engineStarted = false;
+  bool _restoringSession = true;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    // firebase_auth persists the session across launches — restore it
-    // synchronously so a returning user lands straight on the
-    // dashboard rather than the AuthGate.
-    final restored = _auth.currentUserSnapshot;
-    if (restored != null) {
-      _user = restored;
-      // Schedule outside the build cycle: _startEngineSafe awaits the
-      // engine, and initState shouldn't be async.
-      Future.microtask(() => _onAuthed(restored));
+    _performSilentSignIn();
+  }
+
+  Future<void> _performSilentSignIn() async {
+    try {
+      final user = await _auth.trySilentSignIn();
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _restoringSession = false;
+        });
+        if (user != null) {
+          await _onAuthed(user);
+        }
+      }
+    } catch (e, st) {
+      _log('Silent sign-in threw error: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _user = null;
+          _restoringSession = false;
+        });
+      }
     }
   }
 
@@ -594,13 +646,29 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
           surface: Color(0xFF111827),
         ),
       ),
-      home: _user == null
-          ? AuthGateScreen(
-              authService: _auth,
-              onAuthed: _onAuthed,
-              onSwitchToOffline: _switchToOffline,
+      home: _restoringSession
+          ? const Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Restoring session…',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
             )
-          : Dashboard(engine: widget.engine, config: widget.config),
+          : (_user == null
+              ? AuthGateScreen(
+                  authService: _auth,
+                  onAuthed: _onAuthed,
+                  onSwitchToOffline: _switchToOffline,
+                )
+              : Dashboard(engine: widget.engine, config: widget.config)),
     );
   }
 }

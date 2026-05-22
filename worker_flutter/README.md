@@ -28,7 +28,11 @@ Pick **Cloud** or **Offline** mode.
 
 - **Cloud** signs in with Google and starts listening for jobs from
   the [web frontend](https://magic-bracket-simulator.web.app).
-  Results show up on the public leaderboard.
+  Results show up on the public leaderboard. The Simulate tab also has
+  a **Run locally** checkbox that bypasses the cloud queue and runs on
+  this machine directly — handy when you want immediate feedback
+  without occupying a cloud worker. When signed in, the results still
+  mirror to Cloud Jobs / Leaderboard automatically.
 - **Offline** lets you pick 4 bundled Commander precons and run a
   bracket locally. Results stay on your machine.
 

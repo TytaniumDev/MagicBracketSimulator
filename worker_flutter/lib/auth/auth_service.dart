@@ -82,8 +82,9 @@ class AuthService {
   Stream<AuthedUser?> get currentUser =>
       _firebaseAuth.authStateChanges().map(_mapUser);
 
-  /// Synchronous snapshot of the currently signed-in user, if any.
-  /// Used at boot to restore a persisted session.
+  /// Synchronously returns the user currently signed into the native
+  /// Firebase SDK. Emits `null` while signed out or before the SDK
+  /// finishes loading its cache.
   AuthedUser? get currentUserSnapshot => _mapUser(_firebaseAuth.currentUser);
 
   AuthedUser? _mapUser(User? user) {
@@ -95,21 +96,11 @@ class AuthService {
     );
   }
 
-  /// Trigger the Google Sign-In flow and return the signed-in user.
-  ///
-  /// Throws [AuthCancelledException] if the user closes the OAuth
-  /// browser/tab without completing sign-in. Other errors bubble.
+  /// Drive the platform-specific Google login flow. Returns the authed
+  /// user, or throws on cancellation / configuration failure.
   Future<AuthedUser> signIn() async {
     if (_useDesktopFlow) {
       return _signInDesktop();
-    }
-    return _signInNative();
-  }
-
-  /// Native `signInWithProvider` — iOS, Android, Web.
-  Future<AuthedUser> _signInNative() async {
-    if (kDebugMode) {
-      debugPrint('AuthService.signIn() — using signInWithProvider');
     }
     final provider = GoogleAuthProvider()..addScope('email');
     final UserCredential credential;
@@ -186,6 +177,7 @@ class AuthService {
       );
       rethrow;
     }
+
     // Persist the Google refresh token so the next launch can silently
     // re-sign-in via `trySilentSignIn`. Absence is non-fatal — the
     // user can still complete sign-in this session; they'll just see

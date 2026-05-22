@@ -23,6 +23,810 @@
     <description>Desktop worker for the Magic Bracket Simulator project.</description>
     <language>en</language>
     <item>
+      <title>Version 0.2.122 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 16:22:32 +0000</pubDate>
+      <sparkle:version>142</sparkle:version>
+      <sparkle:shortVersionString>0.2.122</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.122/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="AwX2ONVgkrt1AXRNHzKmwsX9LS47RPSAhjvLXq4LbTFfwqVzvUMrm1HSMoxDkPMLEVZTGk4turBzPnKsrgqZCA=="
+                 length="40822168"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.121 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 15:51:06 +0000</pubDate>
+      <sparkle:version>141</sparkle:version>
+      <sparkle:shortVersionString>0.2.121</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.121/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="1R7WESfcqMVRtdFxGiTdaJ7dKV3FVZ4WRdlFA0LarQNySGsyBu0B1LFci33VcDAgSsAy/wA27O2Us7dVT3j+Aw=="
+                 length="40822305"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.120 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 15:13:06 +0000</pubDate>
+      <sparkle:version>140</sparkle:version>
+      <sparkle:shortVersionString>0.2.120</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.120/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="qB1BpcfYcZnMdEpDVlCR5iC+adxb9uhU7d59pfDHhLXgBk4LKqAc8X+p7pWqTjeODRaCln7deyQtd6DjFkz9Ag=="
+                 length="40822150"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.119 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 14:40:30 +0000</pubDate>
+      <sparkle:version>139</sparkle:version>
+      <sparkle:shortVersionString>0.2.119</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.119/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="sNrh10K3TXzvHpQEsh3A/IR2Ska9q76kCEzlo/QK+kIUKZJn7qlJ9PHU9SC1kpWfArq6937xJfhI3dQGGRw/Aw=="
+                 length="40822158"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.118 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 14:13:52 +0000</pubDate>
+      <sparkle:version>138</sparkle:version>
+      <sparkle:shortVersionString>0.2.118</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.118/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="Ll3itB8BMgZMBePi0X5xObuYYTDolFb8qCNswuNLC3f/9sV6p7ig+6/iHVljvachCZ0mstuo5O5e2mlCSswaBQ=="
+                 length="40822027"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.117 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 13:38:34 +0000</pubDate>
+      <sparkle:version>137</sparkle:version>
+      <sparkle:shortVersionString>0.2.117</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.117/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="QTvtG9n1eqAc94YEtBuziU9i9zpOmXoW4w0RQ6H0sS1+g8Q8tBZ3CruzW8MYOeMmPpwbbeXemhx9TvQM1GktBg=="
+                 length="40822226"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.116 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 13:07:22 +0000</pubDate>
+      <sparkle:version>136</sparkle:version>
+      <sparkle:shortVersionString>0.2.116</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.116/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="UzXv7i/8rsP0OXrTo/ZEBzbABcxvpBeowYnMSYk9ZAk8GMxx4LlaePYa5y1BcNiwJlpl89eqejTQ14/aITrzAA=="
+                 length="40822195"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.115 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 12:36:45 +0000</pubDate>
+      <sparkle:version>135</sparkle:version>
+      <sparkle:shortVersionString>0.2.115</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.115/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="d+tW8IGwXz72DJyQOPpsabBhNPJZ4jQzxKZjC9Ey8w8YLD4IAXfN2JJvc5ivOR/6UJa0cz8c0w/fayg+RhBWDw=="
+                 length="40822093"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.114 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 12:02:10 +0000</pubDate>
+      <sparkle:version>134</sparkle:version>
+      <sparkle:shortVersionString>0.2.114</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.114/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="aR4PpzxkVN8L2xnCibrrZOQb3UowET57kPiuR/IIJv7GCMpoIxoYmtX+0g/JfPBYPcRBifjdwUfsxJB/qbxuBw=="
+                 length="40822052"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.113 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 11:29:23 +0000</pubDate>
+      <sparkle:version>133</sparkle:version>
+      <sparkle:shortVersionString>0.2.113</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.113/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="Jxz13SDLI2N67jgMwliIrinbxshfMOtATOhD9TC+aZ3/0NMaG6z/Y8HC0572oP65h05+HNGCPQ0pDAcgPggwAw=="
+                 length="40822056"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.112 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 10:50:42 +0000</pubDate>
+      <sparkle:version>132</sparkle:version>
+      <sparkle:shortVersionString>0.2.112</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.112/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="czW5MczFSiPYtnfXNcPlM0Hjy34yN6FnIiwR263VBav6lGvz/sUrpQ6ix14acYWMJvmddYl2vagZCvuS4kzPCA=="
+                 length="40822110"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.111 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 10:15:45 +0000</pubDate>
+      <sparkle:version>131</sparkle:version>
+      <sparkle:shortVersionString>0.2.111</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.111/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="jUZ+EIK2OKsFn0eQgBWUzUhu+5BJj9Gx4fNFREIoxOOD2SVC0CgJRwVLNnDXuJYhHwrfekB/60WrDugcMlr7DA=="
+                 length="40822312"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.110 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 09:38:50 +0000</pubDate>
+      <sparkle:version>130</sparkle:version>
+      <sparkle:shortVersionString>0.2.110</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.110/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="4ehe8FyhXtCeBNadfMqb9aFUo0Kho6QerrQB3uwSyp2zgQeyaAlrBlY4NNOF2WNH3PJxhk6ZE1D2Phb2iktuCg=="
+                 length="40822101"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.109 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 09:07:12 +0000</pubDate>
+      <sparkle:version>129</sparkle:version>
+      <sparkle:shortVersionString>0.2.109</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.109/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="guntQMt5rV4Eow/tYHpwAG8OcnF0XavRkXeF/GHzjcX3QAm0yiMS4EKdPDpmncU+noMtQwjcr4bdJT7wuCB+Cw=="
+                 length="40822619"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.108 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 08:35:21 +0000</pubDate>
+      <sparkle:version>128</sparkle:version>
+      <sparkle:shortVersionString>0.2.108</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.108/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="VzSlT7kfftUY7GHWwk8HQzN3pg4zc286t2WvcAGAsv7wHpvBUEUduzsgrRQhUCXWgRr3oryb/dmK9c2gCcjoDQ=="
+                 length="40822336"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.107 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 08:02:08 +0000</pubDate>
+      <sparkle:version>127</sparkle:version>
+      <sparkle:shortVersionString>0.2.107</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.107/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="hzHROWyI2VbtyaMMs1tLlZNbH6hgHkiQRUmT+daMlfMi9x8GnHMCMO9WbYmTEZR3PK2mOfAA2VU2TX8K5UAXBg=="
+                 length="40822199"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.106 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 07:26:57 +0000</pubDate>
+      <sparkle:version>126</sparkle:version>
+      <sparkle:shortVersionString>0.2.106</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.106/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="IrfHKvziOKgAZuKwi2BVB5yqCh54A5BdPxhwF7aRAXxbhV76g8Z+fRpSqKvpdZxeuIoD3j6/hP0z2EC5HbgXBg=="
+                 length="40822457"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.105 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 06:53:40 +0000</pubDate>
+      <sparkle:version>125</sparkle:version>
+      <sparkle:shortVersionString>0.2.105</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.105/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="OzhYHAcbAfxqXO1xUoX/MiQW73ZVQWPwfBL1FLK5LEZW5oPx2QNsGTgYk9C+L+wsimz6WSUvNgNJO37ONI1eBA=="
+                 length="40822337"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.104 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 06:14:44 +0000</pubDate>
+      <sparkle:version>124</sparkle:version>
+      <sparkle:shortVersionString>0.2.104</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.104/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="FyLlABhRrnc8a12BhRRDJCU5xRqdnskh6nynQS7WpsHnG8yBsOXHaR4RHD7xG3C+f9L/WgN8WjZNyCQnjQM5Ag=="
+                 length="40822212"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.101 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 08:24:23 +0000</pubDate>
+      <sparkle:version>121</sparkle:version>
+      <sparkle:shortVersionString>0.2.101</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.101/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="MwTM1xoKD2jsVbTd6pW+owbDN63afl/peHPkbEtyO2bAiAalTpP62iQioLS9rnm5AbK/R/j+tISuqwXhK8OYAQ=="
+                 length="40717838"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.100 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 07:50:38 +0000</pubDate>
+      <sparkle:version>120</sparkle:version>
+      <sparkle:shortVersionString>0.2.100</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.100/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="EJwYPCBZtY58apo+6E+cz8HenUKJUFe3FQw4q1KHPXeK+vQLm6G0WJA5iLgwgM9Q3wcVJN37hefUldXGQW/iAA=="
+                 length="40717577"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.99 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 07:17:25 +0000</pubDate>
+      <sparkle:version>119</sparkle:version>
+      <sparkle:shortVersionString>0.2.99</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.99/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="fybovqfQASCnEKtPMy35xjymux+V45PTXirBLDt2T0kZ86zBM/pTUxjy2i5KIrlwYMEBJeb9Ev1H1UW/+zjuCA=="
+                 length="40717588"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.98 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 06:49:00 +0000</pubDate>
+      <sparkle:version>118</sparkle:version>
+      <sparkle:shortVersionString>0.2.98</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.98/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="NAloEG6oO2egow3W5iTjyYknQAtjvKaCa7ws5h05k2Eh/32cw1c4fPjaeXMjSF01fqOFcD2MInSh38A7+N0TDw=="
+                 length="40717449"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.97 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 06:16:29 +0000</pubDate>
+      <sparkle:version>117</sparkle:version>
+      <sparkle:shortVersionString>0.2.97</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.97/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="m7ntih1pGY7ve2hqZ8g7O8ojpQUFs9ISD3s0TqKh26NNdmGE9MPU/VIPDIwd4XOuOjbyH9I7+sqry0PSYJnUCg=="
+                 length="40717666"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.96 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 05:41:10 +0000</pubDate>
+      <sparkle:version>116</sparkle:version>
+      <sparkle:shortVersionString>0.2.96</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.96/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="gmQwxMS5FPJULYeyN6SqV77jxY24Fn4j1bXekv1VZoyknd7odAKLptZsl4St4QPb15WGOA7HEu/ltVs3kQCDDw=="
+                 length="40718016"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.95 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 05:14:39 +0000</pubDate>
+      <sparkle:version>115</sparkle:version>
+      <sparkle:shortVersionString>0.2.95</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.95/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="KzvBeQsqufsCXdZK1ZK980jAmY+tg2ES8yG6/gO1ej+ZGsUECsknxn92QtPH6i2o+njV8pF1sVwcFkzlR1GmDQ=="
+                 length="40717956"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.94 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 04:50:02 +0000</pubDate>
+      <sparkle:version>114</sparkle:version>
+      <sparkle:shortVersionString>0.2.94</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.94/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="7xJldxeqNNqFmlYs4cbxLefN/gr82SlB9Ky/YPakYpubn89yDjeCmOBSfF8D7JYeLtf1R+1t2Uj8dfqPc570Dw=="
+                 length="40717867"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.93 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 04:21:30 +0000</pubDate>
+      <sparkle:version>113</sparkle:version>
+      <sparkle:shortVersionString>0.2.93</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.93/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="c36Y8VMbtVBTsnwHgbOZJraefx7tLP7/NH0qBkHr57zhx0TAtMwup9fRXJaWduzNd72YX0A2VQKnk0dGRDNXBw=="
+                 length="40717412"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.92 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 03:43:49 +0000</pubDate>
+      <sparkle:version>112</sparkle:version>
+      <sparkle:shortVersionString>0.2.92</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.92/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="XLyKcCADjvkAVuuvhE3sXMuSBrdxpRO5LqYYpPd/6h5mWW3WEI/qA1J7pXxFm8ZwGIz8iNkNQoMq1e1O75eUAg=="
+                 length="40717445"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.91 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 03:11:41 +0000</pubDate>
+      <sparkle:version>111</sparkle:version>
+      <sparkle:shortVersionString>0.2.91</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.91/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="Soz1Ez1dvLxXfzLa3jcC20TC9cDTtWA8NkKr72Qu2YRvDqciwH4bgq2ZhJf1K3egINq8Po0Ze5dthoTLC//aBA=="
+                 length="40717793"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.90 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 02:44:36 +0000</pubDate>
+      <sparkle:version>110</sparkle:version>
+      <sparkle:shortVersionString>0.2.90</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.90/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="DWWKPMTvKdrs3vsa5i3+i19s5RGpkYmT09WpiXXs2L5/ZzTT3waRh+8wVkOfyVWms0BCqMqzF/GkClk2HFnTBw=="
+                 length="40717324"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.89 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 02:12:59 +0000</pubDate>
+      <sparkle:version>109</sparkle:version>
+      <sparkle:shortVersionString>0.2.89</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.89/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="6Rl0MgXgDvkqe35poEvkY1WTF9kFvBGzm/kD0/yrsHpumMwmCHl90V6JLda4H+UcU9hsHrAG3SpyTO5xqfD7AA=="
+                 length="40717315"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.88 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 01:43:38 +0000</pubDate>
+      <sparkle:version>108</sparkle:version>
+      <sparkle:shortVersionString>0.2.88</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.88/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="ajnVlszT9FXAQ6ZPOkxSz5i//6cLo0zZ7uaQcO1QqFqi5SEXbHeTVRqLdeGCda3Ywhj6h/TKp8FONR0eRgifCg=="
+                 length="40717329"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.87 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 01:11:57 +0000</pubDate>
+      <sparkle:version>107</sparkle:version>
+      <sparkle:shortVersionString>0.2.87</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.87/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="ANevRCNOdMtJ/65AlAhgW+uQ2rtYCgNC1yBp1mj07cWZ+muwSrQS6lS3peSRP0mZy5cIAatWHPfILt1OF8LNDQ=="
+                 length="40717739"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.86 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 00:40:00 +0000</pubDate>
+      <sparkle:version>106</sparkle:version>
+      <sparkle:shortVersionString>0.2.86</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.86/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="6T1OeJ8V8gnV2ZbzeHyuDpXTXQ/Ecjr6YMLTJD7YOlOEd0DwuM6eqSiEiP7CPh17wd+/HvTiaScnYCjxY91dAQ=="
+                 length="40717436"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.85 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Thu, 21 May 2026 00:11:10 +0000</pubDate>
+      <sparkle:version>105</sparkle:version>
+      <sparkle:shortVersionString>0.2.85</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.85/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="a4Bhg2LnagOR85RboXduQ+LuXmw0MT8DAXTUdhGymlfE86qROWRMEXMDgmMl5cR4umkPkzbXtokXzfVLJACIBA=="
+                 length="40717681"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.84 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 23:38:19 +0000</pubDate>
+      <sparkle:version>104</sparkle:version>
+      <sparkle:shortVersionString>0.2.84</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.84/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="90hOqpyoFEIWvilzLfuJqGZSUly9k/Br9IeVo/0oFKZ37/gCE0oyuFH7LnyBHrxD9Eews02si3ByBZIeBWm+CQ=="
+                 length="40717518"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.83 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 23:13:16 +0000</pubDate>
+      <sparkle:version>103</sparkle:version>
+      <sparkle:shortVersionString>0.2.83</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.83/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="m3vsL1dFezdGUhSZNmi2xtHbJWCJQSphok/FKz31MGjNw5+9cX47n8L8YAJQpPQLYYc6Wff3lNMumwgk3G25Cg=="
+                 length="40717628"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.82 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 22:41:59 +0000</pubDate>
+      <sparkle:version>102</sparkle:version>
+      <sparkle:shortVersionString>0.2.82</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.82/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="mHuxqbTNOK38k4iI0yBadlWfXNb0eAclzGFPQSuseBTJkHNZEQsll/aKKtEQN0HijCDlnhm/x5yiLuKbg6c8AA=="
+                 length="40717445"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.81 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 22:16:54 +0000</pubDate>
+      <sparkle:version>101</sparkle:version>
+      <sparkle:shortVersionString>0.2.81</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.81/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="R9JoIemyK+zBaNqo3FSch1CpniswOvOnea9A/6Gmo7o7vqqGsggTOimCT3tXzy0zKIGOfPMVBlUnj5xop5J3AQ=="
+                 length="40717712"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.80 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 21:46:11 +0000</pubDate>
+      <sparkle:version>100</sparkle:version>
+      <sparkle:shortVersionString>0.2.80</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.80/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="lWtw0KgeIXVT81auA1qYfYhNHV009CcC8GTGmJElBP/1frYh7bey9VLU4LW6eCXdsVyy6nIijFksgFSvTDXxBw=="
+                 length="40717486"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.79 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 21:13:07 +0000</pubDate>
+      <sparkle:version>99</sparkle:version>
+      <sparkle:shortVersionString>0.2.79</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.79/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="6ASRZnr+jzj0JUA+KodQK1hzodgUSiT4m+TrSmpJxvOsnkfFuzViQZuU6RmuP+UWm3VIPTGeIy3UaaAu+QsUBw=="
+                 length="40717670"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.78 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 20:36:52 +0000</pubDate>
+      <sparkle:version>98</sparkle:version>
+      <sparkle:shortVersionString>0.2.78</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.78/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="RNE5PV2A+lYOoxRFwO48k53dsPg4z4Hj00zUsr1X9rv409QzLC8n11CHXKOm0ZK0SOnPGpS/tofwAqR6gLUwCA=="
+                 length="40717666"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.77 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 20:07:35 +0000</pubDate>
+      <sparkle:version>97</sparkle:version>
+      <sparkle:shortVersionString>0.2.77</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.77/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="brC7ieGjxvZaA7pzHNsxpgJaJOENPjP/Qj6otDS3d/bL6Wo+7d91jRNtGQst2gt9SzSX1NEJD/pvZQUqG308Dw=="
+                 length="40717438"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.76 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 19:37:46 +0000</pubDate>
+      <sparkle:version>95</sparkle:version>
+      <sparkle:shortVersionString>0.2.76</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.76/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="kYGVbf2tU5lwik958t1tJzrr7qEp9Wkxq2S9zRbSoCEz6z3WC/NqX1DkkfB4gL6cYk/K99xW7jh0cqgJPz+RCw=="
+                 length="40717405"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.75 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 19:04:42 +0000</pubDate>
+      <sparkle:version>94</sparkle:version>
+      <sparkle:shortVersionString>0.2.75</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.75/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="f/oxaq9JNiG3IdU1BDtpHvFpJtJGnhqNHegYpGXvsL/NuhzxSKIVC+8jn/f/Fo6qNq8ci7xhZen/TDPFq48ABQ=="
+                 length="40717636"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.74 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 18:31:09 +0000</pubDate>
+      <sparkle:version>93</sparkle:version>
+      <sparkle:shortVersionString>0.2.74</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.74/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="5ZslWRPDmVYfCcGOHdiTLUZsg1J4YGspe8K6xEQFlBjQJipazt7zP6i0mMZOKSiup12dpk5aPS2DQ5GxIcxPAw=="
+                 length="40717367"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.73 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 17:56:03 +0000</pubDate>
+      <sparkle:version>92</sparkle:version>
+      <sparkle:shortVersionString>0.2.73</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.73/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="omL8s7oR1cE0vt5pwsDEAFc54dQwzz8qOW19UbybKfYAHgNdQOXcsm19EoOGJxtN8jju75350gWQZ2jfJgR5DQ=="
+                 length="40717521"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.72 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 17:18:14 +0000</pubDate>
+      <sparkle:version>90</sparkle:version>
+      <sparkle:shortVersionString>0.2.72</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.72/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="Oe4kws0XmOV7RePgTl43NSKdXz/8cQKGtPyQhrjRbfqi2yNO8fQssCswhOwvoZtyxAqUW21vGMYxtw3i/udsAA=="
+                 length="40378940"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.71 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 16:49:02 +0000</pubDate>
+      <sparkle:version>89</sparkle:version>
+      <sparkle:shortVersionString>0.2.71</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.71/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="lDm/6im8v8VNdy+kTzztBPrVU+ljqwxu0xpVeI/fD6ZQXl06rglNAlevxKyEO2+IdNzhvd1mM3W1MvwctTfsAA=="
+                 length="40379340"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.70 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 16:15:45 +0000</pubDate>
+      <sparkle:version>88</sparkle:version>
+      <sparkle:shortVersionString>0.2.70</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.70/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="jxEoVwtz0t0yBxLPeF5zfcOR3KeJ3V5ySMzYYLnNrtgRZXGaPpZpSZpGmwbbnomSbN1HOjCkUMROqhQMFKySAA=="
+                 length="40379019"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.69 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 15:47:16 +0000</pubDate>
+      <sparkle:version>87</sparkle:version>
+      <sparkle:shortVersionString>0.2.69</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.69/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="sPEUa4uVlnz/4BDjl3IIZ7chRH1uTrXhgV0n6r0okO5hhjbveOOktfeJcviOvmSQkkL/S5wyhjn86eucdd0UAw=="
+                 length="40378886"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.68 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 15:15:38 +0000</pubDate>
+      <sparkle:version>86</sparkle:version>
+      <sparkle:shortVersionString>0.2.68</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.68/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="StbGoTR1ol4M0twbcQBAvUgAJM/MJAUlzmMSAyy62xjXx9JBz56uSC1tLgkSlBqVfp2jm9srYbnXmI+dgiIUBw=="
+                 length="40379183"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.67 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 14:29:52 +0000</pubDate>
+      <sparkle:version>85</sparkle:version>
+      <sparkle:shortVersionString>0.2.67</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.67/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="+Jo+cscqi8Rd6eCGilTfzjqmpvBKCJ1STO7f8H/P/+Lw4qAszEFl0eh0Fwqv4pE2GjUu25FT3vt8z+wD8o0yBg=="
+                 length="40379145"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.66 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 13:52:23 +0000</pubDate>
+      <sparkle:version>84</sparkle:version>
+      <sparkle:shortVersionString>0.2.66</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.66/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="Voyvetor5gtyqz0f+6P6klI0MxxJLR3qJoRxbFi6UCw9qjHFODjH0rOXN4AxHuBjW+rJbWvietzTKk7zzMskAQ=="
+                 length="40378988"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.65 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 13:11:51 +0000</pubDate>
+      <sparkle:version>83</sparkle:version>
+      <sparkle:shortVersionString>0.2.65</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.65/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="hEXGxi7wQHCKe/jfnBKQViB0SYyDXj1+D8GwUR/++ue5tUf7l+YxH4GG/KNqfD887FAlVxhvxo1yJYIh4IGSAg=="
+                 length="40379077"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.64 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 12:33:01 +0000</pubDate>
+      <sparkle:version>82</sparkle:version>
+      <sparkle:shortVersionString>0.2.64</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.64/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="zzWvRBzXlyaa7WRu/EsxavL9JIOfliwhY8YX1+JoDKNjnVMhXpKtFV5Sn2tJ1+6ZqpTdKru7IM493wJEbZ9ICw=="
+                 length="40378874"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.63 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 12:04:10 +0000</pubDate>
+      <sparkle:version>81</sparkle:version>
+      <sparkle:shortVersionString>0.2.63</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.63/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="MjBFoutMro0o9sHpfymML0eYf17rhMSeAcklRtmcynEPwtoWHAPa+Uv9fBhjfEQG7ReZj8hFm4TtWZ/vhvnYDQ=="
+                 length="40379185"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.62 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 11:31:48 +0000</pubDate>
+      <sparkle:version>80</sparkle:version>
+      <sparkle:shortVersionString>0.2.62</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.62/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="NkAQkXfHX9J6s4FLPSkgKB41sWapfUGh1nKg5DVHgtA3QF2WOXIv/FINwqhCMipEEV+nJN8d+miAryeQnFXqCw=="
+                 length="40379086"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.61 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 10:53:05 +0000</pubDate>
+      <sparkle:version>79</sparkle:version>
+      <sparkle:shortVersionString>0.2.61</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.61/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="kMNzJV98qaQQ6hYAgXvyHqUlEi5PKefRC29peyaPTcPX9sKgNvc3xh0iE2J0ghrESgUVkJSCU1DvvjPsTnL9Aw=="
+                 length="40379027"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.60 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 10:10:20 +0000</pubDate>
+      <sparkle:version>78</sparkle:version>
+      <sparkle:shortVersionString>0.2.60</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.60/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="Fdk+vE1vnOYsJkIYjCZbdgEITJqTyU2z/Jp7+1qctjh1ihSTCoz7RxFuK3hqoap313jxw9+MaMnlbEPmbBWnDg=="
+                 length="40378969"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.59 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 09:32:05 +0000</pubDate>
+      <sparkle:version>77</sparkle:version>
+      <sparkle:shortVersionString>0.2.59</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.59/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="MrD12Cy3F9rASgptpXR6odDEhL/SYy7tJEL4JDaVSf7uvJKlpD3tzfP08UTIhvjwgCiMkBtWdnk3iNHnQGnkDA=="
+                 length="40379018"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.57 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 08:59:39 +0000</pubDate>
+      <sparkle:version>75</sparkle:version>
+      <sparkle:shortVersionString>0.2.57</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.57/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="5jJex+Y6T7xjvyEBZQRV7FtSl3Ih6AuqcwqWPI4ZHrg2GcpwtiKipYgH2AFRza37YRohCl4nX1G1P+Lu+zTMDQ=="
+                 length="40379091"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.56 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 08:34:33 +0000</pubDate>
+      <sparkle:version>74</sparkle:version>
+      <sparkle:shortVersionString>0.2.56</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.56/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="OYL0rRNQy6yuFYwXtHeN9ColkI1ANz3jCWPlCgSQdupZxbd0tFerHgHLauqLi/LthX9PEZ9T1/5sEeWUEpe1BA=="
+                 length="40378993"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.55 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 08:03:25 +0000</pubDate>
+      <sparkle:version>73</sparkle:version>
+      <sparkle:shortVersionString>0.2.55</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.55/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="Y7tMQhiWmvQmnvAx4mMyp/65QM3LRKiUfhl8aJZWoc8cXb5XB2QmJn9mW+/EfDmtMYed5o0dTfjq0to2EG4+Cw=="
+                 length="40379266"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.54 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 07:29:08 +0000</pubDate>
+      <sparkle:version>72</sparkle:version>
+      <sparkle:shortVersionString>0.2.54</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.54/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="FQcgrwzya7jkoqbBZzCG81JmWCBHt65i588D4hSZX6kcyMm01Le2Yx38cRLwKiOd1GHz5iR06FjVgJWeiUHDDw=="
+                 length="40379030"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.53 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Wed, 20 May 2026 07:00:09 +0000</pubDate>
+      <sparkle:version>71</sparkle:version>
+      <sparkle:shortVersionString>0.2.53</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.53/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="eBQb/xZn5TZQ0cHTu3bDS1NzXFXhtAAX3fmBH1PZS87fDt798z7hUXPkIQJnTQQoOUv/lCxo+rETcdDz8MB1Ag=="
+                 length="40379063"
+                 type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 0.2.52 (macOS)</title>
       <sparkle:os>macos</sparkle:os>
       <pubDate>Wed, 20 May 2026 06:30:33 +0000</pubDate>

@@ -94,7 +94,7 @@ class DesktopOAuth {
         // re-prompt on subsequent restarts. `select_account` keeps the
         // account picker available for users with multiple Google
         // accounts.
-        'prompt': 'consent select_account',
+        'prompt': 'select_account consent',
       },
     );
 
@@ -249,6 +249,37 @@ display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 h1{font-size:18px;margin:0 0 8px}p{font-size:13px;margin:0;color:#cbd5e1}</style></head>
 <body><div class="card"><h1>$title</h1><p>$body</p></div></body></html>''';
   }
+
+  /// Exchange a refresh token for a fresh idToken and accessToken.
+  /// Used for silent sign-in on boot.
+  Future<DesktopOAuthResult> refresh(String refreshToken) async {
+    final resp = await _http.post(
+      Uri.parse(_tokenEndpoint),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {
+        'client_id': clientId,
+        if (clientSecret.isNotEmpty) 'client_secret': clientSecret,
+        'refresh_token': refreshToken,
+        'grant_type': 'refresh_token',
+      },
+    );
+    if (resp.statusCode != 200) {
+      throw GoogleRefreshTokenException(resp.statusCode, resp.body);
+    }
+    final tokens = jsonDecode(resp.body) as Map<String, dynamic>;
+    final idToken = tokens['id_token'] as String?;
+    final accessToken = tokens['access_token'] as String?;
+    if (idToken == null || accessToken == null) {
+      throw StateError(
+        'Token response missing id_token/access_token: ${resp.body}',
+      );
+    }
+    return DesktopOAuthResult(
+      idToken: idToken,
+      accessToken: accessToken,
+      refreshToken: tokens['refresh_token'] as String? ?? refreshToken,
+    );
+  }
 }
 
 class DesktopOAuthResult {
@@ -272,8 +303,26 @@ class DesktopOAuthResult {
     if (kDebugMode) {
       return 'DesktopOAuthResult(idToken: ${idToken.substring(0, 16)}…, '
           'accessToken: ${accessToken.substring(0, 16)}…, '
-          'refreshToken: ${refreshToken == null ? "absent" : "present"})';
+          'refreshToken: ${refreshToken != null ? (refreshToken!.length > 8 ? "${refreshToken!.substring(0, 8)}…" : "present") : "null"})';
     }
     return 'DesktopOAuthResult';
   }
+}
+
+class GoogleRefreshTokenException implements Exception {
+  GoogleRefreshTokenException(this.statusCode, this.body);
+  final int statusCode;
+  final String body;
+
+  bool get isInvalidGrant {
+    try {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      return json['error'] == 'invalid_grant';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  String toString() => 'GoogleRefreshTokenException: Google token endpoint returned $statusCode: $body';
 }
