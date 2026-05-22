@@ -64,6 +64,13 @@ dependencies:
   #   OAuth Client ID in addition to the iOS one.
   url_launcher: ^6.3.0
 
+  # Encrypted storage for the Google OAuth refresh token used to
+  # silently re-sign-in on every cold launch. Uses Keychain (macOS),
+  # DPAPI (Windows), libsecret (Linux). firebase_auth's own
+  # persistence is unreliable on Windows for `signInWithCredential`
+  # sessions, so we drive the refresh ourselves.
+  flutter_secure_storage: ^9.2.2
+
   # Offline-mode local persistence (drift = type-safe SQLite for Flutter).
   drift: ^2.20.0
   sqlite3_flutter_libs: ^0.5.24

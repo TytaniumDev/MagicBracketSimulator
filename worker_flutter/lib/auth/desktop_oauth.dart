@@ -81,8 +81,20 @@ class DesktopOAuth {
         'code_challenge': challenge,
         'code_challenge_method': 'S256',
         'state': state,
-        'access_type': 'online',
-        'prompt': 'select_account',
+        // `offline` is required for Google to return a refresh_token,
+        // which we exchange for a fresh id_token on every cold launch
+        // so users stay signed in across restarts (firebase_auth's own
+        // persistence is unreliable on Windows for credentials minted
+        // via `signInWithCredential`).
+        'access_type': 'offline',
+        // `consent` is also required — without it, Google omits the
+        // refresh_token whenever the user already has a grant for this
+        // client + scope set, even if we asked for `offline`. The
+        // one-time consent prompt is the tradeoff for never having to
+        // re-prompt on subsequent restarts. `select_account` keeps the
+        // account picker available for users with multiple Google
+        // accounts.
+        'prompt': 'consent select_account',
       },
     );
 
@@ -122,12 +134,24 @@ class DesktopOAuth {
       final tokens = jsonDecode(resp.body) as Map<String, dynamic>;
       final idToken = tokens['id_token'] as String?;
       final accessToken = tokens['access_token'] as String?;
+      // refresh_token is only present when `access_type=offline` and
+      // Google didn't suppress it (e.g., the user has an existing
+      // grant and `prompt=consent` wasn't sent). Callers persist it to
+      // drive silent sign-in on next launch; absence is treated as a
+      // soft failure rather than a hard error so first-time grants
+      // without consent (an unlikely misconfiguration) don't break the
+      // initial sign-in.
+      final refreshToken = tokens['refresh_token'] as String?;
       if (idToken == null || accessToken == null) {
         throw StateError(
           'Token response missing id_token/access_token: ${resp.body}',
         );
       }
-      return DesktopOAuthResult(idToken: idToken, accessToken: accessToken);
+      return DesktopOAuthResult(
+        idToken: idToken,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
     } finally {
       // Always close the listener — leaving it bound on a random port
       // would leak file descriptors and could collide on a future run.
@@ -228,15 +252,27 @@ h1{font-size:18px;margin:0 0 8px}p{font-size:13px;margin:0;color:#cbd5e1}</style
 }
 
 class DesktopOAuthResult {
-  DesktopOAuthResult({required this.idToken, required this.accessToken});
+  DesktopOAuthResult({
+    required this.idToken,
+    required this.accessToken,
+    this.refreshToken,
+  });
   final String idToken;
   final String accessToken;
+
+  /// Google OAuth refresh token. Present when the initial sign-in was
+  /// granted with `access_type=offline` + `prompt=consent`; null
+  /// otherwise (notably on subsequent grants without the consent
+  /// prompt). Callers should persist this to enable silent sign-in
+  /// on the next launch.
+  final String? refreshToken;
 
   @override
   String toString() {
     if (kDebugMode) {
       return 'DesktopOAuthResult(idToken: ${idToken.substring(0, 16)}…, '
-          'accessToken: ${accessToken.substring(0, 16)}…)';
+          'accessToken: ${accessToken.substring(0, 16)}…, '
+          'refreshToken: ${refreshToken == null ? "absent" : "present"})';
     }
     return 'DesktopOAuthResult';
   }

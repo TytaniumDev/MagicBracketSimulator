@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../cloud/cloud_job_detail_screen.dart';
@@ -33,6 +34,56 @@ class _DashboardState extends State<Dashboard> {
   late final ApiClient _api;
   late final DeckRepo _deckRepo;
 
+  static const String _sentryRelease = String.fromEnvironment(
+    'SENTRY_RELEASE',
+    defaultValue: 'worker_flutter@dev',
+  );
+  static const String _gitSha = String.fromEnvironment(
+    'GIT_SHA',
+    defaultValue: 'local',
+  );
+
+  String _getVersionText() {
+    final parts = _sentryRelease.split('@');
+    if (parts.length > 1) {
+      final ver = parts[1];
+      if (ver != 'dev') {
+        return 'v$ver';
+      }
+    }
+    if (_gitSha != 'local') {
+      return _gitSha.substring(0, 7);
+    }
+    return 'dev';
+  }
+
+  Uri _getGitHubUri() {
+    final parts = _sentryRelease.split('@');
+    if (parts.length > 1) {
+      final ver = parts[1];
+      if (ver != 'dev') {
+        return Uri.parse(
+          'https://github.com/TytaniumDev/MagicBracketSimulator/releases/tag/worker-v$ver',
+        );
+      }
+    }
+    if (_gitSha != 'local') {
+      return Uri.parse(
+        'https://github.com/TytaniumDev/MagicBracketSimulator/commit/$_gitSha',
+      );
+    }
+    return Uri.parse('https://github.com/TytaniumDev/MagicBracketSimulator');
+  }
+
+  Future<void> _openGitHubPage() async {
+    final url = _getGitHubUri();
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +107,46 @@ class _DashboardState extends State<Dashboard> {
           title: const Text('Magic Bracket Worker'),
           centerTitle: false,
           elevation: 0,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: _openGitHubPage,
+                    child: Tooltip(
+                      message: 'View on GitHub',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1F2937),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF374151)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.code, size: 12, color: Color(0xFF60A5FA)),
+                            const SizedBox(width: 6),
+                            Text(
+                              _getVersionText(),
+                              style: const TextStyle(
+                                color: Color(0xFF9CA3AF),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           bottom: const TabBar(
             isScrollable: true,
             tabs: [
