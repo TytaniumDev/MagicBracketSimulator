@@ -125,27 +125,7 @@ class AuthService {
     if (kDebugMode) {
       debugPrint('AuthService.signIn() — using PKCE + signInWithCredential');
     }
-    final clientId = DefaultFirebaseOptions.desktopOAuthClientId;
-    final clientSecret = DefaultFirebaseOptions.desktopOAuthClientSecret;
-    if (clientId == 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID') {
-      throw StateError(
-        'Desktop sign-in needs a Desktop OAuth Client ID. Create one at '
-        'https://console.cloud.google.com/apis/credentials (Application '
-        'type: Desktop app) and paste it into '
-        'DefaultFirebaseOptions.desktopOAuthClientId in firebase_options.dart.',
-      );
-    }
-    if (clientSecret.isEmpty) {
-      throw StateError(
-        'Desktop sign-in is missing GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET. '
-        'Release builds load it from Doppler (blinkbreak/prd). For local '
-        'dev, run: doppler run --project blinkbreak --config prd -- sh -c '
-        "'flutter run -d macos --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=\$GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET'",
-      );
-    }
-    final oauth =
-        _desktopOAuth ??
-        DesktopOAuth(clientId: clientId, clientSecret: clientSecret);
+    final oauth = _getDesktopOAuth();
     final tokens = await _runPkce(oauth);
     final cred = GoogleAuthProvider.credential(
       idToken: tokens.idToken,
@@ -260,12 +240,54 @@ class AuthService {
       return null;
     }
 
-    final oauth =
-        _desktopOAuth ??
-        DesktopOAuth(clientId: clientId, clientSecret: clientSecret);
+    final oauth = _getDesktopOAuth();
+    final DesktopOAuthResult tokens;
+    try {
+      tokens = await oauth.refresh(refreshToken);
+    } on GoogleRefreshTokenException catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('AuthService.trySilentSignIn() — Google token refresh permanent failure: $e');
+      }
+      // Only delete the stored token if the Google endpoint returns a permanent invalid_grant error.
+      if (e.isInvalidGrant) {
+        if (kDebugMode) {
+          debugPrint('AuthService.trySilentSignIn() — Token is invalid/revoked, clearing from secure storage');
+        }
+        try {
+          await _secureStorage.delete(key: _googleRefreshTokenKey);
+        } catch (storageError) {
+          debugPrint('AuthService: Failed to delete refresh token: $storageError');
+        }
+      }
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.signIn,
+        tags: {
+          'platform': Platform.operatingSystem,
+          'phase': 'silent_refresh_google',
+          'is_permanent': e.isInvalidGrant.toString(),
+        },
+      );
+      return null;
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('AuthService.trySilentSignIn() — Google token refresh transient/network failure: $e');
+      }
+      // Network or other transient issues — DO NOT delete the stored token.
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.signIn,
+        tags: {
+          'platform': Platform.operatingSystem,
+          'phase': 'silent_refresh_google_transient',
+        },
+      );
+      return null;
+    }
 
     try {
-      final tokens = await oauth.refresh(refreshToken);
       final cred = GoogleAuthProvider.credential(
         idToken: tokens.idToken,
         accessToken: tokens.accessToken,
@@ -288,27 +310,45 @@ class AuthService {
       return user;
     } catch (e, st) {
       if (kDebugMode) {
-        debugPrint('AuthService.trySilentSignIn() — Silent sign-in failed: $e');
+        debugPrint('AuthService.trySilentSignIn() — Firebase sign-in failed: $e');
       }
-      // If the refresh token is invalid/revoked or network fails, clean secure storage.
-      // Note: We only delete if it's a real Auth error (e.g. invalid grant),
-      // but to be absolutely safe and prevent infinite boot-loops on bad tokens,
-      // we clean it on any exception here.
-      try {
-        await _secureStorage.delete(key: _googleRefreshTokenKey);
-      } catch (_) {}
-
+      // Firebase auth failed, but Google token refresh succeeded, so the token itself is valid.
+      // E.g., Firebase is down, or transient network error. DO NOT delete the stored refresh token.
       await Telemetry.captureError(
         e,
         st,
         category: TelemetryCategory.signIn,
         tags: {
           'platform': Platform.operatingSystem,
-          'phase': 'silent_refresh',
+          'phase': 'silent_refresh_firebase',
         },
       );
       return null;
     }
+  }
+
+  DesktopOAuth _getDesktopOAuth() {
+    if (_desktopOAuth != null) return _desktopOAuth;
+
+    final clientId = DefaultFirebaseOptions.desktopOAuthClientId;
+    final clientSecret = DefaultFirebaseOptions.desktopOAuthClientSecret;
+    if (clientId == 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID') {
+      throw StateError(
+        'Desktop sign-in needs a Desktop OAuth Client ID. Create one at '
+        'https://console.cloud.google.com/apis/credentials (Application '
+        'type: Desktop app) and paste it into '
+        'DefaultFirebaseOptions.desktopOAuthClientId in firebase_options.dart.',
+      );
+    }
+    if (clientSecret.isEmpty) {
+      throw StateError(
+        'Desktop sign-in is missing GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET. '
+        'Release builds load it from Doppler (blinkbreak/prd). For local '
+        'dev, run: doppler run --project blinkbreak --config prd -- sh -c '
+        "'flutter run -d macos --dart-define=GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET=\$GOOGLE_DESKTOP_OAUTH_CLIENT_SECRET'",
+      );
+    }
+    return DesktopOAuth(clientId: clientId, clientSecret: clientSecret);
   }
 
   Future<void> signOut() async {

@@ -245,9 +245,7 @@ h1{font-size:18px;margin:0 0 8px}p{font-size:13px;margin:0;color:#cbd5e1}</style
       },
     );
     if (resp.statusCode != 200) {
-      throw StateError(
-        'Google token endpoint returned ${resp.statusCode}: ${resp.body}',
-      );
+      throw GoogleRefreshTokenException(resp.statusCode, resp.body);
     }
     final tokens = jsonDecode(resp.body) as Map<String, dynamic>;
     final idToken = tokens['id_token'] as String?;
@@ -284,4 +282,22 @@ class DesktopOAuthResult {
     }
     return 'DesktopOAuthResult';
   }
+}
+
+class GoogleRefreshTokenException implements Exception {
+  GoogleRefreshTokenException(this.statusCode, this.body);
+  final int statusCode;
+  final String body;
+
+  bool get isInvalidGrant {
+    try {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      return json['error'] == 'invalid_grant';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  String toString() => 'GoogleRefreshTokenException: Google token endpoint returned $statusCode: $body';
 }
