@@ -23,6 +23,18 @@
     <description>Desktop worker for the Magic Bracket Simulator project.</description>
     <language>en</language>
     <item>
+      <title>Version 0.2.109 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Fri, 22 May 2026 09:07:12 +0000</pubDate>
+      <sparkle:version>129</sparkle:version>
+      <sparkle:shortVersionString>0.2.109</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.109/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="guntQMt5rV4Eow/tYHpwAG8OcnF0XavRkXeF/GHzjcX3QAm0yiMS4EKdPDpmncU+noMtQwjcr4bdJT7wuCB+Cw=="
+                 length="40822619"
+                 type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 0.2.108 (macOS)</title>
       <sparkle:os>macos</sparkle:os>
       <pubDate>Fri, 22 May 2026 08:35:21 +0000</pubDate>
