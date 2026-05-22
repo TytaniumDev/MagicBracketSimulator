@@ -19,6 +19,8 @@ interface LeaderboardEntry {
   isPrecon: boolean;
   primaryCommander: string | null;
   rating: number;
+  rd: number;
+  volatility: number;
   gamesPlayed: number;
   wins: number;
   winRate: number;
@@ -28,18 +30,18 @@ interface LeaderboardEntry {
 
 type SortKey = 'rating' | 'winRate' | 'gamesPlayed' | 'avgWinTurn';
 
-function ConfidenceBadge({ gamesPlayed }: { gamesPlayed: number }) {
-  if (gamesPlayed >= 50) {
+function ConfidenceBadge({ gamesPlayed, rd }: { gamesPlayed: number, rd: number }) {
+  if (gamesPlayed >= 50 && rd < 100) {
     return (
       <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-green-900/60 text-green-300 border border-green-700">
         stable
       </span>
     );
   }
-  if (gamesPlayed < 10) {
+  if (gamesPlayed < 10 || rd > 200) {
     return (
       <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-yellow-900/60 text-yellow-300 border border-yellow-700">
-        unsettled
+        In-Testing
       </span>
     );
   }
@@ -229,7 +231,7 @@ export default function Leaderboard() {
       <p className="text-gray-400 text-center mb-6">
         Relative power level from Commander simulation results.{' '}
         <span className="text-gray-500 text-sm">
-          Rating is a win-rate percentage, smoothed toward 25% (4-player random baseline) until a deck has many games.
+          Rating is a dynamic Glicko-2 Power Rating that accounts for opponent strength and match history.
         </span>
       </p>
 
@@ -317,7 +319,7 @@ export default function Leaderboard() {
                               custom
                             </span>
                           )}
-                          <ConfidenceBadge gamesPlayed={entry.gamesPlayed} />
+                          <ConfidenceBadge gamesPlayed={entry.gamesPlayed} rd={entry.rd} />
                         </div>
                         {entry.setName && (
                           <div className="text-xs text-gray-500 truncate">{entry.setName}</div>
@@ -331,7 +333,8 @@ export default function Leaderboard() {
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono font-semibold text-white">
-                    {entry.rating.toFixed(1)}%
+                    {Math.round(entry.rating)}
+                    <div className="text-[10px] text-gray-500 font-normal">±{Math.round(entry.rd)}</div>
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-300">
                     {(entry.winRate * 100).toFixed(1)}%

@@ -26,4 +26,10 @@ export interface RatingStore {
 
   /** Return all ratings, optionally filtered, sorted by conservative rating desc. */
   getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]>;
+
+  /** Return all stored match results, ordered chronologically by playedAt */
+  getAllMatchResults?(): Promise<MatchResult[]>;
+  
+  /** Clear all ratings (used for full recalcs) */
+  clearAllRatings?(): Promise<void>;
 }

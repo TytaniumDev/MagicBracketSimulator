@@ -15,6 +15,8 @@ import { matchesDeckName } from './condenser/deck-match';
 import { getDeckById } from './deck-store-factory';
 import { getRatingStore } from './rating-store-factory';
 import { addWinTurn, emptyWinTurnAggregate } from './win-turn-aggregate';
+import { updateRating, MatchOutcome, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL } from './glicko2';
+import { applyDecay } from './glicko2-decay';
 import * as Sentry from '@sentry/nextjs';
 
 const MU_DEFAULT = 25;
@@ -81,6 +83,17 @@ export async function processJobForRatings(
   let resolvedGames = 0;
   const jobTimestamp = new Date().toISOString();
 
+  const preRatings = deckIds.map((id, idx) => {
+    const stored = initialStoredRatings[idx];
+    const baseR = stored?.rating ?? DEFAULT_RATING;
+    const baseRd = stored?.rd ?? DEFAULT_RD;
+    const baseVol = stored?.volatility ?? DEFAULT_VOL;
+    const decayedRd = stored?.lastUpdated ? applyDecay(baseRd, baseVol, stored.lastUpdated, jobTimestamp) : baseRd;
+    return { rating: baseR, rd: decayedRd, vol: baseVol };
+  });
+
+  const glickoMatches: MatchOutcome[][] = deckIds.map(() => []);
+
   for (let i = 0; i < games.length; i++) {
     const game = games[i]!;
     const winner = game.winner;
@@ -118,6 +131,21 @@ export async function processJobForRatings(
     const winnerIdx = deckIds.indexOf(winnerDeckId);
     if (winnerIdx === -1) continue;
 
+    for (let p1 = 0; p1 < deckIds.length; p1++) {
+      for (let p2 = 0; p2 < deckIds.length; p2++) {
+        if (p1 === p2) continue;
+        let score: number;
+        if (p1 === winnerIdx) score = 1;
+        else if (p2 === winnerIdx) score = 0;
+        else score = 0.5;
+        glickoMatches[p1].push({
+          opponentRating: preRatings[p2].rating,
+          opponentRd: preRatings[p2].rd,
+          score,
+        });
+      }
+    }
+
     for (let j = 0; j < deckIds.length; j++) {
       const current = currentRatings[j]!;
       const isWinner = j === winnerIdx;
@@ -152,6 +180,15 @@ export async function processJobForRatings(
   await store.recordMatchResults(matchResults);
 
   if (resolvedGames > 0) {
+    for (let j = 0; j < deckIds.length; j++) {
+      const updated = updateRating(preRatings[j], glickoMatches[j]);
+      currentRatings[j] = {
+        ...currentRatings[j]!,
+        rating: updated.rating,
+        rd: updated.rd,
+        volatility: updated.vol,
+      };
+    }
     await store.updateRatings(currentRatings);
     console.log(
       `[RatingStats] Job ${jobId}: recorded ${resolvedGames}/${games.length} game(s) for decks [${deckIds.join(', ')}]`,
