@@ -52,7 +52,7 @@ void main() {
       MaterialApp(
         home: SimulateScreen(
           repo: repo,
-          onStart: (_, _) async => '1',
+          onStart: (_, _, {required runLocally}) async => '1',
           onJobCreated: (_, _) {},
         ),
       ),
@@ -87,7 +87,7 @@ void main() {
         MaterialApp(
           home: SimulateScreen(
             repo: repo,
-            onStart: (decks, n) async {
+            onStart: (decks, n, {required runLocally}) async {
               captured = decks;
               return 'job-42';
             },
@@ -129,7 +129,7 @@ void main() {
       MaterialApp(
         home: SimulateScreen(
           repo: repo,
-          onStart: (_, _) async => '1',
+          onStart: (_, _, {required runLocally}) async => '1',
           onJobCreated: (_, _) {},
         ),
       ),
@@ -168,7 +168,7 @@ void main() {
       MaterialApp(
         home: SimulateScreen(
           repo: repo,
-          onStart: (_, _) async => '1',
+          onStart: (_, _, {required runLocally}) async => '1',
           onJobCreated: (_, _) {},
         ),
       ),

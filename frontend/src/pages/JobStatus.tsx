@@ -664,9 +664,11 @@ export default function JobStatusPage() {
 
             {showLogPanel && (
               <div id="log-panel-section" className="mt-4">
-                <div className="flex gap-2 mb-4">
+                <div className="flex gap-2 mb-4" role="tablist" aria-label="Log View Options">
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={logViewTab === 'condensed'}
                     onClick={() => setLogViewTab('condensed')}
                     className={`px-3 py-1 rounded text-sm ${
                       logViewTab === 'condensed'
@@ -678,6 +680,8 @@ export default function JobStatusPage() {
                   </button>
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={logViewTab === 'raw'}
                     onClick={() => setLogViewTab('raw')}
                     className={`px-3 py-1 rounded text-sm ${
                       logViewTab === 'raw'

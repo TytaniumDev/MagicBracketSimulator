@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:auto_updater/auto_updater.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -95,6 +96,7 @@ Future<void> _appMain() async {
     try {
       await Firebase.initializeApp(options: fbOpts);
       _log('Firebase ready');
+      await _activateAppCheck();
     } catch (e, st) {
       firebaseInitError = e.toString();
       _log('Firebase init failed: $e');
@@ -336,6 +338,41 @@ const _kAutoUpdateCheckIntervalSeconds = 3600;
 /// explicitly asks. The background poll set up below keeps using
 /// `inBackground: true` to stay silent on the no-update path.
 const _kAutoUpdaterChannel = MethodChannel('magic_bracket/auto_updater');
+
+/// Initialize Firebase App Check so API calls carry an
+/// `X-Firebase-AppCheck` token alongside the Firebase ID token —
+/// without it the cloud API returns 401 "Auth token rejected" on every
+/// request that goes through `verifyAllowedUser`/`verifyAuth`.
+///
+/// macOS uses Apple's App Attest in release builds and a debug provider
+/// in `flutter run` so a locally-running app can be paired with the
+/// debug token surfaced via Firebase Console → App Check → Apps.
+/// Windows is a no-op: `firebase_app_check` has no Windows desktop
+/// support yet, so the Windows worker relies on the "Run locally"
+/// path (which bypasses the API entirely) for end-user workflows.
+Future<void> _activateAppCheck() async {
+  if (!Platform.isMacOS) {
+    _log('AppCheck: skipping (unsupported platform)');
+    return;
+  }
+  try {
+    await FirebaseAppCheck.instance.activate(
+      appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.appAttest,
+    );
+    _log('AppCheck: activated (${kDebugMode ? "debug" : "appAttest"})');
+  } catch (e, st) {
+    // Non-fatal: leaves API calls unauthenticated against App Check,
+    // which the user will see as "Auth token rejected". Capturing the
+    // failure lets us see why before the user-facing error surfaces.
+    _log('AppCheck: activation failed (non-fatal): $e\n$st');
+    await Telemetry.captureError(
+      e,
+      st,
+      category: TelemetryCategory.firebaseInit,
+      extra: {'step': 'appCheckActivate'},
+    );
+  }
+}
 
 Future<void> _initAutoUpdater() async {
   // Register the menu-item channel handler FIRST — before any await

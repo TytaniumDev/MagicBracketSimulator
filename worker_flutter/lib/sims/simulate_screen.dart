@@ -8,10 +8,15 @@ import 'deck_row.dart';
 import 'simulation_controls.dart';
 
 /// Returns the new job's id once the start action succeeds. Cloud
-/// mode returns the Firestore doc id; offline mode returns the
-/// auto-increment row id stringified.
+/// mode returns the Firestore doc id when `runLocally` is false, and
+/// the local AppDb row id (stringified) when true; offline mode always
+/// returns the AppDb row id stringified.
 typedef StartJob =
-    Future<String> Function(List<DeckRecord> decks, int simCount);
+    Future<String> Function(
+      List<DeckRecord> decks,
+      int simCount, {
+      required bool runLocally,
+    });
 
 /// Combined deck-management + simulation-picker screen. Replaces the
 /// old `DecksScreen` + `NewSimScreen` + `AddDeckScreen` trio.
@@ -25,6 +30,7 @@ class SimulateScreen extends StatefulWidget {
     required this.repo,
     required this.onStart,
     required this.onJobCreated,
+    this.showRunLocally = false,
   });
 
   final DeckRepo repo;
@@ -33,6 +39,11 @@ class SimulateScreen extends StatefulWidget {
   /// Navigate to the new job's detail screen. Cloud and offline modes
   /// push different routes; the screen doesn't care which.
   final void Function(BuildContext context, String jobId) onJobCreated;
+
+  /// Show the "Run locally" checkbox in the bottom panel. Cloud mode
+  /// sets this so the user can bypass the cloud job queue and run on
+  /// this machine. Offline mode leaves it off — every run is local.
+  final bool showRunLocally;
 
   @override
   State<SimulateScreen> createState() => _SimulateScreenState();
@@ -49,6 +60,7 @@ class _SimulateScreenState extends State<SimulateScreen> {
   bool _preconOpen = false;
 
   bool _busy = false;
+  bool _runLocally = false;
   String? _error;
 
   @override
@@ -111,7 +123,11 @@ class _SimulateScreenState extends State<SimulateScreen> {
       _error = null;
     });
     try {
-      final jobId = await widget.onStart(pickedDecks, _sims);
+      final jobId = await widget.onStart(
+        pickedDecks,
+        _sims,
+        runLocally: _runLocally,
+      );
       if (!mounted) return;
       setState(() => _picked.clear());
       widget.onJobCreated(context, jobId);
@@ -302,6 +318,9 @@ class _SimulateScreenState extends State<SimulateScreen> {
                 busy: _busy,
                 onUnpick: _toggle,
                 onStart: () => _start(pickedRecords),
+                showRunLocally: widget.showRunLocally,
+                runLocally: _runLocally,
+                onRunLocallyChanged: (v) => setState(() => _runLocally = v),
               ),
             ],
           );
