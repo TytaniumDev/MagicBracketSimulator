@@ -9,7 +9,7 @@
     "dev": "tsx src/worker.ts",
     "watch": "tsx watch src/worker.ts",
     "start:keep-awake": "caffeinate -i npm start",
-    "test:unit": "tsx src/override.test.ts"
+    "test:unit": "tsx src/override.test.ts && tsx src/condenser.test.ts"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^4.3.0",
@@ -18,8 +18,8 @@
     "dotenv": "^17.2.3"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^22.15.29",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.8.3"
   }
 }

@@ -9,6 +9,7 @@ import { toDck } from './ingestion/to-dck';
 import { slugify } from './saved-decks';
 import { parseCommanderFromContent } from './saved-decks';
 import { uploadPreconsJson } from './gcs-storage';
+import { USE_FIRESTORE } from './env';
 
 const ARCHIDEKT_LIST_URL = 'https://archidekt.com/api/decks/v3/';
 const ARCHIDEKT_OWNER = 'Archidekt_Precons';
@@ -118,9 +119,6 @@ function generatePreconId(name: string, allIds: Set<string>): string {
  * existing precons in the store, and upserts new/changed decks.
  */
 export async function syncPrecons(): Promise<SyncResult> {
-  const USE_FIRESTORE =
-    typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
-
   console.log('[PreconSync] Starting Archidekt precon sync...');
 
   // 1. Fetch full list from Archidekt and deduplicate

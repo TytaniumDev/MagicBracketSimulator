@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { deleteDeck } from '@/lib/deck-store-factory';
 import { removeColorIdentity } from '@/lib/deck-metadata';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
@@ -11,8 +11,8 @@ interface RouteParams {
 /**
  * DELETE /api/decks/[id] - Delete a deck (only owner can delete)
  */
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  let user;
+export async function DELETE(request: NextRequest, { params }: RouteParams): Promise<NextResponse | Response> {
+  let user: AuthUser;
   try {
     user = await verifyAllowedUser(request);
   } catch {
