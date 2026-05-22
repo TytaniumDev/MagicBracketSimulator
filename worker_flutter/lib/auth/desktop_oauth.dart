@@ -81,8 +81,8 @@ class DesktopOAuth {
         'code_challenge': challenge,
         'code_challenge_method': 'S256',
         'state': state,
-        'access_type': 'online',
-        'prompt': 'select_account',
+        'access_type': 'offline',
+        'prompt': 'select_account consent',
       },
     );
 
@@ -122,12 +122,17 @@ class DesktopOAuth {
       final tokens = jsonDecode(resp.body) as Map<String, dynamic>;
       final idToken = tokens['id_token'] as String?;
       final accessToken = tokens['access_token'] as String?;
+      final refreshToken = tokens['refresh_token'] as String?;
       if (idToken == null || accessToken == null) {
         throw StateError(
           'Token response missing id_token/access_token: ${resp.body}',
         );
       }
-      return DesktopOAuthResult(idToken: idToken, accessToken: accessToken);
+      return DesktopOAuthResult(
+        idToken: idToken,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
     } finally {
       // Always close the listener — leaving it bound on a random port
       // would leak file descriptors and could collide on a future run.
@@ -225,18 +230,57 @@ display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 h1{font-size:18px;margin:0 0 8px}p{font-size:13px;margin:0;color:#cbd5e1}</style></head>
 <body><div class="card"><h1>$title</h1><p>$body</p></div></body></html>''';
   }
+
+  /// Exchange a refresh token for a fresh idToken and accessToken.
+  /// Used for silent sign-in on boot.
+  Future<DesktopOAuthResult> refresh(String refreshToken) async {
+    final resp = await _http.post(
+      Uri.parse(_tokenEndpoint),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {
+        'client_id': clientId,
+        if (clientSecret.isNotEmpty) 'client_secret': clientSecret,
+        'refresh_token': refreshToken,
+        'grant_type': 'refresh_token',
+      },
+    );
+    if (resp.statusCode != 200) {
+      throw StateError(
+        'Google token endpoint returned ${resp.statusCode}: ${resp.body}',
+      );
+    }
+    final tokens = jsonDecode(resp.body) as Map<String, dynamic>;
+    final idToken = tokens['id_token'] as String?;
+    final accessToken = tokens['access_token'] as String?;
+    if (idToken == null || accessToken == null) {
+      throw StateError(
+        'Token response missing id_token/access_token: ${resp.body}',
+      );
+    }
+    return DesktopOAuthResult(
+      idToken: idToken,
+      accessToken: accessToken,
+      refreshToken: tokens['refresh_token'] as String? ?? refreshToken,
+    );
+  }
 }
 
 class DesktopOAuthResult {
-  DesktopOAuthResult({required this.idToken, required this.accessToken});
+  DesktopOAuthResult({
+    required this.idToken,
+    required this.accessToken,
+    this.refreshToken,
+  });
   final String idToken;
   final String accessToken;
+  final String? refreshToken;
 
   @override
   String toString() {
     if (kDebugMode) {
       return 'DesktopOAuthResult(idToken: ${idToken.substring(0, 16)}…, '
-          'accessToken: ${accessToken.substring(0, 16)}…)';
+          'accessToken: ${accessToken.substring(0, 16)}…, '
+          'refreshToken: ${refreshToken != null ? (refreshToken!.length > 8 ? "${refreshToken!.substring(0, 8)}…" : "present") : "null"})';
     }
     return 'DesktopOAuthResult';
   }

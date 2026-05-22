@@ -510,20 +510,35 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
   final AuthService _auth = AuthService();
   AuthedUser? _user;
   bool _engineStarted = false;
+  bool _restoringSession = true;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    // firebase_auth persists the session across launches — restore it
-    // synchronously so a returning user lands straight on the
-    // dashboard rather than the AuthGate.
-    final restored = _auth.currentUserSnapshot;
-    if (restored != null) {
-      _user = restored;
-      // Schedule outside the build cycle: _startEngineSafe awaits the
-      // engine, and initState shouldn't be async.
-      Future.microtask(() => _onAuthed(restored));
+    _performSilentSignIn();
+  }
+
+  Future<void> _performSilentSignIn() async {
+    try {
+      final user = await _auth.trySilentSignIn();
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _restoringSession = false;
+        });
+        if (user != null) {
+          await _onAuthed(user);
+        }
+      }
+    } catch (e, st) {
+      _log('Silent sign-in threw error: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _user = null;
+          _restoringSession = false;
+        });
+      }
     }
   }
 
@@ -594,13 +609,29 @@ class _WorkerAppState extends State<_WorkerApp> with WindowListener {
           surface: Color(0xFF111827),
         ),
       ),
-      home: _user == null
-          ? AuthGateScreen(
-              authService: _auth,
-              onAuthed: _onAuthed,
-              onSwitchToOffline: _switchToOffline,
+      home: _restoringSession
+          ? const Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Restoring session…',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
             )
-          : Dashboard(engine: widget.engine, config: widget.config),
+          : (_user == null
+              ? AuthGateScreen(
+                  authService: _auth,
+                  onAuthed: _onAuthed,
+                  onSwitchToOffline: _switchToOffline,
+                )
+              : Dashboard(engine: widget.engine, config: widget.config)),
     );
   }
 }

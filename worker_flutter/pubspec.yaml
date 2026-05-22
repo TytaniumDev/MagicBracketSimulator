@@ -22,6 +22,7 @@ dependencies:
   firebase_auth: ^5.4.0
   cloud_firestore: ^5.6.0
   firebase_storage: ^12.3.0
+  flutter_secure_storage: ^9.2.2
 
   # Native window + tray
   tray_manager: ^0.5.2

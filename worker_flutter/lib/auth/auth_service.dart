@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../firebase_options.dart';
 import '../telemetry.dart';
@@ -45,12 +46,19 @@ class AuthedUser {
 /// cloud_firestore reads `request.auth.uid` on subsequent writes
 /// either way.
 class AuthService {
-  AuthService({FirebaseAuth? firebaseAuth, DesktopOAuth? desktopOAuth})
-    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-      _desktopOAuth = desktopOAuth;
+  AuthService({
+    FirebaseAuth? firebaseAuth,
+    DesktopOAuth? desktopOAuth,
+    FlutterSecureStorage? secureStorage,
+  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+       _desktopOAuth = desktopOAuth,
+       _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   final FirebaseAuth _firebaseAuth;
   final DesktopOAuth? _desktopOAuth;
+  final FlutterSecureStorage _secureStorage;
+
+  static const _googleRefreshTokenKey = 'google_refresh_token';
 
   /// Stream of the current Firebase user, mapped to our `AuthedUser`
   /// shape. Emits `null` while signed out.
@@ -163,6 +171,26 @@ class AuthService {
       );
       rethrow;
     }
+
+    // Save the Google OAuth refresh token securely for silent sign-in on boot.
+    if (tokens.refreshToken != null) {
+      try {
+        await _secureStorage.write(
+          key: _googleRefreshTokenKey,
+          value: tokens.refreshToken,
+        );
+      } catch (e, st) {
+        debugPrint('AuthService: Failed to save refresh token: $e');
+        // Non-fatal error for the sign-in itself, but capture it.
+        await Telemetry.captureError(
+          e,
+          st,
+          category: TelemetryCategory.signIn,
+          tags: {'phase': 'persist_refresh_token'},
+        );
+      }
+    }
+
     return _requireUser(credential);
   }
 
@@ -201,7 +229,96 @@ class AuthService {
     );
   }
 
-  Future<void> signOut() => _firebaseAuth.signOut();
+  /// Attempts to silently sign in using a previously persisted Google refresh token.
+  /// Returns the authenticated user on success, or `null` if silent sign-in fails
+  /// or no refresh token is stored.
+  Future<AuthedUser?> trySilentSignIn() async {
+    if (!_useDesktopFlow) {
+      // Non-desktop platforms use the native Firebase Auth persistence.
+      // Firebase Auth's currentUser will automatically populate.
+      return currentUserSnapshot;
+    }
+
+    final refreshToken = await _secureStorage.read(key: _googleRefreshTokenKey);
+    if (refreshToken == null) {
+      if (kDebugMode) {
+        debugPrint('AuthService.trySilentSignIn() — No saved refresh token found');
+      }
+      return null;
+    }
+
+    if (kDebugMode) {
+      debugPrint('AuthService.trySilentSignIn() — Found saved refresh token, attempting silent refresh');
+    }
+
+    final clientId = DefaultFirebaseOptions.desktopOAuthClientId;
+    final clientSecret = DefaultFirebaseOptions.desktopOAuthClientSecret;
+    if (clientId == 'REPLACE_WITH_DESKTOP_OAUTH_CLIENT_ID' || clientSecret.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('AuthService.trySilentSignIn() — Missing clientId or clientSecret');
+      }
+      return null;
+    }
+
+    final oauth =
+        _desktopOAuth ??
+        DesktopOAuth(clientId: clientId, clientSecret: clientSecret);
+
+    try {
+      final tokens = await oauth.refresh(refreshToken);
+      final cred = GoogleAuthProvider.credential(
+        idToken: tokens.idToken,
+        accessToken: tokens.accessToken,
+      );
+
+      final credential = await _firebaseAuth.signInWithCredential(cred);
+
+      // Persist the new refresh token if Google returned one.
+      if (tokens.refreshToken != null) {
+        await _secureStorage.write(
+          key: _googleRefreshTokenKey,
+          value: tokens.refreshToken,
+        );
+      }
+
+      final user = _requireUser(credential);
+      if (kDebugMode) {
+        debugPrint('AuthService.trySilentSignIn() — Silent refresh successful for ${user.email}');
+      }
+      return user;
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('AuthService.trySilentSignIn() — Silent sign-in failed: $e');
+      }
+      // If the refresh token is invalid/revoked or network fails, clean secure storage.
+      // Note: We only delete if it's a real Auth error (e.g. invalid grant),
+      // but to be absolutely safe and prevent infinite boot-loops on bad tokens,
+      // we clean it on any exception here.
+      try {
+        await _secureStorage.delete(key: _googleRefreshTokenKey);
+      } catch (_) {}
+
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.signIn,
+        tags: {
+          'platform': Platform.operatingSystem,
+          'phase': 'silent_refresh',
+        },
+      );
+      return null;
+    }
+  }
+
+  Future<void> signOut() async {
+    try {
+      await _secureStorage.delete(key: _googleRefreshTokenKey);
+    } catch (e) {
+      debugPrint('AuthService: Failed to clear secure storage on signOut: $e');
+    }
+    await _firebaseAuth.signOut();
+  }
 
   /// Sign-in is supported on every desktop target via the PKCE flow.
   static bool get isSupported => true;
