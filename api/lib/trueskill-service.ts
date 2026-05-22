@@ -95,6 +95,31 @@ export async function processJobForRatings(
       }
     }
 
+    const interactionCounts: Record<string, number> = {};
+    const protectionCounts: Record<string, number> = {};
+
+    for (const deckHistory of game.decks) {
+      let matchingDeckId: string | null = null;
+      for (const { id, name } of deckInfos) {
+        if (name && matchesDeckName(deckHistory.deckLabel, name)) {
+          matchingDeckId = id;
+          break;
+        }
+      }
+      if (matchingDeckId) {
+        let interactions = 0;
+        let protections = 0;
+        for (const turn of deckHistory.turns) {
+          for (const action of turn.actions) {
+            if (action.eventType === 'interaction') interactions++;
+            if (action.eventType === 'protection') protections++;
+          }
+        }
+        interactionCounts[matchingDeckId] = interactions;
+        protectionCounts[matchingDeckId] = protections;
+      }
+    }
+
     matchResults.push({
       id: `${jobId}_${i}`,
       jobId,
@@ -102,6 +127,8 @@ export async function processJobForRatings(
       deckIds,
       winnerDeckId,
       turnCount: game.winningTurn ?? null,
+      interactionCounts,
+      protectionCounts,
       playedAt: jobTimestamp,
     });
 
@@ -121,10 +148,15 @@ export async function processJobForRatings(
     for (let j = 0; j < deckIds.length; j++) {
       const current = currentRatings[j]!;
       const isWinner = j === winnerIdx;
+      const dId = deckIds[j];
+      const iCount = interactionCounts[dId] || 0;
+      const pCount = protectionCounts[dId] || 0;
       let next: DeckRating = {
         ...current,
         gamesPlayed: current.gamesPlayed + 1,
         wins: current.wins + (isWinner ? 1 : 0),
+        interactionCountSum: (current.interactionCountSum ?? 0) + iCount,
+        protectionCountSum: (current.protectionCountSum ?? 0) + pCount,
         lastUpdated: jobTimestamp,
       };
       if (isWinner && game.winningTurn != null) {
