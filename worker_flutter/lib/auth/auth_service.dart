@@ -251,11 +251,16 @@ class AuthService {
       return null;
     }
 
+    if (resp.statusCode == 400) {
+      try {
+        final body = jsonDecode(resp.body) as Map<String, dynamic>;
+        if (body['error'] == 'invalid_grant') {
+          await _refreshTokenStore.delete();
+        }
+      } catch (_) {}
+      return null;
+    }
     if (resp.statusCode >= 400 && resp.statusCode < 500) {
-      // 4xx from Google's token endpoint means this refresh token is
-      // dead (revoked, expired, scope changed, etc.). Clear it so we
-      // stop hammering on every launch.
-      await _refreshTokenStore.delete();
       return null;
     }
     if (resp.statusCode != 200) {
@@ -332,7 +337,10 @@ class AuthService {
     );
   }
 
-  Future<void> signOut() => _firebaseAuth.signOut();
+  Future<void> signOut() async {
+    await _firebaseAuth.signOut();
+    await _refreshTokenStore.delete();
+  }
 
   /// Sign-in is supported on every desktop target via the PKCE flow.
   static bool get isSupported => true;
