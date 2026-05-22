@@ -15,7 +15,9 @@ import { isWorkerRequest } from '@/lib/auth';
 import { sweepStaleJobs } from '@/lib/stale-sweeper';
 import { errorResponse } from '@/lib/api-response';
 
-const IS_LOCAL_MODE = !process.env.GOOGLE_CLOUD_PROJECT;
+import { isLocalMode } from '@/lib/env';
+
+const IS_LOCAL_MODE = isLocalMode();
 
 export async function POST(req: NextRequest) {
   if (!IS_LOCAL_MODE && !isWorkerRequest(req)) {

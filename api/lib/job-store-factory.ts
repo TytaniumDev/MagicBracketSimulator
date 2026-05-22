@@ -10,10 +10,10 @@ import { cancelRecoveryCheck } from './cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from './logger';
 
+import { USE_FIRESTORE, isGcpMode } from './env';
+
 const log = createLogger('JobStore');
 const recoveryLog = createLogger('Recovery');
-
-const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
 
 // Lazy dynamic import of the SQLite-backed store. Using `await import()` (not
 // `require()`) so webpack can statically analyze the dependency and emit it
@@ -38,9 +38,7 @@ if (USE_FIRESTORE) {
   log.info('Using SQLite + local filesystem');
 }
 
-export function isGcpMode(): boolean {
-  return USE_FIRESTORE;
-}
+export { isGcpMode };
 
 export async function getJob(id: string): Promise<Job | null> {
   if (USE_FIRESTORE) {

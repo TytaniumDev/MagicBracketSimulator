@@ -7,7 +7,7 @@
  * In LOCAL mode: no-ops (recovery relies on stream-open check only).
  */
 
-const USE_CLOUD_TASKS = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+import { USE_FIRESTORE as USE_CLOUD_TASKS } from './env';
 
 let tasksClient: InstanceType<typeof import('@google-cloud/tasks').CloudTasksClient> | null = null;
 

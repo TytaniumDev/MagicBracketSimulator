@@ -88,7 +88,8 @@ export async function POST(request: NextRequest) {
 
 /** Yields match_results in bounded-size pages; works for both SQLite and Firestore. */
 async function* iterateMatchResults(): AsyncGenerator<MatchResult[]> {
-  const isGcp = !!process.env.GOOGLE_CLOUD_PROJECT;
+  const { isGcpMode } = await import('@/lib/env');
+  const isGcp = isGcpMode();
   if (isGcp) {
     yield* iterateFirestoreMatchResults();
   } else {

@@ -4,8 +4,7 @@
  */
 import type { WorkerInfo } from './types';
 import * as firestoreStore from './firestore-worker-store';
-
-const USE_FIRESTORE = typeof process.env.GOOGLE_CLOUD_PROJECT === 'string' && process.env.GOOGLE_CLOUD_PROJECT.length > 0;
+import { USE_FIRESTORE } from './env';
 
 // Lazy dynamic import — see job-store-factory.ts for rationale.
 type SqliteWorkerStore = typeof import('./worker-store');

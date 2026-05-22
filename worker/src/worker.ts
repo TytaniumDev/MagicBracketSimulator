@@ -74,6 +74,40 @@ const activeAbortControllers = new Map<string, Set<AbortController>>();
 // Ordered list of all active abort controllers for capacity preemption (most recent at end)
 const allActiveAbortControllers: AbortController[] = [];
 
+// ============================================================================
+// Job Cache
+// ============================================================================
+
+/**
+ * In-flight job fetch cache.
+ *
+ * When many simulations under the same job start concurrently, each one
+ * previously called fetchJob independently, generating N identical HTTP/DB
+ * round-trips. This map coalesces them: the first caller inserts a Promise
+ * and all subsequent callers for the same jobId await the same Promise.
+ *
+ * The entry is deleted once the Promise settles so that a subsequent poll
+ * cycle (e.g. a retry or a new batch of sims) always fetches fresh data.
+ */
+const jobFetchCache = new Map<string, Promise<JobData | null>>();
+
+/**
+ * Fetch job details, coalescing concurrent requests for the same jobId.
+ * Uses the module-level jobFetchCache so that N simultaneous sims for
+ * the same job share one network round-trip.
+ */
+function fetchJobCached(jobId: string): Promise<JobData | null> {
+  const cached = jobFetchCache.get(jobId);
+  if (cached) return cached;
+
+  const promise = fetchJob(jobId).finally(() => {
+    // Evict once settled so the next batch always sees fresh data.
+    jobFetchCache.delete(jobId);
+  });
+  jobFetchCache.set(jobId, promise);
+  return promise;
+}
+
 // Notify mechanism for push-based job notification (local polling mode)
 let jobNotifyResolve: (() => void) | null = null;
 
@@ -324,8 +358,8 @@ async function processSimulationInternal(
 ): Promise<void> {
   const simLabel = `[${simId}]`;
 
-  // Fetch job for deck data
-  const job = await fetchJob(jobId);
+  // Fetch job for deck data (coalesced — concurrent sims for the same job share one request)
+  const job = await fetchJobCached(jobId);
   if (!job) {
     console.error(`${simLabel} Job ${jobId} not found, reporting FAILED`);
     await reportSimulationStatus(jobId, simId, {

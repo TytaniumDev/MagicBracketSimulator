@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAdmin, unauthorizedResponse } from '@/lib/auth';
+import { verifyAuth, verifyAdmin, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { getCoverageStore } from '@/lib/coverage-store-factory';
 import { errorResponse } from '@/lib/api-response';
 
 /**
  * GET /api/coverage/config — read coverage config (any authenticated user)
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse | Response> {
   try {
     await verifyAuth(request);
   } catch {
@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
 /**
  * PATCH /api/coverage/config — update coverage config (admin only)
  */
-export async function PATCH(request: NextRequest) {
-  let user;
+export async function PATCH(request: NextRequest): Promise<NextResponse | Response> {
+  let user: AuthUser;
   try {
     user = await verifyAdmin(request);
   } catch {
