@@ -86,9 +86,7 @@ def main() -> None:
 
     appcast = args.appcast.read_text()
 
-    # Idempotency guard: check if this enclosure URL is already present in the appcast.
-    # If the enclosure URL is already present, the workflow has rerun against the same release.
-    if args.enclosure_url in appcast:
+    if f'url="{args.enclosure_url}"' in appcast:
         raise SystemExit(
             f"appcast.xml already contains an <item> for enclosure {args.enclosure_url}; "
             "refusing to insert a duplicate."
