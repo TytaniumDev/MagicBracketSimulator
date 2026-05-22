@@ -292,7 +292,11 @@ jobs:
         continue-on-error: true
         run: dart run sentry_dart_plugin
 
-      - name: Package release as zip
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+        # Try choco install, standard on windows runner.
+
+      - name: Compile Windows Installer
         working-directory: worker_flutter
         shell: pwsh
         run: |
@@ -300,12 +304,9 @@ jobs:
           if (-not (Test-Path $src)) {
             $src = "build/windows/runner/Release"
           }
-          $dst = "build/MagicBracketWorker-windows.zip"
-          if (Test-Path $dst) { Remove-Item $dst }
-          Compress-Archive -Path "$src/*" -DestinationPath $dst
-          Get-ChildItem $dst
+          iscc /dMyAppVersion="${{ needs.version.outputs.version }}" /dSourceDir="$src" windows/installer.iss
 
-      - name: Sign zip for WinSparkle (DSA)
+      - name: Sign installer for WinSparkle (DSA)
         env:
           SPARKLE_DSA_PRIVATE_KEY: ${{ secrets.SPARKLE_DSA_PRIVATE_KEY }}
           TAG: ${{ needs.version.outputs.tag }}
@@ -320,9 +321,9 @@ jobs:
           KEY_FILE=$(mktemp)
           trap 'rm -f "$KEY_FILE"' EXIT
           printf '%s' "$SPARKLE_DSA_PRIVATE_KEY" > "$KEY_FILE"
-          ZIP=build/MagicBracketWorker-windows.zip
-          LEN=$(wc -c < "$ZIP")
-          SIG=$(openssl dgst -sha1 -binary < "$ZIP" \
+          EXE=build/MagicBracketWorker-Installer.exe
+          LEN=$(wc -c < "$EXE")
+          SIG=$(openssl dgst -sha1 -binary < "$EXE" \
             | openssl dgst -sha1 -sign "$KEY_FILE" \
             | openssl enc -base64 -A)
           if [ -z "$SIG" ]; then
@@ -341,7 +342,7 @@ jobs:
         with:
           name: windows
           path: |
-            worker_flutter/build/MagicBracketWorker-windows.zip
+            worker_flutter/build/MagicBracketWorker-Installer.exe
             worker_flutter/build/sparkle-manifest-windows.json
           if-no-files-found: error
 
@@ -371,7 +372,7 @@ jobs:
           files: |
             artifacts/macos/MagicBracketWorker-macos.zip
             artifacts/macos/sparkle-manifest.json
-            artifacts/windows/MagicBracketWorker-windows.zip
+            artifacts/windows/MagicBracketWorker-Installer.exe
             artifacts/windows/sparkle-manifest-windows.json
           fail_on_unmatched_files: true
 
@@ -408,7 +409,7 @@ jobs:
           name: macos
           path: artifacts/macos
 
-      - name: Prepend appcast item
+      - name: Prepend appcast item (macOS)
         env:
           VERSION: ${{ needs.version.outputs.version }}
           BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
@@ -419,7 +420,22 @@ jobs:
             --manifest artifacts/macos/sparkle-manifest.json \
             --version "$VERSION" \
             --build-number "$BUILD_NUMBER" \
+            --os macos \
             --enclosure-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/MagicBracketWorker-macos.zip"
+
+      - name: Prepend appcast item (Windows)
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          python3 .github/scripts/prepend_appcast_item.py \
+            --appcast worker_flutter/appcast.xml \
+            --manifest artifacts/windows/sparkle-manifest-windows.json \
+            --version "$VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --os windows \
+            --enclosure-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/MagicBracketWorker-Installer.exe"
 
       # Push the appcast change to a side branch, open a PR via the
       # PAT, and enable auto-merge. The PAT is what makes CI trigger on
