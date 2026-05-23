@@ -127,12 +127,14 @@ class PrependAppcastItemTest(unittest.TestCase):
         self.assertIn("<sparkle:os>macos</sparkle:os>", text)
         self.assertIn('sparkle:edSignature="abcED_SIG=="', text)
         self.assertIn('length="12345"', text)
+        self.assertIn("<sparkle:version>8</sparkle:version>", text)
 
         # Verify Windows properties exist in prepended item
         self.assertIn("<title>Version 0.2.1 (Windows)</title>", text)
         self.assertIn("<sparkle:os>windows</sparkle:os>", text)
         self.assertIn('sparkle:dsaSignature="xyzDSA_SIG=="', text)
         self.assertIn('length="54321"', text)
+        self.assertIn("<sparkle:version>0.2.1</sparkle:version>", text)
 
     def test_existing_comments_are_preserved(self) -> None:
         self.run_script_macos()

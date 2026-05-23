@@ -48,7 +48,7 @@ def build_item(
         f"      <title>Version {version} {title_suffix}</title>\n"
         f"      <sparkle:os>{os_name}</sparkle:os>\n"
         f"      <pubDate>{pub_date}</pubDate>\n"
-        f"      <sparkle:version>{build_number}</sparkle:version>\n"
+        f"      <sparkle:version>{build_number if os_name == 'macos' else version}</sparkle:version>\n"
         f"      <sparkle:shortVersionString>{version}</sparkle:shortVersionString>\n"
         f"      <sparkle:minimumSystemVersion>{'11.0' if os_name == 'macos' else '10.0'}</sparkle:minimumSystemVersion>\n"
         f'      <enclosure url="{enclosure_url}"\n'
