@@ -71,18 +71,21 @@ def main() -> None:
 
     manifest = json.loads(args.manifest.read_text())
     
-    if args.os == "macos":
-        signature = manifest["edSignature"]
-        sig_attr = "sparkle:edSignature"
-        os_name = "macos"
-        title_suffix = "(macOS)"
-    else:
-        signature = manifest["dsaSignature"]
-        sig_attr = "sparkle:dsaSignature"
-        os_name = "windows"
-        title_suffix = "(Windows)"
+    try:
+        if args.os == "macos":
+            signature = manifest["edSignature"]
+            sig_attr = "sparkle:edSignature"
+            os_name = "macos"
+            title_suffix = "(macOS)"
+        else:
+            signature = manifest["dsaSignature"]
+            sig_attr = "sparkle:dsaSignature"
+            os_name = "windows"
+            title_suffix = "(Windows)"
 
-    length = int(manifest["length"])
+        length = int(manifest["length"])
+    except (KeyError, ValueError) as e:
+        raise SystemExit(f"Manifest at {args.manifest} is malformed or missing required keys: {e}")
 
     appcast = args.appcast.read_text()
 
