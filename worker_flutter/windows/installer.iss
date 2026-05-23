@@ -7,7 +7,7 @@
 #endif
 
 #ifndef SourceDir
-  #define SourceDir "build\windows\x64\runner\Release"
+  #define SourceDir "..\build\windows\x64\runner\Release"
 #endif
 
 [Setup]
@@ -22,7 +22,7 @@ OutputBaseFilename=MagicBracketWorker-Installer
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=lowest
-SetupIconFile=assets\tray_icon.ico
+SetupIconFile=..\assets\tray_icon.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

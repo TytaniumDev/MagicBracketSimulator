@@ -304,6 +304,7 @@ jobs:
           if (-not (Test-Path $src)) {
             $src = "build/windows/runner/Release"
           }
+          $src = [System.IO.Path]::GetFullPath($src)
           iscc /dMyAppVersion="${{ needs.version.outputs.version }}" /dSourceDir="$src" windows/installer.iss
 
       - name: Sign installer for WinSparkle (DSA)
@@ -408,6 +409,12 @@ jobs:
         with:
           name: macos
           path: artifacts/macos
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: artifacts/windows
 
       - name: Prepend appcast item (macOS)
         env:
