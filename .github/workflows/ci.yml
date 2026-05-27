@@ -21,6 +21,12 @@ jobs:
             api/package-lock.json
             worker/package-lock.json
 
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
       - run: ./scripts/lint.sh
 
   build:
@@ -61,6 +67,12 @@ jobs:
             frontend/package-lock.json
             api/package-lock.json
             worker/package-lock.json
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
       - run: ./scripts/test.sh
 

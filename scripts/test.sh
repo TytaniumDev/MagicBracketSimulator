@@ -22,3 +22,11 @@ npm run test:ingestion && cd ..
 # Worker tests
 echo "=== Worker unit tests ==="
 cd worker && npm ci && npm run test:unit && cd ..
+
+# Worker Flutter tests
+echo "=== Worker Flutter tests ==="
+if command -v flutter &>/dev/null; then
+  cd worker_flutter && flutter pub get && flutter test && cd ..
+else
+  echo "Flutter not installed, skipping worker_flutter tests."
+fi

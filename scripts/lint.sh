@@ -15,3 +15,11 @@ cd frontend && npm ci && npm run lint && cd ..
 # API
 echo "=== API lint ==="
 cd api && npm ci && npm run lint && cd ..
+
+# Worker Flutter
+echo "=== Worker Flutter lint ==="
+if command -v flutter &>/dev/null; then
+  cd worker_flutter && flutter pub get && flutter analyze && cd ..
+else
+  echo "Flutter not installed, skipping worker_flutter lint."
+fi
