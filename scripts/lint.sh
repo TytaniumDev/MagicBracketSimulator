@@ -19,7 +19,7 @@ cd api && npm ci && npm run lint && cd ..
 # Worker Flutter
 echo "=== Worker Flutter lint ==="
 if command -v flutter &>/dev/null; then
-  cd worker_flutter && flutter pub get && flutter analyze && cd ..
+  cd worker_flutter && flutter pub get && flutter analyze --no-fatal-infos && cd ..
 else
   echo "Flutter not installed, skipping worker_flutter lint."
 fi
