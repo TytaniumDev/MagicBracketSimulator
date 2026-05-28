@@ -20,7 +20,7 @@ if (!process.env.GOOGLE_CLOUD_PROJECT) {
  *
  * Per-simulation architecture:
  * 1. Loads config from Google Secret Manager (if GOOGLE_CLOUD_PROJECT set) or env
- * 2. Receives simulation tasks via Pub/Sub (1 message = 1 simulation) or polls for jobs
+ * 2. Receives simulation tasks by polling the API for PENDING jobs
  * 3. Fetches job details from the API for deck data
  * 4. Runs a single simulation container via `docker run --rm`
  * 5. Reports per-simulation status to the API (RUNNING/COMPLETED/FAILED)
@@ -369,7 +369,7 @@ async function processSimulationInternal(
     return;
   }
 
-  // Skip if job is already in a terminal state (stale Pub/Sub redelivery, etc.)
+  // Skip if job is already in a terminal state
   if (job.status === 'COMPLETED' || job.status === 'FAILED') {
     console.log(`${simLabel} Job ${jobId} is already ${job.status}, skipping`);
     return;  // Don't report status — stale scanner may have deleted sim records
