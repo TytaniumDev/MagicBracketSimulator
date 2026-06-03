@@ -29,6 +29,8 @@
 - **Worker Install**: `cd worker && npm install`
 - **Worker Dev**: `cd worker && npm run dev`
 - **Worker Test**: `cd worker && npm run test:unit`
+- **Worker Flutter Test**: `cd worker_flutter && flutter test`
+- **Worker Flutter Lint**: `cd worker_flutter && flutter analyze --no-fatal-infos`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
@@ -38,3 +40,4 @@
 - `frontend/`: React app
 - `api/`: Next.js API, ingestion, and analysis
 - `worker/`: Node.js + Docker simulation runner
+- `worker_flutter/`: Cross-platform desktop worker (macOS/Windows)
