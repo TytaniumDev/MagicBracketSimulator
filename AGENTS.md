@@ -6,7 +6,7 @@
 - **Executable:** If it isn't an executable command or a hard constraint, it doesn't belong here.
 
 ## Tooling
-- **Node.js**: 20+ (managed by `npm`)
+- **Node.js**: 24+ (managed by `npm`)
 - **Docker**: Required for simulation engine
 - **Package Manager**: `npm` (Node)
 

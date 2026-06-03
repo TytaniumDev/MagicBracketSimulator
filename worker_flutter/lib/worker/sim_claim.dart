@@ -84,14 +84,16 @@ class SimClaimer {
         // jobId is the parent of the parent of the sim doc
         final jobId = simRef.parent.parent!.id;
 
-        return ClaimSucceeded(SimDoc(
-          simId: simRef.id,
-          jobId: jobId,
-          index: (data['index'] as num?)?.toInt() ?? 0,
-          state: 'RUNNING',
-          workerId: workerId,
-          workerName: workerName,
-        ));
+        return ClaimSucceeded(
+          SimDoc(
+            simId: simRef.id,
+            jobId: jobId,
+            index: (data['index'] as num?)?.toInt() ?? 0,
+            state: 'RUNNING',
+            workerId: workerId,
+            workerName: workerName,
+          ),
+        );
       });
     } on FirebaseException catch (e) {
       return ClaimLostRace('firestore: ${e.code}');

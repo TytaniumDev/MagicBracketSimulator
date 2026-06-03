@@ -19,7 +19,6 @@ import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
 import 'launch/auto_start_service.dart';
 import 'launch/mode_picker_screen.dart';
-import 'macos/activation_policy.dart';
 import 'offline/offline_app.dart';
 import 'sentry_setup.dart';
 import 'telemetry.dart';
@@ -634,12 +633,12 @@ class _WorkerAppState extends State<_WorkerApp> {
               ),
             )
           : (_user == null
-              ? AuthGateScreen(
-                  authService: _auth,
-                  onAuthed: _onAuthed,
-                  onSwitchToOffline: _switchToOffline,
-                )
-              : Dashboard(engine: widget.engine, config: widget.config)),
+                ? AuthGateScreen(
+                    authService: _auth,
+                    onAuthed: _onAuthed,
+                    onSwitchToOffline: _switchToOffline,
+                  )
+                : Dashboard(engine: widget.engine, config: widget.config)),
     );
   }
 }

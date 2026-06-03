@@ -59,7 +59,10 @@ class LeaseWriter {
     } catch (_) {
       // _writeOnce already swallows; this is belt-and-suspenders.
     }
-    _timer = Timer.periodic(tickInterval, (_) => _writeOnce(status: _activeStatus()));
+    _timer = Timer.periodic(
+      tickInterval,
+      (_) => _writeOnce(status: _activeStatus()),
+    );
   }
 
   Future<void> stop() async {

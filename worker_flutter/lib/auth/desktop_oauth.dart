@@ -324,5 +324,6 @@ class GoogleRefreshTokenException implements Exception {
   }
 
   @override
-  String toString() => 'GoogleRefreshTokenException: Google token endpoint returned $statusCode: $body';
+  String toString() =>
+      'GoogleRefreshTokenException: Google token endpoint returned $statusCode: $body';
 }
