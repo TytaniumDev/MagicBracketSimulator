@@ -40,6 +40,7 @@ class DeckPickerSection extends StatefulWidget {
 }
 
 class _DeckPickerSectionState extends State<DeckPickerSection> {
+  // Use ExpansionTileController for compatibility as ExpansibleController may not be available on this Flutter version
   late final ExpansionTileController _ctrl;
 
   @override
