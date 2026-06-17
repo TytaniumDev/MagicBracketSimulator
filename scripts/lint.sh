@@ -18,4 +18,4 @@ cd api && npm ci && npm run lint && cd ..
 
 # Worker Flutter
 echo "=== Worker Flutter lint ==="
-cd worker_flutter && flutter pub get && flutter analyze --no-fatal-infos --no-fatal-infos && cd ..
+cd worker_flutter && flutter pub get && flutter analyze --no-fatal-infos && cd ..
