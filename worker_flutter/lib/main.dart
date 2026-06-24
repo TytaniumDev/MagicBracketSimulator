@@ -19,7 +19,6 @@ import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
 import 'launch/auto_start_service.dart';
 import 'launch/mode_picker_screen.dart';
-import 'macos/activation_policy.dart';
 import 'offline/offline_app.dart';
 import 'sentry_setup.dart';
 import 'telemetry.dart';
