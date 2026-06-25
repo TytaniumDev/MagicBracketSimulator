@@ -8,21 +8,21 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 |---------|------------|----------|
 | Database | SQLite | Firestore |
 | File Storage | Local filesystem | Cloud Storage (GCS) |
-| Job Queue | Polling-based worker | Pub/Sub |
+| Job Queue | Polling-based worker | Polling-based worker |
 | Analysis | Win rate / game stats | Win rate / game stats |
-| Worker | worker/ (polling) | worker/ (Pub/Sub subscriber) |
+| Worker | worker/ (polling) | worker/ (polling) |
 
 ## Mode Detection
 
 The system automatically detects the mode based on the `GOOGLE_CLOUD_PROJECT` environment variable:
-- **Set**: GCP mode (Firestore, Pub/Sub, GCS)
+- **Set**: GCP mode (Firestore, HTTP Polling, GCS)
 - **Not set**: LOCAL mode (SQLite, filesystem)
 
 At startup, you'll see log messages like:
 ```
 [Job Store] Running in GCP mode
 [Job Store] Project: magic-bracket-simulator
-[Job Store] Using: Firestore + Cloud Storage + Pub/Sub
+[Job Store] Using: Firestore + Cloud Storage + HTTP Polling
 ```
 
 ## Quick Mode Toggle
@@ -50,8 +50,7 @@ These commands copy or remove `.env.local` override files in `api/` and `fronten
 1. GCP Project with:
    - Firestore database
    - Cloud Storage bucket
-   - Pub/Sub topic and subscription
-2. Service account key with permissions for Firestore, GCS, and Pub/Sub
+2. Service account key with permissions for Firestore and GCS
 3. Docker installed (for worker)
 
 ### Configuration Files
@@ -86,7 +85,7 @@ WORKER_API_URL="http://<vm-internal-ip>:9090"  # VPC-internal IP for API→worke
 npm run dev
 ```
 
-**Terminal 2: Local Worker (processes jobs via Pub/Sub)**
+**Terminal 2: Local Worker**
 ```bash
 npm run worker:gcp
 ```
@@ -95,7 +94,7 @@ npm run worker:gcp
 
 | Service | Purpose | Where it runs |
 |---------|---------|---------------|
-| api | API backend (Firestore/Pub/Sub) | Local or Cloud Run |
+| api | API backend (Firestore/Polling) | Local or Cloud Run |
 | frontend | React UI | Local or Firebase Hosting |
 | worker | Node.js orchestrator that spawns simulation containers (Docker) | Docker on your machine |
 | simulation | Java + Forge engine container (ephemeral) | Spawns via `docker run` inside worker |
@@ -167,10 +166,6 @@ The worker image contains the Node.js orchestrator. The simulation image (`magic
 - For local testing, use `http://localhost:3000`
 - For Cloud Run, use the deployed URL
 
-### Pub/Sub messages not received
-- Check `PUBSUB_SUBSCRIPTION` matches the subscription name in GCP
-- Verify service account has `pubsub.subscriber` permission
-
 ### Firestore permission errors (e.g. `7 PERMISSION_DENIED: User not authorized to perform this action`)
 - **Deployed API (Firebase App Hosting / Cloud Run):** The backend runs as a Cloud Run service account. That identity must have **Cloud Datastore User** so it can read/write Firestore (decks, jobs). Grant the role on the project:
   - GCP Console → **IAM & Admin** → **IAM** → find the service account used by your App Hosting backend (e.g. `PROJECT_NUMBER-compute@developer.gserviceaccount.com` or the one shown in **Firebase** → **App Hosting** → your backend → **Settings**).
@@ -184,6 +179,6 @@ The worker image contains the Node.js orchestrator. The simulation image (`magic
 - **Local API:** Ensure service account key path is correct and the key’s account has Firestore read/write (e.g. Cloud Datastore User).
 
 ### Jobs stuck in QUEUED
-- Ensure worker is running and connected to Pub/Sub
+- Ensure worker is running and polling API
 - Check worker logs for errors
 - Verify `WORKER_SECRET` matches between API and worker
