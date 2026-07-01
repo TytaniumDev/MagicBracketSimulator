@@ -29,6 +29,8 @@
 - **Worker Install**: `cd worker && npm install`
 - **Worker Dev**: `cd worker && npm run dev`
 - **Worker Test**: `cd worker && npm run test:unit`
+- **Worker Flutter Lint**: `cd worker_flutter && flutter pub get && flutter analyze --no-fatal-infos`
+- **Worker Flutter Test**: `cd worker_flutter && flutter pub get && flutter test`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)

@@ -21,6 +21,10 @@ jobs:
             api/package-lock.json
             worker/package-lock.json
 
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
       - run: ./scripts/lint.sh
 
   build:
@@ -61,6 +65,10 @@ jobs:
             frontend/package-lock.json
             api/package-lock.json
             worker/package-lock.json
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
 
       - run: ./scripts/test.sh
 
