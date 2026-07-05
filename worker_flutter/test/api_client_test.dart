@@ -62,41 +62,9 @@ void main() {
       expect(capturedHeaders!.containsKey('X-Firebase-AppCheck'), isFalse);
     });
 
-    test('retries with forceRefresh when first call returns null', () async {
+    test('calls token provider with forceRefresh: false', () async {
       int callCount = 0;
-      bool? lastForceRefresh;
-      Map<String, String>? capturedHeaders;
-      final httpClient = MockClient((req) async {
-        capturedHeaders = req.headers;
-        return http.Response('{"ok": true}', 200);
-      });
-
-      final api = ApiClient(
-        baseUrl: 'http://localhost',
-        client: httpClient,
-        auth: mockAuth,
-        appCheckTokenProvider: ({bool forceRefresh = false}) async {
-          callCount++;
-          lastForceRefresh = forceRefresh;
-          // First call (forceRefresh=false) returns null to simulate
-          // an empty cache. Second call (forceRefresh=true) returns a
-          // fresh token.
-          if (!forceRefresh) return null;
-          return 'fresh-token';
-        },
-      );
-
-      await api.getJson('/api/test');
-
-      expect(callCount, 2,
-          reason: 'should call provider twice (cache miss + force refresh)');
-      expect(lastForceRefresh, isTrue,
-          reason: 'second call should use forceRefresh=true');
-      expect(capturedHeaders!['X-Firebase-AppCheck'], 'fresh-token');
-    });
-
-    test('does not retry when first call already returns a token', () async {
-      int callCount = 0;
+      bool? passedForceRefresh;
       final httpClient = MockClient((req) async {
         return http.Response('{"ok": true}', 200);
       });
@@ -107,41 +75,15 @@ void main() {
         auth: mockAuth,
         appCheckTokenProvider: ({bool forceRefresh = false}) async {
           callCount++;
-          return 'cached-token';
+          passedForceRefresh = forceRefresh;
+          return 'token-xyz';
         },
       );
 
       await api.getJson('/api/test');
 
-      expect(callCount, 1, reason: 'should not retry when cache hit');
-    });
-
-    test(
-        'forceRefresh retry also returning null results in no header attached',
-        () async {
-      int callCount = 0;
-      Map<String, String>? capturedHeaders;
-      final httpClient = MockClient((req) async {
-        capturedHeaders = req.headers;
-        return http.Response('{"ok": true}', 200);
-      });
-
-      final api = ApiClient(
-        baseUrl: 'http://localhost',
-        client: httpClient,
-        auth: mockAuth,
-        appCheckTokenProvider: ({bool forceRefresh = false}) async {
-          callCount++;
-          return null; // both attempts fail
-        },
-      );
-
-      await api.getJson('/api/test');
-
-      expect(callCount, 2,
-          reason: 'should attempt both cached and forced refresh');
-      expect(capturedHeaders!.containsKey('X-Firebase-AppCheck'), isFalse,
-          reason: 'no token available, header should be absent');
+      expect(callCount, 1);
+      expect(passedForceRefresh, isFalse);
     });
 
     test('App Check token is sent on delete requests too', () async {

@@ -95,17 +95,10 @@ class ApiClient {
 
   /// Fetch a Firebase App Check token to attest this request comes from
   /// the legitimate app rather than a script with a stolen ID token.
-  ///
-  /// If the cached token is `null` (e.g. auto-refresh hasn't populated
-  /// the cache yet), retries once with `forceRefresh: true` so the SDK
-  /// makes a fresh attestation request rather than silently returning
-  /// `null` and letting the API reject with 401.
-  Future<String?> _appCheckToken() async {
-    final token = await _appCheckTokenProvider(forceRefresh: false);
-    if (token != null) return token;
-    // Cache miss — force a fresh attestation request before giving up.
-    return _appCheckTokenProvider(forceRefresh: true);
-  }
+  /// Returns `null` on platforms where App Check isn't wired up (Windows
+  /// desktop has no `firebase_app_check` support) or when the underlying
+  /// fetch fails.
+  Future<String?> _appCheckToken() => _appCheckTokenProvider(forceRefresh: false);
 
   Map<String, dynamic> _decode(http.Response resp, String path) {
     if (resp.statusCode == 401) {
