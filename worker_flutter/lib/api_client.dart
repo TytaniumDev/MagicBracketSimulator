@@ -5,6 +5,26 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
+/// Callback that returns a Firebase App Check token string, or `null`
+/// if no token is available. Injected into [ApiClient] so tests can
+/// supply a fake without depending on `FirebaseAppCheck`.
+typedef AppCheckTokenProvider = Future<String?> Function({bool forceRefresh});
+
+/// Default [AppCheckTokenProvider] that delegates to the real
+/// `FirebaseAppCheck` SDK. Returns `null` on non-macOS platforms
+/// (Windows desktop has no `firebase_app_check` support) or when the
+/// underlying fetch fails.
+Future<String?> defaultAppCheckTokenProvider({
+  bool forceRefresh = false,
+}) async {
+  if (!Platform.isMacOS) return null;
+  try {
+    return await FirebaseAppCheck.instance.getToken(forceRefresh);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Thin auth'd HTTP client for the MBS Next.js API.
 ///
 /// Every request attaches `Authorization: Bearer <Firebase ID token>`
@@ -12,13 +32,20 @@ import 'package:http/http.dart' as http;
 /// surface the API's `error` field as the thrown message when
 /// available — the API standardizes on `{ error: string }` for failures.
 class ApiClient {
-  ApiClient({required this.baseUrl, http.Client? client, FirebaseAuth? auth})
-    : _http = client ?? http.Client(),
-      _auth = auth ?? FirebaseAuth.instance;
+  ApiClient({
+    required this.baseUrl,
+    http.Client? client,
+    FirebaseAuth? auth,
+    AppCheckTokenProvider? appCheckTokenProvider,
+  }) : _http = client ?? http.Client(),
+       _auth = auth ?? FirebaseAuth.instance,
+       _appCheckTokenProvider =
+           appCheckTokenProvider ?? defaultAppCheckTokenProvider;
 
   final String baseUrl;
   final http.Client _http;
   final FirebaseAuth _auth;
+  final AppCheckTokenProvider _appCheckTokenProvider;
 
   Future<Map<String, dynamic>> postJson(
     String path,
@@ -70,17 +97,8 @@ class ApiClient {
   /// the legitimate app rather than a script with a stolen ID token.
   /// Returns `null` on platforms where App Check isn't wired up (Windows
   /// desktop has no `firebase_app_check` support) or when the underlying
-  /// fetch fails — letting the request proceed unattested mirrors the
-  /// web client's soft-fail. The API then surfaces the missing token as
-  /// a 401 the user sees as "Auth token rejected".
-  Future<String?> _appCheckToken() async {
-    if (!Platform.isMacOS) return null;
-    try {
-      return await FirebaseAppCheck.instance.getToken();
-    } catch (_) {
-      return null;
-    }
-  }
+  /// fetch fails.
+  Future<String?> _appCheckToken() => _appCheckTokenProvider(forceRefresh: false);
 
   Map<String, dynamic> _decode(http.Response resp, String path) {
     if (resp.statusCode == 401) {
