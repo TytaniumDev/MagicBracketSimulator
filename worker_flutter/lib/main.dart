@@ -477,6 +477,8 @@ void _log(String msg) {
   }
 }
 
+void logToFile(String msg) => _log(msg);
+
 /// Shown when Firebase failed to initialize (typically the first run before
 /// `flutterfire configure` has populated firebase_options.dart). Gives the
 /// user a clear path forward instead of a stack trace.
