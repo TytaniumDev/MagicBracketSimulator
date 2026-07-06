@@ -1,5 +1,4 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
-import { getAppCheck } from 'firebase-admin/app-check';
 import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { NextRequest } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -253,34 +252,4 @@ export function isWorkerRequest(req: NextRequest): boolean {
   return timingSafeEqual(secretHash, expectedHash);
 }
 
-/**
- * Verify the Firebase App Check token from the X-Firebase-AppCheck header.
- * Skipped in local mode and for worker requests (server-to-server, no reCAPTCHA).
- * @throws Error if the token is missing or invalid
- */
-async function verifyAppCheck(req: NextRequest): Promise<void> {
-  if (IS_LOCAL_MODE || isWorkerRequest(req)) return;
 
-  // Bypass App Check for requests coming from the desktop worker client.
-  // Since all write operations also require the user's ID token and verify
-  // they are in ALLOWED_EMAILS, this is safe and allows both Windows (which
-  // does not support App Check) and macOS (if attestation fails) to work.
-  if (req.headers.get('X-MBS-Client') === 'desktop-worker') {
-    return;
-  }
-
-  const appCheckToken = req.headers.get('X-Firebase-AppCheck');
-  if (!appCheckToken) {
-    throw new Error('Missing App Check token');
-  }
-
-  try {
-    getFirebaseApp();
-    await getAppCheck().verifyToken(appCheckToken);
-  } catch (error) {
-    throw new Error(
-      `App Check verification failed: ${error instanceof Error ? error.message : 'unknown'}`,
-      { cause: error }
-    );
-  }
-}
