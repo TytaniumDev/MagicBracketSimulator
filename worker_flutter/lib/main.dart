@@ -373,14 +373,14 @@ Future<void> _activateAppCheck() async {
       appleProvider:
           kDebugMode
               ? AppleProvider.debug
-              : AppleProvider.appAttestWithDeviceCheckFallback,
+              : AppleProvider.deviceCheck,
     );
     // Enable proactive token refresh so getToken() always has a cached
     // token ready. Without this, getToken() returns null (no token
     // present, no request in-flight) and API calls fail with 401.
     await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
     _log(
-      'AppCheck: activated (${kDebugMode ? "debug" : "appAttestWithDeviceCheckFallback"})',
+      'AppCheck: activated (${kDebugMode ? "debug" : "deviceCheck"})',
     );
   } catch (e, st) {
     // Non-fatal: leaves API calls unauthenticated against App Check,
@@ -390,8 +390,8 @@ Future<void> _activateAppCheck() async {
     await Telemetry.captureError(
       e,
       st,
-      category: TelemetryCategory.firebaseInit,
-      extra: {'step': 'appCheckActivate'},
+      category: TelemetryCategory.boot,
+      extra: {'phase': 'appcheck_activate'},
     );
   }
 }
@@ -418,8 +418,12 @@ Future<void> _initAutoUpdater() async {
       _log('AutoUpdater: user-initiated check failed: $e\n$st');
     }
   });
+  // Cache bust the raw.githubusercontent.com feed URL so manual update
+  // checks do not get served cached responses by macOS/system HTTP cache.
+  final cacheBusterUrl =
+      '$_kAppcastUrl?t=${DateTime.now().millisecondsSinceEpoch}';
   try {
-    await autoUpdater.setFeedURL(_kAppcastUrl);
+    await autoUpdater.setFeedURL(cacheBusterUrl);
     await autoUpdater.setScheduledCheckInterval(
       _kAutoUpdateCheckIntervalSeconds,
     );
@@ -427,7 +431,7 @@ Future<void> _initAutoUpdater() async {
     // when nothing is new.
     await autoUpdater.checkForUpdates(inBackground: true);
     _log(
-      'AutoUpdater: feed=$_kAppcastUrl, interval=${_kAutoUpdateCheckIntervalSeconds}s',
+      'AutoUpdater: feed=$cacheBusterUrl, interval=${_kAutoUpdateCheckIntervalSeconds}s',
     );
   } catch (e, st) {
     // Sparkle init failure (e.g. missing SUPublicEDKey in some configs) is
