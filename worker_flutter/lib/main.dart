@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:auto_updater/auto_updater.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,7 +20,6 @@ import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
 import 'launch/auto_start_service.dart';
 import 'launch/mode_picker_screen.dart';
-import 'macos/activation_policy.dart';
 import 'offline/offline_app.dart';
 import 'sentry_setup.dart';
 import 'telemetry.dart';
@@ -118,9 +118,22 @@ Future<void> _appMain() async {
   _log('Initializing window_manager');
   await windowManager.ensureInitialized();
   _log('window_manager initialized');
-  const opts = WindowOptions(
-    size: Size(640, 520),
-    minimumSize: Size(420, 360),
+  final primaryDisplay = PlatformDispatcher.instance.displays.firstOrNull;
+  Size defaultSize = const Size(1024, 768); // fallback size if primaryDisplay is null
+  if (primaryDisplay != null) {
+    final devicePixelRatio = primaryDisplay.devicePixelRatio;
+    final screenWidth = primaryDisplay.size.width / devicePixelRatio;
+    final screenHeight = primaryDisplay.size.height / devicePixelRatio;
+    
+    // 70% of screen size, clamped to sensible bounds.
+    final targetWidth = (screenWidth * 0.70).clamp(640.0, 1920.0);
+    final targetHeight = (screenHeight * 0.70).clamp(520.0, 1200.0);
+    defaultSize = Size(targetWidth, targetHeight);
+  }
+
+  final opts = WindowOptions(
+    size: defaultSize,
+    minimumSize: const Size(420, 360),
     center: true,
     titleBarStyle: TitleBarStyle.normal,
     title: 'Magic Bracket Worker',

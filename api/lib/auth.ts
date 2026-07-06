@@ -82,7 +82,8 @@ export async function verifyAuth(req: NextRequest): Promise<AuthUser> {
     return LOCAL_MOCK_USER;
   }
 
-  await verifyAppCheck(req);
+  // App Check disabled per user request (Firebase Auth is sufficient for this app)
+  // await verifyAppCheck(req);
 
   const authHeader = req.headers.get('Authorization');
 
@@ -143,7 +144,8 @@ export async function verifyAllowedUser(req: NextRequest): Promise<AuthUser> {
     return LOCAL_MOCK_USER;
   }
 
-  await verifyAppCheck(req);
+  // App Check disabled per user request (Firebase Auth is sufficient for this app)
+  // await verifyAppCheck(req);
 
   const authHeader = req.headers.get('Authorization');
 
