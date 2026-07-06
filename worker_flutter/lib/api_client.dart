@@ -101,9 +101,6 @@ class ApiClient {
   Future<String?> _appCheckToken() => _appCheckTokenProvider(forceRefresh: false);
 
   Map<String, dynamic> _decode(http.Response resp, String path) {
-    if (resp.statusCode == 401) {
-      throw const ApiAuthException('Auth token rejected; please sign in again');
-    }
     Map<String, dynamic>? body;
     if (resp.body.isNotEmpty) {
       try {
@@ -112,6 +109,12 @@ class ApiClient {
       } catch (_) {
         // non-JSON; fall through to status-code message
       }
+    }
+    if (resp.statusCode == 401) {
+      final msg =
+          body?['error']?.toString() ??
+          'Auth token rejected; please sign in again';
+      throw ApiAuthException(msg);
     }
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       final msg =

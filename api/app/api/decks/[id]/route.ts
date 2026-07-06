@@ -15,8 +15,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
   let user: AuthUser;
   try {
     user = await verifyAllowedUser(request);
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    return unauthorizedResponse(error instanceof Error ? error.message : undefined);
   }
 
   try {

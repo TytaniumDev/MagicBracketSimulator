@@ -255,12 +255,36 @@ void main() {
   // ── Error handling ──────────────────────────────────────────────
 
   group('error handling', () {
-    test('throws ApiAuthException with auth-rejected message on 401', () async {
+    test('throws ApiAuthException with server error message on 401', () async {
       final httpClient = MockClient((req) async {
         return http.Response(
           '{"error": "Missing App Check token"}',
           401,
         );
+      });
+
+      final api = ApiClient(
+        baseUrl: 'http://localhost',
+        client: httpClient,
+        auth: mockAuth,
+        appCheckTokenProvider: ({bool forceRefresh = false}) async => null,
+      );
+
+      expect(
+        () => api.getJson('/api/decks'),
+        throwsA(
+          isA<ApiAuthException>().having(
+            (e) => e.message,
+            'message',
+            'Missing App Check token',
+          ),
+        ),
+      );
+    });
+
+    test('throws ApiAuthException with default message on empty 401 response', () async {
+      final httpClient = MockClient((req) async {
+        return http.Response('', 401);
       });
 
       final api = ApiClient(
