@@ -232,7 +232,6 @@ platform :mac do
       package:      app_path,
       bundle_id:    APP_IDENTIFIER,
       api_key:      asc_api_key,
-      use_notarytool: true,
       print_log:    true
     )
 
