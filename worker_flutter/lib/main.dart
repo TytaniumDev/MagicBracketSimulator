@@ -370,13 +370,18 @@ Future<void> _activateAppCheck() async {
   }
   try {
     await FirebaseAppCheck.instance.activate(
-      appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.appAttest,
+      appleProvider:
+          kDebugMode
+              ? AppleProvider.debug
+              : AppleProvider.appAttestWithDeviceCheckFallback,
     );
     // Enable proactive token refresh so getToken() always has a cached
     // token ready. Without this, getToken() returns null (no token
     // present, no request in-flight) and API calls fail with 401.
     await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
-    _log('AppCheck: activated (${kDebugMode ? "debug" : "appAttest"})');
+    _log(
+      'AppCheck: activated (${kDebugMode ? "debug" : "appAttestWithDeviceCheckFallback"})',
+    );
   } catch (e, st) {
     // Non-fatal: leaves API calls unauthenticated against App Check,
     // which the user will see as "Auth token rejected". Capturing the

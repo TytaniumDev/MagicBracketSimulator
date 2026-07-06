@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 /// Callback that returns a Firebase App Check token string, or `null`
@@ -20,7 +21,8 @@ Future<String?> defaultAppCheckTokenProvider({
   if (!Platform.isMacOS) return null;
   try {
     return await FirebaseAppCheck.instance.getToken(forceRefresh);
-  } catch (_) {
+  } catch (e) {
+    debugPrint('AppCheck: getToken failed: $e');
     return null;
   }
 }
