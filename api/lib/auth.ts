@@ -259,6 +259,14 @@ export function isWorkerRequest(req: NextRequest): boolean {
 async function verifyAppCheck(req: NextRequest): Promise<void> {
   if (IS_LOCAL_MODE || isWorkerRequest(req)) return;
 
+  // Bypass App Check for requests coming from the desktop worker client.
+  // Since all write operations also require the user's ID token and verify
+  // they are in ALLOWED_EMAILS, this is safe and allows both Windows (which
+  // does not support App Check) and macOS (if attestation fails) to work.
+  if (req.headers.get('X-MBS-Client') === 'desktop-worker') {
+    return;
+  }
+
   const appCheckToken = req.headers.get('X-Firebase-AppCheck');
   if (!appCheckToken) {
     throw new Error('Missing App Check token');

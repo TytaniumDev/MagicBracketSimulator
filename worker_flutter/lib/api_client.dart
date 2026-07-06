@@ -97,6 +97,7 @@ class ApiClient {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-MBS-Client': 'desktop-worker',
     };
     final appCheckToken = await _appCheckToken();
     if (appCheckToken != null) headers['X-Firebase-AppCheck'] = appCheckToken;

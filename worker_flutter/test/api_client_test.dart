@@ -39,6 +39,7 @@ void main() {
 
       expect(capturedHeaders, isNotNull);
       expect(capturedHeaders!['X-Firebase-AppCheck'], 'app-check-token-123');
+      expect(capturedHeaders!['X-MBS-Client'], 'desktop-worker');
     });
 
     test('omits X-Firebase-AppCheck header when provider always returns null',
@@ -59,6 +60,7 @@ void main() {
       await api.getJson('/api/test');
 
       expect(capturedHeaders, isNotNull);
+      expect(capturedHeaders!['X-MBS-Client'], 'desktop-worker');
       expect(capturedHeaders!.containsKey('X-Firebase-AppCheck'), isFalse);
     });
 
