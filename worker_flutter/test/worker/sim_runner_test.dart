@@ -19,7 +19,7 @@ Game Result: Game 1 ended in 16984 ms. Ai(4)-Doran has won!
 ''';
       final parsed = parseGameLog(log);
       expect(parsed.winners, ['Ai(4)-Doran']);
-      expect(parsed.winningTurns, [23]);
+      expect(parsed.winningTurns, [12]);
     });
 
     test('returns empty for log with no winner line', () {
@@ -42,7 +42,7 @@ Game Result: Game 2 ended in 7000 ms. Ai(2)-Beta has won!
 ''';
       final parsed = parseGameLog(log);
       expect(parsed.winners, ['Ai(1)-Alpha', 'Ai(2)-Beta']);
-      expect(parsed.winningTurns, [12, 18]);
+      expect(parsed.winningTurns, [6, 9]);
     });
 
     test('skips winner line that has no preceding turn marker', () {
@@ -63,7 +63,7 @@ Game outcome: Turn 10
 Game Result: Game 1 ended in 1000 ms. Ai(1)-Alpha has won!
 ''';
       final parsed = parseGameLog(log);
-      expect(parsed.winningTurns, [10]);
+      expect(parsed.winningTurns, [5]);
     });
 
     test('parses real-world Forge output format', () {
@@ -82,7 +82,7 @@ Game Result: Game 1 ended in 16984 ms. Ai(4)-Doran Big Butts has won!
 ''';
       final parsed = parseGameLog(log);
       expect(parsed.winners, ['Ai(4)-Doran Big Butts']);
-      expect(parsed.winningTurns, [23]);
+      expect(parsed.winningTurns, [12]);
     });
 
     test('turn count is NOT multiplied by 4 — single game with turn 12', () {
@@ -94,7 +94,7 @@ Game outcome: Turn 12
 Game Result: Game 1 ended in 5000 ms. Ai(2)-Beta has won!
 ''';
       final parsed = parseGameLog(log);
-      expect(parsed.winningTurns, [12]);
+      expect(parsed.winningTurns, [6]);
       expect(parsed.winningTurns.first, lessThan(48));
     });
 
@@ -112,7 +112,7 @@ Game Result: Game 3 ended in 3000 ms. Ai(3)-Charlie has won!
 ''';
       final parsed = parseGameLog(log);
       expect(parsed.winners, ['Ai(1)-Alpha', 'Ai(2)-Beta', 'Ai(3)-Charlie']);
-      expect(parsed.winningTurns, [5, 11, 19]);
+      expect(parsed.winningTurns, [3, 6, 10]);
     });
 
     test('winning turns from realistic Commander logs land in turn 4–24', () {
@@ -128,7 +128,7 @@ Game outcome: Turn $t
 Game Result: Game 1 ended in 1000 ms. Ai(1)-Test has won!
 ''';
         final parsed = parseGameLog(log);
-        expect(parsed.winningTurns, [t], reason: 'expected turn=$t to parse');
+        expect(parsed.winningTurns, [(t + 1) ~/ 2], reason: 'expected turn=$t to parse');
         expect(
           parsed.winningTurns.first,
           inInclusiveRange(1, 100),

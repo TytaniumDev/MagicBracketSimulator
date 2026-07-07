@@ -505,6 +505,7 @@ export async function claimNextSim(
 
   for (const jobDoc of candidates.docs) {
     const jobData = jobDoc.data();
+    if (jobData.source === 'flutter-local') continue;
     const completed = jobData.completedSimCount ?? 0;
     const total = jobData.totalSimCount ?? 0;
     if (total > 0 && completed >= total) continue;

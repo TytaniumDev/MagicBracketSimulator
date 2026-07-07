@@ -97,3 +97,6 @@ frontend/playwright/.cache/
 # Claude Code temp worktrees + MCP state
 .claude/worktrees/
 .playwright-mcp/
+
+# Local SQLite data
+data/

@@ -260,7 +260,7 @@ export function claimNextSim(
         `SELECT s.job_id AS job_id, s.sim_id AS sim_id, s.idx AS idx, j.status AS job_status
          FROM simulations s
          JOIN jobs j ON j.id = s.job_id
-         WHERE s.state = 'PENDING' AND j.status IN ('QUEUED', 'RUNNING')
+         WHERE s.state = 'PENDING' AND j.status IN ('QUEUED', 'RUNNING') AND (j.source IS NULL OR j.source != 'flutter-local')
          ORDER BY j.created_at ASC, s.idx ASC
          LIMIT 1`,
       )

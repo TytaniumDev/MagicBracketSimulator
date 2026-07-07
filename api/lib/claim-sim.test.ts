@@ -145,6 +145,17 @@ async function runTests() {
     }
   });
 
+  await test('skips jobs where source is flutter-local', () => {
+    const jobId = createJob(DECKS, 4, undefined, undefined, undefined, 'flutter-local').id;
+    try {
+      initializeSimulations(jobId, 1);
+      const claimed = claimNextSim('w', 'W');
+      assertEqual(claimed, undefined, 'flutter-local job → no claim');
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
   console.log('\n-------------------');
   const passed = results.filter((r) => r.passed).length;
   const failed = results.filter((r) => !r.passed).length;

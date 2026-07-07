@@ -51,14 +51,28 @@ class SimClaimer {
         .collectionGroup('simulations')
         .where('state', isEqualTo: 'PENDING')
         .orderBy('createdAt')
-        .limit(1)
+        .limit(20)
         .get();
 
     if (snapshot.docs.isEmpty) {
       return ClaimNoneAvailable();
     }
 
-    final candidate = snapshot.docs.first;
+    QueryDocumentSnapshot<Map<String, dynamic>>? candidate;
+    for (final doc in snapshot.docs) {
+      final simRef = doc.reference;
+      final jobId = simRef.parent.parent!.id;
+      final jobDoc = await firestore.collection('jobs').doc(jobId).get();
+      if (!jobDoc.exists || jobDoc.data()?['source'] != 'flutter-local') {
+        candidate = doc;
+        break;
+      }
+    }
+
+    if (candidate == null) {
+      return ClaimNoneAvailable();
+    }
+
     final simRef = candidate.reference;
     final data = candidate.data();
 

@@ -14,7 +14,6 @@ import '../decks/deck_record.dart';
 import '../decks/deck_repo.dart';
 import '../launch/auto_start_service.dart';
 import '../models/sim.dart';
-import '../offline/cloud_mirror.dart';
 import '../offline/db/app_db.dart';
 import '../offline/local_job_screen.dart';
 import '../offline/offline_runner.dart';
@@ -44,10 +43,7 @@ class _DashboardState extends State<Dashboard> {
   late final AppDb _localDb;
   late final OfflineRunner _localRunner;
 
-  /// One mirror per active local job. Kept around until the dashboard
-  /// is disposed so terminal-state writes for late-finishing sims still
-  /// reach Firestore. Skipped entirely when the user is signed out.
-  final Map<int, CloudJobMirror> _mirrors = {};
+
 
   /// Set by `_startCloud`/`_startLocal` before they return so the
   /// follow-up `onJobCreated` callback knows which detail screen to
@@ -128,10 +124,6 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   void dispose() {
-    for (final mirror in _mirrors.values) {
-      unawaited(mirror.dispose());
-    }
-    _mirrors.clear();
     _localDb.close();
     super.dispose();
   }
@@ -166,24 +158,7 @@ class _DashboardState extends State<Dashboard> {
       deckNames: decks.map((d) => d.name).toList(),
       simCount: simCount,
     );
-    // Best-effort cloud mirror — runs in the background so a Firestore
-    // hiccup never delays the local run kickoff. Skipped silently when
-    // the user is signed out (which is the whole point of "no auth
-    // needed"). Multiple back-to-back local runs each get their own
-    // mirror; the disposal loop in `dispose()` cleans them up.
-    final mirror = CloudJobMirror(db: _localDb);
-    _mirrors[jobId] = mirror;
-    unawaited(
-      mirror.start(localJobId: jobId, decks: decks, simulations: simCount).then(
-        (firestoreId) {
-          if (firestoreId == null) {
-            // Either signed-out or the mirror failed — drop the
-            // entry so it doesn't pin the empty CloudJobMirror.
-            _mirrors.remove(jobId);
-          }
-        },
-      ),
-    );
+
     unawaited(_localRunner.run(jobId));
     return jobId.toString();
   }

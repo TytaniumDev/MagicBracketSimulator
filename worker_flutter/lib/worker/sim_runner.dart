@@ -78,6 +78,7 @@ class SimRunner {
       '-Xmx${maxHeapMb}m',
       '-Dio.netty.tryReflectionSetAccessible=true',
       '-Dfile.encoding=UTF-8',
+      if (Platform.isMacOS) '-Dapple.awt.UIElement=true',
       // NOTE: do NOT add -Djava.awt.headless=true. Forge initialises an
       // AWT toolkit even in sim mode and that flag causes it to bail
       // silently with exit 1 and no output. forge.sh ships without it.
@@ -222,7 +223,7 @@ ParsedGameLog parseGameLog(String logText) {
     if (winMatch != null) {
       winners.add(winMatch.group(2)!.trim());
       if (lastTurn > 0) {
-        winningTurns.add(lastTurn);
+        winningTurns.add((lastTurn + 1) ~/ 2);
         lastTurn = -1; // reset so the next game uses its own turn marker
       }
     }

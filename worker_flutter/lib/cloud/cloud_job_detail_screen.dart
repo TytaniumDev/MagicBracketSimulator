@@ -64,24 +64,43 @@ class _Body extends StatelessWidget {
     // Aggregate per-deck win counts + win turns from finished sims.
     final wins = <String, int>{for (final d in deckNames) d: 0};
     final winTurns = <String, List<int>>{for (final d in deckNames) d: []};
-    var failed = 0;
+    var failedGames = 0;
+    var totalGamesPlayed = 0;
+    var failedSims = 0;
     for (final s in sims) {
       final state = (s['state'] as String?) ?? '';
       if (state == 'COMPLETED') {
-        final winner = (s['winner'] as String?) ?? '';
-        final match = _matchDeck(winner, deckNames);
-        if (match != null) {
-          wins[match] = (wins[match] ?? 0) + 1;
-          final t = (s['winningTurn'] as num?)?.toInt();
-          if (t != null) winTurns[match]!.add(t);
+        final List<dynamic> simWinners = s['winners'] is List
+            ? s['winners'] as List
+            : (s['winner'] != null ? [s['winner'] as String] : const <String>[]);
+        final List<dynamic> simTurns = s['winningTurns'] is List
+            ? s['winningTurns'] as List
+            : (s['winningTurn'] != null ? [s['winningTurn'] as num] : const <num>[]);
+
+        for (var i = 0; i < simWinners.length; i++) {
+          final winner = simWinners[i] as String? ?? '';
+          final match = _matchDeck(winner, deckNames);
+          if (match != null) {
+            wins[match] = (wins[match] ?? 0) + 1;
+            if (i < simTurns.length) {
+              final t = (simTurns[i] as num?)?.toInt();
+              if (t != null) winTurns[match]!.add(t);
+            }
+          }
         }
+        totalGamesPlayed += simWinners.isNotEmpty ? simWinners.length : 1;
       } else if (state == 'FAILED') {
-        failed++;
+        failedSims++;
+        final source = job['source'] as String?;
+        final isLocal = source == 'flutter-local';
+        failedGames += isLocal ? 1 : 4;
+        totalGamesPlayed += isLocal ? 1 : 4;
       }
     }
     final completedSims = sims
         .where((s) => s['state'] == 'COMPLETED' || s['state'] == 'FAILED')
         .length;
+    final completedGames = totalGamesPlayed - failedGames;
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -92,7 +111,7 @@ class _Body extends StatelessWidget {
             const SizedBox(width: 10),
             Text(
               '$completedSims / $total sims'
-              '${failed > 0 ? "  •  $failed failed" : ""}',
+              '${failedSims > 0 ? "  •  $failedSims failed" : ""}',
               style: const TextStyle(color: Colors.white70),
             ),
           ],
@@ -113,7 +132,7 @@ class _Body extends StatelessWidget {
             name: d,
             wins: wins[d] ?? 0,
             // exclude failures from rate denominator
-            completed: completedSims - failed,
+            completed: completedGames,
             winTurns: winTurns[d] ?? const [],
           ),
         const SizedBox(height: 24),
