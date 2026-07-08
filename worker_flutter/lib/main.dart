@@ -104,7 +104,7 @@ Future<void> _appMain() async {
         e,
         st,
         category: TelemetryCategory.firebaseInit,
-        extra: {'projectId': fbOpts.projectId},
+        contexts: {'projectId': fbOpts.projectId},
       );
     }
   }
@@ -404,7 +404,7 @@ Future<void> _activateAppCheck() async {
       e,
       st,
       category: TelemetryCategory.boot,
-      extra: {'phase': 'appcheck_activate'},
+      contexts: {'phase': 'appcheck_activate'},
     );
   }
 }

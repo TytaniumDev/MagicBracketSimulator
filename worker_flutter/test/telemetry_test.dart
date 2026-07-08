@@ -18,39 +18,42 @@ void main() {
 
   group('scrubPii', () {
     test('redacts email-shaped values in event extras', () {
+      final contexts = Contexts();
+      contexts['app_data'] = {
+        'note': 'user contacted me at someone@example.com about it',
+        'okField': 'no pii here',
+      };
       final event = SentryEvent(message: const SentryMessage('hi')).copyWith(
-        extra: <String, dynamic>{
-          'note': 'user contacted me at someone@example.com about it',
-          'okField': 'no pii here',
-        },
+        contexts: contexts,
       );
 
       final scrubbed = scrubPii(event);
 
       expect(scrubbed, isNotNull);
-      expect(scrubbed!.extra!['note'], contains('[redacted-email]'));
-      expect(scrubbed.extra!['note'], isNot(contains('someone@example.com')));
-      expect(scrubbed.extra!['okField'], 'no pii here');
+      final appData = scrubbed!.contexts['app_data'] as Map<String, dynamic>;
+      expect(appData['note'], contains('[redacted-email]'));
+      expect(appData['note'], isNot(contains('someone@example.com')));
+      expect(appData['okField'], 'no pii here');
     });
 
     test('redacts known PII keys', () {
+      final contexts = Contexts();
+      contexts['email'] = 'a@b.com';
+      contexts['uid'] = 'xyz';
+      contexts['displayName'] = 'Tyler';
+      contexts['user_id'] = '42';
+      contexts['safe'] = 'keep me';
       final event = SentryEvent(message: const SentryMessage('hi')).copyWith(
-        extra: <String, dynamic>{
-          'email': 'a@b.com',
-          'uid': 'xyz',
-          'displayName': 'Tyler',
-          'user_id': '42',
-          'safe': 'keep me',
-        },
+        contexts: contexts,
       );
 
       final scrubbed = scrubPii(event);
 
-      expect(scrubbed!.extra!['email'], '[redacted]');
-      expect(scrubbed.extra!['uid'], '[redacted]');
-      expect(scrubbed.extra!['displayName'], '[redacted]');
-      expect(scrubbed.extra!['user_id'], '[redacted]');
-      expect(scrubbed.extra!['safe'], 'keep me');
+      expect(scrubbed!.contexts['email'], '[redacted]');
+      expect(scrubbed.contexts['uid'], '[redacted]');
+      expect(scrubbed.contexts['displayName'], '[redacted]');
+      expect(scrubbed.contexts['user_id'], '[redacted]');
+      expect(scrubbed.contexts['safe'], 'keep me');
     });
 
     test('replaces user with redacted placeholder', () {

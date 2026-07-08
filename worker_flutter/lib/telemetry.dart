@@ -62,7 +62,7 @@ class Telemetry {
     StackTrace? stack, {
     required TelemetryCategory category,
     Map<String, String>? tags,
-    Map<String, dynamic>? extra,
+    Map<String, dynamic>? contexts,
   }) async {
     await Sentry.captureException(
       error,
@@ -72,10 +72,8 @@ class Telemetry {
         if (tags != null) {
           tags.forEach(scope.setTag);
         }
-        if (extra != null) {
-          // ignore: deprecated_member_use — `setExtra` is the documented
-          // 8.x API. Sentry's 9.x release moves to structured contexts.
-          extra.forEach(scope.setExtra);
+        if (contexts != null) {
+          contexts.forEach((key, value) => scope.setContexts(key, value));
         }
       },
     );
@@ -111,18 +109,24 @@ SentryEvent? scrubPii(SentryEvent event, {Hint? hint}) {
       ? event
       : event.copyWith(user: SentryUser(id: '[redacted]'));
 
-  // ignore: deprecated_member_use — see comment in Telemetry.captureError.
-  final extra = cleaned.extra;
-  if (extra != null) {
-    for (final key in extra.keys.toList()) {
-      if (_piiKeys.contains(key)) {
-        extra[key] = '[redacted]';
-        continue;
+  final contexts = cleaned.contexts;
+  for (final key in contexts.keys.toList()) {
+    if (_piiKeys.contains(key)) {
+      contexts[key] = '[redacted]';
+      continue;
+    }
+    final value = contexts[key];
+    if (value is Map<String, dynamic>) {
+      for (final nestedKey in value.keys.toList()) {
+        final nestedValue = value[nestedKey];
+        if (nestedValue is String && _emailRegex.hasMatch(nestedValue)) {
+          value[nestedKey] = nestedValue.replaceAll(_emailRegex, '[redacted-email]');
+        } else if (_piiKeys.contains(nestedKey)) {
+          value[nestedKey] = '[redacted]';
+        }
       }
-      final value = extra[key];
-      if (value is String && _emailRegex.hasMatch(value)) {
-        extra[key] = value.replaceAll(_emailRegex, '[redacted-email]');
-      }
+    } else if (value is String && _emailRegex.hasMatch(value)) {
+      contexts[key] = value.replaceAll(_emailRegex, '[redacted-email]');
     }
   }
 

@@ -130,7 +130,7 @@ class WorkerEngine {
         e,
         st,
         category: TelemetryCategory.engineRuntime,
-        extra: {'phase': 'lease_writer_start'},
+        contexts: {'phase': 'lease_writer_start'},
       );
     }
 
@@ -167,7 +167,7 @@ class WorkerEngine {
         e,
         st,
         category: TelemetryCategory.engineRuntime,
-        extra: {'phase': 'pending_listener_setup'},
+        contexts: {'phase': 'pending_listener_setup'},
       );
     }
   }
@@ -305,7 +305,7 @@ class WorkerEngine {
         e,
         st,
         category: TelemetryCategory.engineRuntime,
-        extra: {'phase': 'sim_run', 'jobId': sim.jobId, 'simId': sim.simId},
+        contexts: {'phase': 'sim_run', 'jobId': sim.jobId, 'simId': sim.simId},
       );
       await _claimer.reportTerminal(
         sim: sim,
