@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 /// One bundled-precon deck. The `.dck` content lives either in the
 /// Flutter asset bundle (preferred — ships inside the app, available
 /// instantly on first launch) or, for users with a separately-
-/// installed Forge tree, in `<forgePath>/res/Decks/Commander/*.dck`.
+/// installed Forge tree, in `&lt;forgePath&gt;/res/Decks/Commander/*.dck`.
 class PreconDeck {
   PreconDeck({
     required this.displayName,
@@ -38,7 +38,7 @@ class PreconDeck {
 }
 
 /// Loads precons from the Flutter asset bundle PLUS any extra .dck
-/// files the user may have dropped into `<forgePath>/res/Decks/
+/// files the user may have dropped into `&lt;forgePath&gt;/res/Decks/
 /// Commander/`. The bundled set is the floor — offline mode works
 /// from a fresh install without a Forge download.
 Future<List<PreconDeck>> loadBundledPrecons(String forgePath) async {
@@ -104,7 +104,7 @@ Future<List<PreconDeck>> loadBundledPrecons(String forgePath) async {
   return out;
 }
 
-/// Write a bundled precon to `destDir/<filename>` and return the full
+/// Write a bundled precon to `destDir/&lt;filename&gt;` and return the full
 /// path Forge will read. No-op when the deck is already a real file.
 Future<String> materializePrecon(PreconDeck deck, String destDir) async {
   if (!deck.isBundled) return deck.path;

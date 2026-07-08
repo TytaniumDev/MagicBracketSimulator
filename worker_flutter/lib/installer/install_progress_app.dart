@@ -69,7 +69,7 @@ class _InstallScreenState extends State<_InstallScreen> {
         e,
         st,
         category: TelemetryCategory.installer,
-        extra: {'stage': _last.stage, 'message': _last.message},
+        contexts: {'stage': _last.stage, 'message': _last.message},
       );
     }
   }

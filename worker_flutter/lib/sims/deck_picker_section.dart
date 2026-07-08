@@ -40,11 +40,13 @@ class DeckPickerSection extends StatefulWidget {
 }
 
 class _DeckPickerSectionState extends State<DeckPickerSection> {
+  // ignore: deprecated_member_use
   late final ExpansionTileController _ctrl;
 
   @override
   void initState() {
     super.initState();
+    // ignore: deprecated_member_use
     _ctrl = ExpansionTileController();
   }
 
