@@ -47,18 +47,28 @@ cd worker_flutter && flutter run -d macos    # or: -d windows
 
 ## Documentation Map
 
+**Core Architecture & API**
 *   [Architecture Overview](docs/ARCHITECTURE.md)
-*   [Architecture Issues](docs/ARCHITECTURE_ISSUES.md)
 *   [API Reference](API.md)
 *   [Data Flow](DATA_FLOW.md)
+
+**Deployment & Operations**
 *   [Deployment Guide](docs/DEPLOYMENT.md)
-*   [Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md)
 *   [Mode Setup](docs/MODE_SETUP.md)
-*   [Precon Sync](docs/PRECON_SYNC.md)
 *   [Secrets Setup](docs/SECRETS_SETUP.md)
+*   [Precon Sync](docs/PRECON_SYNC.md)
 *   [Stale Sweeper](docs/STALE_SWEEPER.md)
 *   [Sweeper Alerting](docs/SWEEPER_ALERTING.md)
 *   [Sweeper Alert Policy](docs/sweeper-alert-policy.yaml)
+
+**Desktop Worker (Flutter)**
+*   [Auth Setup](worker_flutter/docs/AUTH_SETUP.md)
+*   [App Check Setup](worker_flutter/docs/APP_CHECK_SETUP.md)
+*   [Sentry Setup](worker_flutter/docs/sentry-setup.md)
+
+**Legacy / Planning**
+*   [Architecture Issues](docs/ARCHITECTURE_ISSUES.md)
+*   [Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md)
 
 ## Contributing
 
