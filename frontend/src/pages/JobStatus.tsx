@@ -788,6 +788,7 @@ export default function JobStatusPage() {
             type="button"
             onClick={handleDelete}
             disabled={isDeletingJob}
+            aria-label="Delete this simulation job"
             className="ml-auto px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
             {isDeletingJob && <Spinner size="sm" />}
