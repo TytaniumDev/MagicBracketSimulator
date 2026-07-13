@@ -10,6 +10,7 @@ import { RequestAccessCard } from '../components/RequestAccessCard';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
+import { Spinner } from '../components/Spinner';
 
 interface Deck {
   id: string;
@@ -399,12 +400,13 @@ function SimulationForm() {
             type="button"
             onClick={handleSaveDeck}
             disabled={isSaving || !deckUrl.trim()}
-            className={`px-4 py-2 rounded-md ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md ${
               isSaving || !deckUrl.trim()
                 ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 : 'bg-green-600 text-white hover:bg-green-700'
             }`}
           >
+            {isSaving && <Spinner size="sm" />}
             {isSaving ? 'Adding...' : 'Add Deck'}
           </button>
         </div>
@@ -448,12 +450,13 @@ function SimulationForm() {
               type="button"
               onClick={handleSaveDeck}
               disabled={isSaving || !deckText.trim()}
-              className={`mt-3 w-full py-2 rounded-md font-medium ${
+              className={`flex items-center justify-center gap-2 mt-3 w-full py-2 rounded-md font-medium ${
                 isSaving || !deckText.trim()
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
             >
+              {isSaving && <Spinner size="sm" />}
               {isSaving ? 'Adding...' : 'Add Deck'}
             </button>
           </>
@@ -693,12 +696,13 @@ function SimulationForm() {
         <button
           type="submit"
           disabled={isSubmitting || selectedDeckIds.length !== 4}
-          className={`w-full py-3 rounded-md font-semibold ${
+          className={`flex items-center justify-center gap-2 w-full py-3 rounded-md font-semibold ${
             isSubmitting || selectedDeckIds.length !== 4
               ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
+          {isSubmitting && <Spinner size="sm" />}
           {isSubmitting ? 'Submitting...' : 'Run Simulations'}
         </button>
       </form>
