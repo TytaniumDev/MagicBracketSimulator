@@ -16,8 +16,8 @@ For each `QUEUED` or `RUNNING` job, the endpoint:
    (`SIM_HARD_CANCEL_THRESHOLD_MS`, default `7200000`). Cancellation uses
    conditional writes so a worker completing a sim at the last millisecond
    always wins the race.
-3. **Runs the existing recovery path** (`recoverStaleJob`) to re-publish
-   stale-PENDING Pub/Sub messages and re-trigger aggregation.
+3. **Runs the existing recovery path** (`recoverStaleJob`) to reset
+   stale-PENDING simulations and re-trigger aggregation.
 4. **Explicitly triggers aggregation** for local-mode jobs where every sim
    is now terminal (Firestore mode's recovery already does this).
 
@@ -83,5 +83,4 @@ and redeploy.
 
 See `docs/superpowers/specs/2026-04-10-stuck-job-prevention-design.md` and
 the incident writeup for job `uxBSYQvYB4JNoycuLSzz`, which sat stuck at
-24/25 sims for ~12 hours because of a worker restart plus Pub/Sub
-starvation.
+24/25 sims for ~12 hours because of a worker restart.

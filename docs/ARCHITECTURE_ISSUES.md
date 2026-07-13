@@ -36,7 +36,7 @@ Aggregation is fire-and-forget from the sim PATCH response path. If it fails (ti
 - `api/app/api/jobs/[id]/simulations/[simId]/route.ts` — body fields destructured without type validation
 - Various PATCH endpoints accept `Record<string, unknown>` without sanitization
 
-**Mitigation:** Add zod schemas for request bodies at system boundaries. Internal service-to-service calls (worker → API) still benefit from validation since Pub/Sub redelivery can send malformed payloads.
+**Mitigation:** Add zod schemas for request bodies at system boundaries. Internal service-to-service calls (worker → API) still benefit from validation since retry mechanisms can send malformed payloads.
 
 ---
 
@@ -148,7 +148,7 @@ Users can submit a job with 4 identical decks. While technically valid (useful f
 
 These cross-cutting patterns contributed to past regressions:
 
-1. **No state machine enforcement** (resolved in PR #78) — Invalid state transitions from Pub/Sub redelivery caused COMPLETED simulations to revert to RUNNING.
+1. **No state machine enforcement** (resolved in PR #78) — Invalid state transitions from retry redelivery caused COMPLETED simulations to revert to RUNNING.
 
 2. **Silent error swallowing** (resolved in PR #78) — `.catch(() => {})` on fire-and-forget operations hid failures that later caused data inconsistency.
 
