@@ -28,7 +28,6 @@
 - **Worker Build**: `cd worker && npm run build`
 - **Worker Install**: `cd worker && npm install`
 - **Worker Dev**: `cd worker && npm run dev`
-- **Worker Test**: `cd worker && npm run test:unit`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)
@@ -36,5 +35,6 @@
 
 ## Project Structure
 - `frontend/`: React app
-- `api/`: Next.js API, ingestion, and analysis
+- `api/`: Next.js API and ingestion
 - `worker/`: Node.js + Docker simulation runner
+- `worker_flutter/`: Cross-platform desktop worker

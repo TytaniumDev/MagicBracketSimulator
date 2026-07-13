@@ -77,4 +77,4 @@ jobs:
 
       - name: Run unit tests
         # Stdlib-only — no pip install needed.
-        run: python3 -m unittest discover -s .github/scripts -p '*_test.py' -v
+        run: ./scripts/test-release-scripts.sh
