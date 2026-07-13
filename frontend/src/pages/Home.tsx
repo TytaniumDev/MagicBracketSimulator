@@ -101,6 +101,8 @@ function SimulationForm() {
   // Deck selection state
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [simulations, setSimulations] = useState(100);
+  const [batchCount, setBatchCount] = useState(1);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
@@ -242,6 +244,19 @@ function SimulationForm() {
     });
   };
 
+  const handleAutoFill = () => {
+    setSelectedDeckIds((prev) => {
+      const needed = 4 - prev.length;
+      if (needed <= 0) return prev;
+      
+      const availablePrecons = preconDecks.filter(d => !prev.includes(d.id));
+      const shuffled = [...availablePrecons].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, needed).map(d => d.id);
+      
+      return [...prev, ...selected];
+    });
+  };
+
   const handleSaveDeck = async () => {
     setSaveError(null);
     setSaveMessage(null);
@@ -332,44 +347,82 @@ function SimulationForm() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const getRandomPod = (baseSelection: string[]): string[] => {
+    const needed = 4 - baseSelection.length;
+    if (needed <= 0) return baseSelection.slice(0, 4);
+
+    const availablePrecons = preconDecks.filter(d => !baseSelection.includes(d.id));
+    const shuffled = [...availablePrecons].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, needed).map(d => d.id);
+    
+    return [...baseSelection, ...selected];
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setSubmitError(null);
 
-    if (selectedDeckIds.length !== 4) {
-      setSubmitError('Please select exactly 4 decks');
+    if (selectedDeckIds.length > 4) {
+      setSubmitError('Please select no more than 4 decks');
       return;
     }
 
-    const key = idempotencyKey ?? crypto.randomUUID();
-    if (!idempotencyKey) setIdempotencyKey(key);
+    if (batchCount < 1 || batchCount > 50) {
+      setSubmitError('Batch count must be between 1 and 50');
+      return;
+    }
+
+    const keyBase = idempotencyKey ?? crypto.randomUUID();
+    if (!idempotencyKey) setIdempotencyKey(keyBase);
     setIsSubmitting(true);
+    setBatchProgress({ current: 0, total: batchCount });
 
     try {
-      const body = {
-        deckIds: selectedDeckIds,
-        simulations,
-        idempotencyKey: key,
-      };
+      const createdJobIds: string[] = [];
 
-      const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      for (let i = 0; i < batchCount; i++) {
+        const pod = getRandomPod(selectedDeckIds);
+        
+        if (pod.length !== 4) {
+          throw new Error('Not enough preconstructed decks to fill the pod. Please add more decks or select manually.');
+        }
 
-      const data = await response.json();
+        const key = `${keyBase}-batch-${i}`;
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create job');
+        const body = {
+          deckIds: pod,
+          simulations,
+          idempotencyKey: key,
+        };
+
+        const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          // If we fail on 400 exactly 4 decks, we catch it here.
+          throw new Error(data.error || 'Failed to create job');
+        }
+
+        createdJobIds.push(data.id);
+        setBatchProgress({ current: i + 1, total: batchCount });
       }
 
-      navigate(`/jobs/${data.id}`);
+      if (batchCount === 1 && createdJobIds.length === 1) {
+        navigate(`/jobs/${createdJobIds[0]}`);
+      } else {
+        navigate(`/`);
+      }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'An error occurred');
       setIdempotencyKey(null);
     } finally {
       setIsSubmitting(false);
+      setBatchProgress(null);
     }
   };
 
@@ -482,22 +535,33 @@ function SimulationForm() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-gray-300">
-              Pick 4 Decks ({selectedDeckIds.length}/4)
+              Pick 1-4 Decks ({selectedDeckIds.length}/4)
               {searchQuery.trim() && (
                 <span className="ml-2 text-gray-400 font-normal">
                   Showing {filteredDecks.length} of {allDecks.length}
                 </span>
               )}
             </label>
-            {selectedDeckIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectedDeckIds([])}
-                className="text-xs text-gray-400 hover:text-white"
-              >
-                Clear selection
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedDeckIds.length < 4 && (
+                <button
+                  type="button"
+                  onClick={handleAutoFill}
+                  className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                >
+                  Auto-fill Opponents
+                </button>
+              )}
+              {selectedDeckIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDeckIds([])}
+                  className="text-xs text-gray-400 hover:text-white"
+                >
+                  Clear selection
+                </button>
+              )}
+            </div>
           </div>
 
           <input
@@ -684,23 +748,64 @@ function SimulationForm() {
           className="mb-4"
         />
 
+        <SliderWithInput
+          label="Batch Job Count"
+          value={batchCount}
+          onChange={setBatchCount}
+          min={1}
+          max={50}
+          step={1}
+          className="mb-6"
+        />
+
+        {batchProgress && (
+          <div className="mb-4">
+            <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <span>Submitting batch...</span>
+              <span>{batchProgress.current} / {batchProgress.total}</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {submitError && (
           <div className="mb-4 bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
             {submitError}
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting || selectedDeckIds.length !== 4}
-          className={`w-full py-3 rounded-md font-semibold ${
-            isSubmitting || selectedDeckIds.length !== 4
-              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {isSubmitting ? 'Submitting...' : 'Run Simulations'}
-        </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {selectedDeckIds.length < 4 && batchCount === 1 ? (
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`w-full py-3 rounded-md font-semibold col-span-1 md:col-span-2 ${
+                isSubmitting
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
+              }`}
+            >
+              {isSubmitting ? 'Submitting...' : 'Quick Start (Auto-fill & Run)'}
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={isSubmitting || selectedDeckIds.length > 4}
+              className={`w-full py-3 rounded-md font-semibold col-span-1 md:col-span-2 ${
+                isSubmitting || selectedDeckIds.length > 4
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              {isSubmitting ? 'Submitting...' : batchCount > 1 ? `Run Batch (${batchCount} jobs)` : 'Run Simulation'}
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );
