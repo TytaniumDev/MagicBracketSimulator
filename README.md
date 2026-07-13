@@ -21,22 +21,15 @@
 
 ## Quick Start
 
-**Just want to run simulations?** Download the desktop worker for your platform from the [latest release](https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest) and double-click. macOS builds are Developer-ID signed + notarized; Windows builds will trip SmartScreen the first time — click *More info → Run anyway*. The worker self-updates from then on.
-
-The worker has two modes:
-- **Cloud:** signs in with Google, picks up jobs from the shared Firestore queue. Results show on the [web leaderboard](https://magic-bracket-simulator.web.app).
-- **Offline:** picks 4 bundled Commander precons, runs the bracket locally, keeps results on your machine.
-
-**Want to run the whole stack locally for development?** See the [Deployment Guide](docs/DEPLOYMENT.md). The legacy Docker worker (`worker/`) is still in the repo and works, but the desktop worker (`worker_flutter/`) is the path going forward.
-
 ```bash
-# Frontend + API
+# Install dependencies and start Frontend + API locally
 npm run install:all && npm run dev
 # → http://localhost:5173
-
-# Desktop worker (Flutter)
-cd worker_flutter && flutter run -d macos    # or: -d windows
 ```
+
+**Want to run simulations or the full stack?**
+*   **Desktop Worker:** Download from [latest release](https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest) to run bracket simulations on your machine.
+*   **Full Stack & Development:** See the [Deployment Guide](docs/DEPLOYMENT.md) for complete local environment setup.
 
 ## Key Features
 
