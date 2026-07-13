@@ -88,8 +88,8 @@ When prompted, type `gcloud` to use the legacy flow. The script will install `jq
 
 ### What the Worker Does
 
-- Loads runtime config from Secret Manager (API_URL, GCS_BUCKET, PUBSUB_SUBSCRIPTION, WORKER_SECRET)
-- Subscribes to Pub/Sub for job messages
+- Loads runtime config from Secret Manager (API_URL, GCS_BUCKET, WORKER_SECRET)
+- Polls API to claim jobs
 - Runs Forge simulations and POSTs results back to the API
 - Receives push commands from the API (config overrides, cancellation, job notifications, drain control) via port 9090
 
@@ -112,7 +112,7 @@ The `setup-worker.sh` script places a service account key at `worker/sa.json` an
 - **SSH/Tailscale access:** The worker accepts inbound push commands from the API on
   port 9090 (config updates, cancellation, job notifications). In local mode this is
   localhost-only; in GCP mode it uses VPC-internal networking. The worker also makes
-  outbound connections to Pub/Sub, API, and Secret Manager.
+  outbound connections to API and Secret Manager.
 
 ### Auto-Deploy with Watchtower
 
@@ -155,7 +155,6 @@ The worker can be configured via environment variables (in `.env` or Secret Mana
 | `GOOGLE_CLOUD_PROJECT` | GCP Project ID (triggers GCP mode if set) | `magic-bracket-simulator` |
 | `API_URL` | Base URL of the API | `http://localhost:3000` or Cloud Run URL |
 | `WORKER_SECRET` | Shared secret for worker authentication | `some-secret-string` |
-| `PUBSUB_SUBSCRIPTION` | Pub/Sub subscription name (GCP mode only) | `job-created-worker` |
 | `SIMULATION_IMAGE` | Docker image for the simulation container | `ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest` |
 | `WORKER_NAME` | Display name for the worker (visible in UI) | Hostname |
 | `WORKER_ID` | Unique ID for the worker (auto-generated if unset) | `worker-uuid-1234` |
