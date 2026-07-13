@@ -5,7 +5,7 @@ set -euo pipefail
 if command -v nvm &>/dev/null || [ -s "$HOME/.nvm/nvm.sh" ]; then
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-  nvm install 20 && nvm use 20
+  nvm install 24 && nvm use 24
 fi
 
 # Frontend tests
@@ -22,3 +22,7 @@ npm run test:ingestion && cd ..
 # Worker tests
 echo "=== Worker unit tests ==="
 cd worker && npm ci && npm run test:unit && cd ..
+
+# Worker Flutter tests
+echo "=== Worker Flutter tests ==="
+cd worker_flutter && flutter pub get && flutter test && cd ..

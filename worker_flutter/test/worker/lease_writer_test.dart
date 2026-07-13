@@ -83,8 +83,11 @@ void main() {
       final doc = await firestore.collection('workers').doc('w1').get();
       final lease = doc.data()!['lease'] as Map<String, dynamic>;
       final expiresAt = DateTime.parse(lease['expiresAt'] as String);
-      expect(expiresAt.isAfter(DateTime.now().toUtc()), true,
-          reason: 'lease should not be already-expired immediately after write');
+      expect(
+        expiresAt.isAfter(DateTime.now().toUtc()),
+        true,
+        reason: 'lease should not be already-expired immediately after write',
+      );
     });
   });
 }

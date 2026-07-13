@@ -662,12 +662,12 @@ class _WorkerAppState extends State<_WorkerApp> {
               ),
             )
           : (_user == null
-              ? AuthGateScreen(
-                  authService: _auth,
-                  onAuthed: _onAuthed,
-                  onSwitchToOffline: _switchToOffline,
-                )
-              : Dashboard(engine: widget.engine, config: widget.config)),
+                ? AuthGateScreen(
+                    authService: _auth,
+                    onAuthed: _onAuthed,
+                    onSwitchToOffline: _switchToOffline,
+                  )
+                : Dashboard(engine: widget.engine, config: widget.config)),
     );
   }
 }

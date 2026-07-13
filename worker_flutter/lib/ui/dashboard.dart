@@ -228,7 +228,10 @@ class _DashboardState extends State<Dashboard> {
                     child: Tooltip(
                       message: 'View on GitHub',
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1F2937),
                           borderRadius: BorderRadius.circular(12),
@@ -237,7 +240,11 @@ class _DashboardState extends State<Dashboard> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.code, size: 12, color: Color(0xFF60A5FA)),
+                            const Icon(
+                              Icons.code,
+                              size: 12,
+                              color: Color(0xFF60A5FA),
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               _getVersionText(),
