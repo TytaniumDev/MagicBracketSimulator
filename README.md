@@ -59,6 +59,9 @@ cd worker_flutter && flutter run -d macos    # or: -d windows
 *   [Stale Sweeper](docs/STALE_SWEEPER.md)
 *   [Sweeper Alerting](docs/SWEEPER_ALERTING.md)
 *   [Sweeper Alert Policy](docs/sweeper-alert-policy.yaml)
+*   [Flutter Worker App Check Setup](worker_flutter/docs/APP_CHECK_SETUP.md)
+*   [Flutter Worker Auth Setup](worker_flutter/docs/AUTH_SETUP.md)
+*   [Flutter Worker Sentry Setup](worker_flutter/docs/sentry-setup.md)
 
 ## Contributing
 
