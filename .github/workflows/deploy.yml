@@ -1,3 +1,5 @@
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 # Deploy Firebase services on push to main (after PR merge).
 #
 # What gets deployed here:
