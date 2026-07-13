@@ -106,6 +106,20 @@ export const IGNORE_PATTERNS = [
 // Each pattern targets a specific type of game event.
 
 /**
+ * Pattern: Interaction spells / abilities
+ *
+ * Why keep: Countering spells or removing permanents indicates high interaction.
+ */
+export const KEEP_INTERACTION = /\b(countered|exiled|destroyed)\b/i;
+
+/**
+ * Pattern: Protection spells / abilities
+ *
+ * Why keep: Indicates protection of key combo pieces.
+ */
+export const KEEP_PROTECTION = /\b(hexproof|indestructible|protection)\b/i;
+
+/**
  * Pattern: Extra card draw (beyond normal draw step)
  *
  * Why keep: Extra card draw indicates card advantage engines, which are

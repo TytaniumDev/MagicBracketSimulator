@@ -37,6 +37,8 @@ const KeepWinCondition = /wins?\s+the\s+game|game\s+over|winner|wins\s+the\s+mat
 const KeepCommanderCast = /casts?\s+(their\s+)?commander|from\s+command\s+zone/i;
 const KeepCombat = /attacks?\s+with|declares?\s+attack|combat\s+damage|assigned\s+.*\s+to\s+attack/i;
 const KeepLandPlayed = /^Land:/i;
+const KeepInteraction = /\b(countered|exiled|destroyed)\b/i;
+const KeepProtection = /\b(hexproof|indestructible|protection)\b/i;
 
 // Extraction patterns
 const ExtractTurnMarkerNew = /^Turn:\s*Turn\s+(\d+)\s*\((.+)\)\s*$/i;
@@ -249,6 +251,16 @@ function classifyLine(line: string): EventType | null {
   // Priority 7: Combat
   if (KeepCombat.test(line)) {
     return 'combat';
+  }
+
+  // Priority 7.1: Protection
+  if (KeepProtection.test(line)) {
+    return 'protection';
+  }
+
+  // Priority 7.2: Interaction
+  if (KeepInteraction.test(line)) {
+    return 'interaction';
   }
 
   // Priority 8: Land Played

@@ -46,6 +46,8 @@ import {
   KEEP_EXTRA_DRAW,
   KEEP_COMBAT,
   KEEP_LAND_PLAYED,
+  KEEP_INTERACTION,
+  KEEP_PROTECTION,
   EXTRACT_CMC,
 } from './patterns';
 
@@ -139,6 +141,22 @@ export function classifyLine(line: string): EventType | null {
   // the deck's aggression level and threat generation.
   if (KEEP_COMBAT.test(line)) {
     return 'combat';
+  }
+
+  // -------------------------------------------------------------------------
+  // Priority 7.1: Protection
+  // -------------------------------------------------------------------------
+  // Protection logic indicates combos or defense of key pieces.
+  if (KEEP_PROTECTION.test(line)) {
+    return 'protection';
+  }
+
+  // -------------------------------------------------------------------------
+  // Priority 7.2: Interaction
+  // -------------------------------------------------------------------------
+  // Counters, removal, etc. indicate density of control elements.
+  if (KEEP_INTERACTION.test(line)) {
+    return 'interaction';
   }
 
   // -------------------------------------------------------------------------

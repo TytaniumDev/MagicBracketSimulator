@@ -19,7 +19,9 @@ export type EventType =
   | 'win_condition'
   | 'commander_cast'
   | 'combat'
-  | 'draw_extra';
+  | 'draw_extra'
+  | 'interaction'
+  | 'protection';
 
 // ---------------------------------------------------------------------------
 // Condensed game (for AI bracket analysis)

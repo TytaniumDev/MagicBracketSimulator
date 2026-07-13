@@ -44,6 +44,10 @@ export interface LeaderboardEntry {
   avgWinTurn: number | null;
   /** 16 bins — indexes 0..14 map to turns 1..15, index 15 is "16+". Null when no data. */
   winTurnHistogram: number[] | null;
+  /** Average number of interaction events (counters/removal) per game */
+  interactionDensity: number;
+  /** Average number of protection events per game */
+  protectionDensity: number;
 }
 
 // Prior: expected win rate in a 4-player free-for-all is 25%.
@@ -59,8 +63,12 @@ const PRIOR_WINS = PRIOR_WEIGHT * PRIOR_WIN_RATE;
 // cannot silently drop high-Bayesian decks.
 const STORE_FETCH_CAP = 10_000;
 
-function bayesianScore(wins: number, gamesPlayed: number): number {
-  return ((wins + PRIOR_WINS) / (gamesPlayed + PRIOR_WEIGHT)) * 100;
+function bayesianScore(wins: number, gamesPlayed: number, interactionDensity: number = 0): number {
+  // Base bayesian win rate percentage
+  const baseRating = ((wins + PRIOR_WINS) / (gamesPlayed + PRIOR_WEIGHT)) * 100;
+  // Incorporate interaction density as a weight to the final rating. 
+  // High interaction decks with slower win turns receive a bump so they aren't incorrectly relegated.
+  return baseRating + (interactionDensity * 1.5);
 }
 
 // In-memory cache with 5-minute TTL
@@ -117,6 +125,10 @@ export async function GET(request: NextRequest) {
           Array.isArray(r.winTurnHistogram) &&
           r.winTurnHistogram.length === 16 &&
           r.winTurnHistogram.some((n) => n > 0);
+        
+        const interactionDensity = r.gamesPlayed > 0 ? (r.interactionCountSum ?? 0) / r.gamesPlayed : 0;
+        const protectionDensity = r.gamesPlayed > 0 ? (r.protectionCountSum ?? 0) / r.gamesPlayed : 0;
+
         return {
           deckId: r.deckId,
           name,
@@ -125,12 +137,14 @@ export async function GET(request: NextRequest) {
           primaryCommander: primaryCommander ?? null,
           mu: r.mu,
           sigma: r.sigma,
-          rating: bayesianScore(r.wins, r.gamesPlayed),
+          rating: bayesianScore(r.wins, r.gamesPlayed, interactionDensity),
           gamesPlayed: r.gamesPlayed,
           wins: r.wins,
           winRate: r.gamesPlayed > 0 ? r.wins / r.gamesPlayed : 0,
           avgWinTurn: winTurnWins > 0 ? (r.winTurnSum ?? 0) / winTurnWins : null,
           winTurnHistogram: hasHistogram ? r.winTurnHistogram! : null,
+          interactionDensity,
+          protectionDensity,
         };
       }),
     );

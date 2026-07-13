@@ -12,7 +12,9 @@ export type EventType =
   | 'win_condition'
   | 'commander_cast'
   | 'combat'
-  | 'draw_extra';
+  | 'draw_extra'
+  | 'interaction'
+  | 'protection';
 
 // A single event from the game log
 export interface GameEvent {
