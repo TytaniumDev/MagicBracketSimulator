@@ -80,7 +80,7 @@
 - [x] **3.4** Replace `runForgeSim()` with `runSimulationContainer()` (kept monolithic as fallback)
 - [x] **3.5** Replace `processJob()` with resource-aware scheduler (`processJobWithContainers`)
 - [x] **3.6** Add `reportSimulationStatus()` and `apiInitializeSimulations()` API calls
-- [x] **3.7** Update Pub/Sub `flowControl.maxMessages` (1 → capacity in container mode)
+- [x] **3.7** Update HTTP polling claim concurrency (1 → capacity in container mode)
 - [x] **3.8** Remove `isProcessingJob` mutex (isolated containers handle concurrency)
 - [x] **3.9** Add `ensureSimulationImage()` pre-pull on startup
 - [x] **3.10** Build verified — worker, API, frontend all compile cleanly
@@ -141,7 +141,7 @@ Split the current monolithic worker Docker image into two images:
 
 | Image | Contents | Role |
 |-------|----------|------|
-| **`worker`** | Node.js 20 only (~50MB) | Pub/Sub subscriber, resource monitor, simulation orchestrator, result aggregator |
+| **`worker`** | Node.js 20 only (~50MB) | HTTP polling client, resource monitor, simulation orchestrator, result aggregator |
 | **`simulation`** | Java 17 + Forge + xvfb (~750MB) | Runs exactly 1 simulation (1 game), writes log, exits |
 
 **Key benefits:**
@@ -151,7 +151,7 @@ Split the current monolithic worker Docker image into two images:
 - Multi-machine scaling — add a machine, run `setup-worker.sh`, done
 
 **Non-goals for v1:**
-- Per-simulation Pub/Sub messages (the API still publishes one `job-created` message; the *worker* decomposes into individual simulation containers)
+- Per-simulation HTTP polling claim tasks
 - Kubernetes/container orchestration — we stay on Docker Compose + host Docker socket
 - Changing the Forge simulation engine itself
 
@@ -162,7 +162,7 @@ Split the current monolithic worker Docker image into two images:
 ### Before (Current)
 
 ```
-Pub/Sub ──→ Worker Container (Node.js + Java + xvfb)
+HTTP Polling ──→ Worker Container (Node.js + Java + xvfb)
                 │
                 ├─ child_process.spawn(forge, ["-n", "10"])  ← sequential inside JVM
                 ├─ child_process.spawn(forge, ["-n", "10"])
@@ -178,7 +178,7 @@ Pub/Sub ──→ Worker Container (Node.js + Java + xvfb)
 ### After (Proposed)
 
 ```
-Pub/Sub ──→ Worker Container (Node.js only)
+HTTP Polling ──→ Worker Container (Node.js only)
                 │
                 ├─ docker run simulation --game 1  ← true parallel, 1 game each
                 ├─ docker run simulation --game 2
@@ -704,7 +704,7 @@ async function initializeSimulations(jobId: string, count: number): Promise<void
 }
 ```
 
-#### 3.3.6 Pub/Sub Changes
+#### 3.3.6 Polling Changes
 
 Change `flowControl.maxMessages` from `1` to the calculated capacity:
 
@@ -1008,7 +1008,7 @@ If the new worker has issues:
 | 2 | Disk space exhaustion from simulation logs | Low | Medium | Worker cleans up job directories after aggregation. Add disk space monitoring. |
 | 3 | Race condition in job completion detection | Medium | Medium | Use Firestore transactions or atomic counters for `gamesCompleted`. |
 | 4 | Worker crash while simulations still running | Low | Medium | Simulation containers complete independently. On restart, worker can check for orphaned containers (`docker ps --filter label=mbs-job-id=...`). |
-| 5 | Pub/Sub ack deadline exceeded for large jobs | Low | Medium | The `@google-cloud/pubsub` client auto-extends ack deadlines (up to 60 min). For very large jobs (>200 sims), consider splitting into multiple Pub/Sub messages. |
+| 5 | Network interruption during polling claim | Low | Low | The HTTP polling client handles transient network errors and retries gracefully. |
 | 6 | Network failure between worker and API | Medium | Medium | Worker retries status updates with exponential backoff. Simulation results are persisted locally in log files. |
 | 7 | Simulation image not pre-pulled, first run slow | Low | Low | `ensureSimulationImage()` on worker startup. Watchtower keeps image current. |
 

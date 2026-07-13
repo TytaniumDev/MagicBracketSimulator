@@ -80,7 +80,7 @@ Use this URL when running `npm run populate-worker-secret`. The frontend always 
 1. In [GCP Console](https://console.cloud.google.com/iam-admin/serviceaccounts), select your project.
 2. Create a service account (e.g. `magic-bracket-worker`) or select an existing one used for the worker.
 3. Grant roles (e.g.):
-   - **Pub/Sub Subscriber** (to pull job messages),
+   - **Worker** (HTTP polling client),
    - **Storage Object Admin** (or appropriate GCS role for the artifacts bucket),
    - **Cloud Datastore User** (or **Firestore** roles if using Firestore).
 4. Open the service account → **Keys** → **Add key** → **Create new key** → **JSON**. Download the JSON file.
@@ -103,8 +103,6 @@ The **Provision Worker** workflow reads secrets from Doppler and syncs them into
    | `WORKER_SECRET` | Shared secret between worker and API |
    | `API_URL` | Production API URL (see §0) |
    | `GCS_BUCKET` | Cloud Storage bucket name (e.g. `magic-bracket-simulator-artifacts`) |
-   | `PUBSUB_SUBSCRIPTION` | Pub/Sub subscription for jobs (e.g. `job-created-worker`) |
-   | `PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION` | Pub/Sub subscription for worker report-in (e.g. `worker-report-in-worker`) |
    | `GHCR_USER` | GitHub username (for Watchtower to pull worker images) |
    | `GHCR_TOKEN` | GitHub PAT with `read:packages` scope (for Watchtower) |
 
@@ -131,7 +129,7 @@ Use `--defaults` for non-interactive mode: `npm run populate-worker-secret -- --
 
 #### IAM requirements
 
-The identity the worker uses (ADC or service account key) must have **Secret Manager Secret Accessor** on the project. Same key can have Pub/Sub, GCS, Firestore roles as before. For the provision workflow, the SA key also needs **Secret Manager Admin** (to create/update secrets).
+The identity the worker uses (ADC or service account key) must have **Secret Manager Secret Accessor** on the project. Same key can have GCS, Firestore roles as before. For the provision workflow, the SA key also needs **Secret Manager Admin** (to create/update secrets).
 
 ---
 
