@@ -119,6 +119,9 @@ export interface DeckRating {
   /** 16 bins — indexes 0..14 map to turns 1..15, index 15 is "16+". */
   winTurnHistogram?: number[];
   lastUpdated: string;
+  rating?: number;
+  rd?: number;
+  volatility?: number;
   /** Denormalized deck metadata (for leaderboard without N+1 queries) */
   deckName?: string;
   setName?: string | null;

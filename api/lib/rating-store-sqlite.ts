@@ -125,6 +125,15 @@ export const sqliteRatingStore: RatingStore = {
     return row !== undefined;
   },
 
+  async getAllMatchResults(): Promise<MatchResult[]> {
+    const db = getDb();
+    const rows = db.prepare('SELECT data FROM match_results ORDER BY json_extract(data, "$.playedAt") ASC').all() as { data: string }[];
+    return rows.map((r) => JSON.parse(r.data));
+  },
+  async clearAllRatings(): Promise<void> {
+    const db = getDb();
+    db.prepare('DELETE FROM ratings').run();
+  },
   async getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]> {
     const db = getDb();
     const minGames = options?.minGames ?? 0;

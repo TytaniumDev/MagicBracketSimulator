@@ -24,6 +24,8 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getRatingStore } from '@/lib/rating-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
 import { errorResponse } from '@/lib/api-response';
+import { applyDecay } from '@/lib/glicko2-decay';
+import { DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL } from '@/lib/glicko2';
 
 export interface LeaderboardEntry {
   deckId: string;
@@ -35,8 +37,10 @@ export interface LeaderboardEntry {
   mu: number;
   /** @deprecated Legacy TrueSkill uncertainty; no longer updated. Neutral default (≈8.33) for new decks. */
   sigma: number;
-  /** Bayesian-adjusted win rate as a percentage (prior = 25% over 40 games). */
+  /** Glicko-2 Power Rating */
   rating: number;
+  rd: number;
+  volatility: number;
   gamesPlayed: number;
   wins: number;
   winRate: number;
@@ -46,12 +50,14 @@ export interface LeaderboardEntry {
   winTurnHistogram: number[] | null;
 }
 
+/*
 // Prior: expected win rate in a 4-player free-for-all is 25%.
 // Weight: equivalent to "40 games of 25%" mixed in — a new deck scores exactly
 // the prior, and the prior's influence fades as real games accumulate.
 const PRIOR_WIN_RATE = 0.25;
 const PRIOR_WEIGHT = 40;
 const PRIOR_WINS = PRIOR_WEIGHT * PRIOR_WIN_RATE;
+*/
 
 // Upper bound when fetching from the store — anything above this means we have
 // bigger problems than leaderboard truncation. The route applies the user's
@@ -59,9 +65,6 @@ const PRIOR_WINS = PRIOR_WEIGHT * PRIOR_WIN_RATE;
 // cannot silently drop high-Bayesian decks.
 const STORE_FETCH_CAP = 10_000;
 
-function bayesianScore(wins: number, gamesPlayed: number): number {
-  return ((wins + PRIOR_WINS) / (gamesPlayed + PRIOR_WEIGHT)) * 100;
-}
 
 // In-memory cache with 5-minute TTL
 let cache: { data: LeaderboardEntry[]; minGames: number; limit: number; at: number } | null = null;
@@ -125,7 +128,9 @@ export async function GET(request: NextRequest) {
           primaryCommander: primaryCommander ?? null,
           mu: r.mu,
           sigma: r.sigma,
-          rating: bayesianScore(r.wins, r.gamesPlayed),
+          rating: r.rating ?? DEFAULT_RATING,
+          rd: applyDecay(r.rd ?? DEFAULT_RD, r.volatility ?? DEFAULT_VOL, r.lastUpdated, new Date().toISOString()),
+          volatility: r.volatility ?? DEFAULT_VOL,
           gamesPlayed: r.gamesPlayed,
           wins: r.wins,
           winRate: r.gamesPlayed > 0 ? r.wins / r.gamesPlayed : 0,

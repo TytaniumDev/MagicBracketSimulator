@@ -97,6 +97,20 @@ export const firestoreRatingStore: RatingStore = {
     return !snapshot.empty;
   },
 
+  async getAllMatchResults(): Promise<MatchResult[]> {
+    const { getFirestore } = require('firebase-admin/firestore');
+    const db = getFirestore();
+    const snap = await db.collection('match_results').orderBy('playedAt', 'asc').get();
+    return snap.docs.map((d: import("firebase-admin/firestore").QueryDocumentSnapshot) => d.data() as MatchResult);
+  },
+  async clearAllRatings(): Promise<void> {
+    const { getFirestore } = require('firebase-admin/firestore');
+    const db = getFirestore();
+    const snap = await db.collection('ratings').get();
+    const batch = db.batch();
+    snap.docs.forEach((doc: import("firebase-admin/firestore").QueryDocumentSnapshot) => batch.delete(doc.ref));
+    await batch.commit();
+  },
   async getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]> {
     const minGames = options?.minGames ?? 0;
     const limit = options?.limit ?? 500;
