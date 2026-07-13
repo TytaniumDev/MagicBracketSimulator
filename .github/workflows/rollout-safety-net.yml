@@ -49,6 +49,9 @@ permissions:
   id-token: write # WIF OIDC exchange
   issues: write # So we can file an issue when the safety net fires
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   ensure-rollout:
     name: Ensure App Hosting rollout exists
