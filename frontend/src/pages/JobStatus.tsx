@@ -61,7 +61,7 @@ export default function JobStatusPage() {
   // Data hooks
   const { job, simulations, error: streamError } = useJobStream(id);
   const logs = useJobLogs(id, job, { showLogPanel, loadStructured: loadStructuredLogs });
-  const { winTally, winTurns, gamesPlayed, simGamesCompleted } = useWinData(
+  const { winTally, winTurns, winTurnSums, gamesPlayed, simGamesCompleted } = useWinData(
     job, simulations, logs.structuredGames, logs.deckNames,
   );
 
@@ -201,6 +201,7 @@ export default function JobStatusPage() {
           colorIdentityByDeckName={logs.colorIdentityByDeckName}
           winTally={winTally}
           winTurns={winTurns}
+          winTurnSums={winTurnSums}
           gamesPlayed={gamesPlayed}
           totalSimulations={job.simulations}
           deckLinks={job.deckLinks}
