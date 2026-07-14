@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { renderWithRouter } from '../test/render';
 import JobStatusPage from './JobStatus';
 import { useJobStream } from '../hooks/useJobStream';
@@ -408,7 +408,9 @@ describe('JobStatus — Run Again', () => {
     });
     expect(screen.getByText('Submitting...').closest('button')).toBeDisabled();
 
-    resolveResponse({ ok: true, json: () => Promise.resolve({ id: 'job-new' }) } as unknown as Response);
+    await act(async () => {
+      resolveResponse({ ok: true, json: () => Promise.resolve({ id: 'job-new' }) } as unknown as Response);
+    });
   });
 
   it('shows error when resubmit fails', async () => {

@@ -9,6 +9,7 @@ interface DeckShowcaseProps {
   colorIdentityByDeckName: Record<string, string[]>;
   winTally: Record<string, number> | null;
   winTurns: Record<string, number[]> | null;
+  winTurnSums: Record<string, number> | null;
   gamesPlayed: number;
   totalSimulations: number;
   deckLinks?: Record<string, string | null>;
@@ -48,6 +49,7 @@ export const DeckShowcase = memo(function DeckShowcase({
   colorIdentityByDeckName,
   winTally,
   winTurns,
+  winTurnSums,
   gamesPlayed,
   totalSimulations,
   deckLinks,
@@ -77,12 +79,12 @@ export const DeckShowcase = memo(function DeckShowcase({
       const turns = winTurns?.[name] ?? [];
       stats[name] = {
         winPct: gamesPlayed > 0 ? ((wins / gamesPlayed) * 100).toFixed(0) : null,
-        avgTurn: turns.length > 0 ? (turns.reduce((acc, t) => acc + t, 0) / turns.length).toFixed(1) : null,
+        avgTurn: turns.length > 0 && winTurnSums ? (winTurnSums[name] / turns.length).toFixed(1) : null,
       };
     }
 
     return { sorted: s, maxWins: m, deckStats: stats };
-  }, [deckNames, winTally, winTurns, gamesPlayed]);
+  }, [deckNames, winTally, winTurns, winTurnSums, gamesPlayed]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

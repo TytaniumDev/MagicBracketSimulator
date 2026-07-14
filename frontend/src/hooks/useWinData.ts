@@ -7,6 +7,7 @@ import type { StructuredGame } from '@shared/types/log';
 export interface WinData {
   winTally: Record<string, number> | null;
   winTurns: Record<string, number[]> | null;
+  winTurnSums: Record<string, number> | null;
   gamesPlayed: number;
   simGamesCompleted: number;
 }
@@ -18,6 +19,7 @@ export interface WinData {
 export interface SimWinResult {
   simWinTally: Record<string, number> | null;
   simWinTurns: Record<string, number[]> | null;
+  simWinTurnSums: Record<string, number> | null;
   simGamesCompleted: number;
 }
 
@@ -30,7 +32,7 @@ export function computeSimWins(
   deckNames: string[],
 ): SimWinResult {
   if (simulations.length === 0) {
-    return { simWinTally: null, simWinTurns: null, simGamesCompleted: 0 };
+    return { simWinTally: null, simWinTurns: null, simWinTurnSums: null, simGamesCompleted: 0 };
   }
 
   const completedSims = simulations.filter((s) => s.state === 'COMPLETED');
@@ -42,15 +44,17 @@ export function computeSimWins(
     const gamesCompleted = completedSims.reduce(
       (sum, s) => sum + (s.winners && s.winners.length > 0 ? s.winners.length : 1), 0,
     ) || completedSims.length;
-    return { simWinTally: null, simWinTurns: null, simGamesCompleted: gamesCompleted };
+    return { simWinTally: null, simWinTurns: null, simWinTurnSums: null, simGamesCompleted: gamesCompleted };
   }
 
   const tally: Record<string, number> = {};
   const turns: Record<string, number[]> = {};
+  const turnSums: Record<string, number> = {};
 
   for (const name of deckNames) {
     tally[name] = 0;
     turns[name] = [];
+    turnSums[name] = 0;
   }
 
   for (const sim of completedSims) {
@@ -76,6 +80,7 @@ export function computeSimWins(
       if (i < simTurns.length && simTurns[i] !== undefined) {
         if (!turns[matchedDeck]) turns[matchedDeck] = [];
         turns[matchedDeck].push(simTurns[i]);
+        turnSums[matchedDeck] = (turnSums[matchedDeck] || 0) + simTurns[i];
       }
     }
   }
@@ -90,12 +95,13 @@ export function computeSimWins(
     (sum, s) => sum + (s.winners && s.winners.length > 0 ? s.winners.length : 1), 0,
   ) || completedSims.length;
 
-  return { simWinTally: tally, simWinTurns: turns, simGamesCompleted: gamesCompleted };
+  return { simWinTally: tally, simWinTurns: turns, simWinTurnSums: turnSums, simGamesCompleted: gamesCompleted };
 }
 
 export interface StructuredWinResult {
   structuredWinTally: Record<string, number> | null;
   structuredWinTurns: Record<string, number[]> | null;
+  structuredWinTurnSums: Record<string, number> | null;
 }
 
 /**
@@ -106,16 +112,18 @@ export function computeStructuredWins(
   logDeckNames: string[] | null,
 ): StructuredWinResult {
   if (!structuredGames || structuredGames.length === 0) {
-    return { structuredWinTally: null, structuredWinTurns: null };
+    return { structuredWinTally: null, structuredWinTurns: null, structuredWinTurnSums: null };
   }
 
   const tally: Record<string, number> = {};
   const turns: Record<string, number[]> = {};
+  const turnSums: Record<string, number> = {};
 
   if (logDeckNames) {
     for (const name of logDeckNames) {
       tally[name] = 0;
       turns[name] = [];
+      turnSums[name] = 0;
     }
   }
 
@@ -131,6 +139,7 @@ export function computeStructuredWins(
       if (game.winningTurn !== undefined) {
         if (!turns[matchedDeck]) turns[matchedDeck] = [];
         turns[matchedDeck].push(game.winningTurn);
+        turnSums[matchedDeck] = (turnSums[matchedDeck] || 0) + game.winningTurn;
       }
     }
   }
@@ -139,7 +148,7 @@ export function computeStructuredWins(
     turns[deck].sort((a, b) => a - b);
   }
 
-  return { structuredWinTally: tally, structuredWinTurns: turns };
+  return { structuredWinTally: tally, structuredWinTurns: turns, structuredWinTurnSums: turnSums };
 }
 
 /**
@@ -151,8 +160,8 @@ export function resolveEffectiveWins(
   structuredResult: StructuredWinResult,
   structuredGames: StructuredGame[] | null,
 ): WinData {
-  const { structuredWinTally, structuredWinTurns } = structuredResult;
-  const { simWinTally, simWinTurns, simGamesCompleted } = simResult;
+  const { structuredWinTally, structuredWinTurns, structuredWinTurnSums } = structuredResult;
+  const { simWinTally, simWinTurns, simWinTurnSums, simGamesCompleted } = simResult;
 
   const winTally =
     jobResults?.wins ??
@@ -166,13 +175,17 @@ export function resolveEffectiveWins(
     structuredWinTally && Object.keys(structuredWinTally).length > 0
       ? structuredWinTurns
       : simWinTurns;
+  const winTurnSums =
+    structuredWinTally && Object.keys(structuredWinTally).length > 0
+      ? structuredWinTurnSums
+      : simWinTurnSums;
   const gamesPlayed =
     jobResults?.gamesPlayed ??
     (structuredGames && structuredGames.length > 0
       ? structuredGames.length
       : simGamesCompleted);
 
-  return { winTally, winTurns, gamesPlayed, simGamesCompleted };
+  return { winTally, winTurns, winTurnSums, gamesPlayed, simGamesCompleted };
 }
 
 // ---------------------------------------------------------------------------
