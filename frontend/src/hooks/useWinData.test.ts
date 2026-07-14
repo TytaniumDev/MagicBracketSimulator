@@ -184,11 +184,13 @@ describe('resolveEffectiveWins', () => {
   const noSims: ReturnType<typeof computeSimWins> = {
     simWinTally: null,
     simWinTurns: null,
+    simWinTurnSums: null,
     simGamesCompleted: 0,
   };
   const noStructured: ReturnType<typeof computeStructuredWins> = {
     structuredWinTally: null,
     structuredWinTurns: null,
+    structuredWinTurnSums: null,
   };
 
   it('prefers server results when present', () => {

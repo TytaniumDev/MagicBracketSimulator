@@ -53,6 +53,7 @@ vi.mock('@tanstack/react-query', async () => {
 const defaultWinData = {
   winTally: null,
   winTurns: null,
+  winTurnSums: null,
   gamesPlayed: 0,
   simGamesCompleted: 0,
 };

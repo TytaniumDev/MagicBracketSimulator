@@ -11,6 +11,7 @@ function renderShowcase(overrides: Partial<Parameters<typeof DeckShowcase>[0]> =
     colorIdentityByDeckName: {},
     winTally: null,
     winTurns: null,
+    winTurnSums: null,
     gamesPlayed: 0,
     totalSimulations: 20,
     jobStatus: 'RUNNING',
