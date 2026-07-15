@@ -9,6 +9,7 @@
 - **Node.js**: 20+ (managed by `npm`)
 - **Docker**: Required for simulation engine
 - **Package Manager**: `npm` (Node)
+- **Flutter**: `stable` channel
 
 ## Setup
 - **Install Node Dependencies**: `npm run install:all`
@@ -29,6 +30,8 @@
 - **Worker Install**: `cd worker && npm install`
 - **Worker Dev**: `cd worker && npm run dev`
 - **Worker Test**: `cd worker && npm run test:unit`
+- **Worker Flutter Test**: `cd worker_flutter && flutter test`
+- **Worker Flutter Lint**: `cd worker_flutter && flutter analyze --no-fatal-infos`
 
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` (Runs on PR)

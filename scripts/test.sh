@@ -22,3 +22,7 @@ npm run test:ingestion && cd ..
 # Worker tests
 echo "=== Worker unit tests ==="
 cd worker && npm ci && npm run test:unit && cd ..
+
+# Worker Flutter tests
+echo "=== Worker Flutter tests ==="
+cd worker_flutter && flutter pub get && flutter test && cd ..
