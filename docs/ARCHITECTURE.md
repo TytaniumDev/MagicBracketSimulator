@@ -11,8 +11,8 @@ The system supports two deployment modes, auto-detected by the `GOOGLE_CLOUD_PRO
 
 | Mode | Storage | Queue | Auth | Worker Transport |
 |------|---------|-------|------|------------------|
-| **Local** (env unset) | SQLite + filesystem | HTTP polling | None | `GET /api/jobs/claim-sim` |
-| **GCP** (env set) | Firestore + Cloud Storage | HTTP polling | Firebase Auth | `GET /api/jobs/claim-sim` |
+| **Local** (env unset) | SQLite + filesystem | HTTP polling / Local | None | `GET /api/jobs/claim-sim` (Node) / Bundled (Flutter) |
+| **GCP** (env set) | Firestore + Cloud Storage | HTTP polling / Firestore | Firebase Auth | `GET /api/jobs/claim-sim` (Node) / Cloud Firestore SDK (Flutter) |
 
 ---
 
@@ -69,11 +69,12 @@ flowchart TB
 
 ### Worker Host Components
 
-| Component | Image | Purpose |
-|-----------|-------|---------|
-| **Worker** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs. Exposes port 9090 for push-based API control (config, cancel, notify, drain) |
-| **Simulation** | `ghcr.io/.../simulation` (~750MB) | Java 17 + Forge + xvfb: runs exactly 1 game, writes log, exits |
-| **Watchtower** | `nickfedor/watchtower` | Polls GHCR for new worker images, auto-restarts |
+| Component | Image / App | Purpose |
+|-----------|-------------|---------|
+| **Worker (Docker)** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs via HTTP polling, spawns simulation containers, aggregates logs. Exposes port 9090 for push-based API control |
+| **Worker (Desktop)** | Native App (macOS/Windows) | Flutter orchestrator: directly uses Firestore SDK for queue/jobs, bundles Java/Forge internally. Updates via Sparkle. |
+| **Simulation** | `ghcr.io/.../simulation` (~750MB) | Java 17 + Forge + xvfb: runs exactly 1 game, writes log, exits (Docker mode only) |
+| **Watchtower** | `nickfedor/watchtower` | Polls GHCR for new worker images, auto-restarts (Docker mode only) |
 
 ---
 
@@ -297,6 +298,7 @@ flowchart LR
 | **frontend/** | React SPA (Vite + Tailwind v4 + Firebase Auth) |
 | **api/** | Next.js 15 API: jobs, decks, simulations |
 | **worker/** | Node.js orchestrator: HTTP polling, container management |
+| **worker_flutter/** | Cross-platform desktop worker (Flutter) for macOS/Windows |
 | **worker/forge-engine/** | Forge assets: `run_sim.sh`, precon decks |
 | **simulation/** | Simulation image Dockerfile (references `worker/forge-engine/`) |
 | **scripts/** | Setup and provisioning scripts |
