@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { getRuntimeConfig } from '../config';
 import { useAuth } from '../contexts/AuthContext';
+import { Spinner } from '../components/Spinner';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
@@ -399,13 +400,13 @@ function SimulationForm() {
             type="button"
             onClick={handleSaveDeck}
             disabled={isSaving || !deckUrl.trim()}
-            className={`px-4 py-2 rounded-md ${
+            className={`px-4 py-2 rounded-md flex items-center justify-center ${
               isSaving || !deckUrl.trim()
                 ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 : 'bg-green-600 text-white hover:bg-green-700'
             }`}
           >
-            {isSaving ? 'Adding...' : 'Add Deck'}
+            {isSaving ? <><Spinner className="mr-2" /> Adding...</> : 'Add Deck'}
           </button>
         </div>
 
@@ -448,13 +449,13 @@ function SimulationForm() {
               type="button"
               onClick={handleSaveDeck}
               disabled={isSaving || !deckText.trim()}
-              className={`mt-3 w-full py-2 rounded-md font-medium ${
+              className={`mt-3 w-full py-2 rounded-md font-medium flex items-center justify-center ${
                 isSaving || !deckText.trim()
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
             >
-              {isSaving ? 'Adding...' : 'Add Deck'}
+              {isSaving ? <><Spinner className="mr-2" /> Adding...</> : 'Add Deck'}
             </button>
           </>
         )}
@@ -512,7 +513,7 @@ function SimulationForm() {
           <div className="max-h-80 overflow-y-auto bg-gray-700 rounded-md p-3">
             {decksLoading && (
               <div className="flex items-center justify-center py-8">
-                <div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full mr-3" />
+                <Spinner className="text-purple-500 mr-3" size="md" />
                 <span className="text-sm text-gray-400">Loading decks...</span>
               </div>
             )}
@@ -588,13 +589,13 @@ function SimulationForm() {
                             onClick={() => handleDeleteDeck(deck)}
                             disabled={isDeleting === deck.id}
                             aria-label={`Delete deck ${deck.name}`}
-                            className={`px-2 py-0.5 rounded text-xs ${
+                            className={`px-2 py-0.5 rounded text-xs flex items-center justify-center ${
                               isDeleting === deck.id
                                 ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
                                 : 'bg-red-600/50 text-red-200 hover:bg-red-600'
                             }`}
                           >
-                            {isDeleting === deck.id ? '...' : 'X'}
+                            {isDeleting === deck.id ? <Spinner size="sm" /> : 'X'}
                           </button>
                         )}
                       </div>
@@ -693,13 +694,13 @@ function SimulationForm() {
         <button
           type="submit"
           disabled={isSubmitting || selectedDeckIds.length !== 4}
-          className={`w-full py-3 rounded-md font-semibold ${
+          className={`w-full py-3 rounded-md font-semibold flex items-center justify-center ${
             isSubmitting || selectedDeckIds.length !== 4
               ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
-          {isSubmitting ? 'Submitting...' : 'Run Simulations'}
+          {isSubmitting ? <><Spinner className="mr-2" /> Submitting...</> : 'Run Simulations'}
         </button>
       </form>
     </div>
