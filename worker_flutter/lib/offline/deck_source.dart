@@ -38,7 +38,7 @@ class PreconDeck {
 }
 
 /// Loads precons from the Flutter asset bundle PLUS any extra .dck
-/// files the user may have dropped into `<forgePath>/res/Decks/
+/// files the user may have dropped into `&lt;forgePath&gt;/res/Decks/
 /// Commander/`. The bundled set is the floor — offline mode works
 /// from a fresh install without a Forge download.
 Future<List<PreconDeck>> loadBundledPrecons(String forgePath) async {

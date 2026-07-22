@@ -73,9 +73,7 @@ class Telemetry {
           tags.forEach(scope.setTag);
         }
         if (extra != null) {
-          // ignore: deprecated_member_use — `setExtra` is the documented
-          // 8.x API. Sentry's 9.x release moves to structured contexts.
-          extra.forEach(scope.setExtra);
+          scope.setContexts('extra', extra);
         }
       },
     );
@@ -111,8 +109,7 @@ SentryEvent? scrubPii(SentryEvent event, {Hint? hint}) {
       ? event
       : event.copyWith(user: SentryUser(id: '[redacted]'));
 
-  // ignore: deprecated_member_use — see comment in Telemetry.captureError.
-  final extra = cleaned.extra;
+  final extra = cleaned.contexts['extra'] as Map<String, dynamic>?;
   if (extra != null) {
     for (final key in extra.keys.toList()) {
       if (_piiKeys.contains(key)) {
