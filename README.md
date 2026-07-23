@@ -2,7 +2,7 @@
 
 # Magic Bracket Simulator
 
-[ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐞 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
+[ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
 **Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge.**
 
@@ -21,11 +21,7 @@
 
 ## Quick Start
 
-**Just want to run simulations?** Download the desktop worker for your platform from the [latest release](https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest) and double-click. macOS builds are Developer-ID signed + notarized; Windows builds will trip SmartScreen the first time — click *More info → Run anyway*. The worker self-updates from then on.
-
-The worker has two modes:
-- **Cloud:** signs in with Google, picks up jobs from the shared Firestore queue. Results show on the [web leaderboard](https://magic-bracket-simulator.web.app).
-- **Offline:** picks 4 bundled Commander precons, runs the bracket locally, keeps results on your machine.
+**Want to run simulations?** See the [Worker Modes](docs/WORKER_MODES.md) guide for desktop worker details.
 
 **Want to run the whole stack locally for development?** See the [Deployment Guide](docs/DEPLOYMENT.md). The legacy Docker worker (`worker/`) is still in the repo and works, but the desktop worker (`worker_flutter/`) is the path going forward.
 
@@ -59,6 +55,7 @@ cd worker_flutter && flutter run -d macos    # or: -d windows
 *   [Stale Sweeper](docs/STALE_SWEEPER.md)
 *   [Sweeper Alerting](docs/SWEEPER_ALERTING.md)
 *   [Sweeper Alert Policy](docs/sweeper-alert-policy.yaml)
+*   [Worker Modes](docs/WORKER_MODES.md)
 
 ## Contributing
 
