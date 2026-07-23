@@ -40,7 +40,9 @@ Merges to `main` trigger a GitHub Actions workflow that runs tests and deploys t
 
 ---
 
-## Remote Worker (Headless Machine)
+## Remote Worker (Legacy Docker Setup)
+
+*Note: For desktop environments, it is recommended to download the desktop worker application from the GitHub Releases page instead of using the Docker setup.*
 
 You can run the worker on any machine with Docker — e.g., a headless Mac Mini, a spare Linux box, or a cloud VM. The worker connects to the GCP-hosted API over the network; no local API or frontend required.
 

@@ -71,13 +71,16 @@ flowchart TB
 
 | Component | Image | Purpose |
 |-----------|-------|---------|
-| **Worker** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs. Exposes port 9090 for push-based API control (config, cancel, notify, drain) |
+| **Worker (Desktop)** | Native App | Cross-platform desktop worker (macOS/Windows) built with Flutter. Runs simulations using bundled Forge Java runtime. Recommended path. |
+| **Worker (Docker)** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs. Exposes port 9090 for push-based API control (config, cancel, notify, drain) |
 | **Simulation** | `ghcr.io/.../simulation` (~750MB) | Java 17 + Forge + xvfb: runs exactly 1 game, writes log, exits |
 | **Watchtower** | `nickfedor/watchtower` | Polls GHCR for new worker images, auto-restarts |
 
 ---
 
-## Two-Image Architecture: Worker + Simulation
+## Two-Image Architecture: Worker + Simulation (Legacy Docker Mode)
+
+*Note: This section describes the legacy Docker-based worker. The new `worker_flutter` desktop application bundles Forge directly and does not use Docker containers.*
 
 The worker and simulation concerns are split into two Docker images:
 
@@ -296,7 +299,8 @@ flowchart LR
 |-----------|---------|
 | **frontend/** | React SPA (Vite + Tailwind v4 + Firebase Auth) |
 | **api/** | Next.js 15 API: jobs, decks, simulations |
-| **worker/** | Node.js orchestrator: HTTP polling, container management |
+| **worker/** | Node.js orchestrator: HTTP polling, container management (legacy) |
+| **worker_flutter/** | Cross-platform desktop worker (macOS/Windows) built with Flutter |
 | **worker/forge-engine/** | Forge assets: `run_sim.sh`, precon decks |
 | **simulation/** | Simulation image Dockerfile (references `worker/forge-engine/`) |
 | **scripts/** | Setup and provisioning scripts |
