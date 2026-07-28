@@ -21,3 +21,7 @@
 ## 2024-08-05 - Parallelizing Bulk I/O with Promise.all
 **Learning:** The `/api/jobs/bulk-delete` route in `api/app/api/jobs/bulk-delete/route.ts` was processing up to 50 document deletions sequentially using a `for...of` loop, causing significant N+1 network/database latency bottlenecks (especially against Firestore and GCS).
 **Action:** When performing bulk I/O operations (like database queries or cloud resource deletions) on arrays of independent IDs, use `Promise.all(ids.map(async (id) => { ... }))` rather than sequential loops to drastically reduce latency while preserving error isolation per item.
+
+## 2024-05-18 - Inline Array Operations in Grid Views
+**Learning:** In React components rendering grids or lists (like the 4-Deck Grid in `JobStatus.tsx`), performing O(N) array operations (such as `.find`, `.filter`, or iterating object entries) directly inside the mapping loop causes these operations to run on every single re-render. Even fine-grained state updates like hovering can trigger expensive, unnecessary recalculations.
+**Action:** Always pre-calculate and structure list/grid data by extracting these mapping operations into a `useMemo` block that runs *before* the JSX is returned, so the components only need to map over cleanly formatted data.
