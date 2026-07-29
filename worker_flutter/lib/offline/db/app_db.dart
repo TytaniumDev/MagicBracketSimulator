@@ -79,7 +79,7 @@ class AppDb extends _$AppDb {
   /// test suite with `NativeDatabase.memory()` for hermetic, fast
   /// integration tests that exercise the same SQL the app does at
   /// runtime — but without touching disk.
-  AppDb.forTesting(QueryExecutor e) : super(e);
+  AppDb.forTesting(super.e);
 
   @override
   int get schemaVersion => 2;

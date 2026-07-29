@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -116,9 +115,7 @@ void main() {
           client: client,
         );
         await expectLater(
-          uploader
-              .upload(jobId: 'j', simIndex: 0, logText: 'x')
-              .timeout(const Duration(seconds: 35)),
+          uploader.upload(jobId: 'j', simIndex: 0, logText: 'x'),
           completes,
         );
       },

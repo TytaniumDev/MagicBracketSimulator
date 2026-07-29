@@ -40,12 +40,12 @@ class DeckPickerSection extends StatefulWidget {
 }
 
 class _DeckPickerSectionState extends State<DeckPickerSection> {
-  late final ExpansionTileController _ctrl;
+  late final ExpansibleController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = ExpansionTileController();
+    _ctrl = ExpansibleController();
   }
 
   @override

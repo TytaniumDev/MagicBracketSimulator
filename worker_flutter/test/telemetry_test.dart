@@ -19,7 +19,7 @@ void main() {
   group('scrubPii', () {
     test('redacts email-shaped values in event extras', () {
       final event = SentryEvent(message: const SentryMessage('hi')).copyWith(
-        extra: <String, dynamic>{
+        contexts: Contexts()..['extra'] = <String, dynamic>{
           'note': 'user contacted me at someone@example.com about it',
           'okField': 'no pii here',
         },
@@ -28,14 +28,15 @@ void main() {
       final scrubbed = scrubPii(event);
 
       expect(scrubbed, isNotNull);
-      expect(scrubbed!.extra!['note'], contains('[redacted-email]'));
-      expect(scrubbed.extra!['note'], isNot(contains('someone@example.com')));
-      expect(scrubbed.extra!['okField'], 'no pii here');
+      final scrubbedExtra = scrubbed!.contexts['extra'] as Map<String, dynamic>;
+      expect(scrubbedExtra['note'], contains('[redacted-email]'));
+      expect(scrubbedExtra['note'], isNot(contains('someone@example.com')));
+      expect(scrubbedExtra['okField'], 'no pii here');
     });
 
     test('redacts known PII keys', () {
       final event = SentryEvent(message: const SentryMessage('hi')).copyWith(
-        extra: <String, dynamic>{
+        contexts: Contexts()..['extra'] = <String, dynamic>{
           'email': 'a@b.com',
           'uid': 'xyz',
           'displayName': 'Tyler',
@@ -46,11 +47,12 @@ void main() {
 
       final scrubbed = scrubPii(event);
 
-      expect(scrubbed!.extra!['email'], '[redacted]');
-      expect(scrubbed.extra!['uid'], '[redacted]');
-      expect(scrubbed.extra!['displayName'], '[redacted]');
-      expect(scrubbed.extra!['user_id'], '[redacted]');
-      expect(scrubbed.extra!['safe'], 'keep me');
+      final scrubbedExtra = scrubbed!.contexts['extra'] as Map<String, dynamic>;
+      expect(scrubbedExtra['email'], '[redacted]');
+      expect(scrubbedExtra['uid'], '[redacted]');
+      expect(scrubbedExtra['displayName'], '[redacted]');
+      expect(scrubbedExtra['user_id'], '[redacted]');
+      expect(scrubbedExtra['safe'], 'keep me');
     });
 
     test('replaces user with redacted placeholder', () {
