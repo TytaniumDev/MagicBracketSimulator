@@ -23,7 +23,7 @@ The **API Service** is the backend of the Magic Bracket Simulator. It handles:
 | Storage        | **Local filesystem** (dev) · **Google Cloud Storage** (GCP prod)  |
 | Auth           | **Firebase Authentication** (Google sign-in)                      |
 | Worker auth    | `X-Worker-Secret` HMAC-signed header                              |
-| Job dispatch   | **Polling** (workers claim simulations via `POST /api/jobs/claim-sim`) |
+| Job dispatch   | **Polling** (workers claim simulations via `GET /api/jobs/claim-sim`) |
 | Concurrency    | Per-job parallelism — each job is split into `N` independent simulations claimed by workers |
 
 ---
@@ -47,7 +47,7 @@ A **Job** represents one bracket simulation request: 4 decks, N games, optionall
 
 ### 3.2 Simulations
 
-Each Job is divided into **Simulations** (sub-units of work). Each simulation is a fixed batch of games (currently `GAMES_PER_CONTAINER` = 25). Workers atomically claim one simulation at a time via `POST /api/jobs/claim-sim`.
+Each Job is divided into **Simulations** (sub-units of work). Each simulation is a fixed batch of games (currently `GAMES_PER_CONTAINER` = 25). Workers atomically claim one simulation at a time via `GET /api/jobs/claim-sim`.
 
 | State     | Meaning                                 |
 | --------- | --------------------------------------- |
@@ -62,7 +62,7 @@ Each Job is divided into **Simulations** (sub-units of work). Each simulation is
 Workers are long-running Node.js processes that communicate with the API via HTTP. They:
 
 1. Send a heartbeat (`POST /api/workers/heartbeat`) every 30s.
-2. Poll for available simulations (`POST /api/jobs/claim-sim`).
+2. Poll for available simulations (`GET /api/jobs/claim-sim`).
 3. Spawn a Docker container with the Forge simulation engine.
 4. Upload results via `PATCH /api/jobs/:id/simulations/:simId` and `POST /api/jobs/:id/logs/simulation`.
 5. Trigger aggregation when done (`POST /api/jobs/:id/aggregate-if-done`).
