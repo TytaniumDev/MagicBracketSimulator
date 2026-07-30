@@ -168,19 +168,14 @@ Deletes multiple jobs (max 50) and their artifacts.
 
 ### Claim Next Simulation (Worker)
 
-`POST /jobs/claim-sim`
+`GET /jobs/claim-sim`
 
 Atomically claims the next PENDING simulation for a worker.
 **Auth:** Worker auth required.
 
-**Body:**
-
-```json
-{
-  "workerId": "worker-1",
-  "workerName": "MyWorker"
-}
-```
+**Query Parameters:**
+- `workerId`: stable identifier for reclaim heuristics and audit
+- `workerName`: display name surfaced on the job detail UI
 
 **Response:**
 
