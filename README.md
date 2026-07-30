@@ -2,7 +2,7 @@
 
 # Magic Bracket Simulator
 
-[ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐞 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
+[ 🚀 Launch App ](https://magic-bracket-simulator.web.app)  [ 📖 Documentation ](#documentation-map)  [ 🐛 Report Bug ](https://github.com/TytaniumDev/MagicBracketSimulator/issues)
 
 **Simulate thousands of Magic: The Gathering Commander games to predict tournament brackets. Powered by Forge.**
 
@@ -21,22 +21,17 @@
 
 ## Quick Start
 
-**Just want to run simulations?** Download the desktop worker for your platform from the [latest release](https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest) and double-click. macOS builds are Developer-ID signed + notarized; Windows builds will trip SmartScreen the first time — click *More info → Run anyway*. The worker self-updates from then on.
+**Run simulations:** Download the [latest release](https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest) for your platform. The desktop worker runs in **Cloud mode** (shared jobs) or **Offline mode** (local precons).
 
-The worker has two modes:
-- **Cloud:** signs in with Google, picks up jobs from the shared Firestore queue. Results show on the [web leaderboard](https://magic-bracket-simulator.web.app).
-- **Offline:** picks 4 bundled Commander precons, runs the bracket locally, keeps results on your machine.
-
-**Want to run the whole stack locally for development?** See the [Deployment Guide](docs/DEPLOYMENT.md). The legacy Docker worker (`worker/`) is still in the repo and works, but the desktop worker (`worker_flutter/`) is the path going forward.
-
+**Run locally for development:**
 ```bash
 # Frontend + API
 npm run install:all && npm run dev
-# → http://localhost:5173
 
 # Desktop worker (Flutter)
-cd worker_flutter && flutter run -d macos    # or: -d windows
+cd worker_flutter && flutter run -d macos
 ```
+For deployment info, see the [Deployment Guide](docs/DEPLOYMENT.md).
 
 ## Key Features
 
@@ -47,18 +42,29 @@ cd worker_flutter && flutter run -d macos    # or: -d windows
 
 ## Documentation Map
 
+**Core Architecture & API**
 *   [Architecture Overview](docs/ARCHITECTURE.md)
 *   [Architecture Issues](docs/ARCHITECTURE_ISSUES.md)
 *   [API Reference](API.md)
 *   [Data Flow](DATA_FLOW.md)
+
+**Infrastructure & Deployment**
 *   [Deployment Guide](docs/DEPLOYMENT.md)
-*   [Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md)
 *   [Mode Setup](docs/MODE_SETUP.md)
-*   [Precon Sync](docs/PRECON_SYNC.md)
 *   [Secrets Setup](docs/SECRETS_SETUP.md)
+*   [Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md)
+
+**Maintenance & Operations**
+*   [Precon Sync](docs/PRECON_SYNC.md)
 *   [Stale Sweeper](docs/STALE_SWEEPER.md)
 *   [Sweeper Alerting](docs/SWEEPER_ALERTING.md)
 *   [Sweeper Alert Policy](docs/sweeper-alert-policy.yaml)
+*   [Allowed Users Management](scripts/ALLOWED_USERS.md)
+
+**Desktop Worker (Flutter)**
+*   [App Check Setup](worker_flutter/docs/APP_CHECK_SETUP.md)
+*   [Auth Setup](worker_flutter/docs/AUTH_SETUP.md)
+*   [Sentry Setup](worker_flutter/docs/sentry-setup.md)
 
 ## Contributing
 
