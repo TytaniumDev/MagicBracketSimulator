@@ -8,6 +8,7 @@ import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
 import { RequestAccessCard } from '../components/RequestAccessCard';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
+import { Spinner } from '../components/Spinner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
 
@@ -594,7 +595,7 @@ function SimulationForm() {
                                 : 'bg-red-600/50 text-red-200 hover:bg-red-600'
                             }`}
                           >
-                            {isDeleting === deck.id ? '...' : 'X'}
+                            {isDeleting === deck.id ? <Spinner size="sm" /> : 'X'}
                           </button>
                         )}
                       </div>
