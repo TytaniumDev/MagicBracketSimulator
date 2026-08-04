@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
@@ -65,6 +65,38 @@ export default function JobStatusPage() {
     job, simulations, logs.structuredGames, logs.deckNames,
   );
 
+  const currentGame = logs.structuredGames?.[selectedGame];
+  const memoizedDeckStates = useMemo(() => {
+    if (!currentGame) return [];
+    return currentGame.decks.slice(0, 4).map((deck, i) => {
+      const turnActions = deck.turns.find(t => t.turnNumber === selectedTurn);
+      const label = logs.deckNames?.[i] ?? deck.deckLabel;
+      const isHero = i === 0;
+
+      const turnLifeTotals = currentGame.lifePerTurn?.[selectedTurn];
+      const lifeTotal = turnLifeTotals ? (() => {
+        for (const [playerName, life] of Object.entries(turnLifeTotals)) {
+          if (matchesDeckName(playerName, label)) {
+            return life;
+          }
+        }
+        return undefined;
+      })() : undefined;
+
+      const filteredActions = turnActions?.actions.filter((action) => {
+        if (eventFilters.size === 0) return true;
+        if (eventFilters.has('land_played') && action.line.startsWith('Land:')) {
+          return true;
+        }
+        if (action.eventType && eventFilters.has(action.eventType)) {
+          return true;
+        }
+        return false;
+      }) ?? [];
+
+      return { i, label, isHero, lifeTotal, filteredActions };
+    });
+  }, [currentGame, selectedTurn, logs.deckNames, eventFilters]);
   if (streamError) {
     return (
       <div className="max-w-2xl mx-auto text-center">
@@ -161,9 +193,9 @@ export default function JobStatusPage() {
     }
   };
 
-  const currentGame = logs.structuredGames?.[selectedGame];
   const maxTurns = Math.max(1, currentGame?.totalTurns ?? 1);
   const isTerminal = job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED';
+
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -535,32 +567,7 @@ export default function JobStatusPage() {
 
                 {/* 4-Deck Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {currentGame?.decks.slice(0, 4).map((deck, i) => {
-                    const turnActions = deck.turns.find(t => t.turnNumber === selectedTurn);
-                    const label = logs.deckNames?.[i] ?? deck.deckLabel;
-                    const isHero = i === 0;
-
-                    const turnLifeTotals = currentGame?.lifePerTurn?.[selectedTurn];
-                    const lifeTotal = turnLifeTotals ? (() => {
-                      for (const [playerName, life] of Object.entries(turnLifeTotals)) {
-                        if (matchesDeckName(playerName, label)) {
-                          return life;
-                        }
-                      }
-                      return undefined;
-                    })() : undefined;
-
-                    const filteredActions = turnActions?.actions.filter((action) => {
-                      if (eventFilters.size === 0) return true;
-                      if (eventFilters.has('land_played') && action.line.startsWith('Land:')) {
-                        return true;
-                      }
-                      if (action.eventType && eventFilters.has(action.eventType)) {
-                        return true;
-                      }
-                      return false;
-                    }) ?? [];
-
+                  {memoizedDeckStates.map(({ i, label, isHero, lifeTotal, filteredActions }) => {
                     return (
                       <div
                         key={i}
