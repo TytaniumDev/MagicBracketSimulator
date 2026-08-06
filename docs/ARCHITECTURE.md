@@ -47,12 +47,23 @@ flowchart TB
         Watchtower -.->|auto-update| Worker
     end
 
+    subgraph desktop_worker [Desktop Worker]
+        FlutterWorker[Flutter App<br/>macOS/Windows]
+        JavaChild[Java Child Process<br/>Forge]
+        FlutterWorker -->|spawn| JavaChild
+    end
+
     User --> FirebaseHosting
     FirebaseHosting --> AppHosting
+
+    %% Docker Worker Flow
     Worker -->|GET claim-sim| AppHosting
     AppHosting -->|push config/cancel/notify| Worker
     Worker -->|PATCH status| AppHosting
     Worker -->|POST logs| AppHosting
+
+    %% Flutter Worker Flow
+    FlutterWorker <-->|listen/write direct| Firestore
 ```
 
 ### GCP Components
@@ -63,11 +74,18 @@ flowchart TB
 | **Frontend** | Firebase Hosting | React SPA |
 | **Job Metadata** | Firestore | Job state, deck references, simulation statuses, results |
 | **Artifacts** | Cloud Storage | Raw logs, condensed logs, structured logs |
-| **Job Queue** | Firestore / HTTP Polling | Queue state is stored in Firestore; workers poll `claim-sim` for PENDING simulations |
+| **Job Queue** | Firestore / HTTP Polling | Queue state is stored in Firestore. Docker workers poll `claim-sim`; Flutter workers listen directly via Firestore SDK |
 | **Authentication** | Firebase Auth | Google sign-in with email allowlist |
 | **Secrets** | Secret Manager | Worker config |
 
-### Worker Host Components
+### Desktop Worker Components (Flutter)
+
+| Component | Image | Purpose |
+|-----------|-------|---------|
+| **Flutter App** | `.dmg` / `.exe` | Cross-platform desktop orchestrator: listens to Firestore, spawns headless Forge games via Java, reports results back. |
+| **Simulation** | Bundled Forge Engine | Java + Forge JARs plus card data invoked via `Process.start` from Dart. |
+
+### Worker Host Components (Docker)
 
 | Component | Image | Purpose |
 |-----------|-------|---------|
@@ -297,6 +315,7 @@ flowchart LR
 | **frontend/** | React SPA (Vite + Tailwind v4 + Firebase Auth) |
 | **api/** | Next.js 15 API: jobs, decks, simulations |
 | **worker/** | Node.js orchestrator: HTTP polling, container management |
+| **worker_flutter/** | Flutter desktop worker: cross-platform macOS/Windows app |
 | **worker/forge-engine/** | Forge assets: `run_sim.sh`, precon decks |
 | **simulation/** | Simulation image Dockerfile (references `worker/forge-engine/`) |
 | **scripts/** | Setup and provisioning scripts |
