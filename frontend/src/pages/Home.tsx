@@ -8,6 +8,7 @@ import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
 import { RequestAccessCard } from '../components/RequestAccessCard';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
+import { Spinner } from '../components/Spinner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
 
@@ -690,17 +691,23 @@ function SimulationForm() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting || selectedDeckIds.length !== 4}
-          className={`w-full py-3 rounded-md font-semibold ${
-            isSubmitting || selectedDeckIds.length !== 4
-              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
+        <span
+          className="block w-full"
+          title={selectedDeckIds.length !== 4 ? "Please select exactly 4 decks" : ""}
         >
-          {isSubmitting ? 'Submitting...' : 'Run Simulations'}
-        </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || selectedDeckIds.length !== 4}
+            className={`w-full py-3 rounded-md font-semibold flex items-center justify-center gap-2 ${
+              isSubmitting || selectedDeckIds.length !== 4
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {isSubmitting && <Spinner size="sm" />}
+            {isSubmitting ? 'Submitting...' : 'Run Simulations'}
+          </button>
+        </span>
       </form>
     </div>
   );
