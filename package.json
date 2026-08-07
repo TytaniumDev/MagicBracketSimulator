@@ -19,7 +19,7 @@
     "mode:hosted": "rm -f api/.env.local frontend/.env.local && docker rm -f magic-bracket-worker 2>/dev/null; docker compose -f worker/docker-compose.yml up -d && echo 'Switched to HOSTED/GCP mode. Worker restarted in GCP mode.'"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0",
+    "concurrently": "^9.2.4",
     "firebase-admin": "^13.6.0"
   },
   "dependencies": {
