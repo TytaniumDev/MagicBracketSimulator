@@ -74,6 +74,7 @@ flowchart TB
 | **Worker** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs. Exposes port 9090 for push-based API control (config, cancel, notify, drain) |
 | **Simulation** | `ghcr.io/.../simulation` (~750MB) | Java 17 + Forge + xvfb: runs exactly 1 game, writes log, exits |
 | **Watchtower** | `nickfedor/watchtower` | Polls GHCR for new worker images, auto-restarts |
+| **Desktop Worker** | `worker_flutter/` (App/Exe) | Cross-platform Flutter desktop app (macOS/Windows). Claims jobs directly via Firestore SDK or runs entirely offline with bundled precons. Includes bundled Java/Forge execution environment. |
 
 ---
 
@@ -119,6 +120,19 @@ The worker supports two execution modes (auto-detected):
 |------|-----------|----------|
 | **Container** (default) | `FORGE_PATH` not set | Spawns Docker containers (1 per game) |
 | **Monolithic** (legacy) | `FORGE_PATH` set | Runs Forge as child processes (old behavior) |
+
+---
+
+## Cross-Platform Desktop Worker (worker_flutter)
+
+In addition to the headless Docker worker, the system provides a cross-platform desktop worker built in Flutter (`worker_flutter/`) for macOS and Windows.
+
+| Feature | Description |
+|---------|-------------|
+| **Execution** | Bundles the Java/Forge runtime. Runs simulations directly on the host machine without Docker. |
+| **Cloud Mode** | Authenticates via Google. Bypasses the `/api/jobs/claim-sim` endpoint and uses the `cloud_firestore` SDK to claim PENDING simulations via direct, atomic Firestore transactions. |
+| **Offline Mode** | Runs a fully local bracket simulation using a bundled SQLite database and pre-packaged Commander decks. |
+| **Auto-update** | Seamless updates via `appcast.xml`. |
 
 ---
 

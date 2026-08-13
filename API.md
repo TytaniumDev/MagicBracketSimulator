@@ -170,7 +170,7 @@ Deletes multiple jobs (max 50) and their artifacts.
 
 `POST /jobs/claim-sim`
 
-Atomically claims the next PENDING simulation for a worker.
+Atomically claims the next PENDING simulation for a worker. *(Note: The `worker_flutter` desktop worker bypasses this endpoint and claims simulations directly via atomic transactions using the `cloud_firestore` SDK).*
 **Auth:** Worker auth required.
 
 **Body:**

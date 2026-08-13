@@ -12,6 +12,7 @@ Thank you for your interest in contributing!
 *   **`api/`**: Next.js 15 app serving API routes and job management.
 *   **`frontend/`**: React SPA (Vite + Tailwind v4 + Firebase Auth).
 *   **`worker/`**: Node.js orchestrator that manages simulation containers (Docker).
+*   **`worker_flutter/`**: Cross-platform desktop worker (macOS/Windows) with Cloud and Offline modes.
 *   **`simulation/`**: Docker image containing Java + Forge for running games.
 
 ## Development Workflow
