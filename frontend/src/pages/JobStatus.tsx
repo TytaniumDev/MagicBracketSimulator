@@ -451,16 +451,17 @@ export default function JobStatusPage() {
                   )}
                   <div className="flex items-center gap-2">
                     <label htmlFor="turn-slider" className="text-sm text-gray-400">Turn:</label>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTurn((t) => Math.max(1, t - 1))}
-                      disabled={selectedTurn <= 1}
-                      className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Previous turn"
-                      aria-label="Previous turn"
-                    >
-                      Prev
-                    </button>
+                    <span title="Previous turn" className="inline-flex">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTurn((t) => Math.max(1, t - 1))}
+                        disabled={selectedTurn <= 1}
+                        className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Previous turn"
+                      >
+                        Prev
+                      </button>
+                    </span>
                     <input
                       id="turn-slider"
                       type="range"
@@ -473,16 +474,17 @@ export default function JobStatusPage() {
                     <span className="text-sm text-white min-w-[3rem]">
                       {selectedTurn} / {maxTurns}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTurn((t) => Math.min(maxTurns, t + 1))}
-                      disabled={selectedTurn >= maxTurns}
-                      className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Next turn"
-                      aria-label="Next turn"
-                    >
-                      Next
-                    </button>
+                    <span title="Next turn" className="inline-flex">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTurn((t) => Math.min(maxTurns, t + 1))}
+                        disabled={selectedTurn >= maxTurns}
+                        className="px-2 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Next turn"
+                      >
+                        Next
+                      </button>
+                    </span>
                   </div>
                 </div>
 
