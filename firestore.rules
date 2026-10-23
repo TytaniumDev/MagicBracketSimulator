@@ -21,16 +21,25 @@ service cloud.firestore {
     // `completedSimCount` on the parent job after each successful sim. The
     // unauth path is scoped to: only that one field may change AND the new
     // value must be exactly the existing value + 1 (matches the worker's
-    // `FieldValue.increment(1)` call). Tighten to `if isAllowedUser()` once
-    // Plan 3 enables auth in the worker.
+    // `FieldValue.increment(1)` call). Its first claim on a job may also
+    // flip status QUEUED -> RUNNING, touching only the claim fields (matches
+    // the API's claimNextSim). Tighten to `if isAllowedUser()` once Plan 3
+    // enables auth in the worker.
     match /jobs/{jobId} {
       allow read: if true;
       allow create: if isAllowedUser();
       allow update: if isAllowedUser()
-        || (request.auth == null
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedSimCount'])
-            && request.resource.data.completedSimCount is int
-            && request.resource.data.completedSimCount == resource.data.completedSimCount + 1);
+        || (request.auth == null && (
+             // 1. Flutter worker reports a terminal sim: +1 only.
+             (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedSimCount'])
+              && request.resource.data.completedSimCount is int
+              && request.resource.data.completedSimCount == resource.data.completedSimCount + 1)
+          || // 2. Flutter worker's first claim promotes the job QUEUED -> RUNNING.
+             (resource.data.status == 'QUEUED'
+              && request.resource.data.status == 'RUNNING'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['status', 'startedAt', 'claimedAt', 'workerId', 'workerName', 'updatedAt']))
+        ));
       allow delete: if isAllowedUser();
 
       // Per-simulation tracking subcollection: public reads.
