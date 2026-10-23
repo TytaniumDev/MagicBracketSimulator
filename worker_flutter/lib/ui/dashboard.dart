@@ -291,7 +291,7 @@ class _DashboardState extends State<Dashboard> {
                       _CapacityRow(
                         current: _capacity,
                         onChanged: (v) => setState(() => _capacity = v),
-                        onChangeEnd: (v) => widget.config.setCapacity(v),
+                        onChangeEnd: (v) => widget.engine.setMaxCapacity(v),
                       ),
                       const SizedBox(height: 8),
                       const _LaunchAtLoginRow(),

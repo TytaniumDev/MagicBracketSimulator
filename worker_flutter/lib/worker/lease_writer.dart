@@ -30,7 +30,10 @@ class LeaseWriter {
   final FirebaseFirestore firestore;
   final String workerId;
   final String workerName;
-  final int capacity;
+
+  /// Advertised on each tick; mutable so a live capacity change shows up
+  /// on the next heartbeat.
+  int capacity;
   final Duration tickInterval;
   final Duration leaseTtl;
 
