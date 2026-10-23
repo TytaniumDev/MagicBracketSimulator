@@ -310,6 +310,49 @@ async function runTests() {
     }
   });
 
+  await test('QUEUED job whose sims all finished is aggregated, not failed', async () => {
+    wipeAllActiveJobs();
+    const job = jobStoreSqlite.createJob(DECKS, 8);
+    const jobId = job.id;
+    try {
+      // A Firestore-claiming worker completed every sim without ever
+      // promoting the job, so it still reads QUEUED.
+      jobStoreSqlite.initializeSimulations(jobId, 2);
+      jobStoreSqlite.updateSimulationStatus(jobId, 'sim_000', { state: 'COMPLETED' });
+      jobStoreSqlite.updateSimulationStatus(jobId, 'sim_001', { state: 'COMPLETED' });
+      assert(jobStoreSqlite.getJob(jobId)!.status === 'QUEUED', 'pre: should be QUEUED');
+
+      // Past the QUEUED cap, so the old behavior would hard-fail it.
+      const farFuture = Date.now() + QUEUED_JOB_HARD_FAIL_THRESHOLD_MS + 60_000;
+      const result = await sweep(farFuture);
+
+      assert(result.jobsFailed === 0, `no job should be hard-failed, got ${result.jobsFailed}`);
+      assert(result.aggregationsTriggered === 1, `one aggregation expected, got ${result.aggregationsTriggered}`);
+      const finalJob = jobStoreSqlite.getJob(jobId);
+      assert(finalJob!.status === 'COMPLETED', `job should be COMPLETED, got ${finalJob!.status}`);
+    } finally {
+      cleanupJob(jobId);
+    }
+  });
+
+  await test('QUEUED job with unfinished sims is still hard-failed when old', async () => {
+    wipeAllActiveJobs();
+    const job = jobStoreSqlite.createJob(DECKS, 8);
+    const jobId = job.id;
+    try {
+      jobStoreSqlite.initializeSimulations(jobId, 2);
+      jobStoreSqlite.updateSimulationStatus(jobId, 'sim_000', { state: 'COMPLETED' });
+
+      const farFuture = Date.now() + QUEUED_JOB_HARD_FAIL_THRESHOLD_MS + 60_000;
+      const result = await sweep(farFuture);
+
+      assert(result.jobsFailed === 1, `one job should be hard-failed, got ${result.jobsFailed}`);
+      assert(jobStoreSqlite.getJob(jobId)!.status === 'FAILED', 'job should be FAILED');
+    } finally {
+      cleanupJob(jobId);
+    }
+  });
+
   // ── Summary ───────────────────────────────────────────────────────────
 
   console.log(`\n${results.filter(r => r.passed).length}/${results.length} passed`);

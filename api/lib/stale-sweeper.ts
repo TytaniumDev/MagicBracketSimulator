@@ -7,7 +7,8 @@
  * completing a sim at the last second always wins over a sweeper cancel.
  *
  * In both local (SQLite) and GCP (Firestore) modes, it:
- *   1. Hard-fails any QUEUED job older than QUEUED_JOB_HARD_FAIL_THRESHOLD_MS.
+ *   1. Aggregates any QUEUED job whose sims are all terminal; otherwise
+ *      hard-fails QUEUED jobs older than QUEUED_JOB_HARD_FAIL_THRESHOLD_MS.
  *   2. For each RUNNING job, cancels any sim where (now - job baseline) exceeds
  *      SIM_HARD_CANCEL_THRESHOLD_MS.
  *   3. Calls the existing recoverStaleJob() path to republish stale-PENDING
@@ -102,6 +103,14 @@ export async function hardCancelStaleSimsForJob(
   return results.filter(Boolean).length;
 }
 
+/** True when the job has sims and every one is COMPLETED or CANCELLED. */
+function allSimsTerminal(sims: SimulationStatus[]): boolean {
+  return (
+    sims.length > 0 &&
+    sims.every((s) => s.state === 'COMPLETED' || s.state === 'CANCELLED')
+  );
+}
+
 /**
  * Hard-fail a QUEUED job that has sat unclaimed past the absolute cap.
  * Returns true if the job was transitioned to FAILED.
@@ -127,7 +136,8 @@ export async function hardFailStaleQueuedJob(
  * Run one sweep cycle over every active (QUEUED or RUNNING) job.
  *
  * For each job, in order:
- *   1. If QUEUED and too old → hard-fail and skip the rest.
+ *   1. If QUEUED: aggregate when every sim is terminal, else hard-fail when
+ *      too old; either way skip the rest.
  *   2. If RUNNING → hard-cancel any sims past the 2h baseline.
  *   3. Call jobStore.recoverStaleJob() — this is the existing path that
  *      republishes stale-PENDING sims and re-triggers aggregation in
@@ -157,6 +167,14 @@ export async function sweepStaleJobs(nowMs: number = Date.now()): Promise<SweepR
   for (const job of activeJobs) {
     try {
       if (job.status === 'QUEUED') {
+        // A worker that claims straight from Firestore can finish every sim
+        // while the job still reads QUEUED (Flutter workers before they
+        // promoted jobs to RUNNING). Finalize those instead of failing them.
+        if (allSimsTerminal(await jobStore.getSimulationStatuses(job.id))) {
+          await jobStore.aggregateJobResults(job.id);
+          result.aggregationsTriggered += 1;
+          continue;
+        }
         const failed = await hardFailStaleQueuedJob(job, nowMs);
         if (failed) {
           result.jobsFailed += 1;
@@ -180,10 +198,7 @@ export async function sweepStaleJobs(nowMs: number = Date.now()): Promise<SweepR
         jobStore.getSimulationStatuses(job.id),
       ]);
       if (refreshed && refreshed.status === 'RUNNING') {
-        const allTerminal =
-          sims.length > 0 &&
-          sims.every((s) => s.state === 'COMPLETED' || s.state === 'CANCELLED');
-        if (allTerminal) {
+        if (allSimsTerminal(sims)) {
           await jobStore.aggregateJobResults(job.id);
           result.aggregationsTriggered += 1;
         }
