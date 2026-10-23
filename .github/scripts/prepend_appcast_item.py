@@ -29,6 +29,20 @@ from pathlib import Path
 _ANCHOR = "<language>en</language>"
 
 
+def sparkle_version(*, version: str, build_number: int, os_name: str) -> str:
+    """The <sparkle:version> each updater compares against the running app.
+
+    macOS Sparkle compares CFBundleVersion, which is the bare build number.
+    WinSparkle compares the exe's FileVersion string, which Flutter writes
+    as "<version>+<build>". It must match exactly: WinSparkle treats the
+    "+260" suffix like a pre-release tag, so a bare "0.2.231" item sorts
+    above an installed "0.2.231+260" and the update prompt never stops.
+    """
+    if os_name == "macos":
+        return str(build_number)
+    return f"{version}+{build_number}"
+
+
 def build_item(
     *,
     version: str,
@@ -48,7 +62,7 @@ def build_item(
         f"      <title>Version {version} {title_suffix}</title>\n"
         f"      <sparkle:os>{os_name}</sparkle:os>\n"
         f"      <pubDate>{pub_date}</pubDate>\n"
-        f"      <sparkle:version>{build_number if os_name == 'macos' else version}</sparkle:version>\n"
+        f"      <sparkle:version>{sparkle_version(version=version, build_number=build_number, os_name=os_name)}</sparkle:version>\n"
         f"      <sparkle:shortVersionString>{version}</sparkle:shortVersionString>\n"
         f"      <sparkle:minimumSystemVersion>{'11.0' if os_name == 'macos' else '10.0'}</sparkle:minimumSystemVersion>\n"
         f'      <enclosure url="{enclosure_url}"\n'

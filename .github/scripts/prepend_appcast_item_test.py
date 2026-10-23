@@ -134,7 +134,9 @@ class PrependAppcastItemTest(unittest.TestCase):
         self.assertIn("<sparkle:os>windows</sparkle:os>", text)
         self.assertIn('sparkle:dsaSignature="xyzDSA_SIG=="', text)
         self.assertIn('length="54321"', text)
-        self.assertIn("<sparkle:version>0.2.1</sparkle:version>", text)
+        # Must match the Windows exe's FileVersion ("<version>+<build>"),
+        # or WinSparkle offers the installed version as an update.
+        self.assertIn("<sparkle:version>0.2.1+8</sparkle:version>", text)
 
     def test_existing_comments_are_preserved(self) -> None:
         self.run_script_macos()
