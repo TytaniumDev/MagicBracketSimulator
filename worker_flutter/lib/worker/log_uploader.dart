@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
+import '../api_client.dart';
 import '../app_log.dart';
 import '../telemetry.dart';
 
@@ -12,23 +10,16 @@ import '../telemetry.dart';
 /// shape is the same so the frontend's per-sim log links work identically
 /// for cloud-mode Flutter workers as they do for the Docker worker.
 ///
+/// Auth rides on [ApiClient]: the signed-in user's Firebase ID token,
+/// which the API accepts for users in `allowedUsers`.
+///
 /// Failures are non-fatal: the sim's terminal state has already been
 /// written via `SimClaimer.reportTerminal` by the time this runs, so a
 /// missed log is a cosmetic loss, not a correctness one.
 class LogUploader {
-  LogUploader({
-    required this.apiUrl,
-    required this.workerSecret,
-    http.Client? client,
-  }) : _client = client ?? http.Client();
+  LogUploader({required ApiClient api}) : _api = api;
 
-  final String apiUrl;
-  final String? workerSecret;
-  final http.Client _client;
-
-  /// Whether this uploader will actually post. False when the worker
-  /// secret is unset — callers should still call `upload()`; it no-ops.
-  bool get isConfigured => workerSecret != null && workerSecret!.isNotEmpty;
+  final ApiClient _api;
 
   /// Upload the log for one sim. `simIndex` is 0-based and matches the
   /// `Sims.index` field in Firestore.
@@ -37,35 +28,21 @@ class LogUploader {
     required int simIndex,
     required String logText,
   }) async {
-    if (!isConfigured) return;
-
     final filename =
         'raw/game_${(simIndex + 1).toString().padLeft(3, '0')}.txt';
-    final uri = Uri.parse('$apiUrl/api/jobs/$jobId/logs/simulation');
 
     try {
-      final resp = await _client
-          .post(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Worker-Secret': workerSecret!,
-            },
-            body: jsonEncode({'filename': filename, 'logText': logText}),
-          )
+      await _api
+          .postJson('/api/jobs/$jobId/logs/simulation', {
+            'filename': filename,
+            'logText': logText,
+          })
           .timeout(const Duration(seconds: 30));
-      if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        AppLog.event(
-          TelemetryCategory.engineRuntime,
-          'LogUploader: sim_$simIndex log uploaded '
-          '(${(logText.length / 1024).toStringAsFixed(1)} KB)',
-        );
-      } else {
-        AppLog.event(
-          TelemetryCategory.engineRuntime,
-          'LogUploader: HTTP ${resp.statusCode} for sim_$simIndex: ${resp.body}',
-        );
-      }
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'LogUploader: sim_$simIndex log uploaded '
+        '(${(logText.length / 1024).toStringAsFixed(1)} KB)',
+      );
     } catch (e) {
       AppLog.event(
         TelemetryCategory.engineRuntime,
@@ -73,6 +50,4 @@ class LogUploader {
       );
     }
   }
-
-  void close() => _client.close();
 }

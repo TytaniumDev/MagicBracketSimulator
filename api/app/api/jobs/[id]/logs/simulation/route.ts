@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerRequest, unauthorizedResponse } from '@/lib/auth';
+import { unauthorizedResponse } from '@/lib/auth';
+import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
 import { uploadSingleSimulationLog, MAX_LOG_BYTES } from '@/lib/log-store';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 
@@ -70,10 +71,12 @@ async function readBodyWithLimit(
 /**
  * POST /api/jobs/[id]/logs/simulation — Upload a single simulation's raw log.
  * Called by the worker incrementally after each simulation completes.
+ * Auth: WORKER_SECRET (Docker worker) or an allowlisted user's ID token
+ * (Flutter desktop worker).
  * Body: { filename: string, logText: string }
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
+  if (!(await isWorkerOrAllowlistedUser(request))) {
     return unauthorizedResponse('Worker authentication required');
   }
 

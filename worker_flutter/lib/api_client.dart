@@ -61,14 +61,19 @@ class ApiClient {
     FirebaseAuth? auth,
     AppCheckTokenProvider? appCheckTokenProvider,
   }) : _http = client ?? http.Client(),
-       _auth = auth ?? FirebaseAuth.instance,
+       _authOverride = auth,
        _appCheckTokenProvider =
            appCheckTokenProvider ?? defaultAppCheckTokenProvider;
 
   final String baseUrl;
   final http.Client _http;
-  final FirebaseAuth _auth;
+  final FirebaseAuth? _authOverride;
   final AppCheckTokenProvider _appCheckTokenProvider;
+
+  /// Resolved per request, not at construction, so the engine can build a
+  /// client at boot without touching `FirebaseAuth.instance` before the
+  /// AuthGate runs (see `_bootEngine` in main.dart).
+  FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
 
   Future<Map<String, dynamic>> postJson(
     String path,

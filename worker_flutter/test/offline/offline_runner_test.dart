@@ -59,7 +59,6 @@ void main() {
       decksPath: decksDir.path,
       logsPath: logsDir.path,
       apiUrl: 'http://localhost',
-      workerSecret: null,
     );
     db = AppDb.forTesting(NativeDatabase.memory());
   });

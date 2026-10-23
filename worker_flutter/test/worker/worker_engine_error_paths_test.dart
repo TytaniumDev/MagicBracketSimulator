@@ -27,7 +27,6 @@ void main() {
       decksPath: '/tmp/decks',
       logsPath: '/tmp/logs',
       apiUrl: 'http://localhost',
-      workerSecret: null,
     );
   });
 

@@ -12,8 +12,8 @@
  * stale-sweeper catches them.
  *
  * This endpoint:
- *   1. Auths the caller with WORKER_SECRET (same header the Flutter
- *      LogUploader uses).
+ *   1. Auths the caller with WORKER_SECRET, or with the Firebase ID token
+ *      of an allowlisted user (how the signed-in Flutter worker calls it).
  *   2. Calls `aggregateJobResults(id)`, which itself is idempotent —
  *      it short-circuits if (a) any sim is non-terminal, or (b) the
  *      job is already COMPLETED/FAILED. Safe to call from every sim
@@ -24,7 +24,7 @@
  * sweeper is still the safety net.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerRequest } from '@/lib/auth';
+import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
 import { aggregateJobResults } from '@/lib/job-store-factory';
 import { errorResponse } from '@/lib/api-response';
 
@@ -36,7 +36,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!IS_LOCAL_MODE && !isWorkerRequest(req)) {
+  if (!IS_LOCAL_MODE && !(await isWorkerOrAllowlistedUser(req))) {
     return errorResponse('Unauthorized', 401);
   }
   const { id } = await params;

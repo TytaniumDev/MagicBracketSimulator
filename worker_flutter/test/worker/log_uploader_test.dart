@@ -1,10 +1,24 @@
-import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:worker_flutter/api_client.dart';
 import 'package:worker_flutter/worker/log_uploader.dart';
+
+LogUploader _uploader(http.Client client, {bool signedIn = true}) =>
+    LogUploader(
+      api: ApiClient(
+        baseUrl: 'https://api.example.com',
+        client: client,
+        auth: MockFirebaseAuth(
+          signedIn: signedIn,
+          mockUser: MockUser(uid: 'u1', email: 'u1@example.com'),
+        ),
+        appCheckTokenProvider: ({bool forceRefresh = false}) async => null,
+      ),
+    );
 
 /// `LogUploader` is intentionally non-throwing — a sim's terminal
 /// state lands in Firestore before the upload runs, so missing logs
@@ -23,22 +37,20 @@ void main() {
         capturedBody = jsonDecode(req.body) as Map<String, dynamic>;
         return http.Response('{"ok":true}', 200);
       });
-      final uploader = LogUploader(
-        apiUrl: 'https://api.example.com',
-        workerSecret: 'secret123',
-        client: client,
-      );
-      await uploader.upload(
-        jobId: 'job-abc',
-        simIndex: 4,
-        logText: 'sim 5 stdout',
-      );
+      await _uploader(
+        client,
+      ).upload(jobId: 'job-abc', simIndex: 4, logText: 'sim 5 stdout');
 
       expect(
         capturedUrl,
         'https://api.example.com/api/jobs/job-abc/logs/simulation',
       );
-      expect(capturedHeaders['X-Worker-Secret'], 'secret123');
+      expect(
+        capturedHeaders['Authorization'],
+        startsWith('Bearer '),
+        reason: "the API accepts the signed-in allowlisted user's token",
+      );
+      expect(capturedHeaders.containsKey('X-Worker-Secret'), isFalse);
       expect(capturedHeaders['Content-Type'], contains('application/json'));
       expect(
         capturedBody['filename'],
@@ -50,33 +62,27 @@ void main() {
       expect(capturedBody['logText'], 'sim 5 stdout');
     });
 
-    test('returns silently when worker secret is empty', () async {
+    test('returns silently without posting when signed out', () async {
       var posted = false;
       final client = MockClient((req) async {
         posted = true;
         return http.Response('', 200);
       });
-      final uploader = LogUploader(
-        apiUrl: 'https://api.example.com',
-        workerSecret: '',
-        client: client,
+      await expectLater(
+        _uploader(
+          client,
+          signedIn: false,
+        ).upload(jobId: 'job', simIndex: 0, logText: 'x'),
+        completes,
       );
-      // Should be a no-op — local-mode workers run without a secret
-      // and shouldn't burn cloud round-trips per sim.
-      await uploader.upload(jobId: 'job', simIndex: 0, logText: 'x');
       expect(posted, isFalse);
-      expect(uploader.isConfigured, isFalse);
     });
 
     test('swallows a 5xx without throwing', () async {
       final client = MockClient(
         (req) async => http.Response('upstream down', 503),
       );
-      final uploader = LogUploader(
-        apiUrl: 'https://api.example.com',
-        workerSecret: 'k',
-        client: client,
-      );
+      final uploader = _uploader(client);
       // The contract: terminal sim state is written before this runs,
       // so an upload failure must not bubble and undo that write.
       await expectLater(
@@ -89,11 +95,7 @@ void main() {
       final client = MockClient(
         (req) async => throw const SocketExceptionLike('DNS failure'),
       );
-      final uploader = LogUploader(
-        apiUrl: 'https://api.example.com',
-        workerSecret: 'k',
-        client: client,
-      );
+      final uploader = _uploader(client);
       await expectLater(
         uploader.upload(jobId: 'j', simIndex: 0, logText: 'x'),
         completes,
@@ -110,11 +112,7 @@ void main() {
           await Future.delayed(const Duration(seconds: 35));
           return http.Response('', 200);
         });
-        final uploader = LogUploader(
-          apiUrl: 'https://api.example.com',
-          workerSecret: 'k',
-          client: client,
-        );
+        final uploader = _uploader(client);
         await expectLater(
           uploader
               .upload(jobId: 'j', simIndex: 0, logText: 'x')
