@@ -118,12 +118,10 @@ void main() {
     },
   );
 
-  test('jobs/{id} missing → sim terminates with "job not found"', () async {
-    // Real-world recovery: a sim doc can outlive its parent job if the
-    // job was deleted (rare but possible — admin tooling, retention
-    // sweeps, etc.). The engine has a `_loadJobInfo` null-check that
-    // surfaces a clean error rather than throwing an NPE deep in the
-    // claim path.
+  test('jobs/{id} missing → orphaned sim is never claimed', () async {
+    // A sim doc can outlive its parent job (admin tooling, retention
+    // sweeps). The claimer only scans active jobs, so an orphan must be
+    // left alone rather than claimed, run, or counted against capacity.
     await seedJob(jobId: 'job-orphan', skipJobDoc: true);
 
     final engine = WorkerEngine(
@@ -134,29 +132,16 @@ void main() {
     addTearDown(() async => engine.dispose());
 
     await engine.start();
-    await _waitForCondition(() async {
-      final sims = await firestore
-          .collection('jobs')
-          .doc('job-orphan')
-          .collection('simulations')
-          .get();
-      return sims.docs.any((d) => d.data()['state'] != 'PENDING');
-    }, timeout: const Duration(seconds: 3));
+    // Give the PENDING listener time to fire and the claim loop to run.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
 
     final sims = await firestore
         .collection('jobs')
         .doc('job-orphan')
         .collection('simulations')
         .get();
-    expect(sims.docs.length, 1);
-    final err = sims.docs.first.data()['errorMessage'] as String?;
-    expect(
-      err,
-      contains('not found'),
-      reason:
-          'orphan sims must report the job-missing reason, not get '
-          'silently swallowed (or worse, retried forever)',
-    );
+    expect(sims.docs.single.data()['state'], 'PENDING');
+    expect(engine.currentState.activeSims, isEmpty);
   });
 }
 

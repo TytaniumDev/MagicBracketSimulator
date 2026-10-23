@@ -3,9 +3,10 @@ import 'dart:io';
 
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:worker_flutter/main.dart';
+
+import 'app_log.dart';
+import 'telemetry.dart';
 
 /// Callback that returns a Firebase App Check token string, or `null`
 /// if no token is available. Injected into [ApiClient] so tests can
@@ -20,17 +21,29 @@ Future<String?> defaultAppCheckTokenProvider({
   bool forceRefresh = false,
 }) async {
   if (!Platform.isMacOS) return null;
-  logToFile('AppCheck: defaultAppCheckTokenProvider: getting token (forceRefresh=$forceRefresh)');
+  AppLog.event(
+    TelemetryCategory.api,
+    'AppCheck: defaultAppCheckTokenProvider: getting token (forceRefresh=$forceRefresh)',
+  );
   try {
     final token = await FirebaseAppCheck.instance.getToken(forceRefresh);
     if (token == null) {
-      logToFile('AppCheck: defaultAppCheckTokenProvider: returned null token');
+      AppLog.event(
+        TelemetryCategory.api,
+        'AppCheck: defaultAppCheckTokenProvider: returned null token',
+      );
     } else {
-      logToFile('AppCheck: defaultAppCheckTokenProvider: successfully retrieved token of length ${token.length}');
+      AppLog.event(
+        TelemetryCategory.api,
+        'AppCheck: defaultAppCheckTokenProvider: successfully retrieved token of length ${token.length}',
+      );
     }
     return token;
   } catch (e, st) {
-    logToFile('AppCheck: defaultAppCheckTokenProvider: getToken failed: $e\n$st');
+    AppLog.event(
+      TelemetryCategory.api,
+      'AppCheck: defaultAppCheckTokenProvider: getToken failed: $e\n$st',
+    );
     return null;
   }
 }
@@ -109,7 +122,8 @@ class ApiClient {
   /// Returns `null` on platforms where App Check isn't wired up (Windows
   /// desktop has no `firebase_app_check` support) or when the underlying
   /// fetch fails.
-  Future<String?> _appCheckToken() => _appCheckTokenProvider(forceRefresh: false);
+  Future<String?> _appCheckToken() =>
+      _appCheckTokenProvider(forceRefresh: false);
 
   Map<String, dynamic> _decode(http.Response resp, String path) {
     Map<String, dynamic>? body;

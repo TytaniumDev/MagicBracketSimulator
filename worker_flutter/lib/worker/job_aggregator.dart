@@ -1,7 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import '../app_log.dart';
+import '../telemetry.dart';
 
 /// Calls `POST /api/jobs/:id/aggregate-if-done` after a sim's
 /// terminal write so the API runs `aggregateJobResults` immediately
@@ -31,14 +33,21 @@ class JobAggregator {
           .post(uri, headers: {'X-Worker-Secret': workerSecret!})
           .timeout(const Duration(seconds: 15));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        debugPrint('JobAggregator: triggered for $jobId');
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
+          'JobAggregator: triggered for $jobId',
+        );
       } else {
-        debugPrint(
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
           'JobAggregator: HTTP ${resp.statusCode} for $jobId: ${resp.body}',
         );
       }
     } catch (e) {
-      debugPrint('JobAggregator: trigger failed for $jobId: $e');
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'JobAggregator: trigger failed for $jobId: $e',
+      );
     }
   }
 

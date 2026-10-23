@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import '../app_log.dart';
+import '../telemetry.dart';
 
 /// Posts a single simulation's raw stdout log to the cloud API.
 ///
@@ -53,17 +55,22 @@ class LogUploader {
           )
           .timeout(const Duration(seconds: 30));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        debugPrint(
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
           'LogUploader: sim_$simIndex log uploaded '
           '(${(logText.length / 1024).toStringAsFixed(1)} KB)',
         );
       } else {
-        debugPrint(
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
           'LogUploader: HTTP ${resp.statusCode} for sim_$simIndex: ${resp.body}',
         );
       }
     } catch (e) {
-      debugPrint('LogUploader: sim_$simIndex upload failed: $e');
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'LogUploader: sim_$simIndex upload failed: $e',
+      );
     }
   }
 

@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'app_log.dart';
 import 'auth/auth_gate_screen.dart';
 import 'auth/auth_service.dart';
 import 'config.dart';
@@ -46,7 +47,7 @@ import 'worker/worker_engine.dart';
 /// The only way to fully quit is the tray icon's right-click → "Quit"
 /// menu item, which stops the engine and destroys the window.
 Future<void> main() async {
-  await _initFileLogger();
+  await AppLog.init();
   _log('main() started');
 
   // Crash reporting. The DSN is empty by default — local `flutter run`
@@ -340,10 +341,6 @@ Future<void> _startEngineSafe(WorkerEngine engine) async {
 // ── Global Tray Setup ─────────────────────────────────────────────
 TraySetup? _globalTray;
 
-// ── Simple file logger ────────────────────────────────────────────
-// Tray-only apps have no stderr console visible to the user; we write
-// to ~/Library/Logs/ which is the standard macOS user log location.
-File? _logFile;
 
 /// Appcast URL — RSS feed Sparkle polls to discover new releases. Pinned
 /// to `main` so a tag push that updates the appcast hits existing
@@ -383,10 +380,10 @@ Future<void> _activateAppCheck() async {
   }
   try {
     await FirebaseAppCheck.instance.activate(
-      appleProvider:
+      providerApple:
           kDebugMode
-              ? AppleProvider.debug
-              : AppleProvider.deviceCheck,
+              ? const AppleDebugProvider()
+              : const AppleDeviceCheckProvider(),
     );
     // Enable proactive token refresh so getToken() always has a cached
     // token ready. Without this, getToken() returns null (no token
@@ -459,42 +456,9 @@ Future<void> _initAutoUpdater() async {
   }
 }
 
-Future<void> _initFileLogger() async {
-  // Per-platform convention: macOS uses ~/Library/Logs; Windows uses
-  // %LocalAppData%\com.tytaniumdev.magicBracketSimulator\Logs.
-  late final Directory logsDir;
-  if (Platform.isWindows) {
-    final localAppData =
-        Platform.environment['LOCALAPPDATA'] ??
-        '${Platform.environment['USERPROFILE'] ?? ''}\\AppData\\Local';
-    logsDir = Directory(
-      '$localAppData\\com.tytaniumdev.magicBracketSimulator\\Logs',
-    );
-  } else {
-    final home = Platform.environment['HOME'] ?? '';
-    logsDir = Directory('$home/Library/Logs');
-  }
-  if (!logsDir.existsSync()) logsDir.createSync(recursive: true);
-  _logFile = File(
-    '${logsDir.path}${Platform.pathSeparator}com.tytaniumdev.magicBracketSimulator.log',
-  );
-  _logFile!.writeAsStringSync(
-    '\n=== ${DateTime.now().toIso8601String()} app launched ===\n',
-    mode: FileMode.append,
-  );
-}
-
-void _log(String msg) {
-  final line = '${DateTime.now().toIso8601String()} $msg\n';
-  if (kDebugMode) debugPrint(line);
-  try {
-    _logFile?.writeAsStringSync(line, mode: FileMode.append);
-  } catch (_) {
-    /* ignore */
-  }
-}
-
-void logToFile(String msg) => _log(msg);
+/// Boot-phase log line: written to the local file and kept as a
+/// breadcrumb (a no-op until Sentry is initialized).
+void _log(String msg) => AppLog.event(TelemetryCategory.boot, msg);
 
 /// Shown when Firebase failed to initialize (typically the first run before
 /// `flutterfire configure` has populated firebase_options.dart). Gives the
