@@ -120,12 +120,12 @@ class WorkerEngine {
   Future<void> start() async {
     if (_stateSubject.value.running) return;
     _stopped = false;
-    _stateSubject.add(currentState.copyWith(running: true, lastError: null));
+    _emit(currentState.copyWith(running: true, lastError: null));
 
     try {
       await _leaseWriter.start();
     } catch (e, st) {
-      _stateSubject.add(currentState.copyWith(lastError: 'lease writer: $e'));
+      _emit(currentState.copyWith(lastError: 'lease writer: $e'));
       await Telemetry.captureError(
         e,
         st,
@@ -160,7 +160,7 @@ class WorkerEngine {
                 TelemetryCategory.engineRuntime,
                 'PENDING listener error: $err',
               );
-              _stateSubject.add(
+              _emit(
                 currentState.copyWith(lastError: err.toString()),
               );
             },
@@ -170,7 +170,7 @@ class WorkerEngine {
         TelemetryCategory.engineStart,
         'PENDING listener setup failed: $e',
       );
-      _stateSubject.add(currentState.copyWith(lastError: 'listener setup: $e'));
+      _emit(currentState.copyWith(lastError: 'listener setup: $e'));
       await Telemetry.captureError(
         e,
         st,
@@ -194,7 +194,7 @@ class WorkerEngine {
     }
     _cancelByComposite.clear();
     await _leaseWriter.stop();
-    _stateSubject.add(currentState.copyWith(running: false));
+    _emit(currentState.copyWith(running: false));
   }
 
   /// Change the concurrency cap while the engine is running. Persists the
@@ -396,7 +396,7 @@ class WorkerEngine {
       unawaited(_jobAggregator.triggerIfDone(sim.jobId));
 
       if (result.success) {
-        _stateSubject.add(
+        _emit(
           currentState.copyWith(
             completedCount: currentState.completedCount + 1,
           ),
@@ -530,8 +530,15 @@ class WorkerEngine {
         })
         .whereType<SimDoc>()
         .toList(growable: false);
-    _stateSubject.add(currentState.copyWith(activeSims: active));
+    _emit(currentState.copyWith(activeSims: active));
     _leaseWriter.setActive(active.map((s) => s.compositeId));
+  }
+
+  /// Publish [state] unless the engine has been disposed. Sims that were
+  /// in flight when [dispose] ran still finish afterwards and report.
+  void _emit(EngineState state) {
+    if (_stateSubject.isClosed) return;
+    _stateSubject.add(state);
   }
 
   Future<void> dispose() async {
