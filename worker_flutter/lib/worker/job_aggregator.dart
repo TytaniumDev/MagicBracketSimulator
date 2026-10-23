@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:http/http.dart' as http;
-
+import '../api_client.dart';
 import '../app_log.dart';
 import '../telemetry.dart';
 
@@ -9,40 +8,25 @@ import '../telemetry.dart';
 /// terminal write so the API runs `aggregateJobResults` immediately
 /// instead of waiting for the 15-min stale-sweeper.
 ///
+/// Auth rides on [ApiClient], same as `LogUploader`.
+///
 /// Failures are non-fatal: the terminal sim state is already in
 /// Firestore by the time this fires, and the stale-sweeper picks up
 /// any jobs whose fast-path call missed.
 class JobAggregator {
-  JobAggregator({
-    required this.apiUrl,
-    required this.workerSecret,
-    http.Client? client,
-  }) : _client = client ?? http.Client();
+  JobAggregator({required ApiClient api}) : _api = api;
 
-  final String apiUrl;
-  final String? workerSecret;
-  final http.Client _client;
-
-  bool get isConfigured => workerSecret != null && workerSecret!.isNotEmpty;
+  final ApiClient _api;
 
   Future<void> triggerIfDone(String jobId) async {
-    if (!isConfigured) return;
-    final uri = Uri.parse('$apiUrl/api/jobs/$jobId/aggregate-if-done');
     try {
-      final resp = await _client
-          .post(uri, headers: {'X-Worker-Secret': workerSecret!})
+      await _api
+          .postJson('/api/jobs/$jobId/aggregate-if-done', const {})
           .timeout(const Duration(seconds: 15));
-      if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        AppLog.event(
-          TelemetryCategory.engineRuntime,
-          'JobAggregator: triggered for $jobId',
-        );
-      } else {
-        AppLog.event(
-          TelemetryCategory.engineRuntime,
-          'JobAggregator: HTTP ${resp.statusCode} for $jobId: ${resp.body}',
-        );
-      }
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'JobAggregator: triggered for $jobId',
+      );
     } catch (e) {
       AppLog.event(
         TelemetryCategory.engineRuntime,
@@ -50,6 +34,4 @@ class JobAggregator {
       );
     }
   }
-
-  void close() => _client.close();
 }

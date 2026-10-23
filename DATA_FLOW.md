@@ -92,6 +92,16 @@ parsing:
 Order in code: status is reported first (PATCH), then raw log is uploaded
 (POST).
 
+**Flutter desktop worker:** writes the sim's terminal state straight to
+Firestore (`SimClaimer.reportTerminal`), then POSTs the raw log to
+`/api/jobs/:id/logs/simulation` and, once that upload settles, calls
+`POST /api/jobs/:id/aggregate-if-done`. Waiting for the upload keeps the
+job's last log in the aggregation. Both calls go through `ApiClient` with
+the signed-in user's Firebase ID token; the API accepts that token in place
+of `X-Worker-Secret` when the uid is in the Firestore `allowedUsers`
+collection (`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`). The
+desktop worker has no worker secret.
+
 **Log upload size cap:** `POST /api/jobs/:id/logs/simulation` enforces the
 10 MB `MAX_LOG_BYTES` cap in three places:
 
@@ -396,6 +406,8 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, concurrent update scenarios |
 | Per-sim claim | `api/lib/claim-sim.test.ts` | `claimNextSim` (SQLite): oldest-first ordering, job promotion QUEUED→RUNNING, sim RUNNING update, skipping terminal jobs |
 | Per-sim claim (Flutter) | `worker_flutter/test/worker/sim_claim_test.dart` | `SimClaimer.tryClaim`: oldest active job, lowest index, job promotion QUEUED→RUNNING, skipping terminal/orphaned/flutter-local jobs |
+| Worker endpoint auth | `api/lib/worker-auth.test.ts` | `isWorkerOrAllowlistedUser`: worker secret, allowlisted user token, rejects non-allowlisted/invalid tokens |
+| Flutter log upload + aggregate trigger | `worker_flutter/test/worker/log_uploader_test.dart`, `worker_flutter/test/worker/job_aggregator_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |

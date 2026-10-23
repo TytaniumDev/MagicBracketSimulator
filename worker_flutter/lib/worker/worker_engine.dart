@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rxdart/subjects.dart';
 
+import '../api_client.dart';
 import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
@@ -63,6 +64,7 @@ class WorkerEngine {
     required this.config,
     required this.firestore,
     SimRunner? runnerOverride,
+    ApiClient? apiClient,
   }) : _runner =
            runnerOverride ??
            SimRunner(javaPath: config.javaPath, forgePath: config.forgePath),
@@ -77,22 +79,16 @@ class WorkerEngine {
          workerId: config.workerId,
          workerName: config.workerName,
        ),
-       _logUploader = LogUploader(
-         apiUrl: config.apiUrl,
-         workerSecret: config.workerSecret,
-       ),
-       _jobAggregator = JobAggregator(
-         apiUrl: config.apiUrl,
-         workerSecret: config.workerSecret,
-       );
+       _api = apiClient ?? ApiClient(baseUrl: config.apiUrl);
 
   final WorkerConfig config;
   final FirebaseFirestore firestore;
   final SimRunner _runner;
   final LeaseWriter _leaseWriter;
   final SimClaimer _claimer;
-  final LogUploader _logUploader;
-  final JobAggregator _jobAggregator;
+  final ApiClient _api;
+  late final LogUploader _logUploader = LogUploader(api: _api);
+  late final JobAggregator _jobAggregator = JobAggregator(api: _api);
 
   final _stateSubject = BehaviorSubject<EngineState>.seeded(
     EngineState.initial(),
@@ -349,20 +345,21 @@ class WorkerEngine {
       await _claimer.reportTerminal(sim: sim, result: result);
 
       // Best-effort: post the raw sim log to the API so it shows up under
-      // the frontend's per-sim log view. Non-blocking; failures only log.
+      // the frontend's per-sim log view, then ask the API to aggregate the
+      // parent job NOW if every sim is terminal. Without the trigger the
+      // job waits for the 15-minute stale-sweeper — see `JobAggregator`.
+      // The trigger waits for the upload because aggregation reads the
+      // uploaded logs; on the job's last sim it would otherwise miss one.
+      // Non-blocking; failures only log.
       unawaited(
-        _logUploader.upload(
-          jobId: sim.jobId,
-          simIndex: sim.index,
-          logText: result.logText,
-        ),
+        _logUploader
+            .upload(
+              jobId: sim.jobId,
+              simIndex: sim.index,
+              logText: result.logText,
+            )
+            .then((_) => _jobAggregator.triggerIfDone(sim.jobId)),
       );
-
-      // Fast-path: ask the API to aggregate the parent job NOW if
-      // every sim is terminal. Without this the job sits in RUNNING
-      // until the 15-minute stale-sweeper picks it up — see
-      // `JobAggregator` docstring. Idempotent + non-fatal.
-      unawaited(_jobAggregator.triggerIfDone(sim.jobId));
 
       if (result.success) {
         _stateSubject.add(
