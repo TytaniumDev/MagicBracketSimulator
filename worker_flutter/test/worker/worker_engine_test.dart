@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:worker_flutter/config.dart';
 import 'package:worker_flutter/models/sim.dart';
 import 'package:worker_flutter/worker/sim_runner.dart';
@@ -127,6 +128,37 @@ void main() {
       expect(stubRunner.invocations, 4);
     });
   });
+
+  group('setMaxCapacity', () {
+    test('raising the cap claims more sims without a restart', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final gate = Completer<void>();
+      stubRunner.gate = gate.future;
+      config.maxCapacity = 1;
+
+      await seedJob(jobId: 'job3', simCount: 3);
+      await engine.start();
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 1,
+        timeout: const Duration(seconds: 3),
+      );
+      // Give the claim loop a chance to over-claim if the cap were ignored.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(stubRunner.invocations, 1, reason: 'cap of 1 holds');
+
+      await engine.setMaxCapacity(3);
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 3,
+        timeout: const Duration(seconds: 3),
+      );
+      expect(stubRunner.invocations, 3);
+      expect(config.maxCapacity, 3);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('worker.capacity'), 3);
+
+      gate.complete();
+    });
+  });
 }
 
 /// Block until [check] returns true. Polls every 20ms.
@@ -149,12 +181,17 @@ class _StubSimRunner extends SimRunner {
 
   int invocations = 0;
 
+  /// When set, each run blocks until this completes, so tests can hold
+  /// sims "in flight" and observe the concurrency cap.
+  Future<void>? gate;
+
   @override
   Future<SimResult> runOne({
     required JobInfo job,
     Future<void>? cancelSignal,
   }) async {
     invocations++;
+    if (gate != null) await gate;
     return SimResult(
       success: true,
       durationMs: 10,

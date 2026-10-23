@@ -197,6 +197,16 @@ class WorkerEngine {
     _stateSubject.add(currentState.copyWith(running: false));
   }
 
+  /// Change the concurrency cap while the engine is running. Persists the
+  /// value, advertises it on the next lease tick, and immediately claims
+  /// more work if the cap went up. Lowering the cap lets running sims finish;
+  /// no new claims happen until the active count drops below it.
+  Future<void> setMaxCapacity(int n) async {
+    await config.setCapacity(n);
+    _leaseWriter.capacity = n;
+    if (currentState.running) unawaited(_tryClaimLoop());
+  }
+
   /// Pump the claim loop while we have capacity and PENDING sims exist.
   /// Runs until either we hit capacity or a claim returns NoneAvailable.
   Future<void> _tryClaimLoop() async {

@@ -22,7 +22,10 @@ class WorkerConfig {
 
   final String workerId;
   final String workerName;
-  final int maxCapacity;
+
+  /// Upper bound on concurrent sims. Mutable so a change from the UI takes
+  /// effect on the running engine without an app restart.
+  int maxCapacity;
   final String
   forgePath; // Path to extracted Forge install dir (contains forge-gui-desktop-*.jar)
   final String javaPath; // Absolute path to `java` binary
@@ -94,6 +97,7 @@ class WorkerConfig {
   }
 
   Future<void> setCapacity(int n) async {
+    maxCapacity = n;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kCapacity, n);
   }
