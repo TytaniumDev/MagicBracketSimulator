@@ -227,10 +227,11 @@ platform :mac do
     end
 
     # Notarize the signed .app, then staple the ticket so users without
-    # network at first launch don't see the unsigned warning.
+    # network at first launch don't see the unsigned warning. No
+    # `bundle_id:` — it only applied to the retired altool path, and
+    # current fastlane rejects it as an unknown option.
     notarize(
       package:      app_path,
-      bundle_id:    APP_IDENTIFIER,
       api_key:      asc_api_key,
       print_log:    true
     )
