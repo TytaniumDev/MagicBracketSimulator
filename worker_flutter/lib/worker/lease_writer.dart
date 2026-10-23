@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
+
+import '../app_log.dart';
+import '../telemetry.dart';
 
 /// Writes lease + heartbeat fields to `workers/{workerId}` every 5s.
 ///
@@ -59,7 +61,10 @@ class LeaseWriter {
     } catch (_) {
       // _writeOnce already swallows; this is belt-and-suspenders.
     }
-    _timer = Timer.periodic(tickInterval, (_) => _writeOnce(status: _activeStatus()));
+    _timer = Timer.periodic(
+      tickInterval,
+      (_) => _writeOnce(status: _activeStatus()),
+    );
   }
 
   Future<void> stop() async {
@@ -75,7 +80,10 @@ class LeaseWriter {
         'activeSimulations': 0,
       }, SetOptions(merge: true));
     } catch (e) {
-      debugPrint('LeaseWriter.stop() failed to clear lease: $e');
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'LeaseWriter.stop() failed to clear lease: $e',
+      );
     }
   }
 

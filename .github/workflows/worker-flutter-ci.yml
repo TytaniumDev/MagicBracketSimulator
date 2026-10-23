@@ -1,0 +1,92 @@
+# Presubmit for the Flutter desktop worker (worker_flutter/).
+#
+# The main CI workflow only covers api/ and frontend/, so worker changes
+# (including dependency bumps) used to be validated for the first time by
+# the post-merge release build. This runs the unit tests and compiles both
+# desktop targets on every PR that touches the worker, so a PR can be
+# merged on green without waiting for a release to find a broken build.
+#
+# No secrets: builds run with empty --dart-defines (Sentry no-ops, OAuth
+# secret empty), which is enough to prove the native code compiles.
+name: Worker Flutter CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "worker_flutter/**"
+      - ".github/workflows/worker-flutter-ci.yml"
+
+concurrency:
+  group: worker-flutter-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Worker Flutter / Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker_flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+      - run: flutter test
+
+  build-windows:
+    name: Worker Flutter / Build Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: worker_flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: flutter build windows --release
+        env:
+          # Same native crash backend as the release build.
+          SENTRY_NATIVE_BACKEND: crashpad
+        run: flutter build windows --release
+
+  build-macos:
+    name: Worker Flutter / Build macOS
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: worker_flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Pod install
+        working-directory: worker_flutter/macos
+        run: pod install --repo-update
+
+      - name: flutter build macos --debug
+        run: flutter build macos --debug

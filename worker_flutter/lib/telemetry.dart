@@ -11,6 +11,7 @@ enum TelemetryCategory {
   engineRuntime,
   autoUpdater,
   tray,
+  api,
 }
 
 extension TelemetryCategoryTag on TelemetryCategory {
@@ -32,6 +33,8 @@ extension TelemetryCategoryTag on TelemetryCategory {
         return 'auto_updater';
       case TelemetryCategory.tray:
         return 'tray';
+      case TelemetryCategory.api:
+        return 'api';
     }
   }
 }

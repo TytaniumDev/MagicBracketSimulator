@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:rxdart/subjects.dart';
 
+import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import '../telemetry.dart';
@@ -148,20 +148,28 @@ class WorkerEngine {
           .snapshots()
           .listen(
             (snap) {
-              debugPrint(
-                'WorkerEngine: PENDING listener fired with ${snap.docs.length} doc(s)',
+              AppLog.event(
+                TelemetryCategory.engineRuntime,
+                'PENDING listener fired',
+                data: {'docs': snap.docs.length},
               );
               _tryClaimLoop();
             },
             onError: (Object err) {
-              debugPrint('WorkerEngine: PENDING listener error: $err');
+              AppLog.event(
+                TelemetryCategory.engineRuntime,
+                'PENDING listener error: $err',
+              );
               _stateSubject.add(
                 currentState.copyWith(lastError: err.toString()),
               );
             },
           );
     } catch (e, st) {
-      debugPrint('WorkerEngine: listener setup failed: $e');
+      AppLog.event(
+        TelemetryCategory.engineStart,
+        'PENDING listener setup failed: $e',
+      );
       _stateSubject.add(currentState.copyWith(lastError: 'listener setup: $e'));
       await Telemetry.captureError(
         e,
@@ -197,7 +205,21 @@ class WorkerEngine {
       var attempt = 0;
       ClaimResult result;
       while (true) {
-        result = await _claimer.tryClaim();
+        try {
+          result = await _claimer.tryClaim();
+        } catch (e, st) {
+          // A failed claim query (permissions, missing index, offline) must
+          // not escape as an unhandled async error; the next listener tick
+          // retries.
+          AppLog.event(TelemetryCategory.engineRuntime, 'claim failed: $e');
+          await Telemetry.captureError(
+            e,
+            st,
+            category: TelemetryCategory.engineRuntime,
+            extra: {'phase': 'claim'},
+          );
+          return;
+        }
         // Retry on ClaimLostRace in-place rather than returning: an internal
         // Firestore txn conflict (no competing worker) won't cause the
         // listener to refire, so leaving the sim PENDING here would orphan
@@ -206,12 +228,25 @@ class WorkerEngine {
         attempt++;
         await Future<void>.delayed(Duration(milliseconds: 100 * attempt));
       }
-      if (result is ClaimNoneAvailable) return;
+      if (result is ClaimNoneAvailable) {
+        AppLog.event(TelemetryCategory.engineRuntime, 'claim: none available');
+        return;
+      }
       if (result is ClaimLostRace) {
         // exhausted retries; listener will refire on next change
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
+          'claim: lost race, giving up until next tick',
+          data: {'reason': result.reason},
+        );
         return;
       }
       if (result is ClaimSucceeded) {
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
+          'claim: succeeded',
+          data: {'jobId': result.sim.jobId, 'simId': result.sim.simId},
+        );
         unawaited(_runSim(result.sim));
       }
     }
@@ -230,9 +265,15 @@ class WorkerEngine {
     // up sims claimed after the subscription was set up.
     _watchJobCancellation(sim.jobId);
 
+    final simData = {'jobId': sim.jobId, 'simId': sim.simId};
     try {
       final job = await _loadJobInfo(sim.jobId);
       if (job == null) {
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
+          'sim: job not found',
+          data: simData,
+        );
         await _claimer.reportTerminal(
           sim: sim,
           result: SimResult(
@@ -256,6 +297,11 @@ class WorkerEngine {
         }
       }
       if (missingDecks.isNotEmpty) {
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
+          'sim: missing deck files',
+          data: {...simData, 'decks': missingDecks.join(', ')},
+        );
         await _claimer.reportTerminal(
           sim: sim,
           result: SimResult(
@@ -271,9 +317,24 @@ class WorkerEngine {
         return;
       }
 
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'sim: started',
+        data: simData,
+      );
       final result = await _runner.runOne(
         job: job,
         cancelSignal: cancelCompleter.future,
+      );
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'sim: finished',
+        data: {
+          ...simData,
+          'success': result.success,
+          'durationMs': result.durationMs,
+          if (result.errorMessage != null) 'error': result.errorMessage,
+        },
       );
       await _claimer.reportTerminal(sim: sim, result: result);
 
@@ -301,6 +362,11 @@ class WorkerEngine {
         );
       }
     } catch (e, st) {
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'sim: failed with exception: $e',
+        data: simData,
+      );
       await Telemetry.captureError(
         e,
         st,
@@ -360,7 +426,11 @@ class WorkerEngine {
             // Listener errors are non-fatal here — if the cancel signal misses,
             // the sim still completes or times out on its own. Log so a broken
             // Firestore connection is at least visible during dev.
-            debugPrint('cancellation listener for job $jobId errored: $err');
+            AppLog.event(
+              TelemetryCategory.engineRuntime,
+              'cancellation listener errored: $err',
+              data: {'jobId': jobId},
+            );
           },
         );
     _cancelSubs[jobId] = sub;

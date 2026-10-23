@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../app_log.dart';
 import '../models/sim.dart';
+import '../telemetry.dart';
 
 /// Result of an atomic claim attempt.
 sealed class ClaimResult {}
@@ -17,16 +19,22 @@ class ClaimLostRace extends ClaimResult {
   final String reason;
 }
 
-/// Atomically flip the oldest PENDING sim to RUNNING for this worker.
+/// Job statuses whose PENDING sims are still claimable.
+const _activeJobStatuses = ['QUEUED', 'RUNNING'];
+
+/// Atomically flip the next PENDING sim to RUNNING for this worker.
 ///
-/// Mirrors the API's `/api/jobs/claim-sim` endpoint, but via the
-/// `cloud_firestore` SDK directly. The transactional precondition
-/// (state == 'PENDING') is what makes this safe against races with
-/// Docker workers also claiming via the API endpoint — both paths run
-/// the same atomic Firestore transaction primitive.
+/// Mirrors the API's `claimNextSim` (`api/lib/firestore-job-store.ts`),
+/// but via the `cloud_firestore` SDK directly. The transactional
+/// precondition (state == 'PENDING') is what makes this safe against
+/// races with Docker workers also claiming via the API endpoint — both
+/// paths run the same atomic Firestore transaction primitive.
 ///
-/// Strategy: query for oldest PENDING sim across all jobs ordered by
-/// `createdAt`, then transactionally re-read and flip. If someone else
+/// Strategy: scan the oldest active (QUEUED/RUNNING) jobs, pick the
+/// lowest-index PENDING sim of the first one that has any, then
+/// transactionally re-read and flip. Going job-first means PENDING sims
+/// left behind by deleted, FAILED, or CANCELLED jobs are never claimed
+/// and can't crowd live work out of the scan window. If someone else
 /// got there first the txn observes state != PENDING and returns
 /// [ClaimLostRace] — caller should retry on the next listener tick.
 class SimClaimer {
@@ -43,32 +51,9 @@ class SimClaimer {
   /// Try to claim one PENDING simulation. Single attempt — caller decides
   /// whether to retry.
   Future<ClaimResult> tryClaim() async {
-    // Step 1: find a PENDING sim across all jobs.
-    // We use a collectionGroup query so we don't have to know which job
-    // the sim belongs to up front. Requires a collectionGroup index on
-    // `simulations.state` which the existing app already has.
-    final snapshot = await firestore
-        .collectionGroup('simulations')
-        .where('state', isEqualTo: 'PENDING')
-        .orderBy('createdAt')
-        .limit(20)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      return ClaimNoneAvailable();
-    }
-
-    QueryDocumentSnapshot<Map<String, dynamic>>? candidate;
-    for (final doc in snapshot.docs) {
-      final simRef = doc.reference;
-      final jobId = simRef.parent.parent!.id;
-      final jobDoc = await firestore.collection('jobs').doc(jobId).get();
-      if (!jobDoc.exists || jobDoc.data()?['source'] != 'flutter-local') {
-        candidate = doc;
-        break;
-      }
-    }
-
+    // Step 1: find the first PENDING sim of the oldest active job.
+    // Uses the existing (status, createdAt) composite index on `jobs`.
+    final candidate = await _findPendingSim();
     if (candidate == null) {
       return ClaimNoneAvailable();
     }
@@ -76,7 +61,13 @@ class SimClaimer {
     final simRef = candidate.reference;
     final data = candidate.data();
 
-    // Step 2: transactional claim with re-read.
+    // Step 2: transactional claim with re-read. Logged before the call so
+    // a native crash inside the transaction still leaves a trail.
+    AppLog.event(
+      TelemetryCategory.engineRuntime,
+      'claim: transaction start',
+      data: {'path': simRef.path},
+    );
     try {
       return await firestore.runTransaction<ClaimResult>((tx) async {
         final fresh = await tx.get(simRef);
@@ -98,20 +89,54 @@ class SimClaimer {
         // jobId is the parent of the parent of the sim doc
         final jobId = simRef.parent.parent!.id;
 
-        return ClaimSucceeded(SimDoc(
-          simId: simRef.id,
-          jobId: jobId,
-          index: (data['index'] as num?)?.toInt() ?? 0,
-          state: 'RUNNING',
-          workerId: workerId,
-          workerName: workerName,
-        ));
+        return ClaimSucceeded(
+          SimDoc(
+            simId: simRef.id,
+            jobId: jobId,
+            index: (data['index'] as num?)?.toInt() ?? 0,
+            state: 'RUNNING',
+            workerId: workerId,
+            workerName: workerName,
+          ),
+        );
       });
     } on FirebaseException catch (e) {
       return ClaimLostRace('firestore: ${e.code}');
     } catch (e) {
       return ClaimLostRace('unexpected: $e');
     }
+  }
+
+  /// Scan up to 10 oldest active jobs for one with a PENDING sim and return
+  /// its lowest-index PENDING sim, or null if none is available.
+  ///
+  /// Sims are fetched by index and filtered in memory (per-job sim count is
+  /// small) to avoid a composite (state, index) index — same trade-off as
+  /// the API's `claimNextSim`.
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _findPendingSim() async {
+    final jobs = await firestore
+        .collection('jobs')
+        .where('status', whereIn: _activeJobStatuses)
+        .orderBy('createdAt')
+        .limit(10)
+        .get();
+
+    for (final job in jobs.docs) {
+      final jobData = job.data();
+      if (jobData['source'] == 'flutter-local') continue;
+      final completed = (jobData['completedSimCount'] as num?)?.toInt() ?? 0;
+      final total = (jobData['totalSimCount'] as num?)?.toInt() ?? 0;
+      if (total > 0 && completed >= total) continue;
+
+      final sims = await job.reference
+          .collection('simulations')
+          .orderBy('index')
+          .get();
+      for (final sim in sims.docs) {
+        if (sim.data()['state'] == 'PENDING') return sim;
+      }
+    }
+    return null;
   }
 
   /// Report a sim's terminal state back to Firestore. Used after sim_runner

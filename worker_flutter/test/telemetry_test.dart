@@ -13,6 +13,7 @@ void main() {
       expect(TelemetryCategory.engineRuntime.tagValue, 'engine_runtime');
       expect(TelemetryCategory.autoUpdater.tagValue, 'auto_updater');
       expect(TelemetryCategory.tray.tagValue, 'tray');
+      expect(TelemetryCategory.api.tagValue, 'api');
     });
   });
 

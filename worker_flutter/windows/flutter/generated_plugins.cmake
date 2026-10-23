@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   auto_updater_windows
   cloud_firestore
+  firebase_app_check
   firebase_auth
   firebase_core
   firebase_storage
