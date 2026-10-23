@@ -231,10 +231,25 @@ platform :mac do
     # `bundle_id:` — it only applied to the retired altool path, and
     # current fastlane rejects it as an unknown option.
     notarize(
-      package:      app_path,
-      api_key:      asc_api_key,
-      print_log:    true
+      package:       app_path,
+      api_key:       asc_api_key,
+      print_log:     true,
+      skip_stapling: true
     )
+
+    # Staple separately with retries: the ticket can take a minute to
+    # become fetchable after Apple accepts the submission, and stapler
+    # fails (exit 68) until it is.
+    attempts = 0
+    begin
+      attempts += 1
+      sh("xcrun stapler staple -v #{app_path_abs.shellescape}")
+    rescue FastlaneCore::Interface::FastlaneShellError
+      raise if attempts >= 6
+      UI.important("Stapling failed (attempt #{attempts}/6); retrying in 30s")
+      sleep(30)
+      retry
+    end
 
     # Zip for distribution. The stapled .app inside the zip is what users
     # download. Use absolute paths so fastlane's `sh` working-directory
