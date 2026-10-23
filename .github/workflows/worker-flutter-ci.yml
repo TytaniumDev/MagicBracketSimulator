@@ -86,7 +86,14 @@ jobs:
 
       - name: Pod install
         working-directory: worker_flutter/macos
-        run: pod install --repo-update
+        run: pod update Firebase --repo-update
+
+      - name: Upload Podfile.lock (temporary)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: podfile-lock
+          path: worker_flutter/macos/Podfile.lock
 
       - name: flutter build macos --debug
         run: flutter build macos --debug
