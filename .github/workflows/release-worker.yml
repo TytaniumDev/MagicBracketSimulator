@@ -10,6 +10,11 @@ on:
   push:
     branches:
       - main
+    # The appcast PR this workflow opens merges back to main. Without
+    # this, that merge starts another release, which opens another
+    # appcast PR, forever.
+    paths-ignore:
+      - "worker_flutter/appcast.xml"
     tags:
       - "worker-v*"
 
