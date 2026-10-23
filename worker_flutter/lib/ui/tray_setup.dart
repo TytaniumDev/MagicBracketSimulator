@@ -183,6 +183,16 @@ class TraySetup with TrayListener, WindowListener {
             await eng.stop();
           }
           await dispose();
+          if (Platform.isWindows) {
+            // windowManager.destroy() posts WM_QUIT, and the runner then
+            // tears down the Flutter view while plugin threads (Firestore,
+            // Sentry) are still alive, which crashes on the way out
+            // (MAGIC-BRACKET-WORKER-4). The engine is already stopped, so
+            // flush Sentry and end the process directly.
+            _log('quit: exiting process (Windows)');
+            await Telemetry.close();
+            exit(0);
+          }
           await windowManager.destroy();
           break;
       }

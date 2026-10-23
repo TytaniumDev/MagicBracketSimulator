@@ -45,6 +45,10 @@ extension TelemetryCategoryTag on TelemetryCategory {
 class Telemetry {
   Telemetry._();
 
+  /// Flush queued events and shut the SDK down. Call before a hard
+  /// `exit()`, which would otherwise drop anything still in flight.
+  static Future<void> close() => Sentry.close();
+
   static void breadcrumb(
     TelemetryCategory category,
     String message, {

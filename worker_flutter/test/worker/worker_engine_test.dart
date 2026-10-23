@@ -158,6 +158,34 @@ void main() {
 
       gate.complete();
     });
+
+    test('overlapping triggers never claim past the cap', () async {
+      // Two claim loops running at once both pass the capacity check
+      // before either claim lands, and start two Firestore transactions
+      // in parallel (a native crash on Windows). Triggers that arrive
+      // mid-loop must fold into the running loop instead.
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final gate = Completer<void>();
+      stubRunner.gate = gate.future;
+
+      await seedJob(jobId: 'job4', simCount: 5);
+      await engine.start();
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 2,
+        timeout: const Duration(seconds: 3),
+      );
+
+      await Future.wait([engine.setMaxCapacity(3), engine.setMaxCapacity(3)]);
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 3,
+        timeout: const Duration(seconds: 3),
+      );
+      // Give a second, overlapping loop time to over-claim.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(stubRunner.invocations, 3, reason: 'cap of 3 holds');
+
+      gate.complete();
+    });
   });
 }
 
