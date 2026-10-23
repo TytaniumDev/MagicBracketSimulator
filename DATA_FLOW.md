@@ -40,6 +40,13 @@ conditionally flips the sim back to PENDING. The next worker poll reclaims
 it. Stuck-for-too-long sims (> 2.5 h) and always-retryable FAILED sims are
 handled the same way — reset to PENDING, reclaimed by the next poll.
 
+**Flutter desktop worker:** claims directly against Firestore instead of
+`claim-sim` (`worker_flutter/lib/worker/sim_claim.dart`), using the same
+strategy and transaction as `claimNextSim`: oldest active job first,
+lowest-index PENDING sim, and QUEUED → RUNNING job promotion on the first
+claim. Firestore rules allow that unauthenticated job update only for the
+QUEUED → RUNNING transition and the claim fields.
+
 **No Pub/Sub anywhere in the dispatch path.** Replaced 2026-04-15 after a
 single auth hiccup silently killed the subscription stream for three days.
 Polling fetches fresh credentials on every request and is trivially
@@ -388,6 +395,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
 | Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, concurrent update scenarios |
 | Per-sim claim | `api/lib/claim-sim.test.ts` | `claimNextSim` (SQLite): oldest-first ordering, job promotion QUEUED→RUNNING, sim RUNNING update, skipping terminal jobs |
+| Per-sim claim (Flutter) | `worker_flutter/test/worker/sim_claim_test.dart` | `SimClaimer.tryClaim`: oldest active job, lowest index, job promotion QUEUED→RUNNING, skipping terminal/orphaned/flutter-local jobs |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |

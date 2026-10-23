@@ -32,7 +32,8 @@ const _activeJobStatuses = ['QUEUED', 'RUNNING'];
 ///
 /// Strategy: scan the oldest active (QUEUED/RUNNING) jobs, pick the
 /// lowest-index PENDING sim of the first one that has any, then
-/// transactionally re-read and flip. Going job-first means PENDING sims
+/// transactionally re-read and flip it, promoting the job from QUEUED to
+/// RUNNING on its first claim. Going job-first means PENDING sims
 /// left behind by deleted, FAILED, or CANCELLED jobs are never claimed
 /// and can't crowd live work out of the scan window. If someone else
 /// got there first the txn observes state != PENDING and returns
@@ -78,6 +79,15 @@ class SimClaimer {
         if (freshData['state'] != 'PENDING') {
           return ClaimLostRace('state=${freshData['state']} at txn time');
         }
+
+        // jobRef is the parent of the sim's collection.
+        final jobRef = simRef.parent.parent!;
+        final jobSnap = await tx.get(jobRef);
+        final jobStatus = jobSnap.data()?['status'];
+        if (!_activeJobStatuses.contains(jobStatus)) {
+          return ClaimLostRace('job status=$jobStatus at txn time');
+        }
+
         tx.update(simRef, {
           'state': 'RUNNING',
           'workerId': workerId,
@@ -86,8 +96,21 @@ class SimClaimer {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // jobId is the parent of the parent of the sim doc
-        final jobId = simRef.parent.parent!.id;
+        // First claim on a job promotes it QUEUED -> RUNNING, so the UI
+        // shows it running and the stale-sweeper's QUEUED-age cap doesn't
+        // hard-fail it mid-run.
+        if (jobStatus == 'QUEUED') {
+          tx.update(jobRef, {
+            'status': 'RUNNING',
+            'startedAt': FieldValue.serverTimestamp(),
+            'claimedAt': FieldValue.serverTimestamp(),
+            'workerId': workerId,
+            'workerName': workerName,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        final jobId = jobRef.id;
 
         return ClaimSucceeded(
           SimDoc(

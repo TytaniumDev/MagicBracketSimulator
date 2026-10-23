@@ -9,8 +9,11 @@ job eventually reaches a terminal state (`COMPLETED`, `FAILED`, or
 Every 15 minutes, Cloud Scheduler hits `POST /api/admin/sweep-stale-jobs`.
 For each `QUEUED` or `RUNNING` job, the endpoint:
 
-1. **Hard-fails** any job that has sat `QUEUED` for more than 2 hours
-   (`QUEUED_JOB_HARD_FAIL_THRESHOLD_MS`, default `7200000`).
+1. **Finalizes or hard-fails `QUEUED` jobs.** If every sim is already
+   terminal (a Firestore-claiming worker finished the job without promoting
+   it), it runs aggregation. Otherwise it hard-fails jobs that have sat
+   `QUEUED` for more than 2 hours (`QUEUED_JOB_HARD_FAIL_THRESHOLD_MS`,
+   default `7200000`).
 2. **Hard-cancels** any simulation on a `RUNNING` job whose age — measured
    from `job.startedAt`, falling back to `job.createdAt` — exceeds 2 hours
    (`SIM_HARD_CANCEL_THRESHOLD_MS`, default `7200000`). Cancellation uses

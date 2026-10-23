@@ -46,6 +46,33 @@ void main() {
       },
     );
 
+    test('promotes a QUEUED job to RUNNING on its first claim', () async {
+      final jobRef = await seedJob(firestore, 'job1');
+      await seedSim(jobRef, 'sim1', index: 0);
+
+      await claimer.tryClaim();
+
+      final job = (await jobRef.get()).data()!;
+      expect(job['status'], 'RUNNING');
+      expect(job['workerId'], 'w1');
+      expect(job['workerName'], 'test-worker');
+      expect(job['startedAt'], isNotNull);
+      expect(job['claimedAt'], isNotNull);
+    });
+
+    test('leaves an already RUNNING job untouched', () async {
+      final jobRef = await seedJob(firestore, 'job1', status: 'RUNNING');
+      await seedSim(jobRef, 'sim1', index: 0);
+
+      final result = await claimer.tryClaim();
+      expect(result, isA<ClaimSucceeded>());
+
+      final job = (await jobRef.get()).data()!;
+      expect(job['status'], 'RUNNING');
+      expect(job.containsKey('startedAt'), isFalse);
+      expect(job.containsKey('workerId'), isFalse);
+    });
+
     test('picks a sim from the oldest active job', () async {
       final newerJob = await seedJob(
         firestore,
