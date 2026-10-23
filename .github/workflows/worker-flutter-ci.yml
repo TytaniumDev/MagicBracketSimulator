@@ -86,14 +86,27 @@ jobs:
 
       - name: Pod install
         working-directory: worker_flutter/macos
-        run: pod update Firebase --repo-update
+        run: pod install --repo-update
 
-      - name: Upload Podfile.lock (temporary)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: podfile-lock
-          path: worker_flutter/macos/Podfile.lock
+      # Runs Flutter's project migrations and writes the generated xcconfig
+      # exactly as `flutter build macos` would, without invoking Xcode.
+      - name: flutter build macos --config-only
+        run: flutter build macos --debug --config-only
 
-      - name: flutter build macos --debug
-        run: flutter build macos --debug
+      # The Runner target signs with the fastlane match Developer ID
+      # profile, which presubmit has no access to. Build through xcodebuild
+      # with signing turned off: it still compiles every native plugin and
+      # links the app, which is what this job is here to prove.
+      - name: Build macOS (unsigned)
+        working-directory: worker_flutter/macos
+        run: |
+          xcodebuild build \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            DEVELOPMENT_TEAM=""
