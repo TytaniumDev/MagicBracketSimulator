@@ -12,8 +12,9 @@ For each `QUEUED` or `RUNNING` job, the endpoint:
 1. **Finalizes or hard-fails `QUEUED` jobs.** If every sim is already
    terminal (a Firestore-claiming worker finished the job without promoting
    it), it runs aggregation. Otherwise it hard-fails jobs that have sat
-   `QUEUED` for more than 2 hours (`QUEUED_JOB_HARD_FAIL_THRESHOLD_MS`,
-   default `7200000`).
+   `QUEUED` for more than 3 days (`QUEUED_JOB_HARD_FAIL_THRESHOLD_MS`,
+   default `259200000`). The window is long because pod runs queue many
+   jobs at once and there is no cap on how many a user can have queued.
 2. **Hard-cancels** any simulation on a `RUNNING` job whose age — measured
    from `job.startedAt`, falling back to `job.createdAt` — exceeds 2 hours
    (`SIM_HARD_CANCEL_THRESHOLD_MS`, default `7200000`). Cancellation uses
@@ -77,7 +78,7 @@ curl -s -X POST \
 | Env var | Default | Meaning |
 |---------|---------|---------|
 | `SIM_HARD_CANCEL_THRESHOLD_MS` | `7200000` (2h) | Max lifetime for a non-terminal sim before it's force-cancelled |
-| `QUEUED_JOB_HARD_FAIL_THRESHOLD_MS` | `7200000` (2h) | Max time a job can sit `QUEUED` before it's force-failed |
+| `QUEUED_JOB_HARD_FAIL_THRESHOLD_MS` | `259200000` (3d) | Max time a job can sit `QUEUED` before it's force-failed |
 
 Both are read at API startup. To change them, update `api/apphosting.yaml`
 and redeploy.

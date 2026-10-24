@@ -289,6 +289,14 @@ function firestoreSimToStatus(simId: string, data: Record<string, unknown>): Sim
   };
 }
 
+/**
+ * One-shot job read: Firestore in GCP mode, REST in local mode. Shared with
+ * views that load many jobs at once (pod runs) under the same query key.
+ */
+export function fetchJob(jobId: string, queryClient: QueryClient): Promise<JobResponse> {
+  return db ? fetchJobFirestore(jobId, queryClient) : fetchJobRest(jobId);
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -307,7 +315,7 @@ export function useJobStream(jobId: string | undefined) {
   // Primary data: Firestore direct reads in GCP mode, REST in local mode
   const jobQuery = useQuery({
     queryKey: ['job', jobId],
-    queryFn: () => db ? fetchJobFirestore(jobId!, queryClient) : fetchJobRest(jobId!),
+    queryFn: () => fetchJob(jobId!, queryClient),
     enabled: !!jobId,
     refetchInterval: (query) => {
       if (isFirebaseConfigured) return false;

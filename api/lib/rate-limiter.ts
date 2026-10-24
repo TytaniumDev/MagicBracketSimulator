@@ -1,8 +1,10 @@
 import { isGcpMode } from './env';
 
-const MAX_ACTIVE_JOBS = 3;
-const MAX_JOBS_PER_DAY = 20;
-const MAX_SIMULATIONS_PER_DAY = 500;
+// No cap on active (QUEUED + RUNNING) jobs: pod runs queue one job per
+// 4-deck combination and let them wait their turn. The stale-sweeper clears
+// anything left QUEUED for more than 3 days.
+const MAX_JOBS_PER_DAY = 250;
+const MAX_SIMULATIONS_PER_DAY = 25_000;
 
 interface RateLimitResult {
   allowed: boolean;
@@ -20,22 +22,6 @@ export async function checkRateLimit(
   try {
     const { getFirestore } = await import('./firestore-client');
     const jobsRef = getFirestore().collection('jobs');
-
-    // Check active jobs (QUEUED + RUNNING). Limit caps the query at one
-    // over the threshold so a pathologically high-volume user can't cause
-    // the query to load thousands of docs into memory.
-    const activeSnap = await jobsRef
-      .where('createdBy', '==', userId)
-      .where('status', 'in', ['QUEUED', 'RUNNING'])
-      .limit(MAX_ACTIVE_JOBS + 1)
-      .get();
-
-    if (activeSnap.size >= MAX_ACTIVE_JOBS) {
-      return {
-        allowed: false,
-        reason: `You have ${activeSnap.size} active jobs. Maximum ${MAX_ACTIVE_JOBS} concurrent jobs allowed. Wait for current jobs to finish.`,
-      };
-    }
 
     // Check daily limits. Limit caps at (MAX_JOBS_PER_DAY + 1) — if there
     // are more than MAX_JOBS_PER_DAY we reject immediately, so we never

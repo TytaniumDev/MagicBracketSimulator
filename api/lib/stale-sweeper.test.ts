@@ -287,6 +287,23 @@ async function runTests() {
     }
   });
 
+  await test('QUEUED job waiting a day is left queued', async () => {
+    wipeAllActiveJobs();
+    const job = jobStoreSqlite.createJob(DECKS, 4);
+    const jobId = job.id;
+    try {
+      // Pod runs queue many jobs at once; a long wait is expected, not stale.
+      assert(QUEUED_JOB_HARD_FAIL_THRESHOLD_MS === 3 * 24 * 60 * 60 * 1000, 'default cap should be 3 days');
+      const oneDayLater = Date.now() + 24 * 60 * 60 * 1000;
+      const result = await sweep(oneDayLater);
+
+      assert(result.jobsFailed === 0, `no job should be failed, got ${result.jobsFailed}`);
+      assert(jobStoreSqlite.getJob(jobId)!.status === 'QUEUED', 'job should still be QUEUED');
+    } finally {
+      cleanupJob(jobId);
+    }
+  });
+
   await test('old QUEUED job is hard-failed', async () => {
     wipeAllActiveJobs();
     const job = jobStoreSqlite.createJob(DECKS, 4);

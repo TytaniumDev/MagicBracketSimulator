@@ -7,6 +7,7 @@ import { getApiBase, fetchWithAuth, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { Spinner } from '../components/Spinner';
+import { StatusBadge } from '../components/StatusBadge';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import type { JobStatus, JobSummary } from '@shared/types/job';
 import { GAMES_PER_CONTAINER } from '@shared/types/job';
@@ -33,30 +34,6 @@ function formatDate(isoString: string): string {
   if (diffDays < 7) return `${diffDays}d ago`;
 
   return date.toLocaleDateString();
-}
-
-function StatusBadge({ status }: { status: JobStatus }) {
-  const styles: Record<JobStatus, string> = {
-    QUEUED: 'bg-gray-600 text-gray-200',
-    RUNNING: 'bg-blue-600 text-white',
-    COMPLETED: 'bg-green-600 text-white',
-    FAILED: 'bg-red-600 text-white',
-    CANCELLED: 'bg-orange-600 text-white',
-  };
-
-  const labels: Record<JobStatus, string> = {
-    QUEUED: 'Queued',
-    RUNNING: 'Running',
-    COMPLETED: 'Completed',
-    FAILED: 'Failed',
-    CANCELLED: 'Cancelled',
-  };
-
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
-  );
 }
 
 // Convert a Firestore job document to JobSummary

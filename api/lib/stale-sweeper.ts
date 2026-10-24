@@ -26,9 +26,9 @@ export const SIM_HARD_CANCEL_THRESHOLD_MS = parseInt(
 ); // 2 hours
 
 export const QUEUED_JOB_HARD_FAIL_THRESHOLD_MS = parseInt(
-  process.env.QUEUED_JOB_HARD_FAIL_THRESHOLD_MS ?? '7200000',
+  process.env.QUEUED_JOB_HARD_FAIL_THRESHOLD_MS ?? '259200000',
   10
-); // 2 hours
+); // 3 days — pod runs can queue dozens of jobs that wait their turn
 
 export interface SweepResult {
   scanned: number;
