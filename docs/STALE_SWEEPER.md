@@ -25,12 +25,18 @@ For each `QUEUED` or `RUNNING` job, the endpoint:
 4. **Explicitly triggers aggregation** for local-mode jobs where every sim
    is now terminal (Firestore mode's recovery already does this).
 
+After the per-job pass it also **cancels orphaned sims**: any `PENDING` or
+`RUNNING` sim whose job is already `FAILED` or `CANCELLED`. Desktop workers
+built before the job-first claim (PR #507) claimed any `PENDING` sim, so
+these leftovers kept running for jobs that no longer show as active.
+
 The endpoint returns a JSON `SweepResult`:
 
 ```json
 {
   "scanned": 3,
   "simsCancelled": 1,
+  "orphanSimsCancelled": 0,
   "jobsFailed": 0,
   "recoveriesTriggered": 2,
   "aggregationsTriggered": 1,

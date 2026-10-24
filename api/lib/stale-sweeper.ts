@@ -15,6 +15,8 @@
  *      sims and re-trigger aggregation where applicable.
  *   4. Explicitly triggers aggregation when the job is in a state where
  *      recoverStaleJob's built-in re-trigger does not fire (local mode).
+ *   5. Cancels PENDING/RUNNING sims left under FAILED or CANCELLED jobs, so
+ *      no worker keeps claiming work for a job that already ended.
  */
 import * as Sentry from '@sentry/nextjs';
 import type { Job, SimulationStatus } from './types';
@@ -33,6 +35,7 @@ export const QUEUED_JOB_HARD_FAIL_THRESHOLD_MS = parseInt(
 export interface SweepResult {
   scanned: number;
   simsCancelled: number;
+  orphanSimsCancelled: number;
   jobsFailed: number;
   recoveriesTriggered: number;
   aggregationsTriggered: number;
@@ -133,6 +136,27 @@ export async function hardFailStaleQueuedJob(
 }
 
 /**
+ * Cancel every PENDING/RUNNING sim whose job already ended as FAILED or
+ * CANCELLED. Desktop workers before the job-first claim (PR #507) took any
+ * PENDING sim, so these leftovers kept running for jobs nobody could see.
+ *
+ * Returns the number of sims actually cancelled (races lost excluded).
+ */
+export async function cancelOrphanedSims(nowMs: number): Promise<number> {
+  const orphans = await jobStore.listOrphanedLiveSims();
+  const results = await Promise.all(
+    orphans.map(({ jobId, simId }) =>
+      jobStore.conditionalUpdateSimulationStatus(jobId, simId, ['PENDING', 'RUNNING'], {
+        state: 'CANCELLED',
+        errorMessage: 'Cancelled by stale-sweeper: job already ended',
+        completedAt: new Date(nowMs).toISOString(),
+      })
+    )
+  );
+  return results.filter(Boolean).length;
+}
+
+/**
  * Run one sweep cycle over every active (QUEUED or RUNNING) job.
  *
  * For each job, in order:
@@ -146,6 +170,9 @@ export async function hardFailStaleQueuedJob(
  *      call aggregateJobResults. This covers local (SQLite) mode, where
  *      recoverStaleJob's built-in re-trigger does not fire.
  *
+ * Then, once per sweep, cancel sims orphaned under FAILED/CANCELLED jobs
+ * (including any the steps above just failed).
+ *
  * Per-job errors are isolated: one broken job does not halt the sweep.
  * Errors are logged to Sentry with `component: 'stale-sweeper'` and also
  * collected into SweepResult.errors for the HTTP response.
@@ -158,6 +185,7 @@ export async function sweepStaleJobs(nowMs: number = Date.now()): Promise<SweepR
   const result: SweepResult = {
     scanned: activeJobs.length,
     simsCancelled: 0,
+    orphanSimsCancelled: 0,
     jobsFailed: 0,
     recoveriesTriggered: 0,
     aggregationsTriggered: 0,
@@ -211,6 +239,17 @@ export async function sweepStaleJobs(nowMs: number = Date.now()): Promise<SweepR
       console.error(`[StaleSweeper] job=${job.id} error:`, message);
       result.errors.push({ jobId: job.id, error: message });
     }
+  }
+
+  try {
+    result.orphanSimsCancelled = await cancelOrphanedSims(nowMs);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    Sentry.captureException(err, {
+      tags: { component: 'stale-sweeper', phase: 'orphan-sims' },
+    });
+    console.error('[StaleSweeper] orphan sim cleanup error:', message);
+    result.errors.push({ jobId: '*', error: message });
   }
 
   return result;
