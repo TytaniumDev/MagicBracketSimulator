@@ -59,6 +59,31 @@ export function parsePodRunJobIds(search: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Live updates
+// ---------------------------------------------------------------------------
+
+/** Most ids one Firestore `in` query may match. */
+export const FIRESTORE_IN_LIMIT = 30;
+
+/**
+ * Split a run's job ids into fixed batches of `size` (by position, so a batch
+ * never changes as pods finish) and keep only the batches that still have an
+ * unfinished pod. Each kept batch gets one live listener.
+ */
+export function activePodChunks(
+  jobIds: readonly string[],
+  unfinishedIds: ReadonlySet<string>,
+  size: number = FIRESTORE_IN_LIMIT,
+): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < jobIds.length; i += size) {
+    const chunk = jobIds.slice(i, i + size);
+    if (chunk.some((id) => unfinishedIds.has(id))) chunks.push(chunk);
+  }
+  return chunks;
+}
+
+// ---------------------------------------------------------------------------
 // Standings
 // ---------------------------------------------------------------------------
 

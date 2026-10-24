@@ -252,6 +252,12 @@ unused by the current worker, which uploads per-simulation via
     (i.e., the user was watching a running job). If the initial REST response
     already returned a terminal job, the fetch is skipped to avoid redundancy.
 
+- **Pod run page (`usePodRunJobs`)**
+  - Loads each pod's job with the same one-shot read and `['job', id]` cache key as the job page.
+  - GCP mode: pods are split by position into batches of 30 (Firestore's `in` limit). Each batch that still has an unfinished pod gets one `onSnapshot` on `jobs where documentId in [...]`, merged with `mergeFirestoreJobUpdate`; the listener is dropped once every pod in its batch is terminal.
+  - LOCAL mode: each unfinished pod polls `GET /api/jobs/:id` every 5 seconds.
+  - Standings only count pods with `results`, which aggregation writes before setting COMPLETED.
+
 - **LOCAL mode: TanStack Query polling**
   - TanStack Query `refetchInterval` polls `GET /api/jobs/:id` and `GET /api/jobs/:id/simulations` every 2 seconds.
   - Polling stops automatically when the job reaches a terminal state.
