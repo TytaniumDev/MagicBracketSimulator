@@ -252,6 +252,13 @@ export async function getSimulationStatuses(jobId: string): Promise<SimulationSt
   return (await sqliteStore()).getSimulationStatuses(jobId);
 }
 
+export async function listOrphanedLiveSims(): Promise<{ jobId: string; simId: string }[]> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.listOrphanedLiveSims();
+  }
+  return (await sqliteStore()).listOrphanedLiveSims();
+}
+
 export async function resetJobForRetry(id: string): Promise<boolean> {
   if (USE_FIRESTORE) {
     return firestoreStore.resetJobForRetry(id);

@@ -159,6 +159,8 @@ calls `aggregateJobResults(jobId)` when the cancel-and-recover pass
 leaves the job with every sim in a terminal state (COMPLETED or
 CANCELLED). Step (d) is the catch-all that unsticks jobs where a worker
 died mid-sim before the dead-worker reclaim could complete the pipeline.
+After that pass it cancels any PENDING/RUNNING sim whose job is already
+FAILED or CANCELLED, so outdated workers can't keep claiming them.
 
 ## Lease-based crash recovery (Flutter workers)
 

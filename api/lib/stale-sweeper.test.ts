@@ -370,6 +370,44 @@ async function runTests() {
     }
   });
 
+  await test('PENDING/RUNNING sims under a FAILED job are cancelled', async () => {
+    wipeAllActiveJobs();
+    const job = jobStoreSqlite.createJob(DECKS, 12);
+    const jobId = job.id;
+    try {
+      // An old coverage job that failed but left sims claimable.
+      jobStoreSqlite.initializeSimulations(jobId, 3);
+      jobStoreSqlite.updateSimulationStatus(jobId, 'sim_000', { state: 'COMPLETED' });
+      jobStoreSqlite.updateSimulationStatus(jobId, 'sim_001', { state: 'RUNNING' });
+      jobStoreSqlite.updateJobStatus(jobId, 'FAILED');
+
+      const result = await sweep();
+
+      assert(result.orphanSimsCancelled === 2, `two orphan sims expected, got ${result.orphanSimsCancelled}`);
+      const states = jobStoreSqlite.getSimulationStatuses(jobId).map((s) => s.state);
+      assert(
+        JSON.stringify(states) === JSON.stringify(['COMPLETED', 'CANCELLED', 'CANCELLED']),
+        `unexpected sim states: ${states.join(',')}`
+      );
+      assert(jobStoreSqlite.getJob(jobId)!.status === 'FAILED', 'job should stay FAILED');
+    } finally {
+      cleanupJob(jobId);
+    }
+  });
+
+  await test('PENDING sims under an active job are not treated as orphans', async () => {
+    wipeAllActiveJobs();
+    const jobId = makeRunningJob(2);
+    try {
+      const result = await sweep(Date.now());
+      assert(result.orphanSimsCancelled === 0, `no orphans expected, got ${result.orphanSimsCancelled}`);
+      const sims = jobStoreSqlite.getSimulationStatuses(jobId);
+      assert(sims.every((s) => s.state === 'PENDING'), 'sims should still be PENDING');
+    } finally {
+      cleanupJob(jobId);
+    }
+  });
+
   // ── Summary ───────────────────────────────────────────────────────────
 
   console.log(`\n${results.filter(r => r.passed).length}/${results.length} passed`);

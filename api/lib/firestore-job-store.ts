@@ -770,6 +770,44 @@ export async function getSimulationStatus(
 }
 
 /**
+ * List PENDING/RUNNING sims whose job already ended as FAILED or CANCELLED.
+ * Nothing will ever aggregate these, but a worker that claims straight from
+ * Firestore (older desktop builds) could still pick them up.
+ *
+ * Uses the collection-group single-field index on `simulations.state`.
+ */
+export async function listOrphanedLiveSims(): Promise<{ jobId: string; simId: string }[]> {
+  const snapshot = await firestore
+    .collectionGroup('simulations')
+    .where('state', 'in', ['PENDING', 'RUNNING'])
+    .select()
+    .get();
+
+  const simsByJob = new Map<string, string[]>();
+  for (const doc of snapshot.docs) {
+    const jobRef = doc.ref.parent.parent;
+    if (!jobRef || jobRef.parent.id !== 'jobs') continue;
+    const simIds = simsByJob.get(jobRef.id) ?? [];
+    simIds.push(doc.id);
+    simsByJob.set(jobRef.id, simIds);
+  }
+  if (simsByJob.size === 0) return [];
+
+  const jobDocs = await firestore.getAll(
+    ...[...simsByJob.keys()].map((id) => jobsCollection.doc(id))
+  );
+  const orphans: { jobId: string; simId: string }[] = [];
+  for (const jobDoc of jobDocs) {
+    const status = jobDoc.data()?.status;
+    if (status !== 'FAILED' && status !== 'CANCELLED') continue;
+    for (const simId of simsByJob.get(jobDoc.id) ?? []) {
+      orphans.push({ jobId: jobDoc.id, simId });
+    }
+  }
+  return orphans;
+}
+
+/**
  * Get all simulation statuses for a job, ordered by index.
  */
 export async function getSimulationStatuses(
