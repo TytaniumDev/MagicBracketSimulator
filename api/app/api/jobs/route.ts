@@ -7,7 +7,6 @@ import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, createJobSchema } from '@/lib/validation';
 import type { JobSummary } from '@shared/types/job';
 import { isGcpMode } from '@/lib/job-store-factory';
-import { checkRateLimit } from '@/lib/rate-limiter';
 import { pushToAllWorkers } from '@/lib/worker-push';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
@@ -132,11 +131,8 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     }
     const { deckIds, simulations, parallelism, idempotencyKey } = parsed.data;
 
-    // Rate limiting
-    const rateCheck = await checkRateLimit(user.uid, simulations);
-    if (!rateCheck.allowed) {
-      return errorResponse(rateCheck.reason ?? 'Rate limit exceeded', 429);
-    }
+    // No per-user job or game limits: only allowlisted users reach this
+    // point (verifyAllowedUser), and pod runs queue many jobs at once.
 
     // Warn about duplicate decks (not an error, but produces meaningless results)
     const uniqueDeckIds = new Set(deckIds);
