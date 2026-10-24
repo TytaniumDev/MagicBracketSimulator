@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { isLocalMode } from './env';
+import { isInAllowedUsers } from './allowed-users';
 
 // Local mode: skip Firebase Auth entirely when GOOGLE_CLOUD_PROJECT is not set
 const IS_LOCAL_MODE = isLocalMode();
@@ -49,18 +50,30 @@ export interface AuthUser {
   email: string;
 }
 
-// Email allowlist - can be loaded from Firestore or env var
+// Extra pre-approved emails (comma-separated), on top of Firestore allowedUsers
 const ALLOWED_EMAILS: string[] = process.env.ALLOWED_EMAILS
   ? process.env.ALLOWED_EMAILS.split(',').map(e => e.trim().toLowerCase())
   : [];
-
-// If allowlist is empty, allow all authenticated users (dev mode)
-const ALLOWLIST_ENABLED = ALLOWED_EMAILS.length > 0;
 
 // Admin email list - parsed from ADMIN_EMAILS env var (comma-separated)
 const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
   ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase())
   : [];
+
+/**
+ * May this account run simulations? True for admins, emails in ALLOWED_EMAILS,
+ * and users approved into Firestore `allowedUsers` (via an access request).
+ * `lookup` is injectable for tests.
+ */
+export async function isAllowedAccount(
+  uid: string,
+  email: string,
+  lookup: (uid: string) => Promise<boolean> = isInAllowedUsers,
+): Promise<boolean> {
+  const normalized = email.toLowerCase();
+  if (isAdmin(normalized) || ALLOWED_EMAILS.includes(normalized)) return true;
+  return lookup(uid);
+}
 
 /**
  * Check if an email is an admin. Always true in local mode.
@@ -166,8 +179,7 @@ export async function verifyAllowedUser(req: NextRequest): Promise<AuthUser> {
       throw new Error('Token does not contain email');
     }
 
-    // Check allowlist if enabled
-    if (ALLOWLIST_ENABLED && !ALLOWED_EMAILS.includes(decoded.email.toLowerCase())) {
+    if (!(await isAllowedAccount(decoded.uid, decoded.email))) {
       throw new Error('User not in allowlist');
     }
 
