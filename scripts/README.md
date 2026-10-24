@@ -8,8 +8,8 @@ Development and deployment utilities. Run from the repo root. Used by `npm run` 
 
 **GCP / Firebase (deployment & secrets):**
 - `populate-worker-secret.js` — Stores worker config in GCP Secret Manager
-- `populate-frontend-secret.js` — Stores frontend config in GCP Secret Manager
-- `fetch-frontend-config.js` — Pulls frontend `config.json` from Secret Manager
+- `sync-api-secrets.js` — Copies the API's secrets from Doppler into GCP Secret Manager (run via the Sync API Secrets workflow)
+- `lib/secret-manager.js` — Shared Secret Manager helpers (create-if-missing, add version if changed)
 - `get-cloud-run-url.js` — Prints deployed Cloud Run service URLs
 
 **Auth (GCP mode):**

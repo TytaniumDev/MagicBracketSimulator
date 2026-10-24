@@ -17,7 +17,7 @@ Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the worker
 |--------------------|-----------------|---------|
 | Firebase / GCP project config | Firebase Console, GCP Console | Frontend (Firebase Hosting), API (Cloud Run) |
 | GCP credentials (ADC or key) | `gcloud auth application-default login` or key file | worker, scripts (Secret Manager access) |
-| Worker / API env (e.g. WORKER_SECRET) | API env (Cloud Run); worker: **Secret Manager** (or .env) | API, worker |
+| **API secrets** (WORKER_SECRET, RESEND_API_KEY, ADMIN_EMAIL(S), MOXFIELD_USER_AGENT, SENTRY_DSN) | **Doppler**, synced to GCP Secret Manager by the **Sync API Secrets** workflow (§3.1) | API (Firebase App Hosting) |
 | **worker config** (API_URL, GCS_BUCKET, etc.) | **Google Secret Manager** (`npm run populate-worker-secret`) or worker .env | worker |
 | **CI/CD Secrets** | **Doppler** (project: magic-bracket-simulator, config: dev) | GitHub Actions |
 | **Frontend API URL** | **Committed** in `frontend/public/config.json` (stable App Hosting URL). **Not a secret** — visible when the app loads. Always used as-is; no override. | Frontend (Firebase Hosting) |
@@ -183,23 +183,36 @@ Set at least:
   - Cloud Run (API) env,
   - worker config (in Secret Manager via `npm run populate-worker-secret`, or in `.env` if not using Secret Manager).
 
-### 3.1 Firebase App Hosting (API backend) and Moxfield
+### 3.1 Firebase App Hosting (API backend) secrets — managed in Doppler
 
-The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secrets are referenced there (`secretEnv`: `WORKER_SECRET`, `MOXFIELD_USER_AGENT`). For the backend to read them at runtime you must **grant the App Hosting backend access** to each secret:
+The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`), which can only read secrets from GCP Secret Manager. **Doppler is the source of truth**; the **Sync API Secrets** workflow (`.github/workflows/sync-api-secrets.yml`, `scripts/sync-api-secrets.js`) copies them across. Never edit these secrets in GCP directly — the next sync overwrites them.
 
-1. Create the secret (if not already in Secret Manager):
-   ```bash
-   firebase apphosting:secrets:set moxfield-user-agent
-   ```
-   When prompted, enter your Moxfield User-Agent string and confirm adding permissions.
+For every `- variable: NAME` / `secret: id` entry in `apphosting.yaml`, the workflow copies the Doppler key `NAME` into the GCP secret `id`:
 
-2. If you created the secret in [Cloud Secret Manager](https://console.cloud.google.com/security/secret-manager) instead of the CLI, grant access so the backend can read it:
-   ```bash
-   firebase apphosting:secrets:grantaccess moxfield-user-agent --backend api
-   ```
-   Use your backend ID (e.g. from Firebase Console → Build → App Hosting → your backend). Without this step, `MOXFIELD_USER_AGENT` is not injected and `/api/moxfield-status` returns `enabled: false`; full Moxfield URL import will then fail until access is granted.
+| Doppler key | GCP secret |
+|---|---|
+| `WORKER_SECRET` | `worker-secret` |
+| `MOXFIELD_USER_AGENT` | `moxfield-user-agent` |
+| `RESEND_API_KEY` | `resend-api-key` |
+| `ADMIN_EMAIL` | `admin-email` (receives access-request emails) |
+| `ADMIN_EMAILS` | `admin-emails` (comma-separated admin accounts) |
+| `SENTRY_DSN` | `sentry-dsn` (also used for `NEXT_PUBLIC_SENTRY_DSN`) |
 
-3. **Trigger a new rollout** after granting access. Secrets are injected when a new revision is built; the currently running revision will not see the secret until you redeploy. Either push a new commit to your App Hosting live branch (e.g. `main`) to trigger an automatic rollout, or in [Firebase Console](https://console.firebase.google.com/) go to **Build** → **App Hosting** → your backend → **Rollouts** and create a new rollout. Until a new rollout completes, the API will keep returning `enabled: false` for `/api/moxfield-status`.
+`worker-host-config` is excluded; the Provision Worker workflow builds it (§1.3).
+
+To change an API secret:
+
+1. Edit it in Doppler (same project/config the `DOPPLER_TOKEN` GitHub secret points at).
+2. Run the sync: `gh workflow run sync-api-secrets.yml` (or **Actions → Sync API Secrets → Run workflow**). Keys missing from Doppler are skipped; unchanged values get no new version.
+3. Roll out (see **Rolling out** below) so App Hosting picks up the new version.
+
+**Adding a new API secret:** add the `variable`/`secret` entry to `apphosting.yaml`, add the key to Doppler, run the sync, then grant the backend access once (the sync creates the secret but doesn't grant App Hosting read access):
+```bash
+firebase apphosting:secrets:grantaccess <secret-id> --backend api
+```
+Without access, the variable is not injected (e.g. a missing `MOXFIELD_USER_AGENT` makes `/api/moxfield-status` return `enabled: false`).
+
+**Rolling out:** secrets are injected when a new revision is built; the currently running revision will not see the secret until you redeploy. Either push a new commit to your App Hosting live branch (e.g. `main`) to trigger an automatic rollout, or in [Firebase Console](https://console.firebase.google.com/) go to **Build** → **App Hosting** → your backend → **Rollouts** and create a new rollout. Until a new rollout completes, the API keeps the old values.
 
 ---
 
@@ -211,7 +224,7 @@ The API is deployed via **Firebase App Hosting** (`api/apphosting.yaml`). Secret
 - [ ] **Worker machine:** Run `./scripts/setup-worker.sh` — reads from Secret Manager, no manual config.
 - [ ] **Frontend config:** Committed `config.json` has the stable App Hosting URL (always used as-is).
 - [ ] **API (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in worker config.
-- [ ] **API (Firebase App Hosting):** If using Moxfield URL import, run `firebase apphosting:secrets:grantaccess moxfield-user-agent` (and `apphosting:secrets:set moxfield-user-agent` if the secret does not exist yet). See §3.1.
+- [ ] **API (Firebase App Hosting):** API secrets live in Doppler; run the Sync API Secrets workflow after changing them, then roll out. See §3.1.
 
 ---
 
