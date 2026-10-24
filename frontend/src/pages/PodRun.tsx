@@ -68,7 +68,7 @@ export default function PodRunPage() {
       <p className="text-sm text-gray-400 mb-6">
         {finished} of {jobIds.length} pods finished
         {withResults < finished && ` (${finished - withResults} without results)`}.
-        Standings update as pods finish.
+        Standings update live as each pod finishes.
         {!id && ' Bookmark this page to come back to it.'}
       </p>
 
@@ -132,7 +132,14 @@ export default function PodRunPage() {
                 className="flex items-center justify-between gap-3 bg-gray-800 hover:bg-gray-700 rounded-md px-3 py-2 transition-colors"
               >
                 <span className="text-sm text-gray-200 truncate">{job.deckNames.join(' vs ')}</span>
-                <StatusBadge status={job.status} />
+                <span className="flex items-center gap-3 flex-shrink-0">
+                  {job.status === 'RUNNING' && (
+                    <span className="text-xs text-gray-400 font-mono">
+                      {Math.min(job.gamesCompleted, job.simulations)}/{job.simulations} games
+                    </span>
+                  )}
+                  <StatusBadge status={job.status} />
+                </span>
               </Link>
             </li>
           ))}

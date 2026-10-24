@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aggregatePodStandings, countPods, parsePodRunJobIds, podCombinations, podRunPath, savedPodRunPath } from './pods';
+import { activePodChunks, aggregatePodStandings, countPods, parsePodRunJobIds, podCombinations, podRunPath, savedPodRunPath } from './pods';
 import type { JobResponse } from '@shared/types/job';
 
 function makeJob(overrides: Partial<JobResponse> = {}): JobResponse {
@@ -59,6 +59,22 @@ describe('pod run path', () => {
 
   it('links a saved run by its id', () => {
     expect(savedPodRunPath('run123')).toBe('/pods/run123');
+  });
+});
+
+describe('activePodChunks', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e'];
+
+  it('keeps only batches with an unfinished pod', () => {
+    expect(activePodChunks(ids, new Set(['d']), 2)).toEqual([['c', 'd']]);
+  });
+
+  it('batches by position, not by which pods are unfinished', () => {
+    expect(activePodChunks(ids, new Set(['a', 'e']), 2)).toEqual([['a', 'b'], ['e']]);
+  });
+
+  it('returns nothing once every pod is finished', () => {
+    expect(activePodChunks(ids, new Set(), 2)).toEqual([]);
   });
 });
 
