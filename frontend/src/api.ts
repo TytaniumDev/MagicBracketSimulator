@@ -90,6 +90,26 @@ export async function updateWorkerOverride(
 }
 
 /**
+ * Create a simulation job for one 4-deck pod. Returns the new job's id.
+ */
+export async function createJob(body: {
+  deckIds: string[];
+  simulations: number;
+  idempotencyKey?: string;
+}): Promise<{ id: string }> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/jobs`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to create job');
+  }
+  return data;
+}
+
+/**
  * Delete a single job (admin only)
  */
 export async function deleteJob(jobId: string): Promise<void> {

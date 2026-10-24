@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getApiBase, fetchWithAuth } from '../api';
+import { getApiBase, fetchWithAuth, createJob } from '../api';
 import { getRuntimeConfig } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import { ColorIdentity } from '../components/ColorIdentity';
@@ -10,6 +10,8 @@ import { RequestAccessCard } from '../components/RequestAccessCard';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
+import { REQUIRED_DECK_COUNT } from '@shared/types/job';
+import { MAX_POD_RUN_DECKS, podCombinations, podRunPath } from '../utils/pods';
 
 interface Deck {
   id: string;
@@ -103,7 +105,10 @@ function SimulationForm() {
   const [simulations, setSimulations] = useState(100);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+  // Reused across retries of the same submission so the API dedups it.
+  // Tied to the selection and game count: changing either starts fresh.
+  const [idempotency, setIdempotency] = useState<{ key: string; signature: string } | null>(null);
+  const [podsQueued, setPodsQueued] = useState(0);
 
   // Data state - separate precon and community deck lists
   const [preconDecks, setPreconDecks] = useState<Deck[]>([]);
@@ -114,6 +119,10 @@ function SimulationForm() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const apiBase = getApiBase();
+
+  const isPodRun = selectedDeckIds.length > REQUIRED_DECK_COUNT;
+  const canSubmit = selectedDeckIds.length >= REQUIRED_DECK_COUNT;
+  const pods = useMemo(() => podCombinations(selectedDeckIds), [selectedDeckIds]);
 
   // Combine for filtering and selection
   const allDecks = useMemo(() => [...preconDecks, ...communityDeckList], [preconDecks, communityDeckList]);
@@ -234,7 +243,7 @@ function SimulationForm() {
       if (prev.includes(id)) {
         return prev.filter((x) => x !== id);
       }
-      if (prev.length >= 4) {
+      if (prev.length >= MAX_POD_RUN_DECKS) {
         // Replace oldest selection
         return [...prev.slice(1), id];
       }
@@ -336,38 +345,46 @@ function SimulationForm() {
     e.preventDefault();
     setSubmitError(null);
 
-    if (selectedDeckIds.length !== 4) {
-      setSubmitError('Please select exactly 4 decks');
+    if (selectedDeckIds.length < REQUIRED_DECK_COUNT) {
+      setSubmitError(`Please select at least ${REQUIRED_DECK_COUNT} decks`);
       return;
     }
 
-    const key = idempotencyKey ?? crypto.randomUUID();
-    if (!idempotencyKey) setIdempotencyKey(key);
+    const signature = `${selectedDeckIds.join(',')}|${simulations}`;
+    const key = idempotency?.signature === signature ? idempotency.key : crypto.randomUUID();
+    setIdempotency({ key, signature });
     setIsSubmitting(true);
+    setPodsQueued(0);
+
+    if (isPodRun) {
+      // One job per pod, created in order. Each pod's idempotency key is
+      // derived from the run's key, so a retry after a partial failure
+      // reuses the pods already queued instead of duplicating them.
+      const jobIds: string[] = [];
+      try {
+        for (const [i, pod] of pods.entries()) {
+          const { id } = await createJob({ deckIds: pod, simulations, idempotencyKey: `${key}-pod${i}` });
+          jobIds.push(id);
+          setPodsQueued(jobIds.length);
+        }
+        navigate(podRunPath(jobIds));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'An error occurred';
+        setSubmitError(
+          `Queued ${jobIds.length} of ${pods.length} pods before an error: ${message}. Submit again to queue the rest.`,
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     try {
-      const body = {
-        deckIds: selectedDeckIds,
-        simulations,
-        idempotencyKey: key,
-      };
-
-      const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create job');
-      }
-
-      navigate(`/jobs/${data.id}`);
+      const { id } = await createJob({ deckIds: selectedDeckIds, simulations, idempotencyKey: key });
+      navigate(`/jobs/${id}`);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'An error occurred');
-      setIdempotencyKey(null);
+      setIdempotency(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -475,14 +492,15 @@ function SimulationForm() {
       <form onSubmit={handleSubmit} className="bg-gray-800 rounded-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Run Simulation</h2>
         <p className="text-sm text-gray-400 mb-4">
-          Select exactly 4 decks to battle against each other.
+          Select 4 decks to battle against each other, or up to {MAX_POD_RUN_DECKS} to
+          queue every 4-deck pod and see how they fare overall.
         </p>
 
         {/* Deck Selection */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-gray-300">
-              Pick 4 Decks ({selectedDeckIds.length}/4)
+              Pick 4 to {MAX_POD_RUN_DECKS} Decks ({selectedDeckIds.length} selected)
               {searchQuery.trim() && (
                 <span className="ml-2 text-gray-400 font-normal">
                   Showing {filteredDecks.length} of {allDecks.length}
@@ -669,13 +687,18 @@ function SimulationForm() {
               {selectedDeckIds.map((id) => {
                 const deck = deckOptions.find((d) => d.id === id);
                 return deck?.name ?? id;
-              }).join(' vs ')}
+              }).join(isPodRun ? ', ' : ' vs ')}
+              {isPodRun && (
+                <div className="mt-1 text-gray-400">
+                  {pods.length} pods × {simulations} games = {pods.length * simulations} games total
+                </div>
+              )}
             </div>
           )}
         </div>
 
         <SliderWithInput
-          label="Number of Games"
+          label={isPodRun ? 'Games per Pod' : 'Number of Games'}
           value={simulations}
           onChange={setSimulations}
           min={GAMES_PER_CONTAINER}
@@ -692,14 +715,20 @@ function SimulationForm() {
 
         <button
           type="submit"
-          disabled={isSubmitting || selectedDeckIds.length !== 4}
+          disabled={isSubmitting || !canSubmit}
           className={`w-full py-3 rounded-md font-semibold ${
-            isSubmitting || selectedDeckIds.length !== 4
+            isSubmitting || !canSubmit
               ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
-          {isSubmitting ? 'Submitting...' : 'Run Simulations'}
+          {isSubmitting
+            ? isPodRun
+              ? `Queuing pods (${podsQueued}/${pods.length})...`
+              : 'Submitting...'
+            : isPodRun
+              ? `Queue ${pods.length} Pods`
+              : 'Run Simulations'}
         </button>
       </form>
     </div>

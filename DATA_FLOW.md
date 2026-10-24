@@ -153,7 +153,7 @@ cancellation.
 - **Stale-job sweeper** (`POST /api/admin/sweep-stale-jobs`, see
 `api/lib/stale-sweeper.ts` and `docs/STALE_SWEEPER.md`): fired by Cloud
 Scheduler every 15 minutes. For each active job it (a) hard-fails any
-job that has sat QUEUED for >2h, (b) hard-cancels any sim whose baseline
+job that has sat QUEUED for >3 days, (b) hard-cancels any sim whose baseline
 age exceeds the 2h cap, (c) calls `recoverStaleJob`, and (d) explicitly
 calls `aggregateJobResults(jobId)` when the cancel-and-recover pass
 leaves the job with every sim in a terminal state (COMPLETED or
