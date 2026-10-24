@@ -11,8 +11,6 @@
     "add-allowed-user": "node scripts/add-allowed-user.js",
     "dev:keep-awake": "caffeinate -i npm run dev",
     "populate-worker-secret": "node scripts/populate-worker-secret.js",
-    "populate-frontend-secret": "node scripts/populate-frontend-secret.js",
-    "fetch-frontend-config": "node scripts/fetch-frontend-config.js",
     "get-cloud-run-url": "node scripts/get-cloud-run-url.js",
     "dev:local": "npm run mode:local && npm run dev; npm run mode:hosted",
     "mode:local": "cp api/.env.local.example api/.env.local && cp frontend/.env.local.example frontend/.env.local && docker rm -f magic-bracket-worker 2>/dev/null; docker compose -f worker/docker-compose.yml -f worker/docker-compose.local.yml up -d && echo 'Switched to LOCAL mode. Worker restarted in local mode.'",

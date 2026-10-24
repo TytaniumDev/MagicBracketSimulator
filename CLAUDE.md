@@ -127,7 +127,7 @@ Routes live under `api/app/api/`. Key endpoints:
 - `api/.env` needs for GCP mode: `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `WORKER_SECRET`
 - Worker env: `WORKER_API_PORT` (default 9090) and `WORKER_API_URL` (externally reachable URL for push-based API control)
 - Firebase deploy requires `FIREBASE_TOKEN` in GitHub Actions secrets
-- `npm run populate-worker-secret` and `npm run populate-frontend-secret` manage GCP Secret Manager entries
+- Doppler is the source of truth for secrets. The **Sync API Secrets** workflow (`gh workflow run sync-api-secrets.yml`) copies every secret referenced in `api/apphosting.yaml` from Doppler into GCP Secret Manager; the **Provision Worker** workflow does the same for worker config (see `docs/SECRETS_SETUP.md`)
 
 ### Sentry
 
