@@ -1,6 +1,7 @@
 import { getToken } from 'firebase/app-check';
 import { auth, appCheck } from './firebase';
 import { getRuntimeConfig } from './config';
+import type { PodRunResponse, PodRunSummary } from '@shared/types/pod-run';
 
 function resolveApiBase(): string {
   // Build-time env vars take precedence (local dev overrides)
@@ -107,6 +108,56 @@ export async function createJob(body: {
     throw new Error(data.error || 'Failed to create job');
   }
   return data;
+}
+
+/**
+ * Save a pod run once all of its jobs are queued. Returns the run's id.
+ */
+export async function createPodRun(body: {
+  deckIds: string[];
+  jobIds: string[];
+  simulations: number;
+  idempotencyKey?: string;
+}): Promise<{ id: string }> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/pod-runs`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to save pod run');
+  }
+  return data;
+}
+
+/**
+ * Fetch one pod run with its job ids.
+ */
+export async function fetchPodRun(id: string): Promise<PodRunResponse> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/pod-runs/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    throw new Error(res.status === 404 ? 'Pod run not found' : 'Failed to load pod run');
+  }
+  return res.json();
+}
+
+/**
+ * List pod runs, most recent first. Pass `jobId` for only the runs that
+ * include that job.
+ */
+export async function fetchPodRuns(options: { limit?: number; jobId?: string } = {}): Promise<PodRunSummary[]> {
+  const apiBase = resolveApiBase();
+  const params = new URLSearchParams();
+  if (options.limit != null) params.set('limit', String(options.limit));
+  if (options.jobId) params.set('jobId', options.jobId);
+  const res = await fetchWithAuth(`${apiBase}/api/pod-runs?${params}`);
+  if (!res.ok) {
+    throw new Error('Failed to load pod runs');
+  }
+  const data = await res.json();
+  return Array.isArray(data.podRuns) ? data.podRuns : [];
 }
 
 /**

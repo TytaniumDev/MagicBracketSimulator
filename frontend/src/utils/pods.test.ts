@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aggregatePodStandings, countPods, parsePodRunJobIds, podCombinations, podRunPath } from './pods';
+import { aggregatePodStandings, countPods, parsePodRunJobIds, podCombinations, podRunPath, savedPodRunPath } from './pods';
 import type { JobResponse } from '@shared/types/job';
 
 function makeJob(overrides: Partial<JobResponse> = {}): JobResponse {
@@ -55,6 +55,10 @@ describe('pod run path', () => {
   it('ignores empty entries', () => {
     expect(parsePodRunJobIds('?jobs=a,,b,')).toEqual(['a', 'b']);
     expect(parsePodRunJobIds('')).toEqual([]);
+  });
+
+  it('links a saved run by its id', () => {
+    expect(savedPodRunPath('run123')).toBe('/pods/run123');
   });
 });
 

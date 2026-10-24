@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getApiBase, fetchWithAuth, createJob } from '../api';
+import { getApiBase, fetchWithAuth, createJob, createPodRun } from '../api';
 import { getRuntimeConfig } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import { ColorIdentity } from '../components/ColorIdentity';
@@ -11,7 +11,7 @@ import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
-import { MAX_POD_RUN_DECKS, podCombinations, podRunPath } from '../utils/pods';
+import { MAX_POD_RUN_DECKS, podCombinations, podRunPath, savedPodRunPath } from '../utils/pods';
 
 interface Deck {
   id: string;
@@ -341,6 +341,21 @@ function SimulationForm() {
     }
   };
 
+  /**
+   * Save the run so it can be found again from its jobs and the front page.
+   * Returns where to go next. If saving fails, the pods are still queued, so
+   * fall back to the unsaved jobs-list link rather than reporting an error.
+   */
+  const savePodRun = async (jobIds: string[], idempotencyKey: string): Promise<string> => {
+    try {
+      const { id } = await createPodRun({ deckIds: selectedDeckIds, jobIds, simulations, idempotencyKey });
+      return savedPodRunPath(id);
+    } catch (err) {
+      console.error('Failed to save pod run:', err);
+      return podRunPath(jobIds);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -367,7 +382,7 @@ function SimulationForm() {
           jobIds.push(id);
           setPodsQueued(jobIds.length);
         }
-        navigate(podRunPath(jobIds));
+        navigate(await savePodRun(jobIds, key));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'An error occurred';
         setSubmitError(

@@ -8,8 +8,7 @@
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import type { JobResponse } from '@shared/types/job';
 
-/** Most decks a single pod run may include. C(10, 4) = 210 pods. */
-export const MAX_POD_RUN_DECKS = 10;
+export { MAX_POD_RUN_DECKS } from '@shared/types/pod-run';
 
 /** Every way to pick `size` items from `items`, in input order. */
 export function podCombinations<T>(items: readonly T[], size: number = REQUIRED_DECK_COUNT): T[][] {
@@ -41,8 +40,14 @@ export function countPods(deckCount: number, size: number = REQUIRED_DECK_COUNT)
 }
 
 // ---------------------------------------------------------------------------
-// Pod-run URL: the run is just the list of its job ids
+// Pod-run URLs. Saved runs live at /pods/:id. Before runs were saved, a run
+// was just the list of its job ids in the URL; those links still work, and
+// the jobs-list form is the fallback if saving a run fails.
 // ---------------------------------------------------------------------------
+
+export function savedPodRunPath(podRunId: string): string {
+  return `/pods/${encodeURIComponent(podRunId)}`;
+}
 
 export function podRunPath(jobIds: readonly string[]): string {
   return `/pods?jobs=${jobIds.map(encodeURIComponent).join(',')}`;

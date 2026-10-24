@@ -7,9 +7,11 @@ import { useWinData } from '../hooks/useWinData';
 import { useJobLogs } from '../hooks/useJobLogs';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
+import { usePodRunsForJob } from '../hooks/usePodRuns';
 import { fetchWithAuth } from '../api';
 import { emptyLogs } from '../test/fixtures';
 import type { SimulationStatus } from '../types/simulation';
+import type { PodRunSummary } from '@shared/types/pod-run';
 import {
   makeJob,
   completedWithResults,
@@ -29,6 +31,7 @@ vi.mock('../hooks/useJobStream');
 vi.mock('../hooks/useWinData');
 vi.mock('../hooks/useJobLogs');
 vi.mock('../hooks/useWorkerStatus');
+vi.mock('../hooks/usePodRuns');
 vi.mock('../contexts/AuthContext');
 vi.mock('../api', () => ({
   getApiBase: () => 'http://localhost:3000',
@@ -63,7 +66,12 @@ function setupMocks(overrides: {
   error?: string | null;
   winData?: Partial<typeof defaultWinData>;
   isAdmin?: boolean;
+  podRuns?: PodRunSummary[];
 } = {}) {
+  vi.mocked(usePodRunsForJob).mockReturnValue({
+    data: overrides.podRuns ?? [],
+  } as unknown as ReturnType<typeof usePodRunsForJob>);
+
   vi.mocked(useJobStream).mockReturnValue({
     job: overrides.job ?? null,
     simulations: overrides.simulations ?? [],
@@ -159,6 +167,34 @@ describe('JobStatus — heading', () => {
     setupMocks({ job: makeJob({ simulations: 20 }) });
     renderJobStatus();
     expect(screen.getByText('20 Game Simulation')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pod run link
+// ---------------------------------------------------------------------------
+
+describe('JobStatus — pod run link', () => {
+  it('links to the pod run the job was queued in', () => {
+    setupMocks({
+      job: makeJob(),
+      podRuns: [{
+        id: 'run-1',
+        deckNames: ['A', 'B', 'C', 'D', 'E'],
+        podCount: 5,
+        simulations: 8,
+        createdAt: '2026-10-24T00:00:00.000Z',
+      }],
+    });
+    renderJobStatus();
+    const link = screen.getByRole('link', { name: /5-deck pod run/ });
+    expect(link).toHaveAttribute('href', '/pods/run-1');
+  });
+
+  it('shows no pod run link for a standalone job', () => {
+    setupMocks({ job: makeJob() });
+    renderJobStatus();
+    expect(screen.queryByText(/pod run/)).not.toBeInTheDocument();
   });
 });
 
