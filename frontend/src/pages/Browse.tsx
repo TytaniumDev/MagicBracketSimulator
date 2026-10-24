@@ -9,6 +9,8 @@ import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
+import { RecentPodRuns } from '../components/RecentPodRuns';
+import { formatRelativeDate } from '../utils/format';
 import type { JobStatus, JobSummary } from '@shared/types/job';
 import { GAMES_PER_CONTAINER } from '@shared/types/job';
 
@@ -18,22 +20,6 @@ function formatDurationMs(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
   const seconds = ((ms % 60_000) / 1000).toFixed(1);
   return `${minutes}m ${seconds}s`;
-}
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString();
 }
 
 // Convert a Firestore job document to JobSummary
@@ -295,7 +281,10 @@ export default function Browse() {
         <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} onRefresh={refreshWorkers} userEmail={user?.email} />
       )}
 
+      <RecentPodRuns />
+
       {/* Jobs List */}
+      <h2 className="text-lg font-semibold mb-3">Simulations</h2>
       {isLoading && (
         <div className="bg-gray-800 rounded-lg p-6 text-gray-400 text-center flex justify-center items-center gap-2">
           <Spinner />
@@ -398,7 +387,7 @@ export default function Browse() {
                       </div>
                     )}
                     <div className="text-xs text-gray-500">
-                      {formatDate(run.createdAt)}
+                      {formatRelativeDate(run.createdAt)}
                     </div>
                   </div>
                 </div>

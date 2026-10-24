@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { SIMULATIONS_MIN, SIMULATIONS_MAX, PARALLELISM_MIN, PARALLELISM_MAX } from './types';
+import { REQUIRED_DECK_COUNT } from '@shared/types/job';
+import { MAX_POD_RUN_DECKS } from '@shared/types/pod-run';
 
 // ---------------------------------------------------------------------------
 // POST /api/jobs — Create job
@@ -49,6 +51,23 @@ export const updateJobSchema = z.object({
 });
 
 export type UpdateJobInput = z.infer<typeof updateJobSchema>;
+
+// ---------------------------------------------------------------------------
+// POST /api/pod-runs — Save a pod run
+// ---------------------------------------------------------------------------
+
+export const createPodRunSchema = z.object({
+  deckIds: z
+    .array(z.string().min(1))
+    .min(REQUIRED_DECK_COUNT + 1, `At least ${REQUIRED_DECK_COUNT + 1} deckIds are required`)
+    .max(MAX_POD_RUN_DECKS, `At most ${MAX_POD_RUN_DECKS} deckIds are allowed`),
+  // C(MAX_POD_RUN_DECKS, 4) = 210 pods at most.
+  jobIds: z.array(z.string().min(1)).min(1).max(210),
+  simulations: z.number().int().min(SIMULATIONS_MIN).max(SIMULATIONS_MAX),
+  idempotencyKey: z.string().optional(),
+});
+
+export type CreatePodRunInput = z.infer<typeof createPodRunSchema>;
 
 // ---------------------------------------------------------------------------
 // Helpers

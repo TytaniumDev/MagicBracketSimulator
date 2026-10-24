@@ -6,6 +6,7 @@ import type { JobResponse } from '@shared/types/job';
 import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
+import { PodRunLink } from '../components/PodRunLink';
 import { SimulationGrid } from '../components/SimulationGrid';
 import { Spinner } from '../components/Spinner';
 import { useJobStream } from '../hooks/useJobStream';
@@ -167,7 +168,7 @@ export default function JobStatusPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors"
@@ -175,6 +176,7 @@ export default function JobStatusPage() {
           <span aria-hidden>←</span>
           Back to browse
         </Link>
+        <PodRunLink jobId={job.id} />
       </div>
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold">

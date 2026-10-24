@@ -3,7 +3,7 @@
  * Run with: npx tsx lib/validation.test.ts
  */
 
-import { createJobSchema, updateSimulationSchema, updateJobSchema, parseBody } from './validation';
+import { createJobSchema, createPodRunSchema, updateSimulationSchema, updateJobSchema, parseBody } from './validation';
 
 interface TestResult { name: string; passed: boolean; error?: string; }
 const results: TestResult[] = [];
@@ -176,6 +176,44 @@ async function runTests() {
       dockerRunDurationsMs: [1000, 2000, 3000],
     });
     assertEqual(result.success, true, 'should succeed');
+  });
+
+  // ── createPodRunSchema ──────────────────────────────────────────────
+
+  await test('createPodRunSchema: valid input passes', () => {
+    const result = parseBody(createPodRunSchema, {
+      deckIds: ['a', 'b', 'c', 'd', 'e'],
+      jobIds: ['j1', 'j2', 'j3', 'j4', 'j5'],
+      simulations: 8,
+    });
+    assertEqual(result.success, true, 'should succeed');
+  });
+
+  await test('createPodRunSchema: rejects a single pod of 4 decks', () => {
+    const result = parseBody(createPodRunSchema, {
+      deckIds: ['a', 'b', 'c', 'd'],
+      jobIds: ['j1'],
+      simulations: 8,
+    });
+    assertEqual(result.success, false, 'should fail');
+  });
+
+  await test('createPodRunSchema: rejects more than 10 decks', () => {
+    const result = parseBody(createPodRunSchema, {
+      deckIds: Array.from({ length: 11 }, (_, i) => `d${i}`),
+      jobIds: ['j1'],
+      simulations: 8,
+    });
+    assertEqual(result.success, false, 'should fail');
+  });
+
+  await test('createPodRunSchema: rejects empty jobIds', () => {
+    const result = parseBody(createPodRunSchema, {
+      deckIds: ['a', 'b', 'c', 'd', 'e'],
+      jobIds: [],
+      simulations: 8,
+    });
+    assertEqual(result.success, false, 'should fail');
   });
 
   // ── Summary ─────────────────────────────────────────────────────────

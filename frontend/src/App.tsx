@@ -113,6 +113,7 @@ export default function App() {
                 <Route path="/submit" element={<Home />} />
                 <Route path="/jobs/:id" element={<JobStatus />} />
                 <Route path="/pods" element={<PodRun />} />
+                <Route path="/pods/:id" element={<PodRun />} />
                 <Route path="/worker-setup" element={<WorkerSetup />} />
                 <Route path="/leaderboard" element={<Leaderboard />} />
                 <Route path="/sentry-example-page" element={<SentryExamplePage />} />

@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { usePodRunJobs } from '../hooks/usePodRunJobs';
+import { usePodRun } from '../hooks/usePodRuns';
 import { aggregatePodStandings, parsePodRunJobIds } from '../utils/pods';
 import { isTerminal } from '../utils/status';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
@@ -13,15 +14,42 @@ const EVEN_WIN_RATE = 1 / REQUIRED_DECK_COUNT;
 /**
  * Pod run: every 4-deck pod queued from one selection of more than 4 decks,
  * with standings summed across the pods that have finished.
+ *
+ * Saved runs live at /pods/:id. The older /pods?jobs=… links (runs queued
+ * before runs were saved) still work.
  */
 export default function PodRunPage() {
+  const { id } = useParams<{ id: string }>();
   const { search } = useLocation();
-  const jobIds = useMemo(() => parsePodRunJobIds(search), [search]);
+  const podRun = usePodRun(id);
+  const jobIds = useMemo(
+    () => (id ? podRun.data?.jobIds ?? [] : parsePodRunJobIds(search)),
+    [id, podRun.data, search],
+  );
   const { jobs, isLoading, missingIds } = usePodRunJobs(jobIds);
   const standings = useMemo(() => aggregatePodStandings(jobs), [jobs]);
 
   const finished = jobs.filter((j) => isTerminal(j.status)).length;
   const withResults = jobs.filter((j) => j.results && j.results.gamesPlayed > 0).length;
+
+  if (podRun.isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
+        <Spinner /> Loading pod run...
+      </div>
+    );
+  }
+
+  if (podRun.isError) {
+    return (
+      <div className="max-w-2xl mx-auto text-center text-gray-400">
+        <p className="mb-4">{podRun.error.message}.</p>
+        <Link to="/" className="text-blue-400 hover:underline">
+          Back to recent simulations
+        </Link>
+      </div>
+    );
+  }
 
   if (jobIds.length === 0) {
     return (
@@ -40,7 +68,8 @@ export default function PodRunPage() {
       <p className="text-sm text-gray-400 mb-6">
         {finished} of {jobIds.length} pods finished
         {withResults < finished && ` (${finished - withResults} without results)`}.
-        Standings update as pods finish. Bookmark this page to come back to it.
+        Standings update as pods finish.
+        {!id && ' Bookmark this page to come back to it.'}
       </p>
 
       <section className="mb-8">

@@ -118,6 +118,7 @@ Routes live under `api/app/api/`. Key endpoints:
 - `GET /api/jobs/:id/simulations` — Per-simulation statuses
 - `POST /api/jobs/:id/simulations` — Initialize simulation tracking (worker)
 - `PATCH /api/jobs/:id/simulations/:simId` — Update simulation status (worker)
+- `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Saved pod runs (one job per 4-deck pod); `?jobId=` finds the run a job belongs to
 - Deck and precon CRUD endpoints
 
 ## Environment & Secrets

@@ -322,6 +322,29 @@ export function getDb(): Database.Database {
     )
   `);
 
+  // Pod runs: one selection of more than 4 decks, queued as every 4-deck pod
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pod_runs (
+      id TEXT PRIMARY KEY,
+      deck_ids_json TEXT NOT NULL,
+      deck_names_json TEXT NOT NULL,
+      simulations INTEGER NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      idempotency_key TEXT UNIQUE
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pod_runs_created_at ON pod_runs(created_at)`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pod_run_jobs (
+      pod_run_id TEXT NOT NULL,
+      job_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      PRIMARY KEY (pod_run_id, job_id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pod_run_jobs_job_id ON pod_run_jobs(job_id)`);
+
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);
 
