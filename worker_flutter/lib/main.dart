@@ -26,6 +26,7 @@ import 'sentry_setup.dart';
 import 'telemetry.dart';
 import 'ui/dashboard.dart';
 import 'ui/tray_setup.dart';
+import 'update/quit_for_update_listener.dart';
 import 'worker/worker_engine.dart';
 
 /// Magic Bracket Worker entry point.
@@ -407,6 +408,13 @@ Future<void> _activateAppCheck() async {
 }
 
 Future<void> _initAutoUpdater() async {
+  // Windows: WinSparkle asks the app to exit once it has launched the new
+  // installer. Closing the window only hides it to the tray, so without
+  // this the process lingers and the installer hangs waiting for it.
+  // macOS Sparkle terminates the app itself.
+  if (Platform.isWindows) {
+    autoUpdater.addListener(QuitForUpdateListener(onQuit: _quitForUpdate));
+  }
   // Register the menu-item channel handler FIRST — before any await
   // that could throw and skip the rest of the setup. If `setFeedURL`
   // or `setScheduledCheckInterval` fails, Sparkle's appcast polling
@@ -454,6 +462,23 @@ Future<void> _initAutoUpdater() async {
       data: {'error': e.toString()},
     );
   }
+}
+
+/// Shuts the app down so the update installer can replace it. Uses the
+/// tray's full quit when the tray exists; otherwise just flushes Sentry
+/// and exits.
+Future<void> _quitForUpdate() async {
+  _log('AutoUpdater: quitting for update');
+  final tray = _globalTray;
+  if (tray != null) {
+    await tray.quit();
+    return;
+  }
+  await Telemetry.close().timeout(
+    const Duration(seconds: 10),
+    onTimeout: () {},
+  );
+  exit(0);
 }
 
 /// Boot-phase log line: written to the local file and kept as a

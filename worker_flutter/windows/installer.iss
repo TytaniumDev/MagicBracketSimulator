@@ -23,6 +23,10 @@ Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=lowest
 SetupIconFile=..\assets\tray_icon.ico
+; The app hides to the tray instead of closing, so the Restart Manager's
+; polite close request can leave it running and stall the install. Force
+; it closed if it is still running when files need replacing.
+CloseApplications=force
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

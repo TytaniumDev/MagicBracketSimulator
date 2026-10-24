@@ -178,22 +178,7 @@ class TraySetup with TrayListener, WindowListener {
           }
           break;
         case 'quit':
-          final eng = engine;
-          if (eng != null) {
-            await eng.stop();
-          }
-          await dispose();
-          if (Platform.isWindows) {
-            // windowManager.destroy() posts WM_QUIT, and the runner then
-            // tears down the Flutter view while plugin threads (Firestore,
-            // Sentry) are still alive, which crashes on the way out
-            // (MAGIC-BRACKET-WORKER-4). The engine is already stopped, so
-            // flush Sentry and end the process directly.
-            _log('quit: exiting process (Windows)');
-            await Telemetry.close();
-            exit(0);
-          }
-          await windowManager.destroy();
+          await quit();
           break;
       }
     } catch (e, st) {
@@ -201,6 +186,42 @@ class TraySetup with TrayListener, WindowListener {
         debugPrint('tray menu "${menuItem.key}" failed: $e\n$st');
       }
     }
+  }
+
+  /// Upper bound on the graceful part of [quit]. An update install is
+  /// waiting on this process to exit, so a hung Firestore cancel must
+  /// not keep it alive.
+  static const _kQuitStepTimeout = Duration(seconds: 10);
+
+  /// Fully quits the app: stops the engine, removes the tray icon, and
+  /// ends the process. Used by the tray's "Quit" item and by the
+  /// updater before it installs a new version.
+  Future<void> quit() async {
+    _log('quit: stopping engine');
+    try {
+      await engine?.stop().timeout(_kQuitStepTimeout);
+    } catch (e) {
+      _log('quit: engine stop failed, quitting anyway: $e');
+    }
+    try {
+      await dispose().timeout(_kQuitStepTimeout);
+    } catch (e) {
+      _log('quit: tray dispose failed, quitting anyway: $e');
+    }
+    if (Platform.isWindows) {
+      // windowManager.destroy() posts WM_QUIT, and the runner then
+      // tears down the Flutter view while plugin threads (Firestore,
+      // Sentry) are still alive, which crashes on the way out
+      // (MAGIC-BRACKET-WORKER-4). The engine is already stopped, so
+      // flush Sentry and end the process directly.
+      _log('quit: exiting process (Windows)');
+      await Telemetry.close().timeout(
+        _kQuitStepTimeout,
+        onTimeout: () {},
+      );
+      exit(0);
+    }
+    await windowManager.destroy();
   }
 
   Future<void> _showDashboard() async {
