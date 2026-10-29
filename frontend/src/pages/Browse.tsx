@@ -13,6 +13,7 @@ import { RecentPodRuns } from '../components/RecentPodRuns';
 import { formatRelativeDate } from '../utils/format';
 import type { JobStatus, JobSummary } from '@shared/types/job';
 import { GAMES_PER_CONTAINER } from '@shared/types/job';
+import { reportHandledError } from '../errorReporting';
 
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
@@ -112,6 +113,7 @@ export default function Browse() {
         setDeleteError(`${failedCount} job(s) failed to delete`);
       }
     } catch (err) {
+      reportHandledError(err, { action: 'bulkDeleteJobs' });
       setDeleteError(err instanceof Error ? err.message : 'Bulk delete failed');
     } finally {
       setIsDeleting(false);
@@ -137,6 +139,7 @@ export default function Browse() {
         setIsLoading(false);
       },
       (err) => {
+        reportHandledError(err, { action: 'jobsListener' });
         setError(err.message);
         setIsLoading(false);
       }
@@ -156,6 +159,7 @@ export default function Browse() {
       setError(null);
       return data.jobs as JobSummary[];
     } catch (err) {
+      reportHandledError(err, { action: 'loadJobs' });
       setError(err instanceof Error ? err.message : 'Failed to load jobs');
       return [];
     } finally {
@@ -199,6 +203,7 @@ export default function Browse() {
       setExtraJobs((prev) => [...prev, ...deduped]);
       setNextCursor((data.nextCursor as string | null) ?? null);
     } catch (err) {
+      reportHandledError(err, { action: 'loadMoreJobs' });
       setLoadMoreError(err instanceof Error ? err.message : 'Failed to load more jobs');
     } finally {
       setLoadingMore(false);

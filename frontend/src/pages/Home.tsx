@@ -12,6 +12,7 @@ import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import { MAX_POD_RUN_DECKS, podCombinations, podRunPath, savedPodRunPath } from '../utils/pods';
+import { reportHandledError } from '../errorReporting';
 
 interface Deck {
   id: string;
@@ -166,6 +167,7 @@ function SimulationForm() {
       return Array.isArray(data) ? data : [];
     } catch (err) {
       console.warn('GCS precon fetch failed, will use API fallback:', err);
+      reportHandledError(err, { action: 'fetchPrecons' });
       return [];
     }
   }, []);
@@ -212,6 +214,7 @@ function SimulationForm() {
       community = allApiDecks.filter(d => !d.isPrecon);
     } else {
       console.error('Failed to load community decks:', apiResult.reason);
+      reportHandledError(apiResult.reason, { action: 'loadCommunityDecks' });
       setDeckError('Failed to load community decks. Please try again.');
     }
 
@@ -235,7 +238,10 @@ function SimulationForm() {
     fetchWithAuth(`${apiBase}/api/moxfield-status`)
       .then((res) => res.json())
       .then((data) => setMoxfieldEnabled(data.enabled))
-      .catch(() => setMoxfieldEnabled(false));
+      .catch((err) => {
+        reportHandledError(err, { action: 'checkMoxfieldStatus' });
+        setMoxfieldEnabled(false);
+      });
   }, [apiBase]);
 
   const handleDeckToggle = (id: string) => {
@@ -306,6 +312,7 @@ function SimulationForm() {
       setDeckText('');
       setDeckName('');
     } catch (err) {
+      reportHandledError(err, { action: 'saveDeck' });
       setSaveError(err instanceof Error ? err.message : 'Failed to save deck');
     } finally {
       setIsSaving(false);
@@ -335,6 +342,7 @@ function SimulationForm() {
 
       await loadDecks();
     } catch (err) {
+      reportHandledError(err, { action: 'deleteDeck' });
       setSaveError(err instanceof Error ? err.message : 'Failed to delete deck');
     } finally {
       setIsDeleting(null);
@@ -352,6 +360,7 @@ function SimulationForm() {
       return savedPodRunPath(id);
     } catch (err) {
       console.error('Failed to save pod run:', err);
+      reportHandledError(err, { action: 'savePodRun' });
       return podRunPath(jobIds);
     }
   };
@@ -384,6 +393,7 @@ function SimulationForm() {
         }
         navigate(await savePodRun(jobIds, key));
       } catch (err) {
+        reportHandledError(err, { action: 'startPods', podsQueued: jobIds.length, podCount: pods.length });
         const message = err instanceof Error ? err.message : 'An error occurred';
         setSubmitError(
           `Queued ${jobIds.length} of ${pods.length} pods before an error: ${message}. Submit again to queue the rest.`,
@@ -398,6 +408,7 @@ function SimulationForm() {
       const { id } = await createJob({ deckIds: selectedDeckIds, simulations, idempotencyKey: key });
       navigate(`/jobs/${id}`);
     } catch (err) {
+      reportHandledError(err, { action: 'startSimulation' });
       setSubmitError(err instanceof Error ? err.message : 'An error occurred');
       setIdempotency(null);
     } finally {

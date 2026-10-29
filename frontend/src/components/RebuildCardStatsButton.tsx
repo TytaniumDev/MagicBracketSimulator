@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { backfillCardStats } from '../api';
+import { reportHandledError } from '../errorReporting';
 
 type Progress =
   | { state: 'idle' }
@@ -30,6 +31,7 @@ export function RebuildCardStatsButton() {
       } while (cursor);
       setProgress({ state: 'done', counted, failed });
     } catch (err) {
+      reportHandledError(err, { action: 'rebuildCardStats', counted });
       setProgress({ state: 'error', counted, message: err instanceof Error ? err.message : 'Failed' });
     }
   };

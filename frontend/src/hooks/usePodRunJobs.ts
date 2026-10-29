@@ -6,6 +6,7 @@ import { fetchJob, mergeFirestoreJobUpdate } from './useJobStream';
 import { isTerminal } from '../utils/status';
 import { activePodChunks } from '../utils/pods';
 import type { JobResponse } from '@shared/types/job';
+import { reportHandledError } from '../errorReporting';
 
 /** LOCAL mode: how often to re-read each pod that hasn't finished yet. */
 const LOCAL_POD_POLL_MS = 5_000;
@@ -65,6 +66,7 @@ export function usePodRunJobs(jobIds: readonly string[]): PodRunJobs {
         },
         (error) => {
           console.error('[usePodRunJobs] Firestore listener error:', error);
+          reportHandledError(error, { action: 'podRunJobsListener' });
         },
       ),
     );

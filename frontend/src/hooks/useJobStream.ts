@@ -7,6 +7,7 @@ import { isTerminal } from '../utils/status';
 import { GAMES_PER_CONTAINER } from '@shared/types/job';
 import type { JobResponse } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
+import { reportHandledError } from '../errorReporting';
 
 // ---------------------------------------------------------------------------
 // Deck caching
@@ -369,6 +370,7 @@ export function useJobStream(jobId: string | undefined) {
               queryClient.setQueryData(['job', jobId], fullJob);
             }).catch((err) => {
               console.error('[useJobStream] Final Firestore fetch failed:', err);
+              reportHandledError(err, { action: 'fetchFinalJob', jobId });
             });
           }
           unsubscribe();
@@ -376,6 +378,7 @@ export function useJobStream(jobId: string | undefined) {
       },
       (error) => {
         console.error('[useJobStream] Firestore job listener error:', error);
+        reportHandledError(error, { action: 'jobListener', jobId });
       },
     );
 
@@ -408,6 +411,7 @@ export function useJobStream(jobId: string | undefined) {
       },
       (error) => {
         console.error('[useJobStream] Firestore simulations listener error:', error);
+        reportHandledError(error, { action: 'simulationsListener', jobId });
       },
     );
 

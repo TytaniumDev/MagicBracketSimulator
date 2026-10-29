@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { reportHandledError } from '../errorReporting';
 
 export function RequestAccessCard() {
   const { user, hasRequestedAccess, refreshAccessRequestStatus } = useAuth();
@@ -78,6 +79,7 @@ export function RequestAccessCard() {
       setSubmitted(true);
       refreshAccessRequestStatus();
     } catch (err) {
+      reportHandledError(err, { action: 'requestAccess' });
       setError(err instanceof Error ? err.message : 'Failed to submit request');
     } finally {
       setIsSubmitting(false);
