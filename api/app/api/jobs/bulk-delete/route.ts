@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
-import * as jobStore from '@/lib/job-store-factory';
-import { deleteJobArtifacts } from '@/lib/gcs-storage';
-import { isGcpMode } from '@/lib/deck-store-factory';
+import { deleteJobCompletely } from '@/lib/job-delete';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
 
@@ -38,29 +36,9 @@ export async function POST(request: NextRequest) {
     const results = await Promise.all(
       jobIds.map(async (id: string) => {
         try {
-          const job = await jobStore.getJob(id);
-          if (!job) {
+          if (!(await deleteJobCompletely(id))) {
             return { id, deleted: false, error: 'Not found' };
           }
-
-          // Cancel if still active
-          if (job.status === 'QUEUED' || job.status === 'RUNNING') {
-            await jobStore.cancelJob(id);
-          }
-
-          // Delete simulation subcollection first (Firestore doesn't cascade)
-          await jobStore.deleteSimulations(id);
-          await jobStore.deleteJob(id);
-
-          if (isGcpMode()) {
-            try {
-              await deleteJobArtifacts(id);
-            } catch (err) {
-              Sentry.captureException(err, { tags: { component: 'bulk-delete-artifacts', jobId: id } });
-              console.warn(`Failed to delete GCS artifacts for ${id}:`, err);
-            }
-          }
-
           return { id, deleted: true };
         } catch (err) {
           Sentry.captureException(err, { tags: { component: 'bulk-delete', jobId: id } });

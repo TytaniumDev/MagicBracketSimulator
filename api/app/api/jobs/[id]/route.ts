@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import { deleteJobArtifacts } from '@/lib/gcs-storage';
-import { isGcpMode, getDeckById } from '@/lib/deck-store-factory';
+import { deleteJobCompletely } from '@/lib/job-delete';
+import { getDeckById } from '@/lib/deck-store-factory';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
 import { parseBody, updateJobSchema } from '@/lib/validation';
 import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
@@ -157,27 +157,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return badRequestResponse('Job ID is required');
     }
 
-    const job = await jobStore.getJob(id);
-    if (!job) {
+    if (!(await deleteJobCompletely(id))) {
       return notFoundResponse('Job');
-    }
-
-    // Cancel the job first if it's still active, so the worker can detect it
-    if (job.status === 'QUEUED' || job.status === 'RUNNING') {
-      await jobStore.cancelJob(id);
-    }
-
-    // Delete simulation subcollection first (Firestore doesn't cascade)
-    await jobStore.deleteSimulations(id);
-    await jobStore.deleteJob(id);
-
-    if (isGcpMode()) {
-      try {
-        await deleteJobArtifacts(id);
-      } catch (err) {
-        Sentry.captureException(err, { tags: { component: 'job-delete-artifacts', jobId: id } });
-        console.warn('Failed to delete GCS artifacts:', err);
-      }
     }
 
     return new NextResponse(null, { status: 204 });
