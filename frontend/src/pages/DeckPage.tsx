@@ -66,7 +66,13 @@ export default function DeckPage() {
     () => (data ? [...data.commanders, ...data.cards].map((c) => c.name) : []),
     [data],
   );
-  const scryfall = useScryfallCards(cardNames);
+  // Without a decklist, look up the cards the deck was seen playing instead,
+  // so the impact table still gets images and types.
+  const lookupNames = useMemo(
+    () => (data?.decklistAvailable ? cardNames : (cardImpact.data?.cards ?? []).map((c) => c.name)),
+    [data?.decklistAvailable, cardNames, cardImpact.data],
+  );
+  const scryfall = useScryfallCards(lookupNames);
   const impactCards = useMemo(
     () => {
       if (!cardImpact.data) return [];

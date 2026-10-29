@@ -3,6 +3,7 @@ import type { DeckCard } from '@shared/types/deck';
 import { cardKey, type ScryfallCard } from '../scryfall';
 import { groupDeckCards } from '../utils/card-groups';
 import { useCardPreview } from './CardPreview';
+import { CardName } from './CardName';
 import { ManaCost } from './ManaCost';
 
 interface CardRowProps {
@@ -14,17 +15,18 @@ interface CardRowProps {
 function CardRow({ card, info, previewHandlers }: CardRowProps) {
   return (
     <li>
-      <button
-        type="button"
+      <CardName
+        name={card.name}
+        info={info}
+        previewHandlers={previewHandlers}
         className="w-full flex items-center gap-2 px-1.5 py-0.5 rounded text-left text-sm text-gray-200 hover:bg-gray-700/60 focus:bg-gray-700/60 focus:outline-none"
-        {...previewHandlers(card.name, info?.imageUrl)}
       >
         <span className="w-5 shrink-0 text-right text-xs text-gray-500 tabular-nums">
           {card.quantity > 1 ? card.quantity : ''}
         </span>
         <span className="flex-1 min-w-0 truncate">{card.name}</span>
         {info && <ManaCost cost={info.manaCost} />}
-      </button>
+      </CardName>
     </li>
   );
 }
@@ -38,7 +40,7 @@ interface DeckListProps {
 
 /**
  * Compact decklist grouped by card type. Hovering (or focusing) a card shows
- * its full image beside the list.
+ * its full image beside the list; clicking opens it on Scryfall.
  */
 export const DeckList = memo(function DeckList({ commanders, cards, lookup }: DeckListProps) {
   const { previewHandlers, previewElement } = useCardPreview();

@@ -16,6 +16,8 @@ export interface ScryfallCard {
   manaValue: number;
   /** Front face image, or null when Scryfall has none. */
   imageUrl: string | null;
+  /** The card's page on Scryfall. */
+  scryfallUrl: string | null;
 }
 
 interface ScryfallImageUris {
@@ -27,6 +29,7 @@ interface ScryfallCardJson {
   type_line?: string;
   mana_cost?: string;
   cmc?: number;
+  scryfall_uri?: string;
   image_uris?: ScryfallImageUris;
   card_faces?: { type_line?: string; mana_cost?: string; image_uris?: ScryfallImageUris }[];
 }
@@ -45,6 +48,7 @@ export function toScryfallCard(json: ScryfallCardJson): ScryfallCard {
     manaCost: (json.mana_cost || front?.mana_cost || '').split(' // ')[0],
     manaValue: json.cmc ?? 0,
     imageUrl: json.image_uris?.normal ?? front?.image_uris?.normal ?? null,
+    scryfallUrl: json.scryfall_uri ?? null,
   };
 }
 
