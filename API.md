@@ -317,6 +317,28 @@ Returns fully parsed, structured game-action logs (deck × turn granularity).
 
 ---
 
+## Pod Runs
+
+A pod run is one selection of more than 4 decks, queued as one job per 4-deck pod.
+
+### Save Pod Run
+
+`POST /pod-runs`
+
+Body: `{ deckIds, jobIds, simulations, idempotencyKey? }`, sent once the run's jobs are queued. Records the run on each job and totals the jobs that already have results. Returns `{ id }`.
+
+### List Pod Runs
+
+`GET /pod-runs?limit=10` (max 50), or `GET /pod-runs?jobId=<id>` for the runs that include a job.
+
+Returns `{ podRuns: PodRunSummary[] }`, each with `id`, `deckNames`, `podCount`, `podsWithResults`, `simulations` and `createdAt`.
+
+### Get Pod Run
+
+`GET /pod-runs/:id`
+
+Returns the summary plus `deckIds`, `jobIds` and `standings`: one entry per deck that has played a finished pod (`key`, `name`, `pods`, `gamesPlayed`, `wins`, `winRate`, `avgWinTurn`), best first. Standings grow as each pod's job is aggregated.
+
 ## Decks
 
 ### List Decks

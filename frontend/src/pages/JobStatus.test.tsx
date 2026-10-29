@@ -182,6 +182,7 @@ describe('JobStatus — pod run link', () => {
         id: 'run-1',
         deckNames: ['A', 'B', 'C', 'D', 'E'],
         podCount: 5,
+        podsWithResults: 0,
         simulations: 8,
         createdAt: '2026-10-24T00:00:00.000Z',
       }],

@@ -10,7 +10,9 @@
  */
 
 import { getPodRunStore } from '../lib/pod-run-store-factory';
-import { podRunToSummary } from '../lib/pod-run-utils';
+import { podRunToResponse, podRunToSummary } from '../lib/pod-run-utils';
+import { createJob, setJobResults } from '../lib/job-store-factory';
+import type { JobResults } from '../lib/types';
 
 interface TestResult {
   name: string;
@@ -119,6 +121,83 @@ async function runTests() {
     const summary = podRunToSummary(run!);
     assertEqual(summary.podCount, 3, 'podCount');
     assertEqual(typeof summary.createdAt, 'string', 'createdAt type');
+  });
+
+  // --- Standings ---------------------------------------------------------
+
+  const deck = (name: string) => ({ name, dck: '[Main]\n1 Forest\n' });
+  const podJob = async (ids: string[]) =>
+    (await createJob(ids.map((id) => deck(id.toUpperCase())), 4, { deckIds: ids })).id;
+  const podResults = (wins: Record<string, number>, avgWinTurn: Record<string, number> = {}): JobResults => ({
+    wins,
+    avgWinTurn,
+    gamesPlayed: 4,
+  });
+
+  let standingsRunId = '';
+  let finishedJob = '';
+  let laterJob = '';
+
+  await test('createPodRun totals the jobs that already have results', async () => {
+    finishedJob = await podJob(['d1', 'd2', 'd3', 'd4']);
+    laterJob = await podJob(['d1', 'd2', 'd3', 'd5']);
+    await setJobResults(finishedJob, podResults({ D1: 3, D2: 1 }, { D1: 6, D2: 9 }));
+
+    const run = await store.createPodRun({
+      deckIds: ['d1', 'd2', 'd3', 'd4', 'd5'],
+      deckNames: ['D1', 'D2', 'D3', 'D4', 'D5'],
+      jobIds: [finishedJob, laterJob],
+      simulations: 4,
+      createdBy: 'tester',
+    });
+    standingsRunId = run.id;
+
+    assertEqual(run.podsWithResults, 1, 'podsWithResults');
+    assertEqual(run.standings.d1.wins, 3, 'd1 wins');
+    assertEqual(run.standings.d1.winTurnSum, 18, 'd1 winTurnSum');
+    assertEqual(run.standings.d4.gamesPlayed, 4, 'd4 games');
+    assertEqual(run.standings.d5, undefined, 'd5 has no finished pod yet');
+  });
+
+  await test('applyJob adds a job once its results are in, and only once', async () => {
+    assertEqual(await store.applyJob(laterJob), false, 'no results yet');
+    await setJobResults(laterJob, podResults({ D5: 4 }, { D5: 5 }));
+
+    assertEqual(await store.applyJob(laterJob), true, 'first apply');
+    assertEqual(await store.applyJob(laterJob), false, 'second apply');
+    assertEqual(await store.applyJob(finishedJob), false, 'already totalled at save');
+
+    const run = await store.getPodRun(standingsRunId);
+    assertEqual(run!.podsWithResults, 2, 'podsWithResults');
+    assertEqual(run!.standings.d1.pods, 2, 'd1 pods');
+    assertEqual(run!.standings.d1.gamesPlayed, 8, 'd1 games');
+    assertEqual(run!.standings.d5.wins, 4, 'd5 wins');
+  });
+
+  await test('a job stays in the first run it was saved in', async () => {
+    const other = await store.createPodRun({
+      deckIds: ['d1', 'd2', 'd3', 'd4', 'd5'],
+      deckNames: ['D1', 'D2', 'D3', 'D4', 'D5'],
+      jobIds: [finishedJob],
+      simulations: 4,
+      createdBy: 'tester',
+    });
+    assertEqual(other.podsWithResults, 0, 'podsWithResults');
+  });
+
+  await test('applyJob ignores a job in no run', async () => {
+    const loose = await podJob(['d1', 'd2', 'd3', 'd4']);
+    await setJobResults(loose, podResults({ D1: 4 }));
+    assertEqual(await store.applyJob(loose), false, 'applied');
+  });
+
+  await test('podRunToResponse ranks the standings by win rate', async () => {
+    const response = podRunToResponse((await store.getPodRun(standingsRunId))!);
+    assertEqual(response.standings.map((s) => s.key).join(','), 'd5,d1,d2,d3,d4', 'order');
+    assertEqual(response.standings[1].winRate, 3 / 8, 'd1 win rate');
+    assertEqual(response.standings[1].avgWinTurn, 6, 'd1 avg win turn');
+    assertEqual(response.standings[3].avgWinTurn, null, 'd3 avg win turn');
+    assertEqual(response.podsWithResults, 2, 'podsWithResults');
   });
 
   console.log('\n--- Test Summary ---');

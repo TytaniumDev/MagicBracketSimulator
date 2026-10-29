@@ -397,6 +397,20 @@ export function getDb(): Database.Database {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_pod_run_jobs_job_id ON pod_run_jobs(job_id)`);
+  // Pod run standings (see pod-run-store.ts). NULL standings_json marks a
+  // run saved before standings were kept.
+  for (const ddl of [
+    'ALTER TABLE pod_runs ADD COLUMN standings_json TEXT',
+    'ALTER TABLE pod_runs ADD COLUMN pods_with_results INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE jobs ADD COLUMN pod_run_id TEXT',
+    'ALTER TABLE jobs ADD COLUMN pod_run_applied INTEGER',
+  ]) {
+    try {
+      db.exec(ddl);
+    } catch {
+      // Column already exists
+    }
+  }
 
   // Card impact counters: one JSON document per deck (see lib/card-impact/stats.ts)
   db.exec(`
