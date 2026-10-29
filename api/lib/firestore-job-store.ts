@@ -493,91 +493,120 @@ export async function claimJob(id: string, workerId?: string, workerName?: strin
   }
 }
 
+/** Sims read per page of a claim query. */
+const CLAIM_PAGE_SIZE = 10;
+
 /**
- * Atomically claim the next PENDING simulation across any active (QUEUED or
- * RUNNING) job. Scans up to 10 oldest active jobs for one with a PENDING sim;
- * uses a transaction to flip that sim to RUNNING (and promote the job from
- * QUEUED to RUNNING if needed). Transaction conflicts cause the loop to try
- * the next candidate, so concurrent workers do not collide on the same sim.
+ * Pages read per claim query before giving up. Candidates are skipped when
+ * their job is not claimable (finished, a desktop-local run, or gone until
+ * the stale sweeper cancels the sim), so a few pages keep those from
+ * hiding claimable sims behind them.
+ */
+const CLAIM_MAX_PAGES = 3;
+
+/**
+ * Atomically claim the next claimable simulation: the oldest PENDING sim,
+ * or failing that a RUNNING sim whose lease ran out (its worker is gone).
+ *
+ * Both come from indexed collection-group queries that read a page of
+ * sims, not every sim of every active job. Each candidate is claimed in a
+ * transaction that re-checks the sim and its job (QUEUED or RUNNING, not a
+ * desktop-local run, sims still outstanding), flips the sim to RUNNING and
+ * promotes the job from QUEUED to RUNNING on its first claim. A candidate
+ * that loses a race or fails a check is skipped for the next one.
  */
 export async function claimNextSim(
   workerId: string,
   workerName: string,
   options: ClaimOptions = {},
 ): Promise<{ jobId: string; simId: string; simIndex: number } | null> {
-  const candidates = await jobsCollection
-    .where('status', 'in', ['QUEUED', 'RUNNING'])
-    .orderBy('createdAt', 'asc')
-    .limit(10)
-    .get();
-
-  for (const jobDoc of candidates.docs) {
-    const jobData = jobDoc.data();
-    if (jobData.source === 'flutter-local') continue;
-    const completed = jobData.completedSimCount ?? 0;
-    const total = jobData.totalSimCount ?? 0;
-    if (total > 0 && completed >= total) continue;
-
-    // Fetch sims ordered by index (single-field index, already present).
-    // Filter in memory — per-job sim count is small (~25) so the overhead
-    // is negligible, and this avoids the composite index (state ASC +
-    // index ASC) the combined query would otherwise require. A RUNNING sim
-    // whose lease ran out is claimable too: its worker is gone.
-    const simsSnap = await simulationsCollection(jobDoc.id)
-      .orderBy('index', 'asc')
-      .get();
-    const simDocSnap = simsSnap.docs.find((d) => isSimClaimable(docToSimulationStatus(d.id, d.data())));
-    if (!simDocSnap) continue;
-
+  for await (const simRef of claimCandidates()) {
     try {
-      const claimed = await firestore.runTransaction(async (tx) => {
-        const freshSim = await tx.get(simDocSnap.ref);
-        if (!freshSim.exists) return null;
-        const simData = freshSim.data();
-        if (!simData || !isSimClaimable(docToSimulationStatus(freshSim.id, simData))) return null;
-
-        const freshJob = await tx.get(jobDoc.ref);
-        if (!freshJob.exists) return null;
-        const jobStatus = freshJob.data()?.status;
-        if (jobStatus !== 'QUEUED' && jobStatus !== 'RUNNING') return null;
-
-        tx.update(simDocSnap.ref, {
-          state: 'RUNNING',
-          workerId,
-          workerName,
-          startedAt: new Date().toISOString(),
-          leaseExpiresAt: options.withLease
-            ? Timestamp.fromDate(new Date(simLeaseExpiry()))
-            : FieldValue.delete(),
-        });
-
-        if (jobStatus === 'QUEUED') {
-          tx.update(jobDoc.ref, {
-            status: 'RUNNING',
-            startedAt: FieldValue.serverTimestamp(),
-            claimedAt: FieldValue.serverTimestamp(),
-            workerId,
-            workerName,
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-        }
-
-        return {
-          jobId: jobDoc.id,
-          simId: simDocSnap.id,
-          simIndex: (simData?.index ?? 0) as number,
-        };
-      });
-
+      const claimed = await tryClaimSim(simRef, workerId, workerName, options);
       if (claimed) return claimed;
-      // Lost the race on this sim — try the next candidate job.
     } catch {
-      // Transaction retry exhaustion — move on, another poll will find it.
-      continue;
+      // Transaction retry exhaustion: try the next candidate; the next poll
+      // comes back for this one.
     }
   }
-
   return null;
+}
+
+/**
+ * Candidate sims for a claim, best first: PENDING sims oldest first (sims of
+ * one job share a createdAt and tie-break by path, so they come in index
+ * order), then RUNNING sims with an expired lease.
+ */
+async function* claimCandidates(): AsyncGenerator<FirebaseFirestore.DocumentReference> {
+  const sims = firestore.collectionGroup('simulations');
+  const queries = [
+    sims.where('state', '==', 'PENDING').orderBy('createdAt', 'asc'),
+    sims
+      .where('state', '==', 'RUNNING')
+      .where('leaseExpiresAt', '<', Timestamp.now())
+      .orderBy('leaseExpiresAt', 'asc'),
+  ];
+  for (const query of queries) {
+    let last: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    for (let page = 0; page < CLAIM_MAX_PAGES; page++) {
+      const snap = await (last ? query.startAfter(last) : query).limit(CLAIM_PAGE_SIZE).get();
+      for (const doc of snap.docs) yield doc.ref;
+      if (snap.size < CLAIM_PAGE_SIZE) break;
+      last = snap.docs[snap.docs.length - 1];
+    }
+  }
+}
+
+/** Claim one candidate sim in a transaction. Returns null when it can't be claimed. */
+async function tryClaimSim(
+  simRef: FirebaseFirestore.DocumentReference,
+  workerId: string,
+  workerName: string,
+  options: ClaimOptions,
+): Promise<{ jobId: string; simId: string; simIndex: number } | null> {
+  const jobRef = simRef.parent.parent;
+  if (!jobRef || jobRef.parent.id !== 'jobs') return null;
+
+  return firestore.runTransaction(async (tx) => {
+    const [freshSim, freshJob] = await Promise.all([tx.get(simRef), tx.get(jobRef)]);
+    const simData = freshSim.data();
+    if (!simData || !isSimClaimable(docToSimulationStatus(freshSim.id, simData))) return null;
+
+    const jobData = freshJob.data();
+    if (!jobData) return null;
+    if (jobData.status !== 'QUEUED' && jobData.status !== 'RUNNING') return null;
+    if (jobData.source === 'flutter-local') return null;
+    const completed = jobData.completedSimCount ?? 0;
+    const total = jobData.totalSimCount ?? 0;
+    if (total > 0 && completed >= total) return null;
+
+    tx.update(simRef, {
+      state: 'RUNNING',
+      workerId,
+      workerName,
+      startedAt: new Date().toISOString(),
+      leaseExpiresAt: options.withLease
+        ? Timestamp.fromDate(new Date(simLeaseExpiry()))
+        : FieldValue.delete(),
+    });
+
+    if (jobData.status === 'QUEUED') {
+      tx.update(jobRef, {
+        status: 'RUNNING',
+        startedAt: FieldValue.serverTimestamp(),
+        claimedAt: FieldValue.serverTimestamp(),
+        workerId,
+        workerName,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    return {
+      jobId: jobRef.id,
+      simId: freshSim.id,
+      simIndex: (simData.index ?? 0) as number,
+    };
+  });
 }
 
 // ─── Per-Simulation Tracking (Subcollection) ────────────────────────────────
@@ -811,9 +840,10 @@ export async function getSimulationStatus(
 }
 
 /**
- * List PENDING/RUNNING sims whose job already ended as FAILED or CANCELLED.
- * Nothing will ever aggregate these, but a worker that claims straight from
- * Firestore (older desktop builds) could still pick them up.
+ * List PENDING/RUNNING sims whose job already ended as FAILED or CANCELLED,
+ * or no longer exists. Nothing will ever aggregate these, older desktop
+ * builds that claim straight from Firestore could still pick them up, and
+ * they would sit at the front of the claim queries.
  *
  * Uses the collection-group single-field index on `simulations.state`.
  */
@@ -839,8 +869,9 @@ export async function listOrphanedLiveSims(): Promise<{ jobId: string; simId: st
   );
   const orphans: { jobId: string; simId: string }[] = [];
   for (const jobDoc of jobDocs) {
+    // A sim whose job was deleted is orphaned too: nothing can run it.
     const status = jobDoc.data()?.status;
-    if (status !== 'FAILED' && status !== 'CANCELLED') continue;
+    if (jobDoc.exists && status !== 'FAILED' && status !== 'CANCELLED') continue;
     for (const simId of simsByJob.get(jobDoc.id) ?? []) {
       orphans.push({ jobId: jobDoc.id, simId });
     }
