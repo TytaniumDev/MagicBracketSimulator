@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Add a user to the Firestore allowlist by email.
+ * Give a user access by email: marks their `users/{uid}` access record allowed.
  * The user must have signed in at least once (so they exist in Firebase Auth).
  *
  * Usage:
@@ -14,7 +14,7 @@ const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 
-const ALLOWED_USERS_COLLECTION = 'allowedUsers';
+const USERS_COLLECTION = 'users';
 
 function getFirebaseApp() {
   if (getApps().length > 0) return getApps()[0];
@@ -54,12 +54,17 @@ async function main() {
     const userRecord = await auth.getUserByEmail(email.trim());
     const uid = userRecord.uid;
 
-    await db.collection(ALLOWED_USERS_COLLECTION).doc(uid).set({
-      email: userRecord.email,
-      addedAt: new Date().toISOString(),
-    });
+    await db.collection(USERS_COLLECTION).doc(uid).set(
+      {
+        email: userRecord.email,
+        displayName: userRecord.displayName ?? null,
+        status: 'allowed',
+        approvedAt: new Date(),
+      },
+      { merge: true },
+    );
 
-    console.log(`Added ${email} (UID: ${uid}) to the allowlist.`);
+    console.log(`Gave ${email} (UID: ${uid}) access.`);
   } catch (err) {
     if (err.code === 'auth/user-not-found') {
       console.error(`No Firebase Auth user found for ${email}.`);

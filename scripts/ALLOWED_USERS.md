@@ -1,6 +1,6 @@
-# Allowed users (Firestore allowlist)
+# Allowed users
 
-Only users in the Firestore `allowedUsers` collection can use the app. You manage the list with the `add-allowed-user` script.
+Only users whose `users/{uid}` access record has `status: 'allowed'` (or whose email is in `ADMIN_EMAILS` or `ALLOWED_EMAILS`) can use the app. Users normally get there by requesting access in the app and an admin clicking the approve link in the email. You can also give access directly with the `add-allowed-user` script.
 
 ## One-time setup: service account key
 
@@ -35,15 +35,15 @@ Only users in the Firestore `allowedUsers` collection can use the app. You manag
 
 3. They refresh the app and can use it.
 
-You can run the script as many times as you like; adding an email that’s already allowed just updates the `addedAt` field.
+You can run the script as many times as you like; it just marks the record allowed again.
 
 ## Remove access
 
-Remove the user’s document from the `allowedUsers` collection in [Firestore](https://console.firebase.google.com) → **Firestore** → **allowedUsers** → delete the document whose ID is that user’s UID (you can look up UID under **Authentication** → **Users**).
+Delete the user’s document from the `users` collection in [Firestore](https://console.firebase.google.com) → **Firestore** → **users** → the document whose ID is that user’s UID (you can look up UID under **Authentication** → **Users**). The API caches approvals for up to 5 minutes.
 
 ## Deploy Firestore rules (one-time / after rule changes)
 
-If you haven’t deployed the allowlist rules yet, or after editing `firestore.rules`:
+The deploy workflow deploys `firestore.rules` on merge. To deploy by hand after editing it:
 
 ```bash
 firebase deploy --only firestore:rules

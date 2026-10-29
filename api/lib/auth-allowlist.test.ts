@@ -51,7 +51,7 @@ async function main() {
     assertEqual(await isAllowedAccount('stranger', 'stranger@example.com', lookup), false, 'stranger');
   });
 
-  await test('accepts an account approved into allowedUsers', async () => {
+  await test('accepts an account approved through an access request', async () => {
     assertEqual(await isAllowedAccount('approved-uid', 'new@example.com', lookup), true, 'approved');
   });
 

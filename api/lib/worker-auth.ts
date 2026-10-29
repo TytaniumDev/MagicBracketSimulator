@@ -4,9 +4,8 @@
  *
  * The Docker worker sends the shared WORKER_SECRET. The desktop worker never
  * has that secret; instead it runs signed in as its owner and sends that
- * user's Firebase ID token. A token is accepted only when its uid is in the
- * Firestore `allowedUsers` collection, the same allowlist the Firestore rules
- * and the frontend use.
+ * user's Firebase ID token. A token is accepted only when that user has been
+ * given access (see user-store.ts).
  */
 import type { NextRequest } from 'next/server';
 import { isWorkerRequest, verifyAuth, type AuthUser } from './auth';
@@ -22,7 +21,7 @@ const defaultDeps: WorkerAuthDeps = { isWorkerRequest, verifyAuth, isInAllowedUs
 
 /**
  * True when the request carries the worker secret, or a valid Firebase ID
- * token for a user in `allowedUsers`. Never throws.
+ * token for a user who has been given access. Never throws.
  */
 export async function isWorkerOrAllowlistedUser(
   req: NextRequest,

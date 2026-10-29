@@ -133,8 +133,8 @@ logged and the status is still reported.
 **Flutter desktop worker:** same two calls in the same order (`LogUploader`,
 then `SimApi.reportResult`), through `ApiClient` with the signed-in user's
 Firebase ID token; the API accepts that token in place of `X-Worker-Secret`
-when the uid is in the Firestore `allowedUsers` collection
-(`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`). The desktop
+when that user has been given access, i.e. their `users/{uid}` record has
+status `allowed` (`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`). The desktop
 worker has no worker secret. A FAILED report does not count toward the
 job's finished sims; stale-job recovery retries the sim.
 

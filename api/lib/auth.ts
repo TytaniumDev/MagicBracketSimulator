@@ -17,7 +17,7 @@ export interface AuthUser {
   email: string;
 }
 
-// Extra pre-approved emails (comma-separated), on top of Firestore allowedUsers
+// Extra pre-approved emails (comma-separated), on top of approved users
 const ALLOWED_EMAILS: string[] = process.env.ALLOWED_EMAILS
   ? process.env.ALLOWED_EMAILS.split(',').map(e => e.trim().toLowerCase())
   : [];
@@ -29,7 +29,7 @@ const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
 
 /**
  * May this account run simulations? True for admins, emails in ALLOWED_EMAILS,
- * and users approved into Firestore `allowedUsers` (via an access request).
+ * and users approved through an access request (see user-store.ts).
  * `lookup` is injectable for tests.
  */
 export async function isAllowedAccount(

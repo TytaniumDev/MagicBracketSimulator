@@ -88,7 +88,7 @@ async function main() {
     assertEqual(checkedUid, 'u1', 'allowlist checked for token uid');
   });
 
-  await test('rejects a valid token for a user not in allowedUsers', async () => {
+  await test('rejects a valid token for a user without access', async () => {
     const ok = await isWorkerOrAllowlistedUser(
       request({ Authorization: 'Bearer t' }),
       deps({ isInAllowedUsers: async () => false }),

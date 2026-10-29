@@ -11,7 +11,7 @@ import '../telemetry.dart';
 /// for cloud-mode Flutter workers as they do for the Docker worker.
 ///
 /// Auth rides on [ApiClient]: the signed-in user's Firebase ID token,
-/// which the API accepts for users in `allowedUsers`.
+/// which the API accepts for users who have been given access.
 ///
 /// Runs before the sim's result is reported, because reporting a job's
 /// last sim starts aggregation, which reads the uploaded logs. Failures are
