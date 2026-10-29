@@ -145,6 +145,28 @@ export async function fetchDeck(id: string): Promise<DeckDetailResponse> {
   return res.json();
 }
 
+export interface CardStatsBackfillPage {
+  processed: number;
+  skipped: number;
+  errors: { jobId: string; error: string }[];
+  /** Pass back to continue with older jobs; null when every job has been visited. */
+  nextCursor: string | null;
+}
+
+/**
+ * Count one page of completed jobs into card stats (admin only).
+ */
+export async function backfillCardStats(cursor: string | null): Promise<CardStatsBackfillPage> {
+  const apiBase = resolveApiBase();
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  const res = await fetchWithAuth(`${apiBase}/api/admin/backfill-card-stats${query}`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 /**
  * Fetch per-card impact scores for a deck.
  */

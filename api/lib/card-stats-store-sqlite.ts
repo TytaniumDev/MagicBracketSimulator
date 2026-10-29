@@ -2,7 +2,7 @@
  * SQLite implementation of CardStatsStore (LOCAL mode). Stores each deck's
  * counters as one JSON row.
  */
-import type { CardStatsStore } from './card-stats-store';
+import { applyJobUpdates, type CardStatsStore } from './card-stats-store';
 import { currentDeckCardStats, emptyDeckCardStats } from './card-impact/stats';
 import type { DeckCardStats } from '@shared/types/card-impact';
 
@@ -23,16 +23,17 @@ export const sqliteCardStatsStore: CardStatsStore = {
     return currentDeckCardStats(read(deckId));
   },
 
-  async addJob(deckId, jobId, update): Promise<boolean> {
+  async addJobs(deckId, jobs): Promise<number> {
     const db = getDb();
     return db.transaction(() => {
       const current = currentDeckCardStats(read(deckId)) ?? emptyDeckCardStats();
-      if (current.jobIds.includes(jobId)) return false;
-      const next = { ...update(current), jobIds: [...current.jobIds, jobId] };
-      db.prepare(
-        'INSERT INTO card_stats (deck_id, data_json) VALUES (?, ?) ON CONFLICT(deck_id) DO UPDATE SET data_json = excluded.data_json',
-      ).run(deckId, JSON.stringify(next));
-      return true;
+      const { next, applied } = applyJobUpdates(current, jobs);
+      if (applied > 0) {
+        db.prepare(
+          'INSERT INTO card_stats (deck_id, data_json) VALUES (?, ?) ON CONFLICT(deck_id) DO UPDATE SET data_json = excluded.data_json',
+        ).run(deckId, JSON.stringify(next));
+      }
+      return applied;
     })();
   },
 };

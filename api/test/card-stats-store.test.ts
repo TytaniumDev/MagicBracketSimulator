@@ -8,7 +8,11 @@
  * Run with: npx tsx test/card-stats-store.test.ts
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { getCardStatsStore } from '../lib/card-stats-store-factory';
+import { processJobsForCardStats } from '../lib/card-impact/service';
+import type { DeckCardStats } from '../lib/card-stats-store';
 
 interface TestResult {
   name: string;
@@ -45,47 +49,60 @@ async function main() {
     assertEqual(await store.get(deckId), null, 'no stats');
   });
 
-  await test('addJob applies the update and records the job', async () => {
-    const applied = await store.addJob(deckId, 'job-1', (stats) => {
-      stats.games += 2;
-      return stats;
-    });
-    assertEqual(applied, true, 'applied');
+  const addGames = (jobId: string, games: number) => ({
+    jobId,
+    update: (stats: DeckCardStats) => ({ ...stats, games: stats.games + games }),
+  });
+
+  await test('addJobs applies the update and records the job', async () => {
+    const applied = await store.addJobs(deckId, [addGames('job-1', 2)]);
+    assertEqual(applied, 1, 'applied');
     const stats = await store.get(deckId);
     assertEqual(stats?.games, 2, 'games');
     assertEqual(stats?.jobIds, ['job-1'], 'job ids');
   });
 
-  await test('addJob skips a job it already counted', async () => {
-    const applied = await store.addJob(deckId, 'job-1', (stats) => {
-      stats.games += 2;
-      return stats;
-    });
-    assertEqual(applied, false, 'skipped');
+  await test('addJobs skips a job it already counted', async () => {
+    const applied = await store.addJobs(deckId, [addGames('job-1', 2)]);
+    assertEqual(applied, 0, 'skipped');
     assertEqual((await store.get(deckId))?.games, 2, 'games unchanged');
   });
 
-  await test('addJob accumulates across jobs', async () => {
-    await store.addJob(deckId, 'job-2', (stats) => {
-      stats.games += 3;
-      return stats;
-    });
+  await test('addJobs applies a batch in one call, skipping counted and repeated jobs', async () => {
+    const applied = await store.addJobs(deckId, [
+      addGames('job-1', 100),
+      addGames('job-2', 3),
+      addGames('job-3', 4),
+      addGames('job-3', 100),
+    ]);
+    assertEqual(applied, 2, 'applied');
     const stats = await store.get(deckId);
-    assertEqual(stats?.games, 5, 'games');
-    assertEqual(stats?.jobIds, ['job-1', 'job-2'], 'job ids');
+    assertEqual(stats?.games, 9, 'games');
+    assertEqual(stats?.jobIds, ['job-1', 'job-2', 'job-3'], 'job ids');
   });
 
   await test('counters from an older parser version are dropped and rebuilt', async () => {
     const staleDeckId = `${deckId}-stale`;
-    await store.addJob(staleDeckId, 'job-old', (stats) => ({ ...stats, games: 7, version: 1 }));
+    await store.addJobs(staleDeckId, [
+      { jobId: 'job-old', update: (stats) => ({ ...stats, games: 7, version: 1 }) },
+    ]);
     assertEqual(await store.get(staleDeckId), null, 'stale stats hidden');
-    await store.addJob(staleDeckId, 'job-old', (stats) => {
-      stats.games += 1;
-      return stats;
-    });
+    await store.addJobs(staleDeckId, [addGames('job-old', 1)]);
     const stats = await store.get(staleDeckId);
     assertEqual(stats?.games, 1, 'rebuilt from scratch');
     assertEqual(stats?.jobIds, ['job-old'], 'the same job can be counted again');
+  });
+
+  await test('processJobsForCardStats counts a page of jobs per deck', async () => {
+    const log = fs.readFileSync(path.join(__dirname, '..', 'lib', 'card-impact', 'fixtures', 'forge-2.0.15-game.txt'), 'utf-8');
+    const deckIds = ['temur', 'doran', 'marchesa', 'cavalry'].map((d) => `${deckId}-${d}`);
+    const deckNames = ['Temur Roar Upgraded', 'Doran Big Butts', 'Marchesa', 'Cavalry Charge Upgraded'];
+    const job = (jobId: string) => ({ jobId, deckIds, deckNames, rawLogs: [log] });
+    await processJobsForCardStats([job('page-1'), job('page-2')]);
+    const temur = await store.get(deckIds[0]);
+    assertEqual(temur?.games, 2, 'one game per job');
+    assertEqual(temur?.wins, 2, 'Temur won both');
+    assertEqual(temur?.jobIds, ['page-1', 'page-2'], 'job ids');
   });
 
   const passed = results.filter((r) => r.passed).length;

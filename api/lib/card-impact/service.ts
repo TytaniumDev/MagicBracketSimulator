@@ -4,11 +4,13 @@
  *
  * Runs from aggregateJobResults, which already holds the job's raw logs,
  * so it costs no extra log reads, and one read plus one write per deck in
- * Firestore. Idempotent per job (the store records counted job ids).
+ * Firestore. The backfill batches many jobs into that same one write per
+ * deck. Idempotent per job (the store records counted job ids).
  */
 import { matchesDeckName } from '../condenser/deck-match';
 import { splitConcatenatedGames } from '../condenser/patterns';
 import { getCardStatsStore } from '../card-stats-store-factory';
+import type { CardStatsJobUpdate } from '../card-stats-store';
 import { parseGameCards, type GameCardSummary } from './parse';
 import { addGame } from './stats';
 
@@ -25,31 +27,60 @@ export function seatFor(game: GameCardSummary, deckName: string, deckIndex: numb
   );
 }
 
+/** A finished job's logs and decks, for card stats. */
+export interface CardStatsJob {
+  jobId: string;
+  /** The job's 4 deck ids, in seat order. */
+  deckIds: string[];
+  /** The matching deck names, as they appear in the job. */
+  deckNames: string[];
+  rawLogs: string[];
+}
+
+/** Each deck's counter update for one job, or nothing if its logs hold no games. */
+function deckUpdatesForJob(job: CardStatsJob): Map<string, CardStatsJobUpdate> {
+  const updates = new Map<string, CardStatsJobUpdate>();
+  const games = job.rawLogs.flatMap(splitConcatenatedGames).map(parseGameCards);
+  if (games.length === 0) return updates;
+
+  job.deckIds.forEach((deckId, idx) => {
+    updates.set(deckId, {
+      jobId: job.jobId,
+      update: (stats) => {
+        for (const game of games) {
+          const seat = seatFor(game, job.deckNames[idx] ?? '', idx);
+          if (seat) addGame(stats, game, seat);
+        }
+        return stats;
+      },
+    });
+  });
+  return updates;
+}
+
 /**
- * Add every game in `rawLogs` to the card counters of each of the job's decks.
- *
- * @param deckIds   The job's 4 deck ids, in seat order.
- * @param deckNames The matching deck names, as they appear in the job.
+ * Add every game in the jobs' logs to their decks' card counters, with one
+ * store write per deck however many jobs mention it. Already counted jobs
+ * are skipped.
  */
+export async function processJobsForCardStats(jobs: CardStatsJob[]): Promise<void> {
+  const byDeck = new Map<string, CardStatsJobUpdate[]>();
+  for (const job of jobs) {
+    for (const [deckId, update] of deckUpdatesForJob(job)) {
+      byDeck.set(deckId, [...(byDeck.get(deckId) ?? []), update]);
+    }
+  }
+
+  const store = getCardStatsStore();
+  await Promise.all([...byDeck].map(([deckId, updates]) => store.addJobs(deckId, updates)));
+}
+
+/** Add one finished job's games to its decks' card counters. */
 export async function processJobForCardStats(
   jobId: string,
   deckIds: string[],
   deckNames: string[],
   rawLogs: string[],
 ): Promise<void> {
-  const games = rawLogs.flatMap(splitConcatenatedGames).map(parseGameCards);
-  if (games.length === 0) return;
-
-  const store = getCardStatsStore();
-  await Promise.all(
-    deckIds.map((deckId, idx) =>
-      store.addJob(deckId, jobId, (stats) => {
-        for (const game of games) {
-          const seat = seatFor(game, deckNames[idx] ?? '', idx);
-          if (seat) addGame(stats, game, seat);
-        }
-        return stats;
-      }),
-    ),
-  );
+  await processJobsForCardStats([{ jobId, deckIds, deckNames, rawLogs }]);
 }

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
 import type { CoverageConfig, CoverageStatus } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { RebuildCardStatsButton } from '../components/RebuildCardStatsButton';
 import { WinTurnTooltip } from '../components/WinTurnTooltip';
 
 const TOOLTIP_WIDTH = 320;
@@ -364,6 +365,12 @@ export default function Leaderboard() {
         Ratings update automatically after each completed simulation job.
         More games played → rating moves closer to the deck's true win rate.
       </p>
+
+      {isAdmin && (
+        <div className="mt-4 flex justify-center">
+          <RebuildCardStatsButton />
+        </div>
+      )}
 
       {/* Coverage System */}
       {coverageStatus && (
