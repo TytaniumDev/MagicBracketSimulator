@@ -1,7 +1,8 @@
 import 'package:flutter/services.dart';
 
-/// Handles calls on the `magic_bracket/auto_updater` channel, which the
-/// macOS "Check for Updates…" menu item (MainFlutterWindow.swift) uses.
+/// Runs user-initiated update checks: from the macOS "Check for Updates…"
+/// menu item (MainFlutterWindow.swift) over the `magic_bracket/auto_updater`
+/// channel, and from the Windows tray menu via [check].
 ///
 /// A failed check is passed to [onError] and then returned to Swift as
 /// a [PlatformException], so the menu item can show an alert instead of
@@ -26,11 +27,22 @@ class CheckForUpdatesHandler {
       );
     }
     try {
+      await check();
+    } catch (e) {
+      throw PlatformException(code: 'CHECK_FAILED', message: e.toString());
+    }
+  }
+
+  /// Runs a user-initiated check. A failure is passed to [onError] and
+  /// rethrown. Used directly by the Windows tray menu, which has no
+  /// platform channel in between.
+  Future<void> check() async {
+    try {
       onCheckStarted();
       await checkForUpdates();
     } catch (e, st) {
       await onError(e, st);
-      throw PlatformException(code: 'CHECK_FAILED', message: e.toString());
+      rethrow;
     }
   }
 }
