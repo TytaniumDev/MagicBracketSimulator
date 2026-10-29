@@ -68,8 +68,13 @@ export default function DeckPage() {
   );
   const scryfall = useScryfallCards(cardNames);
   const impactCards = useMemo(
-    () => (cardImpact.data ? onlyDeckCards(cardImpact.data.cards, cardNames, scryfall.data) : []),
-    [cardImpact.data, cardNames, scryfall.data],
+    () => {
+      if (!cardImpact.data) return [];
+      // Without a decklist there's nothing to filter against, so show every card.
+      if (!data?.decklistAvailable) return cardImpact.data.cards;
+      return onlyDeckCards(cardImpact.data.cards, cardNames, scryfall.data);
+    },
+    [cardImpact.data, data?.decklistAvailable, cardNames, scryfall.data],
   );
 
   if (deckQuery.isLoading) {
@@ -91,7 +96,7 @@ export default function DeckPage() {
     );
   }
 
-  const { deck, commanders, cards, stats } = data;
+  const { deck, decklistAvailable, commanders, cards, stats } = data;
   const cardCount = [...commanders, ...cards].reduce((sum, c) => sum + c.quantity, 0);
 
   return (
@@ -144,14 +149,22 @@ export default function DeckPage() {
       <section>
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-lg font-semibold text-white">Decklist</h2>
-          <span className="text-xs text-gray-500">
-            {cardCount} cards
-            {scryfall.isError && ' · card details unavailable'}
-          </span>
+          {decklistAvailable && (
+            <span className="text-xs text-gray-500">
+              {cardCount} cards
+              {scryfall.isError && ' · card details unavailable'}
+            </span>
+          )}
         </div>
-        <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-3">
-          <DeckList commanders={commanders} cards={cards} lookup={scryfall.data} />
-        </div>
+        {decklistAvailable ? (
+          <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-3">
+            <DeckList commanders={commanders} cards={cards} lookup={scryfall.data} />
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">
+            This deck is no longer in the deck library, so its list isn't available. Its results above are kept.
+          </p>
+        )}
       </section>
     </div>
   );
