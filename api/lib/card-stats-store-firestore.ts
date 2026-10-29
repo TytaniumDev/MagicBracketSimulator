@@ -5,7 +5,7 @@
  *   cardStats/{deckId} — DeckCardStats document (one per deck, so a finished
  *   job costs one read and one write per deck).
  */
-import type { CardStatsStore } from './card-stats-store';
+import { applyJobUpdates, type CardStatsStore } from './card-stats-store';
 import { currentDeckCardStats, emptyDeckCardStats } from './card-impact/stats';
 import type { DeckCardStats } from '@shared/types/card-impact';
 import { getFirestore } from './firestore-client';
@@ -19,15 +19,14 @@ export const firestoreCardStatsStore: CardStatsStore = {
     return currentDeckCardStats(snap.exists ? (snap.data() as DeckCardStats) : null);
   },
 
-  async addJob(deckId, jobId, update): Promise<boolean> {
+  async addJobs(deckId, jobs): Promise<number> {
     const ref = cardStatsCol.doc(deckId);
     return firestore.runTransaction(async (transaction) => {
       const snap = await transaction.get(ref);
       const current = currentDeckCardStats(snap.exists ? (snap.data() as DeckCardStats) : null) ?? emptyDeckCardStats();
-      if (current.jobIds.includes(jobId)) return false;
-      const next = update(current);
-      transaction.set(ref, { ...next, jobIds: [...current.jobIds, jobId] });
-      return true;
+      const { next, applied } = applyJobUpdates(current, jobs);
+      if (applied > 0) transaction.set(ref, next);
+      return applied;
     });
   },
 };

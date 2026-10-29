@@ -211,7 +211,9 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
      `cardStats/{deckId}` document (SQLite: `card_stats` table) via one
      read-modify-write per deck. The document lists counted job ids, so
      re-running aggregation or the `POST /api/admin/backfill-card-stats`
-     backfill never double counts. Documents also carry `version`
+     backfill never double counts. The backfill (the leaderboard's admin
+     "Rebuild card stats" button pages through it) batches each page of jobs
+     into one write per deck. Documents also carry `version`
      (`CARD_STATS_VERSION`); counters from an older parser are discarded on
      read and rebuilt by the next job or the backfill. `GET
      /api/decks/:id/card-impact` scores cards from these counters
