@@ -5,6 +5,7 @@ import { podRunToSummary } from '@/lib/pod-run-utils';
 import { resolveDeckIds } from '@/lib/deck-resolver';
 import { parseBody, createPodRunSchema } from '@/lib/validation';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 const DEFAULT_LIST_LIMIT = 10;
 const MAX_LIST_LIMIT = 50;
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
     return NextResponse.json({ podRuns: runs.map(podRunToSummary) });
   } catch (error) {
     console.error('GET /api/pod-runs error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/pod-runs' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to list pod runs', 500);
   }
 }
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     return NextResponse.json({ id: run.id }, { status: 201 });
   } catch (error) {
     console.error('POST /api/pod-runs error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/pod-runs' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to save pod run', 500);
   }
 }

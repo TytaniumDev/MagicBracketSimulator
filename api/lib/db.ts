@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DeckSlot } from './types';
+import * as Sentry from '@sentry/nextjs';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'jobs.db');
@@ -58,6 +59,7 @@ function migrateJobsToDecksJson(database: Database.Database): void {
       updateStmt.run(JSON.stringify(decks), row.id);
       console.log(`[DB Migration] Migrated job ${row.id}`);
     } catch (error) {
+      Sentry.captureException(error, { tags: { component: 'db-migration', jobId: row.id } });
       console.error(`[DB Migration] Failed to migrate job ${row.id}:`, error);
     }
   }

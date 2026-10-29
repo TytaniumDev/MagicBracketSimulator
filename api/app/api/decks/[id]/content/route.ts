@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest, unauthorizedResponse } from '@/lib/auth';
 import { readDeckContent } from '@/lib/deck-store-factory';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(content);
   } catch (error) {
     console.error('Failed to get deck content:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/decks/[id]/content' } });
     return errorResponse('Failed to get deck content', 500);
   }
 }

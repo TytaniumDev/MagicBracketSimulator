@@ -243,6 +243,7 @@ async function fetchJob(jobId: string): Promise<JobData | null> {
     return await response.json();
   } catch (error) {
     console.error(`Error fetching job ${jobId}:`, error);
+    captureWorkerException(error, { component: 'fetch-job', jobId });
     return null;
   }
 }
@@ -270,8 +271,9 @@ async function reportSimulationStatus(
       return data.updated !== false;
     }
     return false;
-  } catch {
+  } catch (err) {
     // Non-fatal: simulation status update failing shouldn't crash the sim
+    captureWorkerException(err, { component: 'report-sim-status', jobId, simId });
     return true; // Assume accepted on network failure to avoid skipping work
   }
 }
@@ -647,6 +649,7 @@ async function sendHeartbeat(status?: 'idle' | 'busy' | 'updating', timeoutMs?: 
     initialHeartbeatDone = true;
   } catch (err) {
     log.warn('Heartbeat error', { error: err instanceof Error ? err.message : err });
+    captureWorkerException(err, { component: 'heartbeat', workerId: currentWorkerId });
   }
 }
 
@@ -669,8 +672,9 @@ async function ensureSimulationImage(): Promise<void> {
     } else {
       console.log('Simulation image pulled successfully');
     }
-  } catch {
+  } catch (err) {
     console.warn('Warning: Docker pull failed. Simulation image must be available locally.');
+    captureWorkerException(err, { component: 'image-pull' });
   }
 }
 
@@ -680,9 +684,10 @@ async function ensureSimulationImage(): Promise<void> {
  */
 function pullSimulationImage(): void {
   console.log('Pull-image request received, re-pulling simulation image...');
-  ensureSimulationImage().catch((err) =>
-    console.warn('Pull-image failed:', err instanceof Error ? err.message : err),
-  );
+  ensureSimulationImage().catch((err) => {
+    console.warn('Pull-image failed:', err instanceof Error ? err.message : err);
+    captureWorkerException(err, { component: 'image-pull' });
+  });
 }
 
 /**
@@ -848,6 +853,7 @@ async function requestCoverageJob(): Promise<boolean> {
   } catch (error) {
     if (error instanceof Error && error.name !== 'TimeoutError') {
       console.error('[Coverage] Error requesting coverage job:', error);
+      captureWorkerException(error, { component: 'coverage', workerId: currentWorkerId });
     }
     return false;
   }
@@ -916,6 +922,7 @@ async function pollForSims(): Promise<void> {
     processSimulation(jobId, simId, simIndex)
       .catch(async (error) => {
         console.error(`Error processing simulation ${simId} for job ${jobId}:`, error);
+        captureWorkerException(error, { component: 'process-simulation', jobId, simId, simIndex });
         await reportSimulationStatus(jobId, simId, {
           state: 'FAILED',
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -950,19 +957,24 @@ function handleShutdown(signal: string): void {
   // Send a final 'updating' heartbeat so the frontend knows we're restarting
   const updatingHeartbeat = sendHeartbeat('updating', 5_000)
     .then(() => console.log('Sent updating heartbeat'))
-    .catch((err) => console.warn('Failed to send updating heartbeat:', err instanceof Error ? err.message : err));
+    .catch((err) => {
+      console.warn('Failed to send updating heartbeat:', err instanceof Error ? err.message : err);
+      captureWorkerException(err, { component: 'heartbeat', workerId: currentWorkerId });
+    });
 
   // After the heartbeat (or timeout), close the worker API and exit.
   updatingHeartbeat.finally(() => {
     stopWorkerApi()
-      .catch(() => {})
-      .then(() => {
+      .catch((err) => captureWorkerException(err, { component: 'shutdown' }))
+      .then(async () => {
+        await flushSentry();
         console.log('Shutdown complete');
         process.exit(0);
       })
       .catch((error: unknown) => {
         console.error('Error during shutdown:', error);
-        process.exit(1);
+        captureWorkerException(error, { component: 'shutdown' });
+        flushSentry().finally(() => process.exit(1));
       });
   });
 
@@ -1028,9 +1040,10 @@ async function main(): Promise<void> {
   // Periodic Docker cleanup (every hour) to free disk space
   dockerCleanupInterval = setInterval(() => {
     console.log('Periodic Docker cleanup...');
-    pruneDockerResources().catch((err) =>
-      console.warn('Periodic Docker cleanup error:', err instanceof Error ? err.message : err),
-    );
+    pruneDockerResources().catch((err) => {
+      console.warn('Periodic Docker cleanup error:', err instanceof Error ? err.message : err);
+      captureWorkerException(err, { component: 'docker-prune' });
+    });
   }, 60 * 60 * 1000);
 
   console.log('Worker is running in polling mode.');

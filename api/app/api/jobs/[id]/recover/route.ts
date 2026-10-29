@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -51,12 +52,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // If still active, reschedule for another check in 5 minutes
     if (stillActive) {
-      scheduleRecoveryCheck(id, 300).catch(err => console.warn('[Recovery] Reschedule failed:', err instanceof Error ? err.message : err));
+      scheduleRecoveryCheck(id, 300).catch(err => {
+        console.warn('[Recovery] Reschedule failed:', err instanceof Error ? err.message : err);
+        Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId: id } });
+      });
     }
 
     return NextResponse.json({ status: 'ok', recovered, stillActive });
   } catch (error) {
     console.error('POST /api/jobs/[id]/recover error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/jobs/[id]/recover' } });
     return errorResponse(error instanceof Error ? error.message : 'Recovery failed', 500);
   }
 }

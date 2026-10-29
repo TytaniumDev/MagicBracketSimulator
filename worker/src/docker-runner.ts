@@ -10,6 +10,7 @@ import { execFile } from 'child_process';
 import { spawn } from 'child_process';
 import { GAMES_PER_CONTAINER } from './constants.js';
 import { createLogger } from './logger.js';
+import { captureWorkerException } from './sentry.js';
 
 const log = createLogger('DockerRunner');
 
@@ -79,11 +80,13 @@ export async function cleanupOrphanedContainers(): Promise<void> {
           console.log(`  Removed: ${name}`);
         } catch (err) {
           console.warn(`  Warning: failed to remove ${name}:`, err instanceof Error ? err.message : err);
+          captureWorkerException(err, { component: 'docker-cleanup' });
         }
       })
     );
   } catch (err) {
     console.warn('Startup cleanup: failed to list orphaned containers:', err instanceof Error ? err.message : err);
+    captureWorkerException(err, { component: 'docker-cleanup' });
   }
 }
 
@@ -97,12 +100,14 @@ export async function pruneDockerResources(): Promise<void> {
     log.info('Docker container prune', { result: containerOutput || '(nothing to prune)' });
   } catch (err) {
     console.warn('Docker container prune failed:', err instanceof Error ? err.message : err);
+    captureWorkerException(err, { component: 'docker-prune' });
   }
   try {
     const imageOutput = await execDockerCommand(['image', 'prune', '-f']);
     log.info('Docker image prune', { result: imageOutput || '(nothing to prune)' });
   } catch (err) {
     console.warn('Docker image prune failed:', err instanceof Error ? err.message : err);
+    captureWorkerException(err, { component: 'docker-prune' });
   }
 }
 

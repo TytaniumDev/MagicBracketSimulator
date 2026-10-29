@@ -19,6 +19,7 @@ import { revertSimToPending } from '@/lib/job-store-factory';
 import { scheduleLeaseSweep } from '@/lib/cloud-tasks';
 
 import { USE_FIRESTORE } from '@/lib/env';
+import * as Sentry from '@sentry/nextjs';
 
 export async function POST(req: NextRequest) {
   if (!isWorkerRequest(req)) {
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
       markWorkerCrashed,
     });
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'lease-sweep' } });
     const message = err instanceof Error ? err.message : String(err);
     console.error(JSON.stringify({
       event: 'lease-sweep-error',

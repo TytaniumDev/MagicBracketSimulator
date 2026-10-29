@@ -11,6 +11,7 @@ import { isGcpMode } from './env';
 import * as gcs from './gcs-storage';
 import { condenseGames, structureGames, splitConcatenatedGames } from './condenser/index';
 import type { CondensedGame, StructuredGame } from './types';
+import * as Sentry from '@sentry/nextjs';
 
 // Local filesystem storage directory
 const LOGS_DATA_DIR = process.env.LOGS_DATA_DIR ?? path.join(process.cwd(), 'logs-data');
@@ -135,7 +136,8 @@ function readLocalMeta(jobId: string): StoredMeta | null {
   if (!fs.existsSync(metaPath)) return null;
   try {
     return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as StoredMeta;
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'log-store', jobId } });
     return null;
   }
 }

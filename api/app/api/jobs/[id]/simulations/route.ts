@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ simulations });
   } catch (error) {
     console.error('GET /api/jobs/[id]/simulations error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/jobs/[id]/simulations' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to get simulations', 500);
   }
 }
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ initialized: count }, { status: 201 });
   } catch (error) {
     console.error('POST /api/jobs/[id]/simulations error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/jobs/[id]/simulations' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to initialize simulations', 500);
   }
 }

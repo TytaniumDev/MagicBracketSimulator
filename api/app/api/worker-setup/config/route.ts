@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 const WORKER_SECRET = process.env.WORKER_SECRET;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(encrypted);
   } catch (err) {
     console.error('Failed to read worker config:', err);
+    Sentry.captureException(err, { tags: { component: 'api-route', route: 'POST /api/worker-setup/config' } });
     return errorResponse('Failed to read worker configuration', 500);
   }
 }

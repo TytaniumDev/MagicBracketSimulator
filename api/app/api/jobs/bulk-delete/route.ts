@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobArtifacts } from '@/lib/gcs-storage';
 import { isGcpMode } from '@/lib/deck-store-factory';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * POST /api/jobs/bulk-delete - Bulk delete jobs (admin only)
@@ -55,12 +56,14 @@ export async function POST(request: NextRequest) {
             try {
               await deleteJobArtifacts(id);
             } catch (err) {
+              Sentry.captureException(err, { tags: { component: 'bulk-delete-artifacts', jobId: id } });
               console.warn(`Failed to delete GCS artifacts for ${id}:`, err);
             }
           }
 
           return { id, deleted: true };
         } catch (err) {
+          Sentry.captureException(err, { tags: { component: 'bulk-delete', jobId: id } });
           return {
             id,
             deleted: false,
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ deletedCount, results });
   } catch (error) {
     console.error('POST /api/jobs/bulk-delete error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/jobs/bulk-delete' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to delete jobs', 500);
   }
 }

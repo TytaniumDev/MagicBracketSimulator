@@ -1,6 +1,7 @@
 import { Storage } from '@google-cloud/storage';
 import { isRetryableGcsError } from './gcs-retry';
 import { withRetry } from './retry';
+import * as Sentry from '@sentry/nextjs';
 
 // Initialize Cloud Storage client
 const storage = new Storage({
@@ -66,6 +67,7 @@ export async function getJobArtifact(
     const [contents] = await file.download();
     return contents.toString('utf-8');
   } catch (error) {
+    Sentry.captureException(error, { tags: { component: 'gcs' } });
     console.error(`Error downloading ${objectPath}:`, error);
     return null;
   }
@@ -87,6 +89,7 @@ export async function getJobArtifactJson<T>(
   try {
     return JSON.parse(contents) as T;
   } catch (error) {
+    Sentry.captureException(error, { tags: { component: 'gcs' } });
     console.error(`Error parsing JSON from ${filename}:`, error);
     return null;
   }

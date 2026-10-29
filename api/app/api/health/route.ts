@@ -3,6 +3,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
 import { getRatingStore } from '@/lib/rating-store-factory';
 import { isJobStuck } from '@/lib/job-utils';
+import * as Sentry from '@sentry/nextjs';
 
 interface HealthCheck {
   ok: boolean;
@@ -38,6 +39,7 @@ export async function GET() {
         : `${stuckJobs.length} stuck job(s)`,
     };
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'health', check: 'stuckJobs' } });
     checks.stuckJobs = { ok: false, detail: `Error checking jobs: ${err instanceof Error ? err.message : 'unknown'}` };
   }
 
@@ -50,6 +52,7 @@ export async function GET() {
       detail: leaderboard.length > 0 ? 'Leaderboard has entries' : 'Leaderboard is empty',
     };
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'health', check: 'ratings' } });
     checks.ratings = { ok: false, detail: `Error checking ratings: ${err instanceof Error ? err.message : 'unknown'}` };
   }
 
@@ -63,6 +66,7 @@ export async function GET() {
         : 'No active workers',
     };
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'health', check: 'worker' } });
     checks.worker = { ok: false, detail: `Error checking workers: ${err instanceof Error ? err.message : 'unknown'}` };
   }
 

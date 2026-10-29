@@ -8,6 +8,7 @@ import { syncPrecons } from '@/lib/archidekt-sync';
 import { errorResponse } from '@/lib/api-response';
 
 import { isLocalMode } from '@/lib/env';
+import * as Sentry from '@sentry/nextjs';
 
 const IS_LOCAL_MODE = isLocalMode();
 
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('[SyncPrecons] Error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/sync/precons' } });
     return errorResponse(error instanceof Error ? error.message : 'Sync failed', 500);
   }
 }

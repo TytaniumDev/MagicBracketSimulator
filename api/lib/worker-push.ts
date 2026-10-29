@@ -4,6 +4,7 @@
  */
 
 import * as workerStore from './worker-store-factory';
+import * as Sentry from '@sentry/nextjs';
 
 const PUSH_TIMEOUT_MS = 5_000;
 
@@ -30,7 +31,8 @@ export async function pushToWorker(
       signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
     });
     return res.ok;
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'worker-push' } });
     return false;
   }
 }

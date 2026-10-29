@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as Sentry from '@sentry/nextjs';
 
 const DECK_METADATA_FILENAME = 'deck-metadata.json';
 
@@ -24,6 +25,7 @@ function loadMetadata(): Record<string, DeckMetadataEntry> {
       return JSON.parse(raw) as Record<string, DeckMetadataEntry>;
     }
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'deck-metadata' } });
     console.error('Failed to load deck metadata:', err);
   }
   return {};
@@ -38,6 +40,7 @@ function saveMetadata(metadata: Record<string, DeckMetadataEntry>): void {
     const metadataPath = getMetadataPath();
     fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8');
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'deck-metadata' } });
     console.error('Failed to save deck metadata:', err);
   }
 }

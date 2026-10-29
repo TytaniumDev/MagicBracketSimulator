@@ -10,6 +10,7 @@ import { lruTouch, lruEvictIfFull } from './lru';
 import { normalizeDckForForge } from './forge-card-name';
 
 import { USE_FIRESTORE, isGcpMode } from './env';
+import * as Sentry from '@sentry/nextjs';
 
 // Log mode detection at startup
 console.log(`[Deck Store] Running in ${USE_FIRESTORE ? 'GCP' : 'LOCAL'} mode`);
@@ -250,7 +251,8 @@ export async function deleteDeck(id: string, userId: string): Promise<boolean> {
 
   try {
     return deleteSavedDeck(id);
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'deck-delete' } });
     return false;
   }
 }

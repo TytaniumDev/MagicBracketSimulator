@@ -657,7 +657,10 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   if (allCancelled) {
     await setJobFailed(jobId, 'All simulations were cancelled (likely by stale-sweeper lifetime cap)');
     await setNeedsAggregation(jobId, false);
-    cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
+    cancelRecoveryCheck(jobId).catch(err => {
+      log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err });
+      Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId } });
+    });
     return;
   }
 
@@ -667,6 +670,9 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   await setNeedsAggregation(jobId, false);
 
   // Cancel recovery task
-  cancelRecoveryCheck(jobId).catch(err => log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err }));
+  cancelRecoveryCheck(jobId).catch(err => {
+    log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err });
+    Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId } });
+  });
 }
 

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as Sentry from '@sentry/nextjs';
 
 const SCRYFALL_CACHE_FILENAME = 'scryfall-color-identity.json';
 
@@ -29,6 +30,7 @@ function loadCache(): Record<string, string[] | null> {
       return JSON.parse(raw) as Record<string, string[] | null>;
     }
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'scryfall' } });
     console.error('Failed to load Scryfall cache:', err);
   }
   return {};
@@ -43,6 +45,7 @@ function saveCache(cache: Record<string, string[] | null>): void {
     const cachePath = getCachePath();
     fs.writeFileSync(cachePath, JSON.stringify(cache, null, 0), 'utf-8');
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'scryfall' } });
     console.error('Failed to save Scryfall cache:', err);
   }
 }
@@ -84,6 +87,7 @@ export async function getColorIdentity(cardName: string): Promise<string[]> {
     saveCache(cache);
     return colorIdentity;
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'scryfall' } });
     console.error(`Scryfall lookup failed for "${normalized}":`, err);
     cache[cacheKey] = null;
     saveCache(cache);

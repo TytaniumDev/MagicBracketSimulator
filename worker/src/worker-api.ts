@@ -14,6 +14,7 @@
 
 import * as http from 'http';
 import * as crypto from 'crypto';
+import { captureWorkerException } from './sentry.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -168,6 +169,7 @@ export function startWorkerApi(handlers: WorkerApiHandlers): Promise<void> {
         }
       } catch (err) {
         const message = err instanceof SyntaxError ? 'Invalid JSON' : 'Internal error';
+        if (!(err instanceof SyntaxError)) captureWorkerException(err, { component: 'worker-api' });
         jsonResponse(res, 400, { error: message });
       }
     });

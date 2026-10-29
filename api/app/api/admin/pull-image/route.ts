@@ -8,6 +8,7 @@ import { pushToAllWorkers } from '@/lib/worker-push';
 import { errorResponse } from '@/lib/api-response';
 
 import { isLocalMode } from '@/lib/env';
+import * as Sentry from '@sentry/nextjs';
 
 const IS_LOCAL_MODE = isLocalMode();
 
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, message: 'Pull-image broadcast sent' });
   } catch (error) {
     console.error('[AdminPullImage] Error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/admin/pull-image' } });
     return errorResponse(error instanceof Error ? error.message : 'Broadcast failed', 500);
   }
 }

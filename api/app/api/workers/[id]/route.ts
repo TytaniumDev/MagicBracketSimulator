@@ -3,6 +3,7 @@ import { verifyAllowedUser } from '@/lib/auth';
 import * as workerStore from '@/lib/worker-store-factory';
 import { pushToWorker } from '@/lib/worker-push';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * PATCH /api/workers/:id — Update per-worker config (owner-gated).
@@ -56,6 +57,7 @@ export async function PATCH(
       return errorResponse(error.message, 401);
     }
     console.error('PATCH /api/workers/[id] error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'PATCH /api/workers/[id]' } });
     return errorResponse(error instanceof Error ? error.message : 'Update failed', 500);
   }
 }
