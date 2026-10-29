@@ -57,6 +57,10 @@ class Installer {
   /// callers (SimRunner) don't have to fetch again.
   ForgeManifest? _lastManifest;
 
+  /// The Forge version the last manifest fetch asked for, or null if the
+  /// manifest hasn't been fetched (or couldn't be).
+  String? get wantedForgeVersion => _lastManifest?.version;
+
   Future<String> _supportDir() async {
     if (_supportDirOverride != null) return _supportDirOverride();
     final dir = await getApplicationSupportDirectory();
