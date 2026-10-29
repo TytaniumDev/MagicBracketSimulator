@@ -13,8 +13,11 @@ on:
     # The appcast PR this workflow opens merges back to main. Without
     # this, that merge starts another release, which opens another
     # appcast PR, forever.
+    # forge-manifest.json is fetched from main at runtime, so a Forge
+    # bump needs no new app build either.
     paths-ignore:
       - "worker_flutter/appcast.xml"
+      - "worker_flutter/forge-manifest.json"
     tags:
       - "worker-v*"
 

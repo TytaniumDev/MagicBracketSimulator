@@ -207,7 +207,9 @@ ParsedGameLog parseGameLog(String logText) {
   final winnerRegex = RegExp(
     r'Game Result: Game (\d+) ended in \d+ ms\.\s*(.+?) has won!',
   );
-  final turnRegex = RegExp(r'Game outcome: Turn (\d+)');
+  // Forge 2.0.12+ capitalizes the caption ("Game Outcome:"); 2.0.10 used
+  // "Game outcome:". Match both so winning turns survive Forge bumps.
+  final turnRegex = RegExp(r'Game outcome: Turn (\d+)', caseSensitive: false);
 
   // For each "has won" line we walk back through the text to find the most
   // recent "Game outcome: Turn N" that precedes it. We do this by tracking

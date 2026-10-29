@@ -70,10 +70,14 @@ The worker has two independent update channels:
 1. **Forge updates** — manifest-driven, no .app release needed.
    - Source of truth: `worker_flutter/forge-manifest.json`.
    - Fetched at boot from raw.githubusercontent.com on `main`.
-   - To bump Forge: download the new tarball, compute its sha256,
-     update the manifest JSON, commit + push to `main`. Existing
-     installs pick it up on next launch — the installer cleans the
-     old jar, verifies the new sha256, extracts.
+   - Bumped automatically: the Nightly Forge Update workflow
+     (`.github/workflows/forge-update.yml`) opens an auto-merging PR
+     whenever a new Forge release ships, using
+     `.github/scripts/update_forge_manifest.py` to fill in the sha256,
+     size and jar name. Existing installs pick it up on next launch —
+     the installer cleans the old jar, verifies the new sha256, extracts.
+   - To bump by hand, run that script against a downloaded tarball and
+     commit the manifest to `main`, or trigger the workflow manually.
 
 2. **App updates** — Sparkle appcast at `worker_flutter/appcast.xml`.
    - Fetched at boot (and every hour while running) from

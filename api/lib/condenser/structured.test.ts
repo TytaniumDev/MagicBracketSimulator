@@ -197,11 +197,11 @@ async function runTests() {
   // Life tracking
   // =========================================================================
 
-  await test('buildStructuredGame: lifePerTurn is empty for old-format logs (no [LIFE] entries)', () => {
+  await test('buildStructuredGame: lifePerTurn is empty for old-format logs (no life entries)', () => {
     const result = buildStructuredGame(games[0]);
     assert(result.lifePerTurn !== undefined, 'should have lifePerTurn field');
     const rounds = Object.keys(result.lifePerTurn!);
-    // The fixture was generated with Forge 2.0.10 (pre-[LIFE] logs), so no life data
+    // The fixture was generated with Forge 2.0.10 (pre-life logs), so no life data
     assertEqual(rounds.length, 0, 'should have no life data for old-format logs');
   });
 
@@ -253,11 +253,12 @@ async function runTests() {
   });
 
   // =========================================================================
-  // calculateLifePerTurn - unit tests with [LIFE] log format
+  // calculateLifePerTurn - unit tests with native life log format
   // =========================================================================
   //
-  // Forge (post-2.0.10) outputs explicit life changes as:
-  //   [LIFE] Life: PlayerName oldValue -> newValue
+  // Forge 2.0.12+ outputs explicit life changes as:
+  //   Life: Life: PlayerName oldValue > newValue
+  // (2.0.11 used `->` as the arrow.)
   //
   // This gives us absolute life totals directly from the game engine.
   // =========================================================================
@@ -270,49 +271,49 @@ async function runTests() {
     return `Turn: Turn 1 (${P1})\n${turnLines}\nTurn: Turn 2 (${P2})\nSome action.\n`;
   }
 
-  await test('calculateLifePerTurn: [LIFE] entry decreases life', () => {
-    const log = miniLog(`[LIFE] Life: ${P1} 40 -> 36`);
+  await test('calculateLifePerTurn: life entry decreases life', () => {
+    const log = miniLog(`Life: Life: ${P1} 40 > 36`);
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
     assertEqual(life[1][P1], 36, 'P1 should be at 36');
     assertEqual(life[1][P2], 40, 'P2 should be untouched at 40');
   });
 
-  await test('calculateLifePerTurn: [LIFE] entry increases life', () => {
-    const log = miniLog(`[LIFE] Life: ${P2} 40 -> 45`);
+  await test('calculateLifePerTurn: life entry increases life', () => {
+    const log = miniLog(`Life: Life: ${P2} 40 > 45`);
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
     assertEqual(life[1][P1], 40, 'P1 untouched');
     assertEqual(life[1][P2], 45, 'P2 should gain life to 45');
   });
 
-  await test('calculateLifePerTurn: multiple [LIFE] entries in same turn', () => {
+  await test('calculateLifePerTurn: multiple life entries in same turn', () => {
     const log = miniLog(
-      `[LIFE] Life: ${P1} 40 -> 37\n[LIFE] Life: ${P1} 37 -> 34`
+      `Life: Life: ${P1} 40 > 37\nLife: Life: ${P1} 37 > 34`
     );
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
     assertEqual(life[1][P1], 34, 'P1 should be at 34 after two decreases');
   });
 
   await test('calculateLifePerTurn: player reaches 0 life', () => {
-    const log = miniLog(`[LIFE] Life: ${P2} 3 -> 0`);
+    const log = miniLog(`Life: Life: ${P2} 3 > 0`);
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
     assertEqual(life[1][P2], 0, 'P2 should be at 0');
   });
 
   await test('calculateLifePerTurn: negative life total', () => {
-    const log = miniLog(`[LIFE] Life: ${P1} 2 -> -3`);
+    const log = miniLog(`Life: Life: ${P1} 2 > -3`);
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
     assertEqual(life[1][P1], -3, 'P1 should be at -3');
   });
 
-  await test('calculateLifePerTurn: no [LIFE] entries returns empty object', () => {
+  await test('calculateLifePerTurn: no life entries returns empty object', () => {
     const log = miniLog('Some action that does not change life.');
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
-    assertEqual(Object.keys(life).length, 0, 'should return empty object when no [LIFE] entries');
+    assertEqual(Object.keys(life).length, 0, 'should return empty object when no life entries');
   });
 
   await test('calculateLifePerTurn: both players change in same round', () => {
     const log = miniLog(
-      `[LIFE] Life: ${P1} 40 -> 38\n[LIFE] Life: ${P2} 40 -> 35`
+      `Life: Life: ${P1} 40 > 38\nLife: Life: ${P2} 40 > 35`
     );
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
     assertEqual(life[1][P1], 38, 'P1 should be at 38');
@@ -327,22 +328,22 @@ async function runTests() {
 
     const log = [
       `Turn: Turn 1 (${P1})`,
-      `[LIFE] Life: ${P1} 40 -> 39`,
+      `Life: Life: ${P1} 40 > 39`,
       `Turn: Turn 2 (${P2})`,
-      `[LIFE] Life: ${P2} 40 -> 37`,
+      `Life: Life: ${P2} 40 > 37`,
       `Turn: Turn 3 (${P3})`,
       `Some action.`,
       `Turn: Turn 4 (${P4})`,
-      `[LIFE] Life: ${P4} 40 -> 35`,
+      `Life: Life: ${P4} 40 > 35`,
       // Round 2
       `Turn: Turn 5 (${P1})`,
-      `[LIFE] Life: ${P1} 39 -> 30`,
+      `Life: Life: ${P1} 39 > 30`,
       `Turn: Turn 6 (${P2})`,
-      `[LIFE] Life: ${P2} 37 -> 32`,
+      `Life: Life: ${P2} 37 > 32`,
       `Turn: Turn 7 (${P3})`,
-      `[LIFE] Life: ${P3} 40 -> 28`,
+      `Life: Life: ${P3} 40 > 28`,
       `Turn: Turn 8 (${P4})`,
-      `[LIFE] Life: ${P4} 35 -> 0`,
+      `Life: Life: ${P4} 35 > 0`,
     ].join('\n');
 
     const life = calculateLifePerTurn(log, fourPlayers, 4);
@@ -360,8 +361,21 @@ async function runTests() {
     assertEqual(life[2][P4], 0, 'P4 round 2 (dead)');
   });
 
-  await test('calculateLifePerTurn: unrecognized player in [LIFE] entry is ignored', () => {
-    const log = miniLog(`[LIFE] Life: Ai(9)-UnknownDeck 40 -> 35`);
+  await test('calculateLifePerTurn: accepts the Forge 2.0.11 `->` arrow', () => {
+    const log = miniLog(`Life: Life: ${P1} 40 -> 33`);
+    const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
+    assertEqual(life[1][P1], 33, 'P1 should be at 33 after 2.0.11-format entry');
+  });
+
+  await test('calculateLifePerTurn: deck name ending in digits keeps its digits', () => {
+    const digitDeck = 'Ai(1)-Deck 2000';
+    const log = `Turn: Turn 1 (${digitDeck})\nLife: Life: ${digitDeck} 40 > 31\nTurn: Turn 2 (${P2})\nSome action.\n`;
+    const life = calculateLifePerTurn(log, [digitDeck, P2], 2);
+    assertEqual(life[1][digitDeck], 31, 'digit-suffix deck should be at 31');
+  });
+
+  await test('calculateLifePerTurn: unrecognized player in life entry is ignored', () => {
+    const log = miniLog(`Life: Life: Ai(9)-UnknownDeck 40 > 35`);
     const life = calculateLifePerTurn(log, MINI_PLAYERS, 2);
     assertEqual(life[1][P1], 40, 'P1 should be untouched');
     assertEqual(life[1][P2], 40, 'P2 should be untouched');
@@ -370,8 +384,8 @@ async function runTests() {
   // =========================================================================
   // calculateLifePerTurn - integration with real fixture
   // =========================================================================
-  // Note: The real fixture was generated with Forge 2.0.10 (pre-[LIFE] logs).
-  // Without [LIFE] entries, calculateLifePerTurn returns empty {}.
+  // Note: The real fixture was generated with Forge 2.0.10 (pre-life logs).
+  // Without life entries, calculateLifePerTurn returns empty {}.
   // These tests verify the function handles old-format logs gracefully.
 
   await test('calculateLifePerTurn (fixture): old-format logs return empty life data', () => {
@@ -379,44 +393,57 @@ async function runTests() {
       const result = buildStructuredGame(games[i]);
       assert(result.lifePerTurn !== undefined, `game ${i + 1} should have lifePerTurn field`);
       const rounds = Object.keys(result.lifePerTurn!);
-      assertEqual(rounds.length, 0, `game ${i + 1} should have empty life data (no [LIFE] entries)`);
+      assertEqual(rounds.length, 0, `game ${i + 1} should have empty life data (no life entries)`);
     }
   });
 
   // =========================================================================
-  // buildStructuredGame - integration with [LIFE] log data
+  // buildStructuredGame - integration with life log data
   // =========================================================================
-  // Tests the full pipeline: raw log with [LIFE] entries → buildStructuredGame
+  // Tests the full pipeline: raw log with life entries → buildStructuredGame
   // → lifePerTurn populated correctly.
 
-  await test('buildStructuredGame: full pipeline with [LIFE] entries populates lifePerTurn', () => {
+  await test('buildStructuredGame (Forge 2.0.15 fixture): real life entries populate lifePerTurn', () => {
+    const raw = fs.readFileSync(path.join(__dirname, 'fixtures', 'real-forge-2.0.15-game.txt'), 'utf-8');
+    const result = buildStructuredGame(raw);
+    const rounds = Object.keys(result.lifePerTurn!).map(Number).sort((a, b) => a - b);
+    assert(rounds.length > 0, 'should have life data from a 2.0.15 log');
+    const last = result.lifePerTurn![rounds[rounds.length - 1]];
+    // Final log lines: Temur Roar wins; Doran, Marchesa end at or below 0.
+    assertEqual(last['Ai(1)-Temur Roar Upgraded'], 30, 'winner life at end');
+    assert(last['Ai(2)-Doran Big Butts'] <= 0, 'Doran should be at or below 0');
+    assert(last['Ai(3)-Marchesa'] <= 0, 'Marchesa should be at or below 0');
+    assertEqual(result.winner, 'Ai(1)-Temur Roar Upgraded', 'winner from 2.0.15 "Game Outcome" caption');
+  });
+
+  await test('buildStructuredGame: full pipeline with life entries populates lifePerTurn', () => {
     const PA = 'Ai(1)-Alpha Deck';
     const PB = 'Ai(2)-Beta Deck';
     const PC = 'Ai(3)-Gamma Deck';
     const PD = 'Ai(4)-Delta Deck';
 
-    // Synthetic 4-player game log with [LIFE] entries
+    // Synthetic 4-player game log with life entries
     const syntheticLog = [
       `Turn: Turn 1 (${PA})`,
       `Land: ${PA} played Forest (41)`,
-      `[LIFE] Life: ${PA} 40 -> 39`,
+      `Life: Life: ${PA} 40 > 39`,
       `Turn: Turn 2 (${PB})`,
       `Land: ${PB} played Island (42)`,
-      `[LIFE] Life: ${PB} 40 -> 38`,
+      `Life: Life: ${PB} 40 > 38`,
       `Turn: Turn 3 (${PC})`,
       `Land: ${PC} played Mountain (43)`,
       `Turn: Turn 4 (${PD})`,
       `Land: ${PD} played Swamp (44)`,
-      `[LIFE] Life: ${PD} 40 -> 35`,
+      `Life: Life: ${PD} 40 > 35`,
       // Round 2
       `Turn: Turn 5 (${PA})`,
-      `[LIFE] Life: ${PA} 39 -> 30`,
+      `Life: Life: ${PA} 39 > 30`,
       `Turn: Turn 6 (${PB})`,
-      `[LIFE] Life: ${PB} 38 -> 25`,
+      `Life: Life: ${PB} 38 > 25`,
       `Turn: Turn 7 (${PC})`,
-      `[LIFE] Life: ${PC} 40 -> 20`,
+      `Life: Life: ${PC} 40 > 20`,
       `Turn: Turn 8 (${PD})`,
-      `[LIFE] Life: ${PD} 35 -> 0`,
+      `Life: Life: ${PD} 35 > 0`,
       `${PD} loses the game.`,
       `${PA} wins the game.`,
       `Game Result: Game 1 ended in 12345 ms. ${PA} has won!`,
