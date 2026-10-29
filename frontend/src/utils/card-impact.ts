@@ -1,4 +1,5 @@
 import type { CardImpact } from '@shared/types/card-impact';
+import { cardKey } from '../scryfall';
 
 /** Below this many casts a card's lift is mostly noise, so it isn't ranked. */
 export const MIN_CASTS_TO_RANK = 5;
@@ -18,6 +19,21 @@ export function topSwingCards(
     .filter((c) => c.cast >= MIN_CASTS_TO_RANK && !isLand(c.name))
     .sort((a, b) => b.closeLift - a.closeLift || b.winLift - a.winLift)
     .slice(0, limit);
+}
+
+/**
+ * Keep only cards from the decklist. Forge logs can name cards the deck
+ * doesn't run, such as copies made by other cards. `faceLookup` (Scryfall
+ * data for the deck, keyed by every face) keeps omen and adventure halves
+ * like "Dynamic Soar", which Forge logs under the half that was cast.
+ */
+export function onlyDeckCards(
+  cards: CardImpact[],
+  deckCardNames: string[],
+  faceLookup: Record<string, unknown> = {},
+): CardImpact[] {
+  const deckKeys = new Set(deckCardNames.map(cardKey));
+  return cards.filter((c) => deckKeys.has(cardKey(c.name)) || cardKey(c.name) in faceLookup);
 }
 
 const PERMANENT_TYPES = ['Creature', 'Planeswalker', 'Artifact', 'Enchantment', 'Battle', 'Land'];

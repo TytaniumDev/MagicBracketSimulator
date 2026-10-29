@@ -1,3 +1,5 @@
+import { forgeCardName } from '../forge-card-name';
+
 export interface DeckCard {
   name: string;
   quantity: number;
@@ -65,7 +67,7 @@ function cleanDeckName(name: string): string {
 /**
  * Clean card name for Forge:
  * - Strip set codes (e.g., "Sol Ring|2XM" -> "Sol Ring")
- * - Handle double-faced cards (keep as-is, Forge uses "CardName // BackName")
+ * - Use the front face of two-part cards (see forge-card-name.ts)
  * - Sanitize to prevent injection
  */
 function cleanCardName(name: string): string {
@@ -79,6 +81,5 @@ function cleanCardName(name: string): string {
   // eslint-disable-next-line no-control-regex -- deliberate: sanitizing raw input
   name = name.replace(/[\r\n\x00-\x1F\x7F]+/g, ' ');
 
-  // Trim whitespace
-  return name.trim();
+  return forgeCardName(name);
 }

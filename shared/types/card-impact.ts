@@ -34,6 +34,11 @@ export interface DeckCardStats {
   cards: Record<string, CardCounters>;
   /** Jobs already counted, so re-running aggregation can't double count. */
   jobIds: string[];
+  /**
+   * Parser version the counters were built with (missing on the first
+   * version). Counters from an older version are discarded and rebuilt.
+   */
+  version?: number;
 }
 
 /** One card's scores, for the deck page. */

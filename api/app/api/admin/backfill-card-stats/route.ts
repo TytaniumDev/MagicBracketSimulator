@@ -11,7 +11,8 @@ import { errorResponse } from '@/lib/api-response';
  * Admin-only. Walks completed jobs 200 at a time, newest first, and adds
  * each one's raw logs to its decks' card counters. Pass the response's
  * `nextCursor` back as `?cursor=` to continue through older jobs. Safe to
- * re-run: the store skips jobs it already counted.
+ * re-run: the store skips jobs it already counted. Run it again after
+ * bumping CARD_STATS_VERSION, which discards counters from the old parser.
  */
 export async function POST(request: NextRequest) {
   try {

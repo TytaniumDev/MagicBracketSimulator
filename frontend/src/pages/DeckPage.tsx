@@ -7,6 +7,7 @@ import { DeckList } from '../components/DeckList';
 import { Spinner } from '../components/Spinner';
 import { WinTurnTooltip } from '../components/WinTurnTooltip';
 import { useDeck, useDeckCardImpact, useScryfallCards } from '../hooks/useDeck';
+import { onlyDeckCards } from '../utils/card-impact';
 
 function StatTile({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
@@ -66,6 +67,10 @@ export default function DeckPage() {
     [data],
   );
   const scryfall = useScryfallCards(cardNames);
+  const impactCards = useMemo(
+    () => (cardImpact.data ? onlyDeckCards(cardImpact.data.cards, cardNames, scryfall.data) : []),
+    [cardImpact.data, cardNames, scryfall.data],
+  );
 
   if (deckQuery.isLoading) {
     return (
@@ -132,7 +137,7 @@ export default function DeckPage() {
         )}
         {cardImpact.isError && <p className="text-sm text-gray-400">Card stats are unavailable right now.</p>}
         {cardImpact.data && (
-          <CardImpactTable games={cardImpact.data.games} cards={cardImpact.data.cards} lookup={scryfall.data} />
+          <CardImpactTable games={cardImpact.data.games} cards={impactCards} lookup={scryfall.data} />
         )}
       </section>
 

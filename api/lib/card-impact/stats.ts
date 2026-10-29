@@ -25,6 +25,13 @@ export const CLOSE_WINDOW = 3;
 
 export type { DeckCardStats };
 
+/**
+ * Bump when parse.ts changes what it counts. Stored counters from an older
+ * version are dropped, and the admin backfill rebuilds them from raw logs.
+ * 2: cards put onto the battlefield without being cast count too.
+ */
+export const CARD_STATS_VERSION = 2;
+
 export function emptyDeckCardStats(): DeckCardStats {
   return {
     games: 0,
@@ -34,7 +41,13 @@ export function emptyDeckCardStats(): DeckCardStats {
     closesFromAlive: new Array(TURN_BINS).fill(0),
     cards: {},
     jobIds: [],
+    version: CARD_STATS_VERSION,
   };
+}
+
+/** Stored counters if they were built by the current parser, else null. */
+export function currentDeckCardStats(stored: DeckCardStats | null | undefined): DeckCardStats | null {
+  return stored && stored.version === CARD_STATS_VERSION ? stored : null;
 }
 
 function bin(turn: number): number {

@@ -4,6 +4,7 @@
  * Reads the lines that tie a card to its controller and to what it did:
  *   Turn: Turn 5 (Ai(1)-Temur Roar Upgraded)
  *   Add To Stack: Ai(1)-Temur Roar Upgraded cast Miirym, Sentinel Wyrm
+ *   Add To Stack: Ai(1)-Temur Roar Upgraded triggered Karakyk Guardian
  *   Add To Stack: Ai(2)-Doran cast Generous Gift targeting [Miirym, Sentinel Wyrm (1)]
  *   Land: Ai(1)-Temur Roar Upgraded played Ketria Triome (20)
  *   Combat: Ai(1)-Temur Roar Upgraded assigned Miirym, Sentinel Wyrm (1) to attack Ai(4)-...
@@ -15,15 +16,21 @@
  * Forge 2.0.10 also put the card id on cast lines; 2.0.12+ doesn't, so
  * ids are learned from whichever lines carry them. Zone changes only
  * appear in Forge 2.0.11+.
+ *
+ * Cards can reach the battlefield without being cast (Ureni of the Unwritten
+ * puts Dragons straight onto it, and Forge logs no zone change for that), so
+ * a card also counts as played the first time it triggers, activates or
+ * attacks. Tokens are skipped, since they aren't cards in the deck, and so
+ * are cards another player already played (stolen ones).
  */
 import { extractWinner } from '../condenser/turns';
 
-/** First time a player cast or played a card in one game, and what it did after. */
+/** First time a player cast, played or used a card in one game, and what it did after. */
 export interface CardPlay {
   /** Forge player label, e.g. "Ai(1)-Temur Roar Upgraded". */
   player: string;
   name: string;
-  /** The player's own turn count when it was first cast or played (1-based). */
+  /** The player's own turn count when it was first cast, played or used (1-based). */
   turn: number;
   /** Damage this card dealt to players (any player, which in practice means opponents). */
   damageToPlayers: number;
@@ -41,7 +48,10 @@ export interface GameCardSummary {
 }
 
 const TURN_LINE = /^Turn: Turn \d+ \((.+)\)\s*$/i;
-const CAST_LINE = /^Add to stack: (.+?) cast (.+)$/i;
+const STACK_LINE = /^Add to stack: (.+)$/i;
+/** What follows the player on an "Add To Stack" line. */
+const STACK_ACTION = /^(cast|triggered|activated) (.+)$/i;
+const TOKEN_NAME = /\bToken$/i;
 const LAND_LINE = /^Land: (.+?) played (.+?) \((\d+)\)\s*$/i;
 const ATTACK_LINE = /^Combat: (.+?) assigned (.+) to attack /i;
 const DAMAGE_LINE = /^Damage: (.+?) \((\d+)\) deals (\d+) (?:combat )?damage to (.+?)\.?\s*$/i;
@@ -102,6 +112,20 @@ export function parseGameCards(gameLog: string): GameCardSummary {
     }
   };
 
+  /**
+   * Record a card first seen through a trigger, activation or attack rather
+   * than a cast. A card another player already played is theirs (it was
+   * stolen, e.g. by Mark of Mutiny), so its damage stays credited to them.
+   */
+  const recordSeen = (player: string, name: string, id: string | null) => {
+    if (TOKEN_NAME.test(name)) return;
+    const knownOwner = id ? idOwner.get(id) : undefined;
+    if (knownOwner && knownOwner !== player) return;
+    const owners = nameOwners.get(name);
+    if (!knownOwner && owners && !owners.has(player)) return;
+    recordPlay(player, name, id);
+  };
+
   /** Which player's play a card reference belongs to: by id, else by a name only one player cast. */
   const playFor = (name: string, id: string | null): CardPlay | undefined => {
     let owner = id ? idOwner.get(id) : undefined;
@@ -122,12 +146,15 @@ export function parseGameCards(gameLog: string): GameCardSummary {
       continue;
     }
 
-    if ((match = CAST_LINE.exec(line))) {
-      const caster = lineOwner(match[0].slice(match[0].indexOf(':') + 1).trim());
-      if (!caster) continue;
-      const [spell, targets] = match[2].split(' targeting [');
+    if ((match = STACK_LINE.exec(line))) {
+      const rest = match[1].trim();
+      const caster = lineOwner(rest);
+      const action = caster ? STACK_ACTION.exec(rest.slice(caster.length + 1)) : null;
+      if (!caster || !action) continue;
+      const [spell, targets] = action[2].split(' targeting [');
       const { name, id } = splitTrailingId(spell);
-      recordPlay(caster, name, id);
+      if (action[1].toLowerCase() === 'cast') recordPlay(caster, name, id);
+      else recordSeen(caster, name, id);
       for (const target of parseCardRefs(targets ?? '')) {
         const targetPlay = playFor(target.name, target.id);
         if (targetPlay && targetPlay.player !== caster) targetPlay.targetedByOpponents++;
@@ -145,7 +172,7 @@ export function parseGameCards(gameLog: string): GameCardSummary {
       const attacker = match[1].trim();
       if (!playerSet.has(attacker)) continue;
       for (const ref of parseCardRefs(match[2])) {
-        if (plays.has(playKey(attacker, ref.name))) idOwner.set(ref.id, attacker);
+        recordSeen(attacker, ref.name, ref.id);
       }
       continue;
     }

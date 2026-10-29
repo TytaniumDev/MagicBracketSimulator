@@ -48,6 +48,22 @@ export function toScryfallCard(json: ScryfallCardJson): ScryfallCard {
   };
 }
 
+/**
+ * Key cards by every face name, so a log line naming an omen or adventure
+ * half ("Dynamic Soar") finds its card ("Whirlwing Stormbrood // Dynamic
+ * Soar"). The front face wins when two cards share a face name.
+ */
+export function indexByFace(cards: ScryfallCard[]): Record<string, ScryfallCard> {
+  const byKey: Record<string, ScryfallCard> = {};
+  for (const card of cards) byKey[cardKey(card.name)] = card;
+  for (const card of cards) {
+    for (const face of card.name.split(' // ').slice(1)) {
+      byKey[cardKey(face)] ??= card;
+    }
+  }
+  return byKey;
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -57,14 +73,14 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 /**
- * Fetch card details for `names`, keyed by `cardKey(name)`. Names Scryfall
- * doesn't recognize are simply absent from the result.
+ * Fetch card details for `names`, keyed by `cardKey` of each face name (see
+ * `indexByFace`). Names Scryfall doesn't recognize are simply absent.
  */
 export async function fetchScryfallCards(names: string[]): Promise<Record<string, ScryfallCard>> {
   // Scryfall resolves split and double-faced cards by their front face
   // ("Fire" → "Fire // Ice") but not always by the joined name.
   const unique = [...new Set(names.map((n) => n.split(' // ')[0].trim()))];
-  const byKey: Record<string, ScryfallCard> = {};
+  const cards: ScryfallCard[] = [];
 
   for (const batch of chunk(unique, MAX_IDENTIFIERS_PER_REQUEST)) {
     const res = await fetch(COLLECTION_URL, {
@@ -76,10 +92,8 @@ export async function fetchScryfallCards(names: string[]): Promise<Record<string
       throw new Error(`Scryfall lookup failed (${res.status})`);
     }
     const body = (await res.json()) as { data?: ScryfallCardJson[] };
-    for (const json of body.data ?? []) {
-      byKey[cardKey(json.name)] = toScryfallCard(json);
-    }
+    cards.push(...(body.data ?? []).map(toScryfallCard));
   }
 
-  return byKey;
+  return indexByFace(cards);
 }

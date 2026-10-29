@@ -130,6 +130,57 @@ test('parse: damage from a card both players cast is credited by attacker id', (
   assertEqual(bears.find((p) => p.player === DORAN)!.damageToPlayers, 0, 'Doran bears');
 });
 
+test('parse: a card put onto the battlefield counts from its first attack or trigger', () => {
+  const log = [
+    `Turn: Turn 1 (${TEMUR})`,
+    `Turn: Turn 2 (${DORAN})`,
+    `Turn: Turn 3 (${TEMUR})`,
+    `Add To Stack: ${TEMUR} triggered Ureni of the Unwritten`,
+    `Add To Stack: ${TEMUR} triggered Karakyk Guardian`,
+    `Turn: Turn 4 (${DORAN})`,
+    `Turn: Turn 5 (${TEMUR})`,
+    `Combat: ${TEMUR} assigned Karakyk Guardian (40), Sapphire Dragon (41) and Dragon Token (90) to attack ${DORAN}.`,
+    `Damage: Sapphire Dragon (41) deals 4 combat damage to ${DORAN}.`,
+    `Add To Stack: ${TEMUR} activated Treasure Token`,
+  ].join('\n');
+  const plays = parseGameCards(log).plays;
+  const guardian = plays.find((p) => p.name === 'Karakyk Guardian');
+  assertEqual(guardian?.turn, 2, 'Guardian counted at its ETB trigger');
+  const sapphire = plays.find((p) => p.name === 'Sapphire Dragon');
+  assertEqual(sapphire?.turn, 3, 'Sapphire counted at its first attack');
+  assertEqual(sapphire?.damageToPlayers, 4, 'Sapphire damage');
+  assert(!plays.some((p) => p.name.endsWith('Token')), 'tokens are skipped');
+});
+
+test('parse: a stolen card stays credited to the player who cast it', () => {
+  const log = [
+    `Turn: Turn 1 (${TEMUR})`,
+    `Add To Stack: ${TEMUR} cast Ureni of the Unwritten`,
+    `Combat: ${TEMUR} assigned Ureni of the Unwritten (96) to attack ${DORAN}.`,
+    `Turn: Turn 2 (${DORAN})`,
+    `Combat: ${DORAN} assigned Ureni of the Unwritten (96) to attack ${TEMUR}.`,
+    `Add To Stack: ${DORAN} triggered Ureni of the Unwritten`,
+    `Damage: Ureni of the Unwritten (96) deals 7 combat damage to ${TEMUR}.`,
+  ].join('\n');
+  const plays = parseGameCards(log).plays.filter((p) => p.name === 'Ureni of the Unwritten');
+  assertEqual(plays.map((p) => p.player), [TEMUR], 'only Temur played Ureni');
+  assertEqual(plays[0].damageToPlayers, 7, 'damage credited to Temur');
+});
+
+test('parse: an opponent\'s triggered ability targeting a card counts as targeting it', () => {
+  const log = [
+    `Turn: Turn 1 (${TEMUR})`,
+    `Add To Stack: ${TEMUR} cast Miirym, Sentinel Wyrm`,
+    `Land: ${TEMUR} played Forest (5)`,
+    `Combat: ${TEMUR} assigned Miirym, Sentinel Wyrm (7) to attack ${DORAN}.`,
+    `Turn: Turn 2 (${DORAN})`,
+    `Add To Stack: ${DORAN} triggered Ravenous Chupacabra targeting [Miirym, Sentinel Wyrm (7)]`,
+  ].join('\n');
+  const plays = parseGameCards(log).plays;
+  assertEqual(plays.find((p) => p.name === 'Miirym, Sentinel Wyrm')?.targetedByOpponents, 1, 'targeted');
+  assert(plays.some((p) => p.player === DORAN && p.name === 'Ravenous Chupacabra'), 'Chupacabra counted');
+});
+
 // ---------------------------------------------------------------------------
 // addGame / scoreCards
 // ---------------------------------------------------------------------------
