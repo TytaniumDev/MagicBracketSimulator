@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { sendAccessRequestEmail } from '@/lib/email-notification';
 import { createHmac } from 'node:crypto';
-import { getFirestore } from '@/lib/firestore-client';
+import { getUserAccess, requestAccess } from '@/lib/user-store';
 import { errorResponse } from '@/lib/api-response';
 
 import { isLocalMode } from '@/lib/env';
@@ -10,8 +10,10 @@ import * as Sentry from '@sentry/nextjs';
 
 const IS_LOCAL_MODE = isLocalMode();
 
-const getDb = getFirestore;
-
+/**
+ * Signed `uid:requestId:timestamp:signature`. Requests now live at
+ * users/{uid}, so requestId is the uid; the approve route only uses the uid.
+ */
 function generateApprovalToken(uid: string, requestId: string): string {
   const secret = process.env.WORKER_SECRET;
   if (!secret) throw new Error('WORKER_SECRET not configured');
@@ -45,43 +47,27 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
       );
     }
 
-    const db = getDb();
-
-    // Check for existing pending request
-    const existing = await db.collection('accessRequests')
-      .where('uid', '==', user.uid)
-      .where('status', '==', 'pending')
-      .limit(1)
-      .get();
-
-    if (!existing.empty) {
+    const displayName = typeof body.displayName === 'string' ? body.displayName : null;
+    const previous = await requestAccess(user.uid, { email: user.email, displayName, message });
+    if (previous === 'requested') {
       return NextResponse.json(
         { message: 'You already have a pending access request' },
         { status: 200 }
       );
     }
-
-    // Create access request document
-    const docRef = db.collection('accessRequests').doc();
-    await docRef.set({
-      uid: user.uid,
-      email: user.email,
-      displayName: body.displayName || null,
-      message,
-      status: 'pending',
-      createdAt: new Date(),
-      resolvedAt: null,
-    });
+    if (previous === 'allowed') {
+      return NextResponse.json({ message: 'You already have access' }, { status: 200 });
+    }
 
     // Generate approval token and send email
     try {
-      const token = generateApprovalToken(user.uid, docRef.id);
+      const token = generateApprovalToken(user.uid, user.uid);
       const apiOrigin = new URL(request.url).origin;
       const approveUrl = `${apiOrigin}/api/access-requests/approve?token=${token}`;
 
       await sendAccessRequestEmail({
         requesterEmail: user.email,
-        requesterName: body.displayName || null,
+        requesterName: displayName,
         message,
         approveUrl,
       });
@@ -117,19 +103,12 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
       return NextResponse.json({ hasRequest: false, status: null });
     }
 
-    const db = getDb();
-    const snap = await db.collection('accessRequests')
-      .where('uid', '==', user.uid)
-      .orderBy('createdAt', 'desc')
-      .limit(1)
-      .get();
-
-    if (snap.empty) {
+    const access = await getUserAccess(user.uid);
+    if (!access) {
       return NextResponse.json({ hasRequest: false, status: null });
     }
-
-    const doc = snap.docs[0].data();
-    return NextResponse.json({ hasRequest: true, status: doc.status });
+    // 'pending' and 'approved' are the statuses this endpoint has always returned.
+    return NextResponse.json({ hasRequest: true, status: access.status === 'allowed' ? 'approved' : 'pending' });
   } catch (error) {
     console.error('GET /api/access-requests error:', error);
     Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/access-requests' } });

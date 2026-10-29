@@ -2,141 +2,51 @@ rules_version='2'
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper: true if the authenticated user is in the allowed-users list.
-    function isAllowedUser() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/allowedUsers/$(request.auth.uid));
-    }
+    // Clients only read. Every write (jobs, simulations, decks, workers,
+    // users) goes through the API with the Admin SDK, which bypasses these
+    // rules. Worker presence lives in the Realtime Database
+    // (database.rules.json).
 
-    // Allowlist: each doc id is a Firebase Auth UID. Users can only read their
-    // own doc (so the app can check "am I allowed?"). Add/remove allowed users
-    // via Firebase Console, Admin SDK, or the approve endpoint.
-    match /allowedUsers/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
-    }
-
-    // Jobs: public reads, writes require allowlist.
-    // SOLO-DEV (Plan 2): the unauthenticated Flutter desktop worker bumps
-    // `completedSimCount` on the parent job after each successful sim. The
-    // unauth path is scoped to: only that one field may change AND the new
-    // value must be exactly the existing value + 1 (matches the worker's
-    // `FieldValue.increment(1)` call). Its first claim on a job may also
-    // flip status QUEUED -> RUNNING, touching only the claim fields (matches
-    // the API's claimNextSim). Tighten to `if isAllowedUser()` once Plan 3
-    // enables auth in the worker.
+    // Jobs and their per-simulation tracking: public reads.
     match /jobs/{jobId} {
       allow read: if true;
-      allow create: if isAllowedUser();
-      allow update: if isAllowedUser()
-        || (request.auth == null && (
-             // 1. Flutter worker reports a terminal sim: +1 only.
-             (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedSimCount'])
-              && request.resource.data.completedSimCount is int
-              && request.resource.data.completedSimCount == resource.data.completedSimCount + 1)
-          || // 2. Flutter worker's first claim promotes the job QUEUED -> RUNNING.
-             (resource.data.status == 'QUEUED'
-              && request.resource.data.status == 'RUNNING'
-              && request.resource.data.diff(resource.data).affectedKeys()
-                   .hasOnly(['status', 'startedAt', 'claimedAt', 'workerId', 'workerName', 'updatedAt']))
-        ));
-      allow delete: if isAllowedUser();
+      allow write: if false;
 
-      // Per-simulation tracking subcollection: public reads.
-      // SOLO-DEV (Plan 2): Flutter worker claims PENDING sims and writes
-      // terminal results without auth. Creates/deletes still go through the
-      // API. Unauth updates are constrained to two specific state
-      // transitions, each with an exact allowed-field-set:
-      //   1. Claim: PENDING -> RUNNING (worker assigns itself).
-      //   2. Terminal: RUNNING -> COMPLETED or FAILED (worker reports result).
-      // Tighten once Plan 3 enables auth.
       match /simulations/{simId} {
         allow read: if true;
-        allow create, delete: if isAllowedUser();
-        allow update: if isAllowedUser()
-          || (request.auth == null && (
-               // 1. Claim: PENDING -> RUNNING. Worker assigns workerId/Name/startedAt/updatedAt.
-               (resource.data.state == 'PENDING'
-                && request.resource.data.state == 'RUNNING'
-                && request.resource.data.diff(resource.data).affectedKeys()
-                     .hasOnly(['state', 'workerId', 'workerName', 'startedAt', 'updatedAt']))
-            || // 2. Terminal: RUNNING -> COMPLETED/FAILED. Result fields optional.
-               (resource.data.state == 'RUNNING'
-                && (request.resource.data.state == 'COMPLETED'
-                    || request.resource.data.state == 'FAILED')
-                && request.resource.data.diff(resource.data).affectedKeys()
-                     .hasOnly(['state', 'completedAt', 'durationMs', 'updatedAt',
-                               'winners', 'winner', 'winningTurns', 'winningTurn',
-                               'errorMessage']))
-          ));
+        allow write: if false;
       }
     }
 
     // Pod runs: public reads (the pod run page listens for standings
-    // changes), written only by the API.
+    // changes).
     match /podRuns/{runId} {
       allow read: if true;
       allow write: if false;
     }
 
-    // Unified decks collection: public reads
-    // Only deck owner can delete; precons (ownerId == null) cannot be deleted by any user
+    // Decks: public reads.
     match /decks/{deckId} {
       allow read: if true;
-      allow create: if isAllowedUser() && request.resource.data.ownerId == request.auth.uid;
-      allow delete: if isAllowedUser() && resource.data.ownerId == request.auth.uid;
-      allow update: if false;
+      allow write: if false;
     }
 
-    // Access requests: any authenticated user can create, users can read their own
-    match /accessRequests/{requestId} {
-      allow create: if request.auth != null;
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow update, delete: if false;
-    }
-
-    // Workers collection: public reads (worker status).
-    // SOLO-DEV (Plan 2): the unauthenticated Flutter desktop worker writes its
-    // own status/lease doc (workerType == 'flutter'). Other writes go through
-    // Admin SDK. The unauth UPDATE branch:
-    //   - checks `resource.data.workerType` (the EXISTING doc) so an attacker
-    //     can't overwrite a Docker worker by smuggling `workerType: 'flutter'`
-    //     into the payload.
-    //   - constrains the affected field set so an attacker can't tamper with
-    //     a legitimate Flutter worker's lease/capacity/status fields. The
-    //     allowed list matches what `LeaseWriter._writeOnce()` and `stop()`
-    //     touch.
-    // Creates remain limited to flutter-typed docs (we accept that an attacker
-    // without auth can still create fake flutter-worker docs; mitigated only
-    // by Plan 3 auth). Tighten the unauth branch once Plan 3 enables auth.
+    // Workers: public reads (durable worker settings; online status is
+    // Realtime Database presence).
     match /workers/{workerId} {
       allow read: if true;
-      allow create: if isAllowedUser()
-        || (request.auth == null && request.resource.data.workerType == 'flutter');
-      allow update: if isAllowedUser()
-        || (request.auth == null
-            && resource.data.workerType == 'flutter'
-            && request.resource.data.workerType == 'flutter'
-            && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['workerName', 'workerType', 'status', 'capacity',
-                           'activeSimulations', 'uptimeMs', 'lastHeartbeat', 'lease']));
-      allow delete: if isAllowedUser();
+      allow write: if false;
     }
 
-    // Allow `collectionGroup('simulations')` reads for the Flutter worker.
-    // Firestore looks up rules by the top-level path for collection-group
-    // queries, so the nested `match /jobs/{jobId}/simulations/{simId}`
-    // rule above doesn't apply to listener queries. Without this match,
-    // the Flutter worker's `where state == PENDING` listener silently
-    // returns empty and never picks up jobs.
-    //
-    // Reads only — actual write paths still flow through the nested
-    // rule's stricter state-transition checks.
+    // Allow `collectionGroup('simulations')` reads for the desktop worker's
+    // PENDING listener. Firestore looks up rules by the top-level path for
+    // collection-group queries, so the nested match above doesn't apply.
     match /{path=**}/simulations/{simId} {
       allow read: if true;
     }
 
-    // Catch-all: deny everything else not explicitly matched
+    // Catch-all: deny everything else, including users/{uid} access records
+    // (read only by the API).
     match /{document=**} {
       allow read, write: if false;
     }

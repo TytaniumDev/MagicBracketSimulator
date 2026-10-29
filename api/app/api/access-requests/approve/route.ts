@@ -1,11 +1,9 @@
 import { NextRequest } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { getFirestore } from '@/lib/firestore-client';
+import { approveUser } from '@/lib/user-store';
 import * as Sentry from '@sentry/nextjs';
 
 const TOKEN_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
-
-const getDb = getFirestore;
 
 function htmlResponse(statusCode: number, title: string, body: string): Response {
   return new Response(
@@ -24,7 +22,7 @@ function htmlResponse(statusCode: number, title: string, body: string): Response
   );
 }
 
-function validateToken(tokenB64: string): { uid: string; requestId: string } | null {
+function validateToken(tokenB64: string): { uid: string } | null {
   const secret = process.env.WORKER_SECRET;
   if (!secret) return null;
 
@@ -50,7 +48,7 @@ function validateToken(tokenB64: string): { uid: string; requestId: string } | n
     if (sigBuf.length !== expectedBuf.length) return null;
     if (!timingSafeEqual(sigBuf, expectedBuf)) return null;
 
-    return { uid, requestId };
+    return { uid };
   } catch {
     return null;
   }
@@ -73,46 +71,22 @@ export async function GET(request: NextRequest) {
       '<h2 class="error">Invalid or Expired Link</h2><p>This approval link is invalid or has expired (24-hour limit). Ask the user to submit a new request.</p>');
   }
 
-  const { uid, requestId } = parsed;
+  const { uid } = parsed;
 
   try {
-    const db = getDb();
-
-    // Verify access request exists and is pending
-    const requestRef = db.collection('accessRequests').doc(requestId);
-    const requestDoc = await requestRef.get();
-
-    if (!requestDoc.exists) {
+    const before = await approveUser(uid);
+    if (!before) {
       return htmlResponse(404, 'Not Found',
         '<h2 class="error">Request Not Found</h2><p>This access request no longer exists.</p>');
     }
 
-    const data = requestDoc.data()!;
-    if (data.status === 'approved') {
+    if (before.status === 'allowed') {
       return htmlResponse(200, 'Already Approved',
-        `<h2 class="success">Already Approved</h2><p><strong>${data.email}</strong> was already approved.</p>`);
+        `<h2 class="success">Already Approved</h2><p><strong>${before.email}</strong> was already approved.</p>`);
     }
-
-    if (data.uid !== uid) {
-      return htmlResponse(400, 'Mismatch',
-        '<h2 class="error">Token Mismatch</h2><p>This token does not match the access request.</p>');
-    }
-
-    // Add user to allowedUsers collection
-    await db.collection('allowedUsers').doc(uid).set({
-      email: data.email,
-      displayName: data.displayName || null,
-      approvedAt: new Date(),
-    });
-
-    // Update access request status
-    await requestRef.update({
-      status: 'approved',
-      resolvedAt: new Date(),
-    });
 
     return htmlResponse(200, 'User Approved',
-      `<h2 class="success">User Approved!</h2><p><strong>${data.email}</strong> can now submit simulations on Magic Bracket Simulator.</p>`);
+      `<h2 class="success">User Approved!</h2><p><strong>${before.email}</strong> can now submit simulations on Magic Bracket Simulator.</p>`);
   } catch (error) {
     Sentry.captureException(error, { tags: { component: 'access-request-approve' } });
     console.error('GET /api/access-requests/approve error:', error);

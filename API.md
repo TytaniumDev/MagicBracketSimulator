@@ -658,19 +658,27 @@ Returns overall coverage progress (% of matchups completed).
 
 ## Access Requests
 
+Each user who asks for access, or is given it, has one private record at `users/{uid}`: email, display name, `status` (`requested` or `allowed`), message, and request and approval times. Only the API reads it (`api/lib/user-store.ts`).
+
 ### Submit Access Request
 
 `POST /access-requests`
 
-Submits a user's request to be granted submission access.
+Body: `{ displayName?, message? }`. Records the request and emails the admin an approve link. Answers 200 without a new email when the user already asked or already has access.
+**Auth:** Firebase Auth required.
+
+### Check Access Request
+
+`GET /access-requests`
+
+Returns `{ hasRequest, status }`, where `status` is `pending` or `approved` (or null with no request).
 **Auth:** Firebase Auth required.
 
 ### Approve Access Request
 
-`POST /access-requests/approve`
+`GET /access-requests/approve?token=...`
 
-Approves a pending access request.
-**Auth:** Admin access required.
+The link from the access-request email. The token is signed with `WORKER_SECRET` and expires after 24 hours. Marks the user's record allowed and returns an HTML page.
 
 ---
 
@@ -680,7 +688,7 @@ Approves a pending access request.
 
 `GET /me`
 
-Returns the current authenticated user's profile and permissions.
+Returns the signed-in user's access. Any signed-in user may call it; the web app uses it to decide what to show.
 **Auth:** Firebase Auth required.
 
 **Response:**
@@ -690,7 +698,8 @@ Returns the current authenticated user's profile and permissions.
   "uid": "user-uid",
   "email": "user@example.com",
   "isAdmin": false,
-  "isAllowed": true
+  "isAllowed": true,
+  "hasRequestedAccess": false
 }
 ```
 

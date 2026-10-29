@@ -7,16 +7,33 @@ import {
   onAuthStateChanged,
   getIdToken,
 } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { auth, db, googleProvider, isFirebaseConfigured } from '../firebase';
+import { auth, googleProvider, isFirebaseConfigured } from '../firebase';
 import { getApiBase, fetchWithAuth } from '../api';
 import { reportHandledError } from '../errorReporting';
 
-const ALLOWED_USERS_COLLECTION = 'allowedUsers';
+/** What `GET /api/me` says about the signed-in user's access. */
+interface MeResponse {
+  isAllowed: boolean;
+  isAdmin: boolean;
+  hasRequestedAccess: boolean;
+}
+
+async function fetchMe(): Promise<MeResponse> {
+  const res = await fetchWithAuth(`${getApiBase()}/api/me`);
+  if (!res.ok) throw new Error(`GET /api/me failed: ${res.status}`);
+  const data = (await res.json()) as Partial<MeResponse>;
+  return {
+    // An API from before `isAllowed` was added answered 200 only for
+    // allowed users.
+    isAllowed: data.isAllowed ?? true,
+    isAdmin: data.isAdmin === true,
+    hasRequestedAccess: data.hasRequestedAccess === true,
+  };
+}
 
 interface AuthContextType {
   user: User | null;
-  /** True only when user is signed in AND listed in Firestore allowedUsers. */
+  /** True only when user is signed in AND has been given access. */
   isAllowed: boolean | null;
   /** True if the current user is an admin */
   isAdmin: boolean;
@@ -79,34 +96,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [hasRequestedAccess, setHasRequestedAccess] = useState(false);
 
-  const checkAccessRequestStatus = async (uid?: string) => {
+  const applyMe = (me: MeResponse) => {
+    setIsAllowed(me.isAllowed);
+    setIsAdmin(me.isAdmin);
+    setHasRequestedAccess(me.hasRequestedAccess);
+  };
+
+  const refreshAccessRequestStatus = async () => {
     try {
-      if (db && uid) {
-        // GCP mode: query Firestore directly
-        const q = query(
-          collection(db, 'accessRequests'),
-          where('uid', '==', uid),
-          orderBy('createdAt', 'desc'),
-          limit(1),
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const data = snap.docs[0].data();
-          setHasRequestedAccess(data.status === 'pending');
-        } else {
-          setHasRequestedAccess(false);
-        }
-      } else {
-        // LOCAL mode: fall back to REST endpoint
-        const apiBase = getApiBase();
-        const res = await fetchWithAuth(`${apiBase}/api/access-requests`);
-        if (res.ok) {
-          const data = await res.json();
-          setHasRequestedAccess(data.hasRequest && data.status === 'pending');
-        }
-      }
+      applyMe(await fetchMe());
     } catch (err) {
-      // Non-fatal: the access request state just stays unknown.
+      // Non-fatal: the access request state just stays as it was.
       reportHandledError(err, { action: 'checkAccessRequestStatus' });
     }
   };
@@ -132,20 +132,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
       try {
-        const allowedRef = doc(db!, ALLOWED_USERS_COLLECTION, firebaseUser.uid);
-        const snap = await getDoc(allowedRef);
-        const allowed = snap.exists();
-        setIsAllowed(allowed);
-
-        // If not allowed, check for pending access request
-        if (!allowed) {
-          // Defer to avoid blocking auth state resolution
-          checkAccessRequestStatus(firebaseUser.uid);
-        }
+        applyMe(await fetchMe());
       } catch (err) {
-        console.error('Error checking allowlist:', err);
+        console.error('Error checking access:', err);
         reportHandledError(err, { action: 'checkAllowlist' });
         setIsAllowed(false);
+        setIsAdmin(false);
       } finally {
         setLoading(false);
       }
@@ -153,23 +145,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => unsubscribe();
   }, []);
-
-  // Fetch admin status from /api/me when user is allowed
-  useEffect(() => {
-    if (!isAllowed || !user) {
-      setIsAdmin(false);
-      return;
-    }
-    const apiBase = getApiBase();
-    fetchWithAuth(`${apiBase}/api/me`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && typeof data.isAdmin === 'boolean') {
-          setIsAdmin(data.isAdmin);
-        }
-      })
-      .catch((err) => reportHandledError(err, { action: 'fetchAdminStatus' }));
-  }, [isAllowed, user]);
 
   const signInWithGoogle = async () => {
     if (!isFirebaseConfigured) return;
@@ -219,7 +194,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAdmin,
     loading,
     hasRequestedAccess,
-    refreshAccessRequestStatus: () => checkAccessRequestStatus(user?.uid),
+    refreshAccessRequestStatus,
     signInWithGoogle,
     signInWithEmail,
     signOut,
