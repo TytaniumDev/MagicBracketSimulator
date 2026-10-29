@@ -55,6 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The rollout check lives in scripts/ensure-rollout.sh.
+      - uses: actions/checkout@v4
+
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v3
         with:
