@@ -623,16 +623,17 @@ export function getSimulationStatuses(jobId: string): SimulationStatus[] {
 }
 
 /**
- * List PENDING/RUNNING sims whose job already ended as FAILED or CANCELLED.
- * Nothing will ever aggregate these, but a worker could still claim them.
+ * List PENDING/RUNNING sims whose job already ended as FAILED or CANCELLED,
+ * or no longer exists. Nothing will ever aggregate these, but a worker could
+ * still claim them.
  */
 export function listOrphanedLiveSims(): { jobId: string; simId: string }[] {
   const db = getDb();
   const rows = db
     .prepare(
       `SELECT s.job_id, s.sim_id FROM simulations s
-       JOIN jobs j ON j.id = s.job_id
-       WHERE s.state IN ('PENDING', 'RUNNING') AND j.status IN ('FAILED', 'CANCELLED')`
+       LEFT JOIN jobs j ON j.id = s.job_id
+       WHERE s.state IN ('PENDING', 'RUNNING') AND (j.id IS NULL OR j.status IN ('FAILED', 'CANCELLED'))`
     )
     .all() as { job_id: string; sim_id: string }[];
   return rows.map((r) => ({ jobId: r.job_id, simId: r.sim_id }));

@@ -22,10 +22,17 @@ queue.
    finds work and backs off to `MAX_IDLE_POLL_MS` (default 60 s) while idle.
 3. **Worker poll:** each worker runs a loop: acquire a semaphore slot, then
    `GET /api/jobs/claim-sim?workerId=...&workerName=...&lease=1`. The
-   endpoint atomically flips the oldest claimable sim on the oldest active
-   job to RUNNING, promotes the job from QUEUED to RUNNING if this is its
-   first claim, and returns `{ jobId, simId, simIndex }`. A 204 means no
-   work. With `lease=1` the sim is reserved until `leaseExpiresAt` (3 min);
+   endpoint atomically flips the oldest claimable sim to RUNNING, promotes
+   its job from QUEUED to RUNNING if this is its first claim, and returns
+   `{ jobId, simId, simIndex }`. A 204 means no work. In Firestore the
+   candidates come from two indexed collection-group queries read a page
+   (10 sims) at a time: PENDING sims by `createdAt` (a job's sims share a
+   timestamp and tie-break by path, so they come in index order), then
+   RUNNING sims by expired `leaseExpiresAt`. Each candidate is claimed in a
+   transaction that re-checks the sim and its job (QUEUED or RUNNING, not
+   `flutter-local`, sims outstanding); a failed check moves on to the next
+   candidate, up to 3 pages per query. The stale sweeper cancels sims whose
+   job ended or was deleted so they don't sit at the front of the queue. With `lease=1` the sim is reserved until `leaseExpiresAt` (3 min);
    a RUNNING sim whose lease has run out counts as claimable, so another
    worker takes it over (see **Crash recovery**).
    Every response (200 or 204) carries the worker's current concurrency

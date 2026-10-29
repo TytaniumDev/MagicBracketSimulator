@@ -137,8 +137,9 @@ export async function hardFailStaleQueuedJob(
 
 /**
  * Cancel every PENDING/RUNNING sim whose job already ended as FAILED or
- * CANCELLED. Desktop workers before the job-first claim (PR #507) took any
- * PENDING sim, so these leftovers kept running for jobs nobody could see.
+ * CANCELLED, or was deleted. Desktop workers before the job-first claim
+ * (PR #507) took any PENDING sim, so these leftovers kept running for jobs
+ * nobody could see; they would also crowd the front of the claim queries.
  *
  * Returns the number of sims actually cancelled (races lost excluded).
  */

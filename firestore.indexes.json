@@ -73,19 +73,27 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "simulations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "leaseExpiresAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
-    {
-      "collectionGroup": "workers",
-      "fieldPath": "lease.expiresAt",
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
     {
       "collectionGroup": "simulations",
       "fieldPath": "state",
