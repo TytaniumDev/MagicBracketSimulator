@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { DeckStats } from '@shared/types/deck';
+import { CardImpactTable } from '../components/CardImpactTable';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckList } from '../components/DeckList';
 import { Spinner } from '../components/Spinner';
 import { WinTurnTooltip } from '../components/WinTurnTooltip';
-import { useDeck, useScryfallCards } from '../hooks/useDeck';
+import { useDeck, useDeckCardImpact, useScryfallCards } from '../hooks/useDeck';
 
 function StatTile({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
@@ -57,6 +58,7 @@ function DeckStatsPanel({ stats }: { stats: DeckStats | null }) {
 export default function DeckPage() {
   const { id } = useParams<{ id: string }>();
   const deckQuery = useDeck(id);
+  const cardImpact = useDeckCardImpact(id);
   const data = deckQuery.data;
 
   const cardNames = useMemo(
@@ -117,6 +119,21 @@ export default function DeckPage() {
       <section>
         <h2 className="text-lg font-semibold text-white mb-3">Results</h2>
         <DeckStatsPanel stats={stats} />
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold text-white">Most game-swinging cards</h2>
+        <p className="mb-3 text-sm text-gray-400">
+          Cards after which games end quickly in this deck's favor, compared with how the deck
+          usually does from the same turn. Good candidates to swap out to lower its power.
+        </p>
+        {cardImpact.isLoading && (
+          <div className="flex items-center gap-2 text-sm text-gray-400"><Spinner /> Loading card stats...</div>
+        )}
+        {cardImpact.isError && <p className="text-sm text-gray-400">Card stats are unavailable right now.</p>}
+        {cardImpact.data && (
+          <CardImpactTable games={cardImpact.data.games} cards={cardImpact.data.cards} lookup={scryfall.data} />
+        )}
       </section>
 
       <section>

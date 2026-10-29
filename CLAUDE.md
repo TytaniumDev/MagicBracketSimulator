@@ -121,6 +121,7 @@ Routes live under `api/app/api/`. Key endpoints:
 - `PATCH /api/jobs/:id/simulations/:simId` — Update simulation status (worker)
 - `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Saved pod runs (one job per 4-deck pod); `?jobId=` finds the run a job belongs to
 - `GET /api/decks/:id` — Deck page data: metadata, parsed decklist, results
+- `GET /api/decks/:id/card-impact` — Per-card impact scores (most game-swinging cards), from counters built at aggregation
 - Deck and precon CRUD endpoints
 
 ## Environment & Secrets

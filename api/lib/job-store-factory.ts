@@ -638,6 +638,15 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     });
   }
 
+  // Update per-deck card impact counters from the same raw logs (no extra reads)
+  if (Array.isArray(job.deckIds) && job.deckIds.length === 4 && rawLogs && rawLogs.length > 0) {
+    const { processJobForCardStats } = await import('./card-impact/service');
+    processJobForCardStats(jobId, job.deckIds, deckNames, rawLogs).catch((err) => {
+      log.error('Card stats update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
+      Sentry.captureException(err, { tags: { component: 'card-stats', jobId } });
+    });
+  }
+
   // Don't overwrite CANCELLED status — logs are ingested above, but status stays CANCELLED
   if (job.status === 'CANCELLED') {
     await setNeedsAggregation(jobId, false);

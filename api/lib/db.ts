@@ -345,6 +345,14 @@ export function getDb(): Database.Database {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_pod_run_jobs_job_id ON pod_run_jobs(job_id)`);
 
+  // Card impact counters: one JSON document per deck (see lib/card-impact/stats.ts)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS card_stats (
+      deck_id TEXT PRIMARY KEY,
+      data_json TEXT NOT NULL
+    )
+  `);
+
   // Run migration for existing jobs (populates decks_json from legacy columns)
   migrateJobsToDecksJson(db);
 

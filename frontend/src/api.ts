@@ -3,6 +3,7 @@ import { auth, appCheck } from './firebase';
 import { getRuntimeConfig } from './config';
 import type { PodRunResponse, PodRunSummary } from '@shared/types/pod-run';
 import type { DeckDetailResponse } from '@shared/types/deck';
+import type { DeckCardImpactResponse } from '@shared/types/card-impact';
 
 function resolveApiBase(): string {
   // Build-time env vars take precedence (local dev overrides)
@@ -140,6 +141,18 @@ export async function fetchDeck(id: string): Promise<DeckDetailResponse> {
   const res = await fetchWithAuth(`${apiBase}/api/decks/${encodeURIComponent(id)}`);
   if (!res.ok) {
     throw new Error(res.status === 404 ? 'Deck not found' : 'Failed to load deck');
+  }
+  return res.json();
+}
+
+/**
+ * Fetch per-card impact scores for a deck.
+ */
+export async function fetchDeckCardImpact(id: string): Promise<DeckCardImpactResponse> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/decks/${encodeURIComponent(id)}/card-impact`);
+  if (!res.ok) {
+    throw new Error('Failed to load card stats');
   }
   return res.json();
 }

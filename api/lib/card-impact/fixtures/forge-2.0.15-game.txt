@@ -1,0 +1,1053 @@
+Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Djavax.net.ssl.trustStoreType=JKS -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=34143 -Dhttp.nonProxyHosts=localhost|127.0.0.1|::1|127.*|0.*|::|169.254.*|api.anthropic.com|api-staging.anthropic.com|api-pr-preview.anthropic.com|mcp-proxy.anthropic.com|mcp-proxy-staging.anthropic.com|registry.npmjs.org|jsr.io|npm.jsr.io|pypi.org|files.pythonhosted.org|index.crates.io|proxy.golang.org|host.docker.internal|10.*|172.16.*|172.17.*|172.18.*|172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|172.29.*|172.30.*|172.31.*|192.168.*|100.64.0.0/10|*.svc.cluster.local|*.svc.cluster.local -Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes=
+Error handling registered!
+04:43:35 [INFO ] GuiBase: ##########################################
+04:43:35 [INFO ] GuiBase: APP: Forge v.2.0.15-SNAPSHOT-09.28
+04:43:35 [INFO ] GuiBase: Java: 21.0.12.1 (Ubuntu)
+04:43:35 [INFO ] GuiBase: OS: Linux 6.18.44-fc-v185 amd64
+04:43:35 [INFO ] GuiBase: RAM: 4096 MB max, 4 CPUs
+04:43:35 [INFO ] GuiBase: ##########################################
+Language 'en-US' loaded successfully.
+(ThreadUtil first call): Running with priority 5
+Read cards: 34010 archived files in 1 ms (25 parts) using thread pool
+Upcoming set Star Trek (TRK) dated in the future. All `upcoming` cards will be added to this set with unknown rarity.
+The card A-Alrund's Epiphany was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Baba Lysaga, Night Witch was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Divide by Zero was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Esika's Chariot was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Faceless Haven was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Fires of Invention was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Goldspan Dragon was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Hullbreaker Horror was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Kumano Faces Kakkazan was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Luminarch Aspirant was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Monster Manual was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Omnath, Locus of Creation was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-The Meathook Massacre was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Unholy Heat was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Blinding Radiance was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Goblin Bruiser was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Ogre Painbringer was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Titanic Pelagosaur was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Treetop Recluse was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+Upcoming set Star Trek (TRK) dated in the future. All `upcoming` cards will be added to this set with unknown rarity.
+Read cards: 854 files in 0 ms (8 parts) using thread pool
+Simulation mode
+An unsupported card was requested: "Whirlwing Stormbrood // Dynamic Soar" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Sapphire Dragon // Psionic Pulse" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Bloomvine Regent // Claim Territory" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Marang River Regent // Coil and Catch" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Bloomvine Regent // Claim Territory" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Sapphire Dragon // Psionic Pulse" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Whirlwing Stormbrood // Dynamic Soar" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Marang River Regent // Coil and Catch" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Midgar, City of Mako // Reactor Raid" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Virtue of Persistence // Locthwain Scorn" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Hagra Mauling // Hagra Broodpit" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Sephiroth, Fabled SOLDIER // Sephiroth, One-Winged Angel" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Virtue of Persistence // Locthwain Scorn" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Midgar, City of Mako // Reactor Raid" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Sephiroth, Fabled SOLDIER // Sephiroth, One-Winged Angel" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Hagra Mauling // Hagra Broodpit" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Foulmire Knight // Profane Insight" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Murderous Rider // Swift End" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Order of Midnight // Alter Fate" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Smitten Swordmaster // Curry Favor" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Dion, Bahamut's Dominant // Bahamut, Warden of Light" from "null". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Murderous Rider // Swift End" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Smitten Swordmaster // Curry Favor" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Order of Midnight // Alter Fate" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Foulmire Knight // Profane Insight" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+An unsupported card was requested: "Dion, Bahamut's Dominant // Bahamut, Warden of Light" from "[N.A.]". 
+
+Forge could not find this card in the Database. Any chance you might have mistyped the card name?
+Ai(1)-Temur Roar Upgraded vs Ai(2)-Doran Big Butts vs Ai(3)-Marchesa vs Ai(4)-Cavalry Charge Upgraded - one game of Commander
+Correcting zone for Ureni of the Unwritten (96)
+Correcting zone for Ureni of the Unwritten (96)
+Warning: default (ie. inherited from base class) implementation of confirmAction is used by Sidar Jabari of Zhalfir for forge.ai.ability.PermanentCreatureAi. Consider declaring an overloaded method
+Mulligan: Ai(3)-Marchesa has mulliganed down to 7 cards.
+Mulligan: Ai(1)-Temur Roar Upgraded has kept a hand of 7 cards
+Mulligan: Ai(2)-Doran Big Butts has kept a hand of 7 cards
+Mulligan: Ai(3)-Marchesa has kept a hand of 7 cards
+Mulligan: Ai(4)-Cavalry Charge Upgraded has kept a hand of 7 cards
+Turn: Turn 1 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Replacement Effect: Ketria Triome enters tapped.
+Land: Ai(1)-Temur Roar Upgraded played Ketria Triome (20)
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 2 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Land: Ai(2)-Doran Big Butts played Forest (126)
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 3 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Replacement Effect: Crumbling Necropolis enters tapped.
+Land: Ai(3)-Marchesa played Crumbling Necropolis (256)
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 4 (Ai(4)-Cavalry Charge Upgraded)
+Phase: Ai(4)-Cavalry Charge Upgraded's Untap step
+Phase: Ai(4)-Cavalry Charge Upgraded's Upkeep step
+Phase: Ai(4)-Cavalry Charge Upgraded's Draw step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, precombat
+Land: Ai(4)-Cavalry Charge Upgraded played Plains (490)
+Phase: Ai(4)-Cavalry Charge Upgraded's Beginning of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Attackers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Blockers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's First Strike Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Combat Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's End of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, postcombat
+Phase: Ai(4)-Cavalry Charge Upgraded's End step
+Phase: Ai(4)-Cavalry Charge Upgraded's Cleanup step
+Turn: Turn 5 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Land: Ai(1)-Temur Roar Upgraded played Karplusan Forest (5)
+Mana: Ketria Triome (20) - {T}: Add {G}.
+Mana: Karplusan Forest (5) - {T}: Add {C}.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Rampant Growth
+Resolve Stack: Rampant Growth (77) - Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 6 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Land: Ai(2)-Doran Big Butts played Forest (129)
+Mana: Forest (126) - {T}: Add {G}.
+Mana: Forest (129) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Farseek
+Replacement Effect: Radiant Grove enters tapped.
+Resolve Stack: Farseek (118) - Ai(2)-Doran Big Butts searches their library for a Plains, Island, Swamp or Mountain card, puts it onto the battlefield tapped, then shuffles.
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 7 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Replacement Effect: Luxury Suite enters tapped unless you have two or more opponents.
+Land: Ai(3)-Marchesa played Luxury Suite (327)
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Mana: Luxury Suite (327) - {T}: Add {B} or {R}.
+Mana: Crumbling Necropolis (256) - {T}: Add {U}, {B}, or {R}.
+Add To Stack: Ai(3)-Marchesa cast Gev, Scaled Scorch
+Resolve Stack: Gev, Scaled Scorch - Creature 3 / 2
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 8 (Ai(4)-Cavalry Charge Upgraded)
+Phase: Ai(4)-Cavalry Charge Upgraded's Untap step
+Phase: Ai(4)-Cavalry Charge Upgraded's Upkeep step
+Phase: Ai(4)-Cavalry Charge Upgraded's Draw step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, precombat
+Land: Ai(4)-Cavalry Charge Upgraded played Swamp (478)
+Phase: Ai(4)-Cavalry Charge Upgraded's Beginning of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Attackers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Blockers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's First Strike Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Combat Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's End of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, postcombat
+Mana: Plains (490) - {T}: Add {W}.
+Mana: Swamp (478) - {T}: Add {B}.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded cast Corpse Knight
+Resolve Stack: Corpse Knight - Creature 2 / 2
+Phase: Ai(4)-Cavalry Charge Upgraded's End step
+Phase: Ai(4)-Cavalry Charge Upgraded's Cleanup step
+Turn: Turn 9 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Replacement Effect: Rejuvenating Springs enters tapped unless you have two or more opponents.
+Land: Ai(1)-Temur Roar Upgraded played Rejuvenating Springs (10)
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Mana: Island (27) - {T}: Add {U}.
+Mana: Rejuvenating Springs (10) - {T}: Add {G} or {U}.
+Mana: Karplusan Forest (5) - {T}: Add {C}.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Dragon's Hoard
+Resolve Stack: Dragon's Hoard
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 10 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Land: Ai(2)-Doran Big Butts played Exotic Orchard (135)
+Mana: Exotic Orchard (135) - {T}: Add one mana of any color that a land an opponent controls could produce.
+Mana: Radiant Grove (182) - {T}: Add {W}.
+Mana: Forest (126) - {T}: Add {G}.
+Mana: Forest (129) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Dusk
+Zone Change: Gev, Scaled Scorch (245) was put into Graveyard from Battlefield.
+Resolve Stack: Dusk (106) - Destroy all creatures with power 3 or greater.
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 11 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Mana: Luxury Suite (327) - {T}: Add {B} or {R}.
+Mana: Crumbling Necropolis (256) - {T}: Add {U}, {B}, or {R}.
+Add To Stack: Ai(3)-Marchesa cast Hungry Ghoul
+Resolve Stack: Hungry Ghoul - Creature 2 / 2
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 12 (Ai(4)-Cavalry Charge Upgraded)
+Phase: Ai(4)-Cavalry Charge Upgraded's Untap step
+Phase: Ai(4)-Cavalry Charge Upgraded's Upkeep step
+Phase: Ai(4)-Cavalry Charge Upgraded's Draw step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, precombat
+Land: Ai(4)-Cavalry Charge Upgraded played Island (456)
+Phase: Ai(4)-Cavalry Charge Upgraded's Beginning of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Attackers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Blockers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's First Strike Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Combat Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's End of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, postcombat
+Mana: Plains (490) - {T}: Add {W}.
+Mana: Swamp (478) - {T}: Add {B}.
+Mana: Island (456) - {T}: Add {U}.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded cast Acclaimed Contender
+Resolve Stack: Acclaimed Contender - Creature 3 / 3
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Corpse Knight
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Acclaimed Contender
+Resolve Stack: When Acclaimed Contender enters, if you control another Knight, look at the top five cards of your library. You may reveal a Knight, Aura, Equipment, or legendary artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order. [Zone Changer: Acclaimed Contender (424)]
+Life: Life: Ai(1)-Temur Roar Upgraded 40 > 39
+Life: Life: Ai(2)-Doran Big Butts 40 > 39
+Life: Life: Ai(3)-Marchesa 40 > 39
+Resolve Stack: Whenever another creature you control enters, each opponent loses 1 life. [Zone Changer: Acclaimed Contender (424)]
+Phase: Ai(4)-Cavalry Charge Upgraded's End step
+Phase: Ai(4)-Cavalry Charge Upgraded's Cleanup step
+Turn: Turn 13 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Land: Ai(1)-Temur Roar Upgraded played Forest (32)
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Mana: Ketria Triome (20) - {T}: Add {R}.
+Mana: Island (27) - {T}: Add {U}.
+Mana: Forest (32) - {T}: Add {G}.
+Mana: Rejuvenating Springs (10) - {T}: Add {G} or {U}.
+Mana: Karplusan Forest (5) - {T}: Add {C}.
+Mana: Dragon's Hoard (9) - {T}: Add one mana of any color.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Miirym, Sentinel Wyrm
+Resolve Stack: Miirym, Sentinel Wyrm - Creature 6 / 6
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Miirym, Sentinel Wyrm (1)]
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 14 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Mana: Forest (126) - {T}: Add {G}.
+Mana: Forest (129) - {T}: Add {G}.
+Mana: Exotic Orchard (135) - {T}: Add one mana of any color that a land an opponent controls could produce.
+Mana: Radiant Grove (182) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Tree of Redemption
+Resolve Stack: Tree of Redemption - Creature 0 / 13
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 15 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 16 (Ai(4)-Cavalry Charge Upgraded)
+Phase: Ai(4)-Cavalry Charge Upgraded's Untap step
+Phase: Ai(4)-Cavalry Charge Upgraded's Upkeep step
+Phase: Ai(4)-Cavalry Charge Upgraded's Draw step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, precombat
+Phase: Ai(4)-Cavalry Charge Upgraded's Beginning of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Attackers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Blockers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's First Strike Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Combat Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's End of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, postcombat
+Mana: Plains (490) - {T}: Add {W}.
+Mana: Swamp (478) - {T}: Add {B}.
+Mana: Island (456) - {T}: Add {U}.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded cast Breathless Knight
+Resolve Stack: Breathless Knight - Creature 2 / 2
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Corpse Knight
+Life: Life: Ai(1)-Temur Roar Upgraded 39 > 38
+Life: Life: Ai(2)-Doran Big Butts 39 > 38
+Life: Life: Ai(3)-Marchesa 39 > 38
+Resolve Stack: Whenever another creature you control enters, each opponent loses 1 life. [Zone Changer: Breathless Knight (391)]
+Phase: Ai(4)-Cavalry Charge Upgraded's End step
+Phase: Ai(4)-Cavalry Charge Upgraded's Cleanup step
+Turn: Turn 17 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Land: Ai(1)-Temur Roar Upgraded played Evolving Wilds (31)
+Zone Change: Evolving Wilds (31) was put into Graveyard from Battlefield.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Evolving Wilds
+Resolve Stack: Evolving Wilds (31) - Ai(1)-Temur Roar Upgraded searches their library for a basic land card, puts it onto the battlefield tapped, then shuffles.
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Combat: Ai(1)-Temur Roar Upgraded assigned Miirym, Sentinel Wyrm (1) to attack Ai(4)-Cavalry Charge Upgraded.
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Combat: Ai(4)-Cavalry Charge Upgraded didn't block Miirym, Sentinel Wyrm (1).
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Damage: Miirym, Sentinel Wyrm (1) deals 6 combat damage to Ai(4)-Cavalry Charge Upgraded.
+Life: Life: Ai(4)-Cavalry Charge Upgraded 40 > 34
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Dragon's Hoard
+Resolve Stack: Dragon's Hoard (9) - Ai(1)-Temur Roar Upgraded draws a card.
+Mana: Ketria Triome (20) - {T}: Add {R}.
+Mana: Island (27) - {T}: Add {U}.
+Mana: Forest (32) - {T}: Add {G}.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Sarkhan, Soul Aflame
+Resolve Stack: Sarkhan, Soul Aflame - Creature 2 / 4
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 18 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Land: Ai(2)-Doran Big Butts played Forest (124)
+Mana: Exotic Orchard (135) - {T}: Add one mana of any color that a land an opponent controls could produce.
+Mana: Forest (126) - {T}: Add {G}.
+Mana: Forest (129) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Generous Gift targeting [Miirym, Sentinel Wyrm (1)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Miirym, Sentinel Wyrm
+Mana: Forest (124) - {T}: Add {G}.
+Mana: Radiant Grove (182) - {T}: Add {G}.
+Resolve Stack: Ward {2} (Whenever this permanent becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.) [Source: Generous Gift (100), Target: Miirym, Sentinel Wyrm (1)]
+Zone Change: Miirym, Sentinel Wyrm (1) was put into Graveyard from Battlefield.
+Resolve Stack: Generous Gift (100) - Destroy Miirym, Sentinel Wyrm (1). 
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 19 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Mana: Luxury Suite (327) - {T}: Add {B} or {R}.
+Mana: Crumbling Necropolis (256) - {T}: Add {U}, {B}, or {R}.
+Add To Stack: Ai(3)-Marchesa cast Talisman of Creativity
+Resolve Stack: Talisman of Creativity
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 20 (Ai(4)-Cavalry Charge Upgraded)
+Phase: Ai(4)-Cavalry Charge Upgraded's Untap step
+Phase: Ai(4)-Cavalry Charge Upgraded's Upkeep step
+Phase: Ai(4)-Cavalry Charge Upgraded's Draw step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, precombat
+Land: Ai(4)-Cavalry Charge Upgraded played Island (455)
+Mana: Island (456) - {T}: Add {U}.
+Mana: Swamp (478) - {T}: Add {B}.
+Mana: Island (455) - {T}: Add {U}.
+Mana: Plains (490) - {T}: Add {W}.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded cast Distant Melody
+Resolve Stack: Distant Melody (470) - Ai(4)-Cavalry Charge Upgraded chooses a creature type. Ai(4)-Cavalry Charge Upgraded draws three cards.
+Phase: Ai(4)-Cavalry Charge Upgraded's Beginning of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Attackers Step
+Combat: Ai(4)-Cavalry Charge Upgraded assigned Breathless Knight (391) to attack Ai(1)-Temur Roar Upgraded.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Sidar Jabari of Zhalfir
+Discard: Ai(4)-Cavalry Charge Upgraded discards Island (453).
+Resolve Stack: Eminence — Whenever you attack with one or more Knights, if Sidar Jabari of Zhalfir is in the command zone or on the battlefield, draw a card, then discard a card. [Number Attackers: [Breathless Knight (391)]]
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Blockers Step
+Combat: Ai(1)-Temur Roar Upgraded didn't block Breathless Knight (391).
+Phase: Ai(4)-Cavalry Charge Upgraded's First Strike Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Combat Damage Step
+Damage: Breathless Knight (391) deals 2 combat damage to Ai(1)-Temur Roar Upgraded.
+Life: Life: Ai(4)-Cavalry Charge Upgraded 34 > 36
+Life: Life: Ai(1)-Temur Roar Upgraded 38 > 36
+Phase: Ai(4)-Cavalry Charge Upgraded's End of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, postcombat
+Phase: Ai(4)-Cavalry Charge Upgraded's End step
+Phase: Ai(4)-Cavalry Charge Upgraded's Cleanup step
+Discard: Ai(4)-Cavalry Charge Upgraded discards Elenda and Azor (468).
+Turn: Turn 21 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Mana: Island (27) - {T}: Add {U}.
+Mana: Mountain (84) - {T}: Add {R}.
+Mana: Forest (32) - {T}: Add {G}.
+Mana: Rejuvenating Springs (10) - {T}: Add {G} or {U}.
+Mana: Ketria Triome (20) - {T}: Add {G}.
+Mana: Dragon's Hoard (9) - {T}: Add one mana of any color.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Ureni of the Unwritten
+Resolve Stack: Ureni of the Unwritten - Creature 7 / 7
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Ureni of the Unwritten
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Ureni of the Unwritten (96)]
+Resolve Stack: Whenever Ureni enters or attacks, look at the top eight cards of your library. You may put a Dragon creature card from among them onto the battlefield. Put the rest on the bottom of your library in a random order. [Zone Changer: Ureni of the Unwritten (96)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Ureni of the Unwritten (96)]
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 22 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Mana: Exotic Orchard (135) - {T}: Add one mana of any color that a land an opponent controls could produce.
+Mana: Forest (126) - {T}: Add {G}.
+Mana: Forest (129) - {T}: Add {G}.
+Mana: Forest (124) - {T}: Add {G}.
+Mana: Radiant Grove (182) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Unhallowed Phalanx
+Replacement Effect: Unhallowed Phalanx enters tapped.
+Resolve Stack: Unhallowed Phalanx - Creature 1 / 13
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 23 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Mana: Luxury Suite (327) - {T}: Add {B} or {R}.
+Mana: Crumbling Necropolis (256) - {T}: Add {U}, {B}, or {R}.
+Mana: Talisman of Creativity (276) - {T}: Add {C}.
+Add To Stack: Ai(3)-Marchesa cast Mark of Mutiny targeting [Ureni of the Unwritten (96)]
+Resolve Stack: Mark of Mutiny (321) - Ai(3)-Marchesa gains control of Ureni of the Unwritten (96) until end of turn. Untap it. It gains haste until end of turn. Ai(3)-Marchesa puts a +1/+1 counter on Ureni of the Unwritten (96).
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Combat: Ai(3)-Marchesa assigned Ureni of the Unwritten (96) to attack Ai(4)-Cavalry Charge Upgraded.
+Add To Stack: Ai(3)-Marchesa triggered Ureni of the Unwritten
+Resolve Stack: Whenever Ureni enters or attacks, look at the top eight cards of your library. You may put a Dragon creature card from among them onto the battlefield. Put the rest on the bottom of your library in a random order. [Attacker: Ureni of the Unwritten (96)]
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Combat: Ai(4)-Cavalry Charge Upgraded didn't block Ureni of the Unwritten (96).
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Damage: Ureni of the Unwritten (96) deals 8 combat damage to Ai(4)-Cavalry Charge Upgraded.
+Life: Life: Ai(4)-Cavalry Charge Upgraded 36 > 28
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 24 (Ai(4)-Cavalry Charge Upgraded)
+Phase: Ai(4)-Cavalry Charge Upgraded's Untap step
+Phase: Ai(4)-Cavalry Charge Upgraded's Upkeep step
+Phase: Ai(4)-Cavalry Charge Upgraded's Draw step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, precombat
+Land: Ai(4)-Cavalry Charge Upgraded played Plains (493)
+Mana: Swamp (478) - {T}: Add {B}.
+Mana: Plains (490) - {T}: Add {W}.
+Mana: Island (456) - {T}: Add {U}.
+Mana: Island (455) - {T}: Add {U}.
+Mana: Plains (493) - {T}: Add {W}.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded cast Arvad the Cursed
+Resolve Stack: Arvad the Cursed - Creature 3 / 3
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Corpse Knight
+Life: Life: Ai(1)-Temur Roar Upgraded 36 > 35
+Life: Life: Ai(2)-Doran Big Butts 38 > 37
+Life: Life: Ai(3)-Marchesa 38 > 37
+Resolve Stack: Whenever another creature you control enters, each opponent loses 1 life. [Zone Changer: Arvad the Cursed (473)]
+Phase: Ai(4)-Cavalry Charge Upgraded's Beginning of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Attackers Step
+Combat: Ai(4)-Cavalry Charge Upgraded assigned Breathless Knight (391) to attack Ai(1)-Temur Roar Upgraded.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Sidar Jabari of Zhalfir
+Discard: Ai(4)-Cavalry Charge Upgraded discards Thriving Moor (499).
+Resolve Stack: Eminence — Whenever you attack with one or more Knights, if Sidar Jabari of Zhalfir is in the command zone or on the battlefield, draw a card, then discard a card. [Number Attackers: [Breathless Knight (391)]]
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Blockers Step
+Combat: Ai(1)-Temur Roar Upgraded didn't block Breathless Knight (391).
+Phase: Ai(4)-Cavalry Charge Upgraded's First Strike Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Combat Damage Step
+Damage: Breathless Knight (391) deals 2 combat damage to Ai(1)-Temur Roar Upgraded.
+Life: Life: Ai(4)-Cavalry Charge Upgraded 28 > 30
+Life: Life: Ai(1)-Temur Roar Upgraded 35 > 33
+Phase: Ai(4)-Cavalry Charge Upgraded's End of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, postcombat
+Phase: Ai(4)-Cavalry Charge Upgraded's End step
+Phase: Ai(4)-Cavalry Charge Upgraded's Cleanup step
+Turn: Turn 25 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Mana: Island (27) - {T}: Add {U}.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Rapid Hybridization targeting [Arvad the Cursed (473)]
+Zone Change: Arvad the Cursed (473) was put into Graveyard from Battlefield.
+Resolve Stack: Rapid Hybridization (46) - Destroy Arvad the Cursed (473). It can't be regenerated. 
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Corpse Knight
+Life: Life: Ai(1)-Temur Roar Upgraded 33 > 32
+Life: Life: Ai(2)-Doran Big Butts 37 > 36
+Life: Life: Ai(3)-Marchesa 37 > 36
+Resolve Stack: Whenever another creature you control enters, each opponent loses 1 life. [Zone Changer: Frog Lizard Token (562)]
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Replacement Effect: As Breeding Pool enters, you may pay 2 life. If you don't, it enters tapped.
+Land: Ai(1)-Temur Roar Upgraded played Breeding Pool (60)
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Combat: Ai(1)-Temur Roar Upgraded assigned Ureni of the Unwritten (96) to attack Ai(4)-Cavalry Charge Upgraded.
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Ureni of the Unwritten
+Resolve Stack: Whenever Ureni enters or attacks, look at the top eight cards of your library. You may put a Dragon creature card from among them onto the battlefield. Put the rest on the bottom of your library in a random order. [Attacker: Ureni of the Unwritten (96)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Lathliss, Dragon Queen (52)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Lathliss, Dragon Queen (52)]
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Combat: Ai(4)-Cavalry Charge Upgraded didn't block Ureni of the Unwritten (96).
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Damage: Ureni of the Unwritten (96) deals 8 combat damage to Ai(4)-Cavalry Charge Upgraded.
+Life: Life: Ai(4)-Cavalry Charge Upgraded 30 > 22
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Dragon's Hoard
+Resolve Stack: Dragon's Hoard (9) - Ai(1)-Temur Roar Upgraded draws a card.
+Mana: Forest (32) - {T}: Add {G}.
+Mana: Mountain (84) - {T}: Add {R}.
+Mana: Rejuvenating Springs (10) - {T}: Add {G} or {U}.
+Mana: Ketria Triome (20) - {T}: Add {G}.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Encroaching Dragonstorm
+Resolve Stack: Encroaching Dragonstorm
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Encroaching Dragonstorm
+Resolve Stack: When this enchantment enters, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. [Zone Changer: Encroaching Dragonstorm (56)]
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 26 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Land: Ai(2)-Doran Big Butts played Swamp (153)
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Mana: Exotic Orchard (135) - {T}: Add one mana of any color that a land an opponent controls could produce.
+Mana: Swamp (153) - {T}: Add {B}.
+Mana: Forest (126) - {T}: Add {G}.
+Mana: Forest (129) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Doran, Besieged by Time
+Resolve Stack: Doran, Besieged by Time - Creature 0 / 5
+Mana: Radiant Grove (182) - {T}: Add {W}.
+Add To Stack: Ai(2)-Doran Big Butts cast Wall of Essence
+Resolve Stack: Wall of Essence - Creature 0 / 4
+Mana: Forest (124) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Wall of Blossoms
+Resolve Stack: Wall of Blossoms - Creature 0 / 4
+Add To Stack: Ai(2)-Doran Big Butts triggered Wall of Blossoms
+Resolve Stack: When Wall of Blossoms enters, draw a card. [Zone Changer: Wall of Blossoms (196)]
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 27 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Mana: Luxury Suite (327) - {T}: Add {B} or {R}.
+Mana: Crumbling Necropolis (256) - {T}: Add {U}, {B}, or {R}.
+Mana: Talisman of Creativity (276) - {T}: Add {C}.
+Add To Stack: Ai(3)-Marchesa cast Phyrexian Altar
+Resolve Stack: Phyrexian Altar
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 28 (Ai(4)-Cavalry Charge Upgraded)
+Phase: Ai(4)-Cavalry Charge Upgraded's Untap step
+Phase: Ai(4)-Cavalry Charge Upgraded's Upkeep step
+Phase: Ai(4)-Cavalry Charge Upgraded's Draw step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, precombat
+Land: Ai(4)-Cavalry Charge Upgraded played Evolving Wilds (409)
+Zone Change: Evolving Wilds (409) was put into Graveyard from Battlefield.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded activated Evolving Wilds
+Resolve Stack: Evolving Wilds (409) - Ai(4)-Cavalry Charge Upgraded searches their library for a basic land card, puts it onto the battlefield tapped, then shuffles.
+Phase: Ai(4)-Cavalry Charge Upgraded's Beginning of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Attackers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Declare Blockers Step
+Phase: Ai(4)-Cavalry Charge Upgraded's First Strike Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Combat Damage Step
+Phase: Ai(4)-Cavalry Charge Upgraded's End of Combat Step
+Phase: Ai(4)-Cavalry Charge Upgraded's Main phase, postcombat
+Mana: Swamp (478) - {T}: Add {B}.
+Mana: Plains (490) - {T}: Add {W}.
+Mana: Island (456) - {T}: Add {U}.
+Mana: Island (455) - {T}: Add {U}.
+Add To Stack: Ai(4)-Cavalry Charge Upgraded cast Sidar Jabari of Zhalfir
+Resolve Stack: Sidar Jabari of Zhalfir - Creature 4 / 3
+Add To Stack: Ai(4)-Cavalry Charge Upgraded triggered Corpse Knight
+Life: Life: Ai(1)-Temur Roar Upgraded 32 > 31
+Life: Life: Ai(2)-Doran Big Butts 36 > 35
+Life: Life: Ai(3)-Marchesa 36 > 35
+Resolve Stack: Whenever another creature you control enters, each opponent loses 1 life. [Zone Changer: Sidar Jabari of Zhalfir (501)]
+Phase: Ai(4)-Cavalry Charge Upgraded's End step
+Phase: Ai(4)-Cavalry Charge Upgraded's Cleanup step
+Turn: Turn 29 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Combat: Ai(1)-Temur Roar Upgraded assigned Ureni of the Unwritten (96) and Lathliss, Dragon Queen (52) to attack Ai(4)-Cavalry Charge Upgraded.
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Ureni of the Unwritten
+Resolve Stack: Whenever Ureni enters or attacks, look at the top eight cards of your library. You may put a Dragon creature card from among them onto the battlefield. Put the rest on the bottom of your library in a random order. [Attacker: Ureni of the Unwritten (96)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Encroaching Dragonstorm
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragonlord Atarka targeting [Sidar Jabari of Zhalfir (501), Breathless Knight (391)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Lathliss, Dragon Queen
+Resolve Stack: Whenever another nontoken Dragon you control enters, create a 5/5 red Dragon creature token with flying. [Zone Changer: Dragonlord Atarka (68)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Encroaching Dragonstorm
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Dragon Token (565)]
+Resolve Stack: When a Dragon you control enters, return this enchantment to its owner's hand. [Zone Changer: Dragon Token (565)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Dragon Token (565)]
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Dragonlord Atarka (68)]
+Damage: Dragonlord Atarka (68) deals 3 damage to Sidar Jabari of Zhalfir (501).
+Damage: Dragonlord Atarka (68) deals 2 damage to Breathless Knight (391).
+Resolve Stack: When Dragonlord Atarka enters, it deals 5 damage divided as you choose among any number of target creatures and/or planeswalkers your opponents control. (Targeting: [[Sidar Jabari of Zhalfir (501), Breathless Knight (391)]]) [Zone Changer: Dragonlord Atarka (68)]
+Zone Change: Breathless Knight (391) was put into Graveyard from Battlefield.
+Zone Change: Sidar Jabari of Zhalfir (501) was put into Graveyard from Battlefield.
+Resolve Stack: When a Dragon you control enters, return this enchantment to its owner's hand. [Zone Changer: Dragonlord Atarka (68)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Dragonlord Atarka (68)]
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Combat: Ai(4)-Cavalry Charge Upgraded didn't block Ureni of the Unwritten (96).
+Ai(4)-Cavalry Charge Upgraded didn't block Lathliss, Dragon Queen (52).
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Damage: Ureni of the Unwritten (96) deals 8 combat damage to Ai(4)-Cavalry Charge Upgraded.
+Damage: Lathliss, Dragon Queen (52) deals 6 combat damage to Ai(4)-Cavalry Charge Upgraded.
+Life: Life: Ai(4)-Cavalry Charge Upgraded 22 > 8
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Dragon's Hoard
+Resolve Stack: Dragon's Hoard (9) - Ai(1)-Temur Roar Upgraded draws a card.
+Mana: Forest (32) - {T}: Add {G}.
+Mana: Rejuvenating Springs (10) - {T}: Add {G} or {U}.
+Mana: Island (27) - {T}: Add {U}.
+Mana: Island (28) - {T}: Add {U}.
+Mana: Mountain (84) - {T}: Add {R}.
+Mana: Mountain (86) - {T}: Add {R}.
+Mana: Breeding Pool (60) - {T}: Add {G}.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Ancient Bronze Dragon
+Resolve Stack: Ancient Bronze Dragon - Creature 7 / 7
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Lathliss, Dragon Queen
+Resolve Stack: Whenever another nontoken Dragon you control enters, create a 5/5 red Dragon creature token with flying. [Zone Changer: Ancient Bronze Dragon (76)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Dragon Token (568)]
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Ancient Bronze Dragon (76)]
+Mana: Ketria Triome (20) - {T}: Add {R}.
+Mana: Karplusan Forest (5) - {T}: Add {C}.
+Add To Stack: Ai(1)-Temur Roar Upgraded cast Dragonlord's Servant
+Resolve Stack: Dragonlord's Servant - Creature 1 / 3
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 30 (Ai(2)-Doran Big Butts)
+Phase: Ai(2)-Doran Big Butts' Untap step
+Phase: Ai(2)-Doran Big Butts' Upkeep step
+Phase: Ai(2)-Doran Big Butts' Draw step
+Phase: Ai(2)-Doran Big Butts' Main phase, precombat
+Land: Ai(2)-Doran Big Butts played Forest (127)
+Phase: Ai(2)-Doran Big Butts' Beginning of Combat Step
+Phase: Ai(2)-Doran Big Butts' Declare Attackers Step
+Phase: Ai(2)-Doran Big Butts' Declare Blockers Step
+Phase: Ai(2)-Doran Big Butts' First Strike Damage Step
+Phase: Ai(2)-Doran Big Butts' Combat Damage Step
+Phase: Ai(2)-Doran Big Butts' End of Combat Step
+Phase: Ai(2)-Doran Big Butts' Main phase, postcombat
+Mana: Exotic Orchard (135) - {T}: Add one mana of any color that a land an opponent controls could produce.
+Mana: Forest (126) - {T}: Add {G}.
+Mana: Forest (129) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Tree of Perdition
+Resolve Stack: Tree of Perdition - Creature 0 / 13
+Mana: Radiant Grove (182) - {T}: Add {W}.
+Mana: Swamp (153) - {T}: Add {B}.
+Mana: Forest (124) - {T}: Add {G}.
+Add To Stack: Ai(2)-Doran Big Butts cast Felothar the Steadfast
+Resolve Stack: Felothar the Steadfast - Creature 0 / 5
+Phase: Ai(2)-Doran Big Butts' End step
+Phase: Ai(2)-Doran Big Butts' Cleanup step
+Turn: Turn 31 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Mana: Luxury Suite (327) - {T}: Add {B} or {R}.
+Mana: Crumbling Necropolis (256) - {T}: Add {U}, {B}, or {R}.
+Mana: Talisman of Creativity (276) - {T}: Add {C}.
+Zone Change: Hungry Ghoul (369) was put into Graveyard from Battlefield.
+Mana: Phyrexian Altar (347) - Sacrifice a creature: Add one mana of any color.
+Add To Stack: Ai(3)-Marchesa cast Skyclave Shadowcat
+Resolve Stack: Skyclave Shadowcat - Creature 3 / 3
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 32 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Combat: Ai(1)-Temur Roar Upgraded assigned Ureni of the Unwritten (96), Dragonlord Atarka (68), Ancient Bronze Dragon (76), Lathliss, Dragon Queen (52), Dragon Token (565), Dragon Token (568), Elephant Token (504), Sarkhan, Soul Aflame (38) and Dragonlord's Servant (92) to attack Ai(2)-Doran Big Butts.
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Ureni of the Unwritten
+Resolve Stack: Whenever Ureni enters or attacks, look at the top eight cards of your library. You may put a Dragon creature card from among them onto the battlefield. Put the rest on the bottom of your library in a random order. [Attacker: Ureni of the Unwritten (96)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Lathliss, Dragon Queen
+Resolve Stack: Whenever another nontoken Dragon you control enters, create a 5/5 red Dragon creature token with flying. [Zone Changer: Karakyk Guardian (61)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Dragon Token (571)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Dragon Token (571)]
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Karakyk Guardian (61)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Karakyk Guardian (61)]
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Combat: Ai(2)-Doran Big Butts didn't block Ureni of the Unwritten (96).
+Ai(2)-Doran Big Butts didn't block Dragonlord Atarka (68).
+Ai(2)-Doran Big Butts didn't block Ancient Bronze Dragon (76).
+Ai(2)-Doran Big Butts didn't block Lathliss, Dragon Queen (52).
+Ai(2)-Doran Big Butts didn't block Dragon Token (565).
+Ai(2)-Doran Big Butts didn't block Dragon Token (568).
+Ai(2)-Doran Big Butts assigned Wall of Essence (183) to block Elephant Token (504).
+Ai(2)-Doran Big Butts didn't block Sarkhan, Soul Aflame (38).
+Ai(2)-Doran Big Butts assigned Wall of Blossoms (196) to block Dragonlord's Servant (92).
+Add To Stack: Ai(2)-Doran Big Butts triggered Doran, Besieged by Time
+Add To Stack: Ai(2)-Doran Big Butts triggered Doran, Besieged by Time
+Resolve Stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Blocker: Wall of Blossoms (196)]
+Resolve Stack: Whenever a creature you control attacks or blocks, it gets +X/+X until end of turn, where X is the difference between its power and toughness. [Blocker: Wall of Essence (183)]
+Mana: Mountain (84) - {T}: Add {R}.
+Mana: Island (27) - {T}: Add {U}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Mana: Mountain (86) - {T}: Add {R}.
+Mana: Island (28) - {T}: Add {U}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Mana: Ketria Triome (20) - {T}: Add {R}.
+Mana: Forest (32) - {T}: Add {G}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Mana: Dragon's Hoard (9) - {T}: Add one mana of any color.
+Mana: Rejuvenating Springs (10) - {T}: Add {G} or {U}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Damage: Karplusan Forest (5) deals 1 non-combat damage to Ai(1)-Temur Roar Upgraded.
+Life: Life: Ai(1)-Temur Roar Upgraded 31 > 30
+Mana: Karplusan Forest (5) - {T}: Add {R} or {G}. Karplusan Forest deals 1 damage to you. 
+Mana: Breeding Pool (60) - {T}: Add {G}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Damage: Ureni of the Unwritten (96) deals 13 combat damage to Ai(2)-Doran Big Butts.
+Damage: Dragonlord Atarka (68) deals 13 combat damage to Ai(2)-Doran Big Butts.
+Damage: Ancient Bronze Dragon (76) deals 12 combat damage to Ai(2)-Doran Big Butts.
+Damage: Lathliss, Dragon Queen (52) deals 11 combat damage to Ai(2)-Doran Big Butts.
+Damage: Dragon Token (565) deals 10 combat damage to Ai(2)-Doran Big Butts.
+Damage: Dragon Token (568) deals 10 combat damage to Ai(2)-Doran Big Butts.
+Damage: Elephant Token (504) deals 3 damage to Wall of Essence (183).
+Damage: Sarkhan, Soul Aflame (38) deals 11 combat damage to Ai(2)-Doran Big Butts.
+Damage: Dragonlord's Servant (92) deals 1 damage to Wall of Blossoms (196).
+Damage: Wall of Essence (183) deals 8 damage to Elephant Token (504).
+Damage: Wall of Blossoms (196) deals 8 damage to Dragonlord's Servant (92).
+Life: Life: Ai(2)-Doran Big Butts 35 > -45
+Zone Change: Elephant Token (504) was put into Graveyard from Battlefield.
+Zone Change: Dragonlord's Servant (92) was put into Graveyard from Battlefield.
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Ancient Bronze Dragon
+Resolve Stack: Whenever Ancient Bronze Dragon deals combat damage to a player, roll a d20. When you do, put X +1/+1 counters on each of up to two target creatures, where X is the result. [Damage Source: Ancient Bronze Dragon (76), Damaged: Ai(2)-Doran Big Butts, Amount: 12]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Ancient Bronze Dragon targeting [Karakyk Guardian (61), Ureni of the Unwritten (96)]
+Resolve Stack: When you do, put X +1/+1 counters on each of up to two target creatures, where X is the result. ([19]) (Targeting: [[Karakyk Guardian (61), Ureni of the Unwritten (96)]])
+Phase: Ai(1)-Temur Roar Upgraded's End of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, postcombat
+Phase: Ai(1)-Temur Roar Upgraded's End step
+Phase: Ai(1)-Temur Roar Upgraded's Cleanup step
+Turn: Turn 33 (Ai(3)-Marchesa)
+Phase: Ai(3)-Marchesa's Untap step
+Phase: Ai(3)-Marchesa's Upkeep step
+Phase: Ai(3)-Marchesa's Draw step
+Phase: Ai(3)-Marchesa's Main phase, precombat
+Mana: Luxury Suite (327) - {T}: Add {B} or {R}.
+Mana: Crumbling Necropolis (256) - {T}: Add {U}, {B}, or {R}.
+Mana: Talisman of Creativity (276) - {T}: Add {C}.
+Zone Change: Skyclave Shadowcat (240) was put into Graveyard from Battlefield.
+Mana: Phyrexian Altar (347) - Sacrifice a creature: Add one mana of any color.
+Add To Stack: Ai(3)-Marchesa cast Sneak Attack
+Resolve Stack: Sneak Attack
+Phase: Ai(3)-Marchesa's Beginning of Combat Step
+Phase: Ai(3)-Marchesa's Declare Attackers Step
+Phase: Ai(3)-Marchesa's Declare Blockers Step
+Phase: Ai(3)-Marchesa's First Strike Damage Step
+Phase: Ai(3)-Marchesa's Combat Damage Step
+Phase: Ai(3)-Marchesa's End of Combat Step
+Phase: Ai(3)-Marchesa's Main phase, postcombat
+Phase: Ai(3)-Marchesa's End step
+Phase: Ai(3)-Marchesa's Cleanup step
+Turn: Turn 34 (Ai(1)-Temur Roar Upgraded)
+Phase: Ai(1)-Temur Roar Upgraded's Untap step
+Phase: Ai(1)-Temur Roar Upgraded's Upkeep step
+Phase: Ai(1)-Temur Roar Upgraded's Draw step
+Phase: Ai(1)-Temur Roar Upgraded's Main phase, precombat
+Land: Ai(1)-Temur Roar Upgraded played Command Tower (29)
+Phase: Ai(1)-Temur Roar Upgraded's Beginning of Combat Step
+Phase: Ai(1)-Temur Roar Upgraded's Declare Attackers Step
+Combat: Ai(1)-Temur Roar Upgraded assigned Ureni of the Unwritten (96), Karakyk Guardian (61), Dragonlord Atarka (68), Ancient Bronze Dragon (76), Lathliss, Dragon Queen (52), Dragon Token (565), Dragon Token (568), Dragon Token (571) and Sarkhan, Soul Aflame (38) to attack Ai(3)-Marchesa.
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Ureni of the Unwritten
+Resolve Stack: Whenever Ureni enters or attacks, look at the top eight cards of your library. You may put a Dragon creature card from among them onto the battlefield. Put the rest on the bottom of your library in a random order. [Attacker: Ureni of the Unwritten (96)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Lathliss, Dragon Queen
+Resolve Stack: Whenever another nontoken Dragon you control enters, create a 5/5 red Dragon creature token with flying. [Zone Changer: Hammerhead Tyrant (51)]
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Sarkhan, Soul Aflame
+Add To Stack: Ai(1)-Temur Roar Upgraded triggered Dragon's Hoard
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Dragon Token (574)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Dragon Token (574)]
+Resolve Stack: Whenever a Dragon you control enters, put a gold counter on Dragon's Hoard. [Zone Changer: Hammerhead Tyrant (51)]
+Resolve Stack: Whenever a Dragon you control enters, you may have Sarkhan, Soul Aflame become a copy of it until end of turn, except its name is Sarkhan, Soul Aflame and it's legendary in addition to its other types. [Zone Changer: Hammerhead Tyrant (51)]
+Phase: Ai(1)-Temur Roar Upgraded's Declare Blockers Step
+Combat: Ai(3)-Marchesa didn't block Ureni of the Unwritten (96).
+Ai(3)-Marchesa didn't block Karakyk Guardian (61).
+Ai(3)-Marchesa didn't block Dragonlord Atarka (68).
+Ai(3)-Marchesa didn't block Ancient Bronze Dragon (76).
+Ai(3)-Marchesa didn't block Lathliss, Dragon Queen (52).
+Ai(3)-Marchesa didn't block Dragon Token (565).
+Ai(3)-Marchesa didn't block Dragon Token (568).
+Ai(3)-Marchesa didn't block Dragon Token (571).
+Ai(3)-Marchesa didn't block Sarkhan, Soul Aflame (38).
+Mana: Mountain (84) - {T}: Add {R}.
+Mana: Island (27) - {T}: Add {U}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Mana: Mountain (86) - {T}: Add {R}.
+Mana: Island (28) - {T}: Add {U}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Mana: Command Tower (29) - {T}: Add one mana of any color in your commander's color identity.
+Mana: Forest (32) - {T}: Add {G}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Mana: Ketria Triome (20) - {T}: Add {R}.
+Mana: Rejuvenating Springs (10) - {T}: Add {G} or {U}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Mana: Dragon's Hoard (9) - {T}: Add one mana of any color.
+Mana: Breeding Pool (60) - {T}: Add {G}.
+Add To Stack: Ai(1)-Temur Roar Upgraded activated Lathliss, Dragon Queen
+Resolve Stack: Lathliss, Dragon Queen (52) - Dragons you control get +1/+0 until end of turn.
+Phase: Ai(1)-Temur Roar Upgraded's First Strike Damage Step
+Phase: Ai(1)-Temur Roar Upgraded's Combat Damage Step
+Damage: Ureni of the Unwritten (96) deals 32 combat damage to Ai(3)-Marchesa.
+Damage: Karakyk Guardian (61) deals 30 combat damage to Ai(3)-Marchesa.
+Damage: Dragonlord Atarka (68) deals 13 combat damage to Ai(3)-Marchesa.
+Damage: Ancient Bronze Dragon (76) deals 12 combat damage to Ai(3)-Marchesa.
+Damage: Lathliss, Dragon Queen (52) deals 11 combat damage to Ai(3)-Marchesa.
+Damage: Dragon Token (565) deals 10 combat damage to Ai(3)-Marchesa.
+Damage: Dragon Token (568) deals 10 combat damage to Ai(3)-Marchesa.
+Damage: Dragon Token (571) deals 10 combat damage to Ai(3)-Marchesa.
+Damage: Sarkhan, Soul Aflame (38) deals 11 combat damage to Ai(3)-Marchesa.
+Life: Life: Ai(3)-Marchesa 35 > -104
+Player Control: Ai(1)-Temur Roar Upgraded has restored control over themself
+Player Control: Ai(2)-Doran Big Butts has restored control over themself
+Player Control: Ai(3)-Marchesa has restored control over themself
+Player Control: Ai(4)-Cavalry Charge Upgraded has restored control over themself
+Game Outcome: Match Duration 0m : 30s
+Game Outcome: Turn 17
+Game Outcome: Ai(1)-Temur Roar Upgraded has won because all opponents have lost
+Game Outcome: Ai(2)-Doran Big Butts has lost because life total reached 0
+Game Outcome: Ai(3)-Marchesa has lost because life total reached 0
+Game Outcome: Ai(4)-Cavalry Charge Upgraded has lost due to accumulation of 21 damage from generals
+Match Result: Ai(1)-Temur Roar Upgraded: 1 Ai(2)-Doran Big Butts: 0 Ai(3)-Marchesa: 0 Ai(4)-Cavalry Charge Upgraded: 0 
+
+Game Result: Game 1 ended in 31556 ms. Ai(1)-Temur Roar Upgraded has won!
+

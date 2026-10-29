@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchDeck } from '../api';
+import { fetchDeck, fetchDeckCardImpact } from '../api';
 import { fetchScryfallCards } from '../scryfall';
 
 /** One deck with its decklist and results, or nothing while `id` is undefined. */
@@ -7,6 +7,16 @@ export function useDeck(id: string | undefined) {
   return useQuery({
     queryKey: ['deck', id],
     queryFn: () => fetchDeck(id!),
+    enabled: id != null,
+    retry: 1,
+  });
+}
+
+/** Per-card impact scores for a deck. */
+export function useDeckCardImpact(id: string | undefined) {
+  return useQuery({
+    queryKey: ['deckCardImpact', id],
+    queryFn: () => fetchDeckCardImpact(id!),
     enabled: id != null,
     retry: 1,
   });

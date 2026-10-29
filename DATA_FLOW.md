@@ -202,7 +202,18 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
     - **Local:** raw game files + `meta.json` (contains `condensed` and
      `structured`).
     - **GCP:** raw logs + `condensed.json` + `structured.json` in GCS.
-  4. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
+  4. **Per-deck stats (fire-and-forget, job has 4 `deckIds`):**
+    - `processJobForRatings` — win/game counters behind the leaderboard and
+     deck page results.
+    - `processJobForCardStats` (`api/lib/card-impact/service.ts`) — runs
+     `parseGameCards` on the raw logs already loaded in step 1 (no extra log
+     reads) and adds each game to the deck's card counters in one
+     `cardStats/{deckId}` document (SQLite: `card_stats` table) via one
+     read-modify-write per deck. The document lists counted job ids, so
+     re-running aggregation or the `POST /api/admin/backfill-card-stats`
+     backfill never double counts. `GET /api/decks/:id/card-impact` scores
+     cards from these counters (`scoreCards`).
+  5. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
 
 So: **condensing and structuring** of logs happens **only in the API**, during
@@ -418,6 +429,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Worker endpoint auth | `api/lib/worker-auth.test.ts` | `isWorkerOrAllowlistedUser`: worker secret, allowlisted user token, rejects non-allowlisted/invalid tokens |
 | Flutter log upload + aggregate trigger | `worker_flutter/test/worker/log_uploader_test.dart`, `worker_flutter/test/worker/job_aggregator_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
+| Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs, `addGame`/`scoreCards` lifts, store idempotency per job |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |
 
