@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../installer/forge_jar.dart';
 import '../models/sim.dart';
 
 /// Spawns a Forge `sim` invocation as a child Java process and captures the
@@ -51,7 +52,7 @@ class SimRunner {
     // Resolve the JAR by globbing `forgePath`. The version isn't baked
     // into the worker any more — it's manifest-driven via the installer,
     // so a single Forge bump can ship without an .app release.
-    final forgeJar = _findForgeJar(forgePath);
+    final forgeJar = findNewestForgeJar(forgePath);
     if (forgeJar == null) {
       return SimResult(
         success: false,
@@ -162,22 +163,6 @@ class SimRunner {
       logText: logText,
       errorMessage: parsed.winners.isEmpty ? 'no winner detected in log' : null,
     );
-  }
-
-  /// Glob-style lookup for the installed Forge JAR. Mirrors the pattern
-  /// the installer writes (`forge-gui-desktop-<version>-jar-with-dependencies.jar`).
-  /// Returns null if no matching JAR is present.
-  String? _findForgeJar(String dir) {
-    final d = Directory(dir);
-    if (!d.existsSync()) return null;
-    for (final entry in d.listSync()) {
-      final name = entry.path.split(Platform.pathSeparator).last;
-      if (name.startsWith('forge-gui-desktop-') &&
-          name.endsWith('-jar-with-dependencies.jar')) {
-        return entry.path;
-      }
-    }
-    return null;
   }
 }
 
