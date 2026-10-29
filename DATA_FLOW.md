@@ -200,26 +200,31 @@ FAILED or CANCELLED, so outdated workers can't keep claiming them.
 **When raw log is uploaded (POST logs/simulation):**
 
 - `**uploadSingleSimulationLog`** (log-store): writes the raw log to storage
-only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
+only (local `logs-data/{jobId}/game_NNN.txt` or GCS `jobs/{jobId}/raw/game_NNN.txt`,
+one file per simulation holding its `GAMES_PER_CONTAINER` games). No parsing
+or aggregation here. GCS objects are stored gzipped (`Content-Encoding:
+gzip`, set by `uploadJobArtifact`; downloads decompress them), and there is
+no lifecycle rule: raw logs are kept forever.
 
 **When aggregation runs (`aggregateJobResults`):**
 
 - **Where:** API server (job-store-factory + log-store).
 - **Steps:**
   1. `**getRawLogs(jobId)`** — loads all raw logs for the job (from local disk
-    or GCS).
+    or GCS) and splits each simulation's file into single games
+    (`splitConcatenatedGames`). Every reader of raw logs goes through it.
   2. `**ingestLogs(jobId, rawLogs, deckNames, deckLists)**` (log-store):
-    - `splitConcatenatedGames` on each uploaded log → list of per-game raw
-     strings.
+    - `splitConcatenatedGames` on each log (a no-op on logs already split)
+     → list of per-game raw strings.
     - `**condenseGames(expandedLogs)**` — full condense pipeline
     (api/lib/condenser): filter, classify, turn metrics, etc. →
     `CondensedGame[]`.
     - `**structureGames(expandedLogs, deckNames)**` — full structure pipeline →
     `StructuredGame[]`.
-  3. **Storage:**
-    - **Local:** raw game files + `meta.json` (contains `condensed` and
-     `structured`).
-    - **GCP:** raw logs + `condensed.json` + `structured.json` in GCS.
+  3. **Storage:** only the derived data is written; raw logs stay as
+     uploaded.
+    - **Local:** `meta.json` (contains `condensed` and `structured`).
+    - **GCP:** `condensed.json` + `structured.json` in GCS, gzipped.
   4. **Per-deck stats (fire-and-forget, job has 4 `deckIds`):**
     - `processJobForRatings` — win/game counters behind the leaderboard and
      deck page results, plus `pairGames` (games played against each other

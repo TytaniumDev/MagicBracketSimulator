@@ -25,6 +25,4 @@ gcloud firestore fields ttls update ttl \
   --quiet 2>/dev/null || echo "IdempotencyKeys TTL policy already exists or update submitted"
 
 echo "Done. TTL policies may take up to 24h to fully activate."
-echo ""
-echo "To apply GCS lifecycle rules for raw logs (30-day deletion):"
-echo "  gsutil lifecycle set infra/gcs-lifecycle.json gs://\$GCS_BUCKET"
+# Job logs in GCS have no lifecycle rule: raw logs are kept forever, gzipped.
