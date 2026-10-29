@@ -3,6 +3,7 @@
 # What gets deployed here:
 #   - Hosting (frontend SPA)
 #   - Firestore (rules + indexes)
+#   - Realtime Database rules (worker presence)
 #
 # What deploys automatically (NOT from this workflow):
 #   - App Hosting (API) — auto-deploys via Firebase's GitHub connection on push
@@ -79,3 +80,8 @@ jobs:
 
       - name: Deploy Hosting & Firestore
         run: npx firebase-tools@latest deploy --only hosting,firestore --force
+
+      # Separate step so a missing Realtime Database permission on the deploy
+      # service account can't block the Hosting and Firestore deploy above.
+      - name: Deploy Realtime Database rules
+        run: npx firebase-tools@latest deploy --only database --force

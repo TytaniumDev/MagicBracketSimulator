@@ -1,9 +1,9 @@
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { NextRequest } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { isLocalMode } from './env';
+import { getFirebaseAdminApp } from './firebase-admin-app';
 import { isInAllowedUsers } from './allowed-users';
 
 // Local mode: skip Firebase Auth entirely when GOOGLE_CLOUD_PROJECT is not set
@@ -11,39 +11,6 @@ const IS_LOCAL_MODE = isLocalMode();
 
 const LOCAL_MOCK_USER: AuthUser = { uid: 'local-user', email: 'local@dev' };
 
-// Initialize Firebase Admin SDK (singleton) — only used in GCP mode
-let firebaseApp: App | undefined;
-
-function getFirebaseApp(): App {
-  if (firebaseApp) return firebaseApp;
-
-  const existingApps = getApps();
-  if (existingApps.length > 0) {
-    firebaseApp = existingApps[0];
-    return firebaseApp;
-  }
-
-  // Initialize with default credentials (uses GOOGLE_APPLICATION_CREDENTIALS or ADC)
-  // In Cloud Run, this uses the service account automatically
-  // For local dev, set GOOGLE_APPLICATION_CREDENTIALS to firebase-admin-key.json
-  if (process.env.FIREBASE_ADMIN_KEY) {
-    // If key is provided as JSON string (e.g., from Secret Manager)
-    const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_KEY);
-    const project = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
-    firebaseApp = initializeApp({
-      credential: cert(serviceAccount),
-      projectId: project,
-    });
-  } else {
-    // Use Application Default Credentials
-    const project = process.env.GOOGLE_CLOUD_PROJECT || 'magic-bracket-simulator';
-    firebaseApp = initializeApp({
-      projectId: project,
-    });
-  }
-
-  return firebaseApp;
-}
 
 export interface AuthUser {
   uid: string;
@@ -123,7 +90,7 @@ export async function verifyTokenString(token: string): Promise<AuthUser> {
   }
 
   try {
-    getFirebaseApp();
+    getFirebaseAdminApp();
     const decoded: DecodedIdToken = await getAuth().verifyIdToken(token);
 
     if (!decoded.email) {
@@ -172,7 +139,7 @@ export async function verifyAllowedUser(req: NextRequest): Promise<AuthUser> {
   }
 
   try {
-    getFirebaseApp();
+    getFirebaseAdminApp();
     const decoded: DecodedIdToken = await getAuth().verifyIdToken(token);
 
     if (!decoded.email) {

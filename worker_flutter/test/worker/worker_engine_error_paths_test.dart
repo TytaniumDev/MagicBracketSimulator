@@ -78,6 +78,7 @@ void main() {
         config: config,
         firestore: firestore,
         apiClient: FakeSimApi(firestore).client,
+        presenceSink: FakePresenceSink(),
         runnerOverride: runner,
       );
       addTearDown(() async => engine.dispose());
@@ -130,6 +131,7 @@ void main() {
       config: config,
       firestore: firestore,
       apiClient: FakeSimApi(firestore).client,
+      presenceSink: FakePresenceSink(),
       runnerOverride: _NeverCalledSimRunner(),
     );
     addTearDown(() async => engine.dispose());

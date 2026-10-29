@@ -1,5 +1,7 @@
-import { Timestamp } from '@google-cloud/firestore';
+import { FieldValue } from '@google-cloud/firestore';
+import { WORKER_STALE_MS } from '@shared/types/worker-presence';
 import { getFirestore } from './firestore-client';
+import { readActiveWorkers, setPresenceOverride, writePresence } from './worker-presence-store';
 import type { WorkerInfo } from './types';
 
 const firestore = getFirestore();
@@ -7,69 +9,50 @@ const workersCollection = firestore.collection('workers');
 const jobsCollection = firestore.collection('jobs');
 
 /**
- * Upsert a worker heartbeat record.
- * Uses merge: true to preserve maxConcurrentOverride set separately.
+ * Durable worker fields last written to `workers/{id}` by this API instance,
+ * so a heartbeat only writes Firestore when they change (or on the first
+ * heartbeat this instance sees).
+ */
+const registeredWorkers = new Map<string, string>();
+
+/**
+ * Record a worker heartbeat.
+ *
+ * Liveness goes to Realtime Database presence (`presence/{workerId}`), which
+ * costs no Firestore operations. The Firestore `workers/{id}` doc keeps only
+ * durable fields (name, owner, push URL, version, concurrency override) and
+ * is written when they change, not on every beat.
  */
 export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
-  // TTL: auto-delete heartbeat docs after 24 hours (requires Firestore TTL policy on 'ttl' field)
-  const ttl = Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
-
-  await workersCollection.doc(info.workerId).set({
+  const durable = {
     workerName: info.workerName,
-    status: info.status,
-    currentJobId: info.currentJobId ?? null,
-    capacity: info.capacity,
-    activeSimulations: info.activeSimulations,
-    uptimeMs: info.uptimeMs,
-    lastHeartbeat: info.lastHeartbeat,
+    workerType: info.workerType ?? 'docker',
     version: info.version ?? null,
     ownerEmail: info.ownerEmail ?? null,
     workerApiUrl: info.workerApiUrl ?? null,
-    ttl,
-  }, { merge: true });
+  };
+  const key = JSON.stringify(durable);
+  if (registeredWorkers.get(info.workerId) === key) {
+    await writePresence(info);
+    return;
+  }
+
+  const docRef = workersCollection.doc(info.workerId);
+  // Older heartbeats set a 24 h TTL; the doc now lives as long as the worker.
+  await docRef.set({ ...durable, ttl: FieldValue.delete() }, { merge: true });
+  const override = (await docRef.get()).data()?.maxConcurrentOverride ?? null;
+  await writePresence(info, { maxConcurrentOverride: override });
+  registeredWorkers.set(info.workerId, key);
 }
 
 /**
- * Get workers whose last heartbeat is within the stale threshold.
- * Workers with status 'updating' get a longer threshold (5 min) to remain
- * visible during Watchtower image pulls and container restarts.
- *
- * Default threshold is 3 minutes to give 3x headroom over the 60-second
- * heartbeat cadence (see HEARTBEAT_INTERVAL_MS in worker/src/worker.ts).
+ * Workers seen within the stale threshold (3 minutes by default, 3x the
+ * Docker worker's 60-second heartbeat), read from Realtime Database
+ * presence. Workers with status 'updating' get 5 minutes to stay visible
+ * during image pulls and container restarts.
  */
-export async function getActiveWorkers(staleThresholdMs = 180_000): Promise<WorkerInfo[]> {
-  const UPDATING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes for updating workers
-  const maxThreshold = Math.max(staleThresholdMs, UPDATING_THRESHOLD_MS);
-  const cutoff = new Date(Date.now() - maxThreshold).toISOString();
-  const snapshot = await workersCollection
-    .where('lastHeartbeat', '>', cutoff)
-    .orderBy('lastHeartbeat', 'desc')
-    .get();
-
-  const now = Date.now();
-  return snapshot.docs
-    .filter((doc) => {
-      const d = doc.data();
-      const age = now - new Date(d.lastHeartbeat).getTime();
-      return d.status === 'updating' ? age <= UPDATING_THRESHOLD_MS : age <= staleThresholdMs;
-    })
-    .map((doc) => {
-      const d = doc.data();
-      return {
-        workerId: doc.id,
-        workerName: d.workerName,
-        status: d.status as WorkerInfo['status'],
-        ...(d.currentJobId && { currentJobId: d.currentJobId }),
-        capacity: d.capacity ?? 0,
-        activeSimulations: d.activeSimulations ?? 0,
-        uptimeMs: d.uptimeMs ?? 0,
-        lastHeartbeat: d.lastHeartbeat,
-        ...(d.version && { version: d.version }),
-        maxConcurrentOverride: d.maxConcurrentOverride ?? null,
-        ownerEmail: d.ownerEmail ?? null,
-        workerApiUrl: d.workerApiUrl ?? null,
-      };
-    });
+export async function getActiveWorkers(staleThresholdMs = WORKER_STALE_MS): Promise<WorkerInfo[]> {
+  return readActiveWorkers(staleThresholdMs);
 }
 
 /**
@@ -89,6 +72,7 @@ export async function setMaxConcurrentOverride(workerId: string, override: numbe
   const doc = await workersCollection.doc(workerId).get();
   if (!doc.exists) return false;
   await workersCollection.doc(workerId).update({ maxConcurrentOverride: override });
+  await setPresenceOverride(workerId, override);
   return true;
 }
 
