@@ -13,9 +13,10 @@ import '../telemetry.dart';
 /// Auth rides on [ApiClient]: the signed-in user's Firebase ID token,
 /// which the API accepts for users in `allowedUsers`.
 ///
-/// Failures are non-fatal: the sim's terminal state has already been
-/// written via `SimClaimer.reportTerminal` by the time this runs, so a
-/// missed log is a cosmetic loss, not a correctness one.
+/// Runs before the sim's result is reported, because reporting a job's
+/// last sim starts aggregation, which reads the uploaded logs. Failures are
+/// non-fatal: the result is still reported, and a missed log only drops
+/// that sim's games from the job's log-derived stats.
 class LogUploader {
   LogUploader({required ApiClient api}) : _api = api;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { unauthorizedResponse } from '@/lib/auth';
+import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { parseBody, updateSimulationSchema } from '@/lib/validation';
 import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
@@ -17,9 +18,16 @@ interface RouteParams {
  * PATCH /api/jobs/[id]/simulations/[simId] — Update a single simulation's status.
  * Called by the worker to report per-simulation progress.
  * Body: Partial<SimulationStatus> (state, workerId, durationMs, errorMessage, winner, winningTurn)
+ *
+ * When the body names a workerId and the sim is held by a different worker
+ * (its lease ran out and another worker took it over), the update is
+ * dropped with { updated: false, reason: 'not_owner' }.
+ *
+ * Auth: X-Worker-Secret (Docker worker) or an allowlisted user's Firebase ID
+ * token (desktop worker).
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
+  if (!(await isWorkerOrAllowlistedUser(request))) {
     return unauthorizedResponse('Worker authentication required');
   }
 
@@ -69,6 +77,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           return NextResponse.json(
             { updated: false, reason: 'invalid_transition', from: currentSim.state, to: state },
           );
+        }
+        if (workerId !== undefined && currentSim.workerId && currentSim.workerId !== workerId) {
+          return NextResponse.json({ updated: false, reason: 'not_owner' });
         }
       }
     }

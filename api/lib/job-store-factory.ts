@@ -7,6 +7,7 @@ import { isTerminalSimState } from '@shared/types/state-machine';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
 import { cancelRecoveryCheck } from './cloud-tasks';
+import { isSimLeaseExpired, type ClaimOptions, type SimLeaseStatus } from './sim-lease';
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from './logger';
 
@@ -186,19 +187,36 @@ export interface ClaimedSim {
 }
 
 /**
- * Atomically claim the next PENDING simulation across all active jobs.
- * Flips the sim to RUNNING with the caller's workerId, and flips the job
- * from QUEUED to RUNNING if this is the first claim against it. Returns
- * null when no work is available.
+ * Atomically claim the next claimable simulation across all active jobs:
+ * a PENDING sim, or a RUNNING one whose lease ran out. Flips the sim to
+ * RUNNING with the caller's workerId (and a fresh lease when
+ * `options.withLease`), and flips the job from QUEUED to RUNNING if this is
+ * the first claim against it. Returns null when no work is available.
  */
 export async function claimNextSim(
   workerId: string,
   workerName: string,
+  options: ClaimOptions = {},
 ): Promise<ClaimedSim | null> {
   if (USE_FIRESTORE) {
-    return firestoreStore.claimNextSim(workerId, workerName);
+    return firestoreStore.claimNextSim(workerId, workerName, options);
   }
-  return (await sqliteStore()).claimNextSim(workerId, workerName) ?? null;
+  return (await sqliteStore()).claimNextSim(workerId, workerName, options) ?? null;
+}
+
+/**
+ * Extend the lease on a RUNNING sim held by `workerId`. See SimLeaseStatus
+ * for what each result tells the worker.
+ */
+export async function extendSimLease(
+  jobId: string,
+  simId: string,
+  workerId: string,
+): Promise<SimLeaseStatus> {
+  if (USE_FIRESTORE) {
+    return firestoreStore.extendSimLease(jobId, simId, workerId);
+  }
+  return (await sqliteStore()).extendSimLease(jobId, simId, workerId);
 }
 
 export async function cancelJob(id: string): Promise<boolean> {
@@ -326,23 +344,6 @@ export async function conditionalResetSimulationToPending(
 }
 
 /**
- * Atomically revert a RUNNING sim back to PENDING when its owning worker's
- * lease has expired. Guarded by expectedWorkerId so racing sweep ticks and
- * already-reclaimed sims are no-ops. SQLite mode returns false (Flutter
- * workers — the only producers of leases — only run in GCP mode).
- */
-export async function revertSimToPending(
-  jobId: string,
-  simId: string,
-  expectedWorkerId: string,
-): Promise<boolean> {
-  if (USE_FIRESTORE) {
-    return firestoreStore.revertSimToPending(jobId, simId, expectedWorkerId);
-  }
-  return (await sqliteStore()).revertSimToPending(jobId, simId, expectedWorkerId);
-}
-
-/**
  * Detect and recover a stale RUNNING job.
  *
  * QUEUED jobs need no recovery: the worker's polling loop picks them up on
@@ -377,7 +378,9 @@ const STALE_RUNNING_THRESHOLD_MS = parseInt(process.env.STALE_RUNNING_THRESHOLD_
  * Handles three cases, all resolved by resetting the sim to PENDING so a
  * polling worker will claim it on its next call:
  * 1. RUNNING sims stuck >2.5 hrs  — container hung.
- * 2. RUNNING sims under a dead worker — crashed mid-sim.
+ * 2. RUNNING sims under a dead worker — crashed mid-sim. A sim with a lease
+ *    is dead when the lease ran out; one without (older workers) when its
+ *    worker stopped heartbeating.
  * 3. FAILED sims — auto-retry.
  *
  * Uses conditional writes so a worker completing a sim at the last moment
@@ -413,7 +416,10 @@ async function recoverStaleSimulations(
       }
 
       // Case 2: RUNNING sim whose worker is dead.
-      if (sim.state === 'RUNNING' && sim.workerId && !activeWorkerIds.has(sim.workerId)) {
+      const workerDead = sim.leaseExpiresAt
+        ? isSimLeaseExpired(sim, now)
+        : sim.workerId != null && !activeWorkerIds.has(sim.workerId);
+      if (sim.state === 'RUNNING' && workerDead) {
         const updated = await conditionalResetSimulationToPending(jobId, sim.simId, ['RUNNING']);
         if (updated) {
           recoveryLog.info('Sim worker is dead, reset to PENDING', { jobId, simId: sim.simId, deadWorker: sim.workerId });

@@ -9,10 +9,10 @@ import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import '../telemetry.dart';
-import 'job_aggregator.dart';
-import 'lease_writer.dart';
+import 'heartbeat_writer.dart';
 import 'log_uploader.dart';
-import 'sim_claim.dart';
+import 'sim_api.dart';
+import 'sim_lease_keeper.dart';
 import 'sim_runner.dart';
 
 /// Worker lifecycle state observable from the UI.
@@ -50,12 +50,14 @@ class EngineState {
 }
 
 /// Top-level orchestrator. Owns:
-///   - the Firestore `simulations where state==PENDING` listener
-///   - the per-job `jobs/{id} status==CANCELLED` listeners (one per active job)
-///   - the LeaseWriter (5s heartbeat with lease)
-///   - the SimClaimer (atomic Firestore transaction to claim PENDING sims)
+///   - the Firestore `simulations where state==PENDING` listener, a
+///     read-only wake-up signal that new work exists
+///   - the HeartbeatWriter (worker status for the web UI)
+///   - the SimApi (claims, lease extensions and results, all through the
+///     API like the Docker worker)
+///   - one SimLeaseKeeper per running sim, which also delivers cancellation
 ///   - the SimRunner (Java child process spawning)
-///   - a Semaphore on `config.maxCapacity` to bound concurrency
+///   - a counter on `config.maxCapacity` to bound concurrency
 ///
 /// Lifecycle: [start] kicks everything off. [stop] cancels active sims and
 /// drains. [stateStream] exposes a snapshot of what's running for the UI.
@@ -65,30 +67,32 @@ class WorkerEngine {
     required this.firestore,
     SimRunner? runnerOverride,
     ApiClient? apiClient,
+    this.leaseInterval = const Duration(seconds: 60),
   }) : _runner =
            runnerOverride ??
            SimRunner(javaPath: config.javaPath, forgePath: config.forgePath),
-       _leaseWriter = LeaseWriter(
+       _heartbeat = HeartbeatWriter(
          firestore: firestore,
          workerId: config.workerId,
          workerName: config.workerName,
          capacity: config.maxCapacity,
        ),
-       _claimer = SimClaimer(
-         firestore: firestore,
-         workerId: config.workerId,
-         workerName: config.workerName,
-       ),
        _api = apiClient ?? ApiClient(baseUrl: config.apiUrl);
 
   final WorkerConfig config;
   final FirebaseFirestore firestore;
+
+  /// How often each running sim's lease is extended.
+  final Duration leaseInterval;
   final SimRunner _runner;
-  final LeaseWriter _leaseWriter;
-  final SimClaimer _claimer;
+  final HeartbeatWriter _heartbeat;
   final ApiClient _api;
+  late final SimApi _simApi = SimApi(
+    api: _api,
+    workerId: config.workerId,
+    workerName: config.workerName,
+  );
   late final LogUploader _logUploader = LogUploader(api: _api);
-  late final JobAggregator _jobAggregator = JobAggregator(api: _api);
 
   final _stateSubject = BehaviorSubject<EngineState>.seeded(
     EngineState.initial(),
@@ -97,11 +101,9 @@ class WorkerEngine {
   EngineState get currentState => _stateSubject.value;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _pendingSub;
-  final Map<String, StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>
-  _cancelSubs = {};
 
-  /// Holds per-sim cancellation completers so a `jobs/{id}.status=CANCELLED`
-  /// listener can ask the corresponding sim runner to terminate.
+  /// Holds per-sim cancellation completers, so [stop] or a cancelled lease
+  /// can ask the corresponding sim runner to terminate.
   final Map<String, Completer<void>> _cancelByComposite = {};
 
   /// Cap concurrent sims at config.maxCapacity. We use a simple counter
@@ -119,20 +121,21 @@ class WorkerEngine {
     _emit(currentState.copyWith(running: true, lastError: null));
 
     try {
-      await _leaseWriter.start();
+      await _heartbeat.start();
     } catch (e, st) {
-      _emit(currentState.copyWith(lastError: 'lease writer: $e'));
+      _emit(currentState.copyWith(lastError: 'heartbeat: $e'));
       await Telemetry.captureError(
         e,
         st,
         category: TelemetryCategory.engineRuntime,
-        extra: {'phase': 'lease_writer_start'},
+        extra: {'phase': 'heartbeat_start'},
       );
     }
 
     // Listen to PENDING sims across all jobs. Every time the listener
     // fires (a new PENDING sim appears, or an existing one's state
-    // changes) we try to claim if we have capacity.
+    // changes) we try to claim if we have capacity. The claim itself goes
+    // through the API, which picks the sim.
     //
     // Listener errors get printed AND surfaced via lastError on the
     // engine state. Without the print, a firestore.rules misconfig
@@ -156,9 +159,7 @@ class WorkerEngine {
                 TelemetryCategory.engineRuntime,
                 'PENDING listener error: $err',
               );
-              _emit(
-                currentState.copyWith(lastError: err.toString()),
-              );
+              _emit(currentState.copyWith(lastError: err.toString()));
             },
           );
     } catch (e, st) {
@@ -180,35 +181,29 @@ class WorkerEngine {
     _stopped = true;
     await _pendingSub?.cancel();
     _pendingSub = null;
-    for (final sub in _cancelSubs.values) {
-      await sub.cancel();
-    }
-    _cancelSubs.clear();
     // Signal any running sims to terminate.
     for (final c in _cancelByComposite.values) {
       if (!c.isCompleted) c.complete();
     }
     _cancelByComposite.clear();
-    await _leaseWriter.stop();
+    await _heartbeat.stop();
     _emit(currentState.copyWith(running: false));
   }
 
   /// Change the concurrency cap while the engine is running. Persists the
-  /// value, advertises it on the next lease tick, and immediately claims
+  /// value, advertises it on the next heartbeat, and immediately claims
   /// more work if the cap went up. Lowering the cap lets running sims finish;
   /// no new claims happen until the active count drops below it.
   Future<void> setMaxCapacity(int n) async {
     await config.setCapacity(n);
-    _leaseWriter.capacity = n;
+    _heartbeat.capacity = n;
     if (currentState.running) unawaited(_tryClaimLoop());
   }
 
   /// True while a claim loop is pumping. Every trigger (listener tick, sim
   /// finished, capacity change) funnels through [_tryClaimLoop], and only
-  /// one loop may run at a time: two overlapping loops start two
-  /// `runTransaction` calls on the same sim, which crashes the FlutterFire
-  /// Windows plugin natively (MAGIC-BRACKET-WORKER-3), and both can pass
-  /// the capacity check before either claim lands.
+  /// one loop may run at a time: overlapping loops could both pass the
+  /// capacity check before either claim lands.
   bool _claimLoopRunning = false;
 
   /// Set when a trigger arrives while a loop is running, so the running loop
@@ -239,68 +234,64 @@ class WorkerEngine {
   /// NoneAvailable. Only called from [_tryClaimLoop].
   Future<void> _claimUntilFullOrEmpty() async {
     while (_semaphoreActive < _semaphoreCapacity && !_stopped) {
-      var attempt = 0;
-      ClaimResult result;
-      while (true) {
-        try {
-          result = await _claimer.tryClaim();
-        } catch (e, st) {
-          // A failed claim query (permissions, missing index, offline) must
-          // not escape as an unhandled async error; the next listener tick
-          // retries.
-          AppLog.event(TelemetryCategory.engineRuntime, 'claim failed: $e');
-          await Telemetry.captureError(
-            e,
-            st,
-            category: TelemetryCategory.engineRuntime,
-            extra: {'phase': 'claim'},
+      final ClaimResult result;
+      try {
+        result = await _simApi.claim();
+      } catch (e, st) {
+        // A failed claim (offline, signed out, API down) must not escape
+        // as an unhandled async error; the next trigger retries.
+        AppLog.event(TelemetryCategory.engineRuntime, 'claim failed: $e');
+        _emit(currentState.copyWith(lastError: 'claim: $e'));
+        await Telemetry.captureError(
+          e,
+          st,
+          category: TelemetryCategory.engineRuntime,
+          extra: {'phase': 'claim'},
+        );
+        return;
+      }
+      switch (result) {
+        case ClaimNoneAvailable():
+          AppLog.event(
+            TelemetryCategory.engineRuntime,
+            'claim: none available',
           );
           return;
-        }
-        // Retry on ClaimLostRace in-place rather than returning: an internal
-        // Firestore txn conflict (no competing worker) won't cause the
-        // listener to refire, so leaving the sim PENDING here would orphan
-        // it. Cap retries to avoid spinning if a real race keeps losing.
-        if (result is! ClaimLostRace || attempt >= 2) break;
-        attempt++;
-        await Future<void>.delayed(Duration(milliseconds: 100 * attempt));
-      }
-      if (result is ClaimNoneAvailable) {
-        AppLog.event(TelemetryCategory.engineRuntime, 'claim: none available');
-        return;
-      }
-      if (result is ClaimLostRace) {
-        // exhausted retries; listener will refire on next change
-        AppLog.event(
-          TelemetryCategory.engineRuntime,
-          'claim: lost race, giving up until next tick',
-          data: {'reason': result.reason},
-        );
-        return;
-      }
-      if (result is ClaimSucceeded) {
-        AppLog.event(
-          TelemetryCategory.engineRuntime,
-          'claim: succeeded',
-          data: {'jobId': result.sim.jobId, 'simId': result.sim.simId},
-        );
-        unawaited(_runSim(result.sim));
+        case ClaimSucceeded(:final sim):
+          AppLog.event(
+            TelemetryCategory.engineRuntime,
+            'claim: succeeded',
+            data: {'jobId': sim.jobId, 'simId': sim.simId},
+          );
+          unawaited(_runSim(sim));
       }
     }
   }
 
-  /// Run a single claimed sim end-to-end: ensure decks present, watch for
-  /// job cancellation, spawn Java, report result back.
+  /// Run a single claimed sim end-to-end: hold its lease, write its decks,
+  /// spawn Java, upload the log, then report the result.
   Future<void> _runSim(SimDoc sim) async {
     _semaphoreActive++;
     final cancelCompleter = Completer<void>();
     _cancelByComposite[sim.compositeId] = cancelCompleter;
     _publishActiveSims();
 
-    // Subscribe to cancellations for this job. The listener resolves all
-    // active completers via `_cancelByComposite` at event time, so it picks
-    // up sims claimed after the subscription was set up.
-    _watchJobCancellation(sim.jobId);
+    // Hold the lease while the sim runs. When the API says the job was
+    // cancelled, or another worker took the sim over, stop the sim.
+    SimLeaseStatus? leaseEnd;
+    final leaseKeeper = SimLeaseKeeper(
+      extend: () => _simApi.extendLease(sim),
+      onEnd: (status) {
+        AppLog.event(
+          TelemetryCategory.engineRuntime,
+          'sim: lease ${status.name}, stopping',
+          data: {'jobId': sim.jobId, 'simId': sim.simId},
+        );
+        leaseEnd = status;
+        if (!cancelCompleter.isCompleted) cancelCompleter.complete();
+      },
+      interval: leaseInterval,
+    )..start();
 
     final simData = {'jobId': sim.jobId, 'simId': sim.simId};
     try {
@@ -311,18 +302,7 @@ class WorkerEngine {
           'sim: job not found',
           data: simData,
         );
-        await _claimer.reportTerminal(
-          sim: sim,
-          result: SimResult(
-            success: false,
-            durationMs: 0,
-            winners: const [],
-            winningTurns: const [],
-            logText: '',
-            errorMessage: 'job ${sim.jobId} not found',
-          ),
-        );
-        unawaited(_jobAggregator.triggerIfDone(sim.jobId));
+        await _report(sim, _failure('job ${sim.jobId} not found'));
         return;
       }
 
@@ -339,18 +319,10 @@ class WorkerEngine {
           'sim: missing deck files',
           data: {...simData, 'decks': missingDecks.join(', ')},
         );
-        await _claimer.reportTerminal(
-          sim: sim,
-          result: SimResult(
-            success: false,
-            durationMs: 0,
-            winners: const [],
-            winningTurns: const [],
-            logText: '',
-            errorMessage: 'missing deck files: ${missingDecks.join(', ')}',
-          ),
+        await _report(
+          sim,
+          _failure('missing deck files: ${missingDecks.join(', ')}'),
         );
-        unawaited(_jobAggregator.triggerIfDone(sim.jobId));
         return;
       }
 
@@ -373,24 +345,29 @@ class WorkerEngine {
           if (result.errorMessage != null) 'error': result.errorMessage,
         },
       );
-      await _claimer.reportTerminal(sim: sim, result: result);
 
-      // Best-effort: post the raw sim log to the API so it shows up under
-      // the frontend's per-sim log view, then ask the API to aggregate the
-      // parent job NOW if every sim is terminal. Without the trigger the
-      // job waits for the 15-minute stale-sweeper — see `JobAggregator`.
-      // The trigger waits for the upload because aggregation reads the
-      // uploaded logs; on the job's last sim it would otherwise miss one.
-      // Non-blocking; failures only log.
-      unawaited(
-        _logUploader
-            .upload(
-              jobId: sim.jobId,
-              simIndex: sim.index,
-              logText: result.logText,
-            )
-            .then((_) => _jobAggregator.triggerIfDone(sim.jobId)),
-      );
+      switch (leaseEnd) {
+        case SimLeaseStatus.lost:
+          // Another worker holds the sim now; its result is theirs to report.
+          return;
+        case SimLeaseStatus.cancelled:
+          await _report(sim, result, cancelled: true);
+          return;
+        case SimLeaseStatus.extended:
+        case null:
+          break;
+      }
+
+      // Upload the log before reporting: reporting the job's last sim
+      // starts aggregation, which reads the uploaded logs. Failures only log.
+      if (result.logText.trim().isNotEmpty) {
+        await _logUploader.upload(
+          jobId: sim.jobId,
+          simIndex: sim.index,
+          logText: result.logText,
+        );
+      }
+      await _report(sim, result);
 
       if (result.success) {
         _emit(
@@ -411,68 +388,56 @@ class WorkerEngine {
         category: TelemetryCategory.engineRuntime,
         extra: {'phase': 'sim_run', 'jobId': sim.jobId, 'simId': sim.simId},
       );
-      await _claimer.reportTerminal(
-        sim: sim,
-        result: SimResult(
-          success: false,
-          durationMs: 0,
-          winners: const [],
-          winningTurns: const [],
-          logText: '',
-          errorMessage: e.toString(),
-        ),
-      );
-      unawaited(_jobAggregator.triggerIfDone(sim.jobId));
+      if (leaseEnd != SimLeaseStatus.lost) {
+        await _report(sim, _failure(e.toString()));
+      }
     } finally {
+      leaseKeeper.stop();
       _semaphoreActive--;
       _cancelByComposite.remove(sim.compositeId);
       _publishActiveSims();
-      // Drop the per-job cancel sub if no other sims for that job remain.
-      final stillHasSamJob = _cancelByComposite.keys.any(
-        (k) => k.startsWith('${sim.jobId}:'),
-      );
-      if (!stillHasSamJob) {
-        await _cancelSubs.remove(sim.jobId)?.cancel();
-      }
       // Try to pick up more work immediately.
       unawaited(_tryClaimLoop());
     }
   }
 
-  void _watchJobCancellation(String jobId) {
-    if (_cancelSubs.containsKey(jobId)) return;
-    final sub = firestore
-        .collection('jobs')
-        .doc(jobId)
-        .snapshots()
-        .listen(
-          (snap) {
-            if (!snap.exists) return;
-            final status = snap.data()?['status'];
-            if (status != 'CANCELLED') return;
-            // Signal every active sim for this job. Looking up completers via
-            // `_cancelByComposite` (rather than capturing a single one at
-            // subscription time) handles the multi-sim case where additional
-            // sims are claimed for the same job after the listener was set up.
-            for (final entry in _cancelByComposite.entries) {
-              if (entry.key.startsWith('$jobId:') && !entry.value.isCompleted) {
-                entry.value.complete();
-              }
-            }
-          },
-          onError: (Object err) {
-            // Listener errors are non-fatal here — if the cancel signal misses,
-            // the sim still completes or times out on its own. Log so a broken
-            // Firestore connection is at least visible during dev.
-            AppLog.event(
-              TelemetryCategory.engineRuntime,
-              'cancellation listener errored: $err',
-              data: {'jobId': jobId},
-            );
-          },
-        );
-    _cancelSubs[jobId] = sub;
+  /// Report [result] for [sim] through the API. A failed report is logged
+  /// and sent to Sentry; the sim's lease then runs out and another worker
+  /// re-runs it.
+  Future<void> _report(
+    SimDoc sim,
+    SimResult result, {
+    bool cancelled = false,
+  }) async {
+    try {
+      if (cancelled) {
+        await _simApi.reportCancelled(sim, durationMs: result.durationMs);
+      } else {
+        await _simApi.reportResult(sim, result);
+      }
+    } catch (e, st) {
+      AppLog.event(
+        TelemetryCategory.engineRuntime,
+        'sim: report failed: $e',
+        data: {'jobId': sim.jobId, 'simId': sim.simId},
+      );
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.engineRuntime,
+        extra: {'phase': 'sim_report', 'jobId': sim.jobId, 'simId': sim.simId},
+      );
+    }
   }
+
+  static SimResult _failure(String errorMessage) => SimResult(
+    success: false,
+    durationMs: 0,
+    winners: const [],
+    winningTurns: const [],
+    logText: '',
+    errorMessage: errorMessage,
+  );
 
   Future<JobInfo?> _loadJobInfo(String jobId) async {
     final doc = await firestore.collection('jobs').doc(jobId).get();
@@ -528,7 +493,7 @@ class WorkerEngine {
         .whereType<SimDoc>()
         .toList(growable: false);
     _emit(currentState.copyWith(activeSims: active));
-    _leaseWriter.setActive(active.map((s) => s.compositeId));
+    _heartbeat.activeSimulations = active.length;
   }
 
   /// Publish [state] unless the engine has been disposed. Sims that were

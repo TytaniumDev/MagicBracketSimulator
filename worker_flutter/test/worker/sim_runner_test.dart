@@ -141,7 +141,9 @@ Game outcome: Turn $t
 Game Result: Game 1 ended in 1000 ms. Ai(1)-Test has won!
 ''';
         final parsed = parseGameLog(log);
-        expect(parsed.winningTurns, [(t + 1) ~/ 2], reason: 'expected turn=$t to parse');
+        expect(parsed.winningTurns, [
+          (t + 1) ~/ 2,
+        ], reason: 'expected turn=$t to parse');
         expect(
           parsed.winningTurns.first,
           inInclusiveRange(1, 100),

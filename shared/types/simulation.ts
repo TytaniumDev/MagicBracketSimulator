@@ -29,4 +29,6 @@ export interface SimulationStatus {
   winners?: string[];
   /** Winning turns for each game in this container batch (multi-game containers) */
   winningTurns?: number[];
+  /** While RUNNING: when the claiming worker's reservation runs out unless extended (ISO). */
+  leaseExpiresAt?: string;
 }

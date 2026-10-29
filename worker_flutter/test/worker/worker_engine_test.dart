@@ -8,6 +8,8 @@ import 'package:worker_flutter/models/sim.dart';
 import 'package:worker_flutter/worker/sim_runner.dart';
 import 'package:worker_flutter/worker/worker_engine.dart';
 
+import 'fake_sim_api.dart';
+
 /// Integration tests for the cloud-mode `WorkerEngine` against an
 /// in-memory fake Firestore. Covers the same code path the real
 /// worker takes when the web frontend queues a new bracket — the
@@ -15,12 +17,14 @@ import 'package:worker_flutter/worker/worker_engine.dart';
 /// state change drives the claim loop.
 void main() {
   late FakeFirebaseFirestore firestore;
+  late FakeSimApi api;
   late _StubSimRunner stubRunner;
   late WorkerEngine engine;
   late WorkerConfig config;
 
   setUp(() {
     firestore = FakeFirebaseFirestore();
+    api = FakeSimApi(firestore);
     stubRunner = _StubSimRunner();
     config = WorkerConfig(
       workerId: 'test-engine-worker',
@@ -35,7 +39,9 @@ void main() {
     engine = WorkerEngine(
       config: config,
       firestore: firestore,
+      apiClient: api.client,
       runnerOverride: stubRunner,
+      leaseInterval: const Duration(milliseconds: 50),
     );
   });
 
@@ -186,6 +192,74 @@ void main() {
       gate.complete();
     });
   });
+
+  group('reporting through the API', () {
+    test('uploads the log before reporting the result', () async {
+      await seedJob(jobId: 'job5', simCount: 1);
+      await engine.start();
+      await _waitForCondition(
+        () async => api.calls.any((c) => c.startsWith('patch')),
+        timeout: const Duration(seconds: 3),
+      );
+
+      expect(api.calls, [
+        'claim sim-0',
+        'upload raw/game_001.txt',
+        'patch sim-0 COMPLETED',
+      ], reason: 'aggregation on the last report reads the uploaded logs');
+      expect(api.patches.single['workerId'], 'test-engine-worker');
+      expect(api.patches.single['winners'], ['Ai(1)-Alpha']);
+      expect(api.patches.single['winningTurns'], [7]);
+    });
+
+    test('extends the lease while a sim runs', () async {
+      final gate = Completer<void>();
+      stubRunner.gate = gate.future;
+      await seedJob(jobId: 'job6', simCount: 1);
+      await engine.start();
+      await _waitForCondition(
+        () async => api.calls.where((c) => c == 'lease sim-0').length >= 2,
+        timeout: const Duration(seconds: 3),
+      );
+      gate.complete();
+    });
+
+    test('a cancelled lease stops the sim and reports CANCELLED', () async {
+      stubRunner.waitForCancel = true;
+      api.leaseStatus = 'cancelled';
+      await seedJob(jobId: 'job7', simCount: 1);
+      await engine.start();
+      await _waitForCondition(
+        () async => api.calls.contains('patch sim-0 CANCELLED'),
+        timeout: const Duration(seconds: 3),
+      );
+      expect(
+        api.calls.where((c) => c.startsWith('upload')),
+        isEmpty,
+        reason: 'a cancelled sim has no games to keep',
+      );
+    });
+
+    test('a lost lease stops the sim without reporting', () async {
+      stubRunner.waitForCancel = true;
+      api.leaseStatus = 'lost';
+      await seedJob(jobId: 'job8', simCount: 1);
+      await engine.start();
+      await _waitForCondition(
+        () async =>
+            engine.currentState.activeSims.isEmpty &&
+            stubRunner.invocations == 1,
+        timeout: const Duration(seconds: 3),
+      );
+      // Leave time for a stray report to land.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(
+        api.calls.where((c) => c.startsWith('patch') || c.startsWith('upload')),
+        isEmpty,
+        reason: 'the sim belongs to another worker now',
+      );
+    });
+  });
 }
 
 /// Block until [check] returns true. Polls every 20ms.
@@ -212,6 +286,10 @@ class _StubSimRunner extends SimRunner {
   /// sims "in flight" and observe the concurrency cap.
   Future<void>? gate;
 
+  /// When true, each run blocks until the engine cancels it, then returns
+  /// the runner's cancelled result.
+  bool waitForCancel = false;
+
   @override
   Future<SimResult> runOne({
     required JobInfo job,
@@ -219,6 +297,17 @@ class _StubSimRunner extends SimRunner {
   }) async {
     invocations++;
     if (gate != null) await gate;
+    if (waitForCancel) {
+      await cancelSignal;
+      return SimResult(
+        success: false,
+        durationMs: 5,
+        winners: const [],
+        winningTurns: const [],
+        logText: 'partial',
+        errorMessage: 'cancelled',
+      );
+    }
     return SimResult(
       success: true,
       durationMs: 10,

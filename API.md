@@ -168,19 +168,12 @@ Deletes multiple jobs (max 50) and their artifacts.
 
 ### Claim Next Simulation (Worker)
 
-`POST /jobs/claim-sim`
+`GET /jobs/claim-sim?workerId=worker-1&workerName=MyWorker&lease=1`
 
-Atomically claims the next PENDING simulation for a worker.
-**Auth:** Worker auth required.
-
-**Body:**
-
-```json
-{
-  "workerId": "worker-1",
-  "workerName": "MyWorker"
-}
-```
+Atomically claims the next simulation for a worker: a PENDING sim, or a RUNNING
+one whose lease ran out. With `lease=1` the sim is reserved for 3 minutes; the
+worker keeps it by extending the lease (below) while it runs.
+**Auth:** Worker secret, or an allowlisted user's Firebase ID token.
 
 **Response:**
 
@@ -251,6 +244,27 @@ Updates the status of a single simulation.
 ```
 
 Valid `state` values: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`
+
+When `workerId` is given and another worker now holds the sim, the update is
+dropped: `{ "updated": false, "reason": "not_owner" }`.
+**Auth:** Worker secret, or an allowlisted user's Firebase ID token.
+
+### Extend Simulation Lease (Worker)
+
+`POST /jobs/:id/simulations/:simId/lease`
+
+Pushes a running sim's lease back 3 minutes. Workers call it about once a minute.
+**Auth:** Worker secret, or an allowlisted user's Firebase ID token.
+
+**Body:**
+
+```json
+{ "workerId": "worker-1" }
+```
+
+**Response:** `{ "status": "extended" | "cancelled" | "lost" }`. On `cancelled`
+the job was cancelled; on `lost` the sim is no longer this worker's. Either
+way the worker stops the sim, and on `lost` it reports nothing.
 
 ---
 
@@ -699,13 +713,6 @@ Broadcasts a `pull-image` command to all active workers so they update their Doc
 ```json
 { "ok": true, "message": "Pull-image broadcast sent" }
 ```
-
-### Sweep Leases
-
-`POST /admin/sweep-leases`
-
-Releases stale worker simulation leases that have exceeded their timeout.
-**Auth:** Admin access required.
 
 ### Sweep Stale Jobs
 
