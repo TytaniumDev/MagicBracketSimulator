@@ -1,4 +1,5 @@
 {
   "apiUrl": "https://api--magic-bracket-simulator.us-central1.hosted.app",
-  "preconsUrl": "https://storage.googleapis.com/magic-bracket-simulator-public/precons.json"
+  "preconsUrl": "https://storage.googleapis.com/magic-bracket-simulator-public/precons.json",
+  "sentryDsn": "https://e113b7f15f73e6f5c152a923b8c51f9e@o4510951154712576.ingest.us.sentry.io/4512338180505600"
 }

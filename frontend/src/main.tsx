@@ -21,8 +21,10 @@ loadRuntimeConfig().then(() => {
         Sentry.browserTracingIntegration(),
         Sentry.replayIntegration(),
       ],
+      environment: import.meta.env.MODE,
       tracesSampleRate: 1.0,
-      replaysSessionSampleRate: 0.1,
+      // The free plan includes few replays, so only record sessions with an error.
+      replaysSessionSampleRate: 0,
       replaysOnErrorSampleRate: 1.0,
       // Tells frontend events apart if they share a project with the API.
       initialScope: { tags: { app: 'frontend' } },
