@@ -361,7 +361,35 @@ Creates a new deck from a URL (Moxfield, Archidekt, ManaBox) or raw deck-list te
 
 `GET /decks/:id`
 
-Returns metadata for a specific deck. No auth required.
+Returns a deck's metadata, its parsed decklist, and its results across every
+recorded game (`stats` is `null` until the deck has played). Powers the deck
+page at `/decks/:id`. **Auth:** signed-in user.
+
+**Response:**
+
+```json
+{
+  "deck": {
+    "id": "deck-uuid",
+    "name": "Temur Roar Upgraded",
+    "primaryCommander": "Ureni of the Unwritten",
+    "colorIdentity": ["G", "U", "R"],
+    "isPrecon": false,
+    "setName": null,
+    "link": "https://moxfield.com/decks/..."
+  },
+  "commanders": [{ "quantity": 1, "name": "Ureni of the Unwritten" }],
+  "cards": [{ "quantity": 1, "name": "Sol Ring" }],
+  "stats": {
+    "rating": 41.2,
+    "gamesPlayed": 212,
+    "wins": 98,
+    "winRate": 0.462,
+    "avgWinTurn": 8.4,
+    "winTurnHistogram": [0, 0, 0, 0, 1, 4, 12, 22, 25, 15, 9, 5, 3, 1, 1, 0]
+  }
+}
+```
 
 ### Get Deck Content
 

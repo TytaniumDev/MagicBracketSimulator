@@ -2,6 +2,7 @@ import { getToken } from 'firebase/app-check';
 import { auth, appCheck } from './firebase';
 import { getRuntimeConfig } from './config';
 import type { PodRunResponse, PodRunSummary } from '@shared/types/pod-run';
+import type { DeckDetailResponse } from '@shared/types/deck';
 
 function resolveApiBase(): string {
   // Build-time env vars take precedence (local dev overrides)
@@ -129,6 +130,18 @@ export async function createPodRun(body: {
     throw new Error(data.error || 'Failed to save pod run');
   }
   return data;
+}
+
+/**
+ * Fetch one deck with its decklist and results, for the deck page.
+ */
+export async function fetchDeck(id: string): Promise<DeckDetailResponse> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/decks/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    throw new Error(res.status === 404 ? 'Deck not found' : 'Failed to load deck');
+  }
+  return res.json();
 }
 
 /**

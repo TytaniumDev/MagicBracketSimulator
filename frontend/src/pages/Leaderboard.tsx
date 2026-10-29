@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth, getCoverageConfig, updateCoverageConfig, getCoverageStatus } from '../api';
 import type { CoverageConfig, CoverageStatus } from '../api';
 import { useAuth } from '../contexts/AuthContext';
@@ -311,7 +312,12 @@ export default function Leaderboard() {
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-medium text-white">{entry.name}</span>
+                          <Link
+                            to={`/decks/${encodeURIComponent(entry.deckId)}`}
+                            className="font-medium text-white hover:text-blue-300 hover:underline"
+                          >
+                            {entry.name}
+                          </Link>
                           {!entry.isPrecon && (
                             <span className="px-1.5 py-0.5 text-xs rounded-full bg-purple-900/60 text-purple-300 border border-purple-700">
                               custom
