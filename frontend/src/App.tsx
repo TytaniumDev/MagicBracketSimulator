@@ -4,6 +4,7 @@ import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
 import Browse from './pages/Browse';
 import DeckPage from './pages/DeckPage';
+import Decks from './pages/Decks';
 import Home from './pages/Home';
 import JobStatus from './pages/JobStatus';
 import PodRun from './pages/PodRun';
@@ -40,6 +41,12 @@ function Header() {
             className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
           >
             Rankings
+          </Link>
+          <Link
+            to="/decks"
+            className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
+          >
+            Decks
           </Link>
           {!loading && user && isAllowed && (
             <>
@@ -113,6 +120,7 @@ export default function App() {
                 <Route path="/" element={<Browse />} />
                 <Route path="/submit" element={<Home />} />
                 <Route path="/jobs/:id" element={<JobStatus />} />
+                <Route path="/decks" element={<Decks />} />
                 <Route path="/decks/:id" element={<DeckPage />} />
                 <Route path="/pods" element={<PodRun />} />
                 <Route path="/pods/:id" element={<PodRun />} />
