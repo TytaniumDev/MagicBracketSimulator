@@ -205,6 +205,7 @@ void main() {
 
       expect(api.calls, [
         'claim sim-0',
+        'job job5',
         'upload raw/game_001.txt',
         'patch sim-0 COMPLETED',
       ], reason: 'aggregation on the last report reads the uploaded logs');

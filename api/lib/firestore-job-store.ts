@@ -1,5 +1,5 @@
 import { Timestamp, FieldValue, FieldPath } from '@google-cloud/firestore';
-import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, JobSource } from './types';
+import { Job, JobStatus, JobResults, JobDeck, SimulationStatus, SimulationState, JobSource } from './types';
 import { getFirestore } from './firestore-client';
 import {
   isSimClaimable,
@@ -47,7 +47,7 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
 }
 
 export interface CreateJobData {
-  decks: DeckSlot[];
+  decks: JobDeck[];
   simulations: number;
   parallelism?: number;
   idempotencyKey?: string;

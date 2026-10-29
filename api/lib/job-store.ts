@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, JobResults, JobDeck, SimulationStatus, SimulationState } from './types';
 import type { JobSource } from '@shared/types/job';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveLeaseExtension, simLeaseExpiry, type ClaimOptions, type SimLeaseStatus } from './sim-lease';
@@ -28,7 +28,7 @@ interface Row {
 }
 
 function rowToJob(row: Row): Job {
-  const decks = JSON.parse(row.decks_json) as DeckSlot[];
+  const decks = JSON.parse(row.decks_json) as JobDeck[];
   const deckIds =
     row.deck_ids_json != null && row.deck_ids_json !== ''
       ? (JSON.parse(row.deck_ids_json) as string[])
@@ -65,7 +65,7 @@ export function getJobByIdempotencyKey(key: string): Job | undefined {
 }
 
 export function createJob(
-  decks: DeckSlot[],
+  decks: JobDeck[],
   simulations: number,
   idempotencyKey?: string,
   parallelism?: number,

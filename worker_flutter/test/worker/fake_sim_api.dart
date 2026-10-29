@@ -13,7 +13,8 @@ import 'package:worker_flutter/worker/worker_presence.dart';
 /// by a [FakeFirebaseFirestore] so tests can seed jobs and read sims back
 /// the way the real API stores them.
 ///
-/// Handles claim-sim, lease extension, sim PATCH and log upload, and
+/// Handles claim-sim, the job worker view, lease extension, sim PATCH and
+/// log upload, and
 /// records each call in [calls] (e.g. `patch sim-0 COMPLETED`) so tests can
 /// assert on order.
 class FakeSimApi {
@@ -47,6 +48,11 @@ class FakeSimApi {
     }
     // /api/jobs/:id/...
     final jobId = segments.length > 2 ? segments[2] : '';
+    if (req.method == 'GET' &&
+        segments.length == 3 &&
+        req.url.queryParameters['view'] == 'worker') {
+      return _workerView(jobId);
+    }
     final body = req.body.isEmpty
         ? <String, dynamic>{}
         : json.decode(req.body) as Map<String, dynamic>;
@@ -69,6 +75,25 @@ class FakeSimApi {
       return http.Response(json.encode({'success': true}), 200);
     }
     return http.Response(json.encode({'error': 'not found'}), 404);
+  }
+
+  /// The job doc as the API's worker view returns it (seeded decks already
+  /// carry their `dck` content).
+  Future<http.Response> _workerView(String jobId) async {
+    calls.add('job $jobId');
+    final job = await firestore.collection('jobs').doc(jobId).get();
+    final data = job.data();
+    if (data == null) {
+      return http.Response(json.encode({'error': 'Job not found'}), 404);
+    }
+    return http.Response(
+      json.encode({
+        'id': jobId,
+        'simulations': data['simulations'],
+        'decks': data['decks'],
+      }),
+      200,
+    );
   }
 
   /// Mirrors the API's claimNextSim: the lowest-index PENDING sim of the

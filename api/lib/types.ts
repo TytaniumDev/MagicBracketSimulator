@@ -53,13 +53,23 @@ export interface DeckSlot {
 }
 
 /**
+ * A seat's deck as recorded on a job. Jobs with 4 deckIds record names only
+ * and workers fetch the content by id (see job-decks.ts); `dck` is present
+ * on older jobs and on jobs without deck ids.
+ */
+export interface JobDeck {
+  name: string;
+  dck?: string;
+}
+
+/**
  * Internal Job representation. Uses Date objects for timestamps
  * (the shared JobResponse type uses ISO strings for serialization).
  */
 export interface Job {
   id: string;
-  decks: DeckSlot[]; // Always length 4 (for backward compat; may be empty when deckIds used)
-  deckIds?: string[]; // Length 4 when set; worker uses cache + deck API when present
+  decks: JobDeck[]; // Always length 4
+  deckIds?: string[]; // Length 4 when set; workers get each deck's content by id
   status: JobStatus;
   simulations: number;
   parallelism?: number;
