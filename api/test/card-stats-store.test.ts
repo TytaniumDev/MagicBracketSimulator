@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getCardStatsStore } from '../lib/card-stats-store-factory';
-import { processJobsForCardStats } from '../lib/card-impact/service';
+import { parseCardStatsJob, processJobsForCardStats } from '../lib/card-impact/service';
 import type { DeckCardStats } from '../lib/card-stats-store';
 
 interface TestResult {
@@ -97,7 +97,7 @@ async function main() {
     const log = fs.readFileSync(path.join(__dirname, '..', 'lib', 'card-impact', 'fixtures', 'forge-2.0.15-game.txt'), 'utf-8');
     const deckIds = ['temur', 'doran', 'marchesa', 'cavalry'].map((d) => `${deckId}-${d}`);
     const deckNames = ['Temur Roar Upgraded', 'Doran Big Butts', 'Marchesa', 'Cavalry Charge Upgraded'];
-    const job = (jobId: string) => ({ jobId, deckIds, deckNames, rawLogs: [log] });
+    const job = (jobId: string) => parseCardStatsJob({ jobId, deckIds, deckNames, rawLogs: [log] });
     await processJobsForCardStats([job('page-1'), job('page-2')]);
     const temur = await store.get(deckIds[0]);
     assertEqual(temur?.games, 2, 'one game per job');
