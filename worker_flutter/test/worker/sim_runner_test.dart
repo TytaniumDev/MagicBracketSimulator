@@ -22,6 +22,19 @@ Game Result: Game 1 ended in 16984 ms. Ai(4)-Doran has won!
       expect(parsed.winningTurns, [12]);
     });
 
+    test('extracts turn from Forge 2.0.12+ "Game Outcome" caption', () {
+      const log = '''
+Game Outcome: Match Duration 0m : 30s
+Game Outcome: Turn 17
+Game Outcome: Ai(1)-Temur Roar Upgraded has won because all opponents have lost
+Match Result: Ai(1)-Temur Roar Upgraded: 1 Ai(2)-Doran Big Butts: 0
+Game Result: Game 1 ended in 31556 ms. Ai(1)-Temur Roar Upgraded has won!
+''';
+      final parsed = parseGameLog(log);
+      expect(parsed.winners, ['Ai(1)-Temur Roar Upgraded']);
+      expect(parsed.winningTurns, [9]);
+    });
+
     test('returns empty for log with no winner line', () {
       const log = '''
 Game outcome: Turn 5

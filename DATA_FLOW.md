@@ -209,10 +209,11 @@ So: **condensing and structuring** of logs happens **only in the API**, during
 aggregation, using the raw logs that workers previously uploaded.
 
 **Life total tracking:** `calculateLifePerTurn()` in `api/lib/condenser/turns.ts`
-parses Forge's native `[LIFE] Life: PlayerName oldValue -> newValue` log entries
-(added in the Forge version after 2.0.10, via Card-Forge/forge#9845). This gives
-absolute life totals directly from the game engine — no heuristic inference
-needed. For logs from older Forge versions (without `[LIFE]` entries), the
+parses Forge's native `Life: Life: PlayerName oldValue > newValue` log entries
+(added in Forge 2.0.11 via Card-Forge/forge#9845; 2.0.11 printed `->`, 2.0.12+
+prints `>`, and both are accepted). This gives absolute life totals directly
+from the game engine — no heuristic inference needed. For logs from Forge
+2.0.10 and earlier (no life entries), the
 function returns an empty object `{}` so the frontend can detect that life data
 is unavailable rather than showing misleading defaults.
 

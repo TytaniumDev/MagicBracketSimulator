@@ -495,42 +495,43 @@ export function extractWinningTurn(rawLog: string): number | undefined {
 /**
  * Pattern for Forge's native life change log entries.
  *
- * Forge (since the version after 2.0.10) outputs explicit life changes as:
- *   [LIFE] Life: PlayerName oldValue -> newValue
+ * Forge 2.0.11+ logs every life change (GameLogEntryType.LIFE). The sim CLI
+ * prints each entry as `<caption>: <message>`, and the message itself is
+ * `Life: <player> <old> > <new>`, so the caption appears twice:
+ *   Life: Life: Ai(1)-Doran Big Butts 40 > 37
  *
- * Examples:
- *   [LIFE] Life: Ai(1)-Doran Big Butts 40 -> 37
- *   [LIFE] Life: Ai(2)-Enduring Enchantments 37 -> 0
+ * 2.0.11 used `->` as the arrow; 2.0.12 changed it to `>`. Both are accepted.
  *
  * Capture groups:
  *   1: Player name (e.g., "Ai(1)-Doran Big Butts")
  *   2: Old life total
  *   3: New life total
  *
- * The player name group uses a greedy match up to the last space-digit sequence,
- * which avoids ambiguity with digit-suffix deck names (e.g., "Ai(4)-Deck 2000").
+ * The player name group is lazy and anchored to the trailing
+ * `<old> <arrow> <new>`, which avoids ambiguity with digit-suffix deck
+ * names (e.g., "Ai(4)-Deck 2000").
  */
-const LIFE_LOG_PATTERN = /^\[LIFE\] Life: (.+)\s+(-?\d+)\s*->\s*(-?\d+)$/;
+const LIFE_LOG_PATTERN = /^Life: Life: (.+?)\s+(-?\d+)\s*-?>\s*(-?\d+)\s*$/;
 
 /**
  * Calculates life totals per round for all players.
  *
- * Parses Forge's native `[LIFE] Life: PlayerName oldValue -> newValue` log
+ * Parses Forge's native `Life: Life: PlayerName oldValue > newValue` log
  * entries to track absolute life totals. This gives us exact values directly
  * from the game engine — no heuristic inference needed.
  *
  * A "round" is one full rotation where each player takes a turn.
  * In a 4-player Commander game, round 1 = segments 1-4, round 2 = segments 5-8, etc.
  *
- * Returns an empty object when no `[LIFE]` entries are found (e.g., logs from
- * Forge versions before the life tracking feature). This lets the frontend
+ * Returns an empty object when no life entries are found (e.g., logs from
+ * Forge 2.0.10 and earlier). This lets the frontend
  * detect that life data is unavailable rather than showing misleading defaults.
  *
  * @param rawLog - The complete raw log text
  * @param players - Array of player identifiers (e.g., ["Ai(1)-Doran Big Butts", ...])
  * @param numPlayers - Number of players in the game (optional, auto-detected if not provided)
  * @returns Map of round number -> map of player name -> life total at end of round.
- *          Empty `{}` when no `[LIFE]` entries are present.
+ *          Empty `{}` when no life entries are present.
  */
 export function calculateLifePerTurn(
   rawLog: string,
@@ -576,7 +577,7 @@ export function calculateLifePerTurn(
         const logName = match[1];
         const newLife = parseInt(match[3], 10);
 
-        // Match the player name from the [LIFE] entry to our known players list
+        // Match the player name from the life entry to our known players list
         // using matchesDeckName for consistency with deck matching elsewhere
         const player = players.find(
           (p) => matchesDeckName(p, logName) || matchesDeckName(logName, p)
@@ -591,7 +592,7 @@ export function calculateLifePerTurn(
     lifePerRound[round] = { ...currentLife };
   }
 
-  // Return empty object when no [LIFE] entries found (old Forge versions).
+  // Return empty object when no life entries found (Forge 2.0.10 and earlier).
   // This lets the frontend distinguish "no data" from "everyone at 40".
   if (!hasLifeEntries) {
     return {};
