@@ -87,7 +87,7 @@ Mode is auto-detected by `GOOGLE_CLOUD_PROJECT` env var:
 - **Worker + Simulation split**: Two Docker images. The worker (Node.js) orchestrates simulation containers (Java + Forge) with semaphore-bounded concurrency, auto-scaled by CPU/RAM. See `worker/src/worker.ts` for `processJobWithContainers`, `Semaphore`, and `calculateDynamicParallelism`.
 - **Per-simulation tracking**: Individual simulation states (PENDING/RUNNING/COMPLETED/FAILED) tracked via Firestore subcollection or SQLite table, streamed to frontend via Firestore `onSnapshot` (GCP) or TanStack Query polling (local).
 - **Backward compatibility**: Worker auto-detects mode — container orchestration (default) or monolithic child processes (legacy, when `FORGE_PATH` is set).
-- **Deck resolution**: Supports Moxfield URLs, precon names, and raw deck text. Resolution happens in `api/lib/deck-resolver.ts` + `api/lib/moxfield-service.ts`. Card names reach Forge as front faces only (`api/lib/forge-card-name.ts`): Forge drops "Front // Back" names for every layout except split cards.
+- **Deck resolution**: Supports Moxfield URLs, precon names, and raw deck text. Resolution happens in `api/lib/deck-resolver.ts` + `api/lib/moxfield-service.ts`. The Archidekt precon sync (`api/lib/archidekt-sync.ts`) keeps only precons released since March of the Machine Commander (`PRECON_CUTOFF_DATE`) and deletes older ones. Card names reach Forge as front faces only (`api/lib/forge-card-name.ts`): Forge drops "Front // Back" names for every layout except split cards.
 - **Push-based worker communication**: API pushes config overrides, cancellation commands, and job notifications to the worker's HTTP API (`worker/src/worker-api.ts`). Push helper lives in `api/lib/worker-push.ts`. Heartbeat remains for health monitoring and startup sync.
 
 ### Data Flow Documentation
@@ -107,6 +107,7 @@ Areas covered: worker result reporting, API status updates, log upload/storage, 
 - `src/pages/Home.tsx` — Main page: deck input, job creation
 - `src/pages/JobStatus.tsx` — Job progress and results
 - `src/pages/DeckPage.tsx` — Deck page (`/decks/:id`): results plus a compact decklist with Scryfall hover previews
+- `src/pages/Decks.tsx` — Decks page (`/decks`): every deck in a grid grouped by set; admins exclude decks from selection
 - `src/contexts/AuthContext.tsx` — Firebase Auth provider
 - `src/api.ts` — API client functions
 - `src/config.ts` — Runtime config loader (reads `config.json`)
@@ -120,7 +121,9 @@ Routes live under `api/app/api/`. Key endpoints:
 - `POST /api/jobs/:id/simulations` — Initialize simulation tracking (worker)
 - `PATCH /api/jobs/:id/simulations/:simId` — Update simulation status (worker)
 - `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Saved pod runs (one job per 4-deck pod); `?jobId=` finds the run a job belongs to
+- `GET /api/decks` — Every deck plus `excludedDeckIds` (decks hidden from the picker and auto-coverage)
 - `GET /api/decks/:id` — Deck page data: metadata, parsed decklist, results
+- `PATCH /api/decks/:id` — Exclude a deck from selection or include it again (admin, `{ excluded }`)
 - `GET /api/decks/:id/card-impact` — Per-card impact scores (most game-swinging cards), from counters built at aggregation
 - Deck and precon CRUD endpoints
 

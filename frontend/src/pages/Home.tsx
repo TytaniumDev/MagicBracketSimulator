@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getApiBase, fetchWithAuth, createJob, createPodRun } from '../api';
-import { getRuntimeConfig } from '../config';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { getApiBase, fetchWithAuth, createJob, createPodRun, type LibraryDeck } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { useDeckLibrary } from '../hooks/useDeckLibrary';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
@@ -14,18 +14,7 @@ import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import { MAX_POD_RUN_DECKS, podCombinations, podRunPath, savedPodRunPath } from '../utils/pods';
 import { reportHandledError } from '../errorReporting';
 
-interface Deck {
-  id: string;
-  name: string;
-  filename: string;
-  colorIdentity?: string[];
-  isPrecon: boolean;
-  link?: string | null;
-  ownerId: string | null;
-  ownerEmail?: string | null;
-  setName?: string | null;
-  primaryCommander?: string | null;
-}
+type Deck = LibraryDeck;
 
 interface DeckOption {
   id: string;
@@ -111,11 +100,11 @@ function SimulationForm() {
   const [idempotency, setIdempotency] = useState<{ key: string; signature: string } | null>(null);
   const [podsQueued, setPodsQueued] = useState(0);
 
-  // Data state - separate precon and community deck lists
-  const [preconDecks, setPreconDecks] = useState<Deck[]>([]);
-  const [communityDeckList, setCommunityDeckList] = useState<Deck[]>([]);
-  const [decksLoading, setDecksLoading] = useState(true);
-  const [deckError, setDeckError] = useState<string | null>(null);
+  // Deck library, minus decks excluded from selection on the Decks page
+  const library = useDeckLibrary();
+  const { refetch: loadDecks } = library;
+  const decksLoading = library.isLoading;
+  const deckError = library.data?.communityDecksFailed ? 'Failed to load community decks. Please try again.' : null;
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -125,8 +114,12 @@ function SimulationForm() {
   const canSubmit = selectedDeckIds.length >= REQUIRED_DECK_COUNT;
   const pods = useMemo(() => podCombinations(selectedDeckIds), [selectedDeckIds]);
 
-  // Combine for filtering and selection
-  const allDecks = useMemo(() => [...preconDecks, ...communityDeckList], [preconDecks, communityDeckList]);
+  // Every deck that can be selected
+  const allDecks = useMemo(() => {
+    const excluded = new Set(library.data?.excludedDeckIds ?? []);
+    return (library.data?.decks ?? []).filter((d) => !excluded.has(d.id));
+  }, [library.data]);
+  const excludedCount = (library.data?.decks.length ?? 0) - allDecks.length;
 
   const filteredDecks = useMemo(() => {
     if (!searchQuery.trim()) return allDecks;
@@ -154,84 +147,6 @@ function SimulationForm() {
       })),
     [allDecks]
   );
-
-  // Fetch precons from GCS (no auth needed) with API fallback
-  const fetchPrecons = useCallback(async (): Promise<Deck[]> => {
-    const { preconsUrl } = getRuntimeConfig();
-    if (!preconsUrl) return []; // local mode — precons come from API
-
-    try {
-      const res = await fetch(preconsUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
-    } catch (err) {
-      console.warn('GCS precon fetch failed, will use API fallback:', err);
-      reportHandledError(err, { action: 'fetchPrecons' });
-      return [];
-    }
-  }, []);
-
-  // Fetch community decks from API (auth required), with one auto-retry for cold starts
-  const fetchCommunityDecks = useCallback(async (): Promise<Deck[]> => {
-    const attempt = async (): Promise<Deck[]> => {
-      const res = await fetchWithAuth(`${apiBase}/api/decks`);
-      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
-      const data = await res.json();
-      return data.decks || [];
-    };
-
-    try {
-      return await attempt();
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      // Only retry on server-side transient errors (likely cold start)
-      if (typeof status === 'number' && status >= 500) {
-        console.error('Community decks fetch failed (5xx), retrying...', err);
-        await new Promise(r => setTimeout(r, 2000));
-        return await attempt(); // Let this throw if it also fails
-      }
-      throw err;
-    }
-  }, [apiBase]);
-
-  // Load all decks on mount
-  const loadDecks = useCallback(async () => {
-    setDecksLoading(true);
-    setDeckError(null);
-
-    const [gcsPrecons, apiResult] = await Promise.allSettled([
-      fetchPrecons(),
-      fetchCommunityDecks(),
-    ]);
-
-    const gcsPreconList = gcsPrecons.status === 'fulfilled' ? gcsPrecons.value : [];
-    let community: Deck[] = [];
-    let allApiDecks: Deck[] = [];
-
-    if (apiResult.status === 'fulfilled') {
-      allApiDecks = apiResult.value;
-      community = allApiDecks.filter(d => !d.isPrecon);
-    } else {
-      console.error('Failed to load community decks:', apiResult.reason);
-      reportHandledError(apiResult.reason, { action: 'loadCommunityDecks' });
-      setDeckError('Failed to load community decks. Please try again.');
-    }
-
-    // If GCS returned no precons, fall back to precons from API response
-    if (gcsPreconList.length === 0 && allApiDecks.length > 0) {
-      setPreconDecks(allApiDecks.filter(d => d.isPrecon));
-    } else {
-      setPreconDecks(gcsPreconList);
-    }
-
-    setCommunityDeckList(community);
-    setDecksLoading(false);
-  }, [fetchPrecons, fetchCommunityDecks]);
-
-  useEffect(() => {
-    loadDecks();
-  }, [loadDecks]);
 
   // Check if Moxfield direct import is available
   useEffect(() => {
@@ -543,6 +458,15 @@ function SimulationForm() {
               </button>
             )}
           </div>
+
+          {excludedCount > 0 && (
+            <p className="mb-2 text-xs text-gray-400">
+              {excludedCount} excluded {excludedCount === 1 ? 'deck is' : 'decks are'} hidden.{' '}
+              <Link to="/decks" className="text-blue-400 hover:underline">
+                Manage decks
+              </Link>
+            </p>
+          )}
 
           <input
             type="text"

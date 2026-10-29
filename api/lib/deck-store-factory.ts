@@ -33,6 +33,8 @@ export interface DeckListItem {
   ownerEmail?: string | null;
   createdAt: string;
   setName?: string | null;
+  /** Precon release date (YYYY-MM-DD); null for user decks. */
+  releasedAt?: string | null;
   archidektId?: number | null;
 }
 
@@ -57,12 +59,13 @@ interface PreconRow {
   color_identity: string | null;
   dck: string;
   link: string | null;
+  released_at: string | null;
 }
 
 function listPreconsFromSqlite(): DeckListItem[] {
   const { getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
   const db = getDb();
-  const rows = db.prepare('SELECT id, archidekt_id, name, set_name, filename, primary_commander, color_identity, link FROM precons ORDER BY name').all() as PreconRow[];
+  const rows = db.prepare('SELECT id, archidekt_id, name, set_name, filename, primary_commander, color_identity, link, released_at FROM precons ORDER BY name').all() as PreconRow[];
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -75,6 +78,7 @@ function listPreconsFromSqlite(): DeckListItem[] {
     ownerEmail: null,
     createdAt: '',
     setName: r.set_name,
+    releasedAt: r.released_at,
     archidektId: r.archidekt_id,
   }));
 }
@@ -217,6 +221,7 @@ export async function getDeckById(id: string): Promise<DeckListItem | null> {
         ownerEmail: deck.ownerEmail,
         createdAt: deck.createdAt?.toDate?.()?.toISOString() ?? '',
         setName: deck.setName ?? null,
+        releasedAt: deck.releasedAt ?? null,
         archidektId: deck.archidektId ?? null,
       };
     }

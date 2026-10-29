@@ -156,6 +156,112 @@ export async function fetchDeck(id: string): Promise<DeckDetailResponse> {
   return res.json();
 }
 
+/** A deck in the library, as the deck list endpoints return it. */
+export interface LibraryDeck {
+  id: string;
+  name: string;
+  filename: string;
+  colorIdentity?: string[];
+  isPrecon: boolean;
+  link?: string | null;
+  ownerId: string | null;
+  ownerEmail?: string | null;
+  setName?: string | null;
+  /** Precon release date (YYYY-MM-DD); missing for user decks. */
+  releasedAt?: string | null;
+  primaryCommander?: string | null;
+}
+
+export interface DeckLibrary {
+  /** Precons first, then community decks. */
+  decks: LibraryDeck[];
+  /** Decks left out of the simulation picker and auto-coverage. */
+  excludedDeckIds: string[];
+  /** True when community decks failed to load (precons may still be shown). */
+  communityDecksFailed: boolean;
+}
+
+/** Precons from the public GCS list (no auth needed). Empty in local mode or on failure. */
+async function fetchPublicPrecons(): Promise<LibraryDeck[]> {
+  const { preconsUrl } = getRuntimeConfig();
+  if (!preconsUrl) return []; // local mode — precons come from API
+
+  try {
+    const res = await fetch(preconsUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn('GCS precon fetch failed, will use API fallback:', err);
+    reportHandledError(err, { action: 'fetchPrecons' });
+    return [];
+  }
+}
+
+/** Every deck plus the excluded ids, with one auto-retry for cold starts. */
+async function fetchDeckList(): Promise<{ decks: LibraryDeck[]; excludedDeckIds: string[] }> {
+  const apiBase = resolveApiBase();
+  const attempt = async () => {
+    const res = await fetchWithAuth(`${apiBase}/api/decks`);
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    const data = await res.json();
+    return { decks: data.decks ?? [], excludedDeckIds: data.excludedDeckIds ?? [] };
+  };
+
+  try {
+    return await attempt();
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    // Only retry on server-side transient errors (likely cold start)
+    if (typeof status === 'number' && status >= 500) {
+      console.error('Deck list fetch failed (5xx), retrying...', err);
+      await new Promise((r) => setTimeout(r, 2000));
+      return await attempt(); // Let this throw if it also fails
+    }
+    throw err;
+  }
+}
+
+/**
+ * Load the deck library: precons from GCS (falling back to the API's list)
+ * and community decks from the API.
+ */
+export async function fetchDeckLibrary(): Promise<DeckLibrary> {
+  const [gcsPrecons, apiResult] = await Promise.allSettled([fetchPublicPrecons(), fetchDeckList()]);
+
+  const gcsPreconList = gcsPrecons.status === 'fulfilled' ? gcsPrecons.value : [];
+  const apiDecks = apiResult.status === 'fulfilled' ? apiResult.value.decks : [];
+  if (apiResult.status === 'rejected') {
+    console.error('Failed to load community decks:', apiResult.reason);
+    reportHandledError(apiResult.reason, { action: 'loadCommunityDecks' });
+  }
+
+  // If GCS returned no precons, fall back to precons from the API response
+  const precons = gcsPreconList.length > 0 ? gcsPreconList : apiDecks.filter((d) => d.isPrecon);
+  return {
+    decks: [...precons, ...apiDecks.filter((d) => !d.isPrecon)],
+    excludedDeckIds: apiResult.status === 'fulfilled' ? apiResult.value.excludedDeckIds : [],
+    communityDecksFailed: apiResult.status === 'rejected',
+  };
+}
+
+/**
+ * Exclude a deck from selection, or include it again (admin only).
+ * Returns every excluded deck id.
+ */
+export async function setDeckExcluded(deckId: string, excluded: boolean): Promise<string[]> {
+  const apiBase = resolveApiBase();
+  const res = await fetchWithAuth(`${apiBase}/api/decks/${encodeURIComponent(deckId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ excluded }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data.excludedDeckIds ?? [];
+}
+
 export interface CardStatsBackfillPage {
   processed: number;
   skipped: number;
