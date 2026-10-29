@@ -3,6 +3,7 @@ import type { CardImpact } from '@shared/types/card-impact';
 import { cardKey, type ScryfallCard } from '../scryfall';
 import { formatLift, isPermanent, MIN_CASTS_TO_RANK, topSwingCards } from '../utils/card-impact';
 import { useCardPreview } from './CardPreview';
+import { CardName } from './CardName';
 
 interface CardImpactTableProps {
   games: number;
@@ -83,13 +84,12 @@ export const CardImpactTable = memo(function CardImpactTable({ games, cards, loo
               return (
                 <tr key={card.name} className="bg-gray-800/50 hover:bg-gray-700/50">
                   <td className="px-3 py-1.5">
-                    <button
-                      type="button"
+                    <CardName
+                      name={card.name}
+                      info={info}
+                      previewHandlers={previewHandlers}
                       className="text-left text-gray-100 hover:text-white focus:outline-none focus:underline"
-                      {...previewHandlers(card.name, info?.imageUrl)}
-                    >
-                      {card.name}
-                    </button>
+                    />
                     {card.cast < MIN_CASTS_TO_RANK && (
                       <span className="ml-1.5 text-xs text-gray-500">few games</span>
                     )}
