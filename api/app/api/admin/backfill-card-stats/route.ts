@@ -3,7 +3,7 @@ import { verifyAdmin, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import * as Sentry from '@sentry/nextjs';
 import { errorResponse } from '@/lib/api-response';
-import type { CardStatsJob } from '@/lib/card-impact/service';
+import type { ParsedCardStatsJob } from '@/lib/card-impact/service';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -41,9 +41,11 @@ export async function POST(request: NextRequest) {
     const limit = parsePageSize(params.get('limit'));
     const { jobs, nextCursor } = await jobStore.listJobs({ limit, cursor });
     const { getRawLogs } = await import('@/lib/log-store');
-    const { processJobsForCardStats } = await import('@/lib/card-impact/service');
+    const { parseCardStatsJob, processJobsForCardStats } = await import('@/lib/card-impact/service');
 
-    const toCount: CardStatsJob[] = [];
+    // Parse each job as it is read, so only one job's raw logs are held at a
+    // time. A page of raw logs can exceed the instance's memory.
+    const toCount: ParsedCardStatsJob[] = [];
     for (const job of jobs) {
       if (!job || job.status !== 'COMPLETED') continue;
       if (!Array.isArray(job.deckIds) || job.deckIds.length !== 4) continue;
@@ -54,7 +56,7 @@ export async function POST(request: NextRequest) {
           skipped.push(job.id);
           continue;
         }
-        toCount.push({ jobId: job.id, deckIds: job.deckIds, deckNames: job.decks.map((d) => d.name), rawLogs });
+        toCount.push(parseCardStatsJob({ jobId: job.id, deckIds: job.deckIds, deckNames: job.decks.map((d) => d.name), rawLogs }));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'unknown error';
         errors.push({ jobId: job.id, error: message });

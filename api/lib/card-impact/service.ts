@@ -37,17 +37,33 @@ export interface CardStatsJob {
   rawLogs: string[];
 }
 
-/** Each deck's counter update for one job, or nothing if its logs hold no games. */
-function deckUpdatesForJob(job: CardStatsJob): Map<string, CardStatsJobUpdate> {
+/**
+ * A job's games reduced to the card signals card stats need. Much smaller
+ * than its raw logs, so a page of jobs fits in memory where their raw logs
+ * (several MB per job) would not.
+ */
+export interface ParsedCardStatsJob {
+  jobId: string;
+  deckIds: string[];
+  deckNames: string[];
+  games: GameCardSummary[];
+}
+
+/** Parse a job's raw logs, so the caller can drop them before reading the next job. */
+export function parseCardStatsJob({ rawLogs, ...job }: CardStatsJob): ParsedCardStatsJob {
+  return { ...job, games: rawLogs.flatMap(splitConcatenatedGames).map(parseGameCards) };
+}
+
+/** Each deck's counter update for one job, or nothing if it holds no games. */
+function deckUpdatesForJob(job: ParsedCardStatsJob): Map<string, CardStatsJobUpdate> {
   const updates = new Map<string, CardStatsJobUpdate>();
-  const games = job.rawLogs.flatMap(splitConcatenatedGames).map(parseGameCards);
-  if (games.length === 0) return updates;
+  if (job.games.length === 0) return updates;
 
   job.deckIds.forEach((deckId, idx) => {
     updates.set(deckId, {
       jobId: job.jobId,
       update: (stats) => {
-        for (const game of games) {
+        for (const game of job.games) {
           const seat = seatFor(game, job.deckNames[idx] ?? '', idx);
           if (seat) addGame(stats, game, seat);
         }
@@ -59,11 +75,11 @@ function deckUpdatesForJob(job: CardStatsJob): Map<string, CardStatsJobUpdate> {
 }
 
 /**
- * Add every game in the jobs' logs to their decks' card counters, with one
+ * Add every game in the parsed jobs to their decks' card counters, with one
  * store write per deck however many jobs mention it. Already counted jobs
  * are skipped.
  */
-export async function processJobsForCardStats(jobs: CardStatsJob[]): Promise<void> {
+export async function processJobsForCardStats(jobs: ParsedCardStatsJob[]): Promise<void> {
   const byDeck = new Map<string, CardStatsJobUpdate[]>();
   for (const job of jobs) {
     for (const [deckId, update] of deckUpdatesForJob(job)) {
@@ -82,5 +98,5 @@ export async function processJobForCardStats(
   deckNames: string[],
   rawLogs: string[],
 ): Promise<void> {
-  await processJobsForCardStats([{ jobId, deckIds, deckNames, rawLogs }]);
+  await processJobsForCardStats([parseCardStatsJob({ jobId, deckIds, deckNames, rawLogs })]);
 }

@@ -213,7 +213,9 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
      re-running aggregation or the `POST /api/admin/backfill-card-stats`
      backfill never double counts. The backfill (the leaderboard's admin
      "Rebuild card stats" button pages through it) batches each page of jobs
-     into one write per deck. Documents also carry `version`
+     into one write per deck, parsing each job's raw logs as it reads them
+     (`parseCardStatsJob`) so only one job's logs are in memory at a time.
+     Documents also carry `version`
      (`CARD_STATS_VERSION`); counters from an older parser are discarded on
      read and rebuilt by the next job or the backfill. `GET
      /api/decks/:id/card-impact` scores cards from these counters

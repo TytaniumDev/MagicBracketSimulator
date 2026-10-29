@@ -1,6 +1,7 @@
 import { getToken } from 'firebase/app-check';
 import { auth, appCheck } from './firebase';
 import { getRuntimeConfig } from './config';
+import { reportHandledError } from './errorReporting';
 import type { PodRunResponse, PodRunSummary } from '@shared/types/pod-run';
 import type { DeckDetailResponse } from '@shared/types/deck';
 import type { DeckCardImpactResponse } from '@shared/types/card-impact';
@@ -66,10 +67,18 @@ export async function fetchWithAuth(
     }
   }
 
-  return fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    return await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    // The request never got a response ("Failed to fetch"): the API is down,
+    // restarting, or answered without CORS headers. Many callers handle this
+    // themselves, so report it here where every call passes.
+    reportHandledError(error, { url, method: options.method ?? 'GET' });
+    throw error;
+  }
 }
 
 /**
