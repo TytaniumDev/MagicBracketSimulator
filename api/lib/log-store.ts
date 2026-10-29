@@ -203,3 +203,14 @@ export async function getStructuredLogs(
   return { games, deckNames: names };
 }
 
+
+/**
+ * Delete every stored log for a job (raw, condensed, structured).
+ */
+export async function deleteLogs(jobId: string): Promise<void> {
+  if (isGcpMode()) {
+    await gcs.deleteJobArtifacts(jobId);
+    return;
+  }
+  fs.rmSync(getJobDir(jobId), { recursive: true, force: true });
+}
