@@ -12,7 +12,9 @@ const BUCKET_NAME = process.env.GCS_BUCKET || 'magic-bracket-simulator-artifacts
 const bucket = storage.bucket(BUCKET_NAME);
 
 /**
- * Upload a job artifact to GCS
+ * Upload a job artifact to GCS. Text and JSON are stored gzipped
+ * (Content-Encoding: gzip); `download()` decompresses them on read, so
+ * readers see the original text.
  * @param jobId The job ID
  * @param filename The filename (e.g., 'condensed.json', 'raw/game_001.txt')
  * @param data The data to upload (string or Buffer)
@@ -36,6 +38,7 @@ export async function uploadJobArtifact(
       const file = bucket.file(objectPath);
       await file.save(data, {
         contentType,
+        gzip: contentType !== 'application/octet-stream',
         metadata: { jobId },
       });
     },
@@ -123,25 +126,8 @@ export async function deleteJobArtifacts(jobId: string): Promise<void> {
 }
 
 /**
- * Upload multiple raw game logs
- * @param jobId The job ID
- * @param logs Array of raw game log contents
- * @returns Array of GCS URIs
- */
-export async function uploadRawLogs(
-  jobId: string,
-  logs: string[]
-): Promise<string[]> {
-  const uploads = logs.map((log, index) => {
-    const filename = `raw/game_${String(index + 1).padStart(3, '0')}.txt`;
-    return uploadJobArtifact(jobId, filename, log);
-  });
-
-  return Promise.all(uploads);
-}
-
-/**
- * Get all raw game logs for a job
+ * Get every raw log file for a job, in filename order. A file holds one
+ * simulation's games (one game per file for older jobs).
  * @param jobId The job ID
  * @returns Array of raw log contents
  */

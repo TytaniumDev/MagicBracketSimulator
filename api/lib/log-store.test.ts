@@ -166,6 +166,14 @@ async function runTests() {
       assertEqual(result![2], 'game three', 'third game');
     });
 
+    await test("getRawLogs: splits a simulation's file into its games", async () => {
+      const jobId = 'job-split-sim';
+      await logStore.uploadSingleSimulationLog(jobId, 'raw/game_001.txt', rawLog);
+      const result = await logStore.getRawLogs(jobId);
+      assertEqual(result?.length, 4, 'games');
+      assertEqual(result![0], games[0], 'first game');
+    });
+
     await test('getRawLogs: ignores non-game files', async () => {
       const jobId = 'job-ignore-nongame';
       const jobDir = path.join(tempDir, jobId);
@@ -187,14 +195,13 @@ async function runTests() {
       assertEqual(result.gameCount, 4, 'gameCount');
     });
 
-    await test('ingestLogs: writes game_NNN.txt files', async () => {
-      const jobId = 'job-ingest-files';
+    await test('ingestLogs: leaves the uploaded raw logs as they are', async () => {
+      const jobId = 'job-ingest-raw';
+      await logStore.uploadSingleSimulationLog(jobId, 'raw/game_001.txt', rawLog);
       await logStore.ingestLogs(jobId, games, ['A', 'B', 'C', 'D']);
-      const jobDir = path.join(tempDir, jobId);
-      for (let i = 1; i <= 4; i++) {
-        const filename = `game_${String(i).padStart(3, '0')}.txt`;
-        assert(fs.existsSync(path.join(jobDir, filename)), `${filename} should exist`);
-      }
+      const files = fs.readdirSync(path.join(tempDir, jobId)).filter((f) => f.startsWith('game_'));
+      assertEqual(files.join(','), 'game_001.txt', 'raw files');
+      assertEqual(fs.readFileSync(path.join(tempDir, jobId, 'game_001.txt'), 'utf-8'), rawLog, 'raw log');
     });
 
     await test('ingestLogs: writes meta.json with condensed, structured, deckNames', async () => {
@@ -215,18 +222,6 @@ async function runTests() {
       // Pass the raw log as a single element — ingestLogs should split it
       const result = await logStore.ingestLogs('job-ingest-concat', [rawLog], ['A', 'B', 'C', 'D']);
       assertEqual(result.gameCount, 4, 'should split into 4 games');
-    });
-
-    await test('ingestLogs: cleans old game files before re-ingesting', async () => {
-      const jobId = 'job-ingest-clean';
-      // First ingest: write 4 games
-      await logStore.ingestLogs(jobId, games, ['A', 'B', 'C', 'D']);
-      // Write an extra game file to simulate leftover from previous ingest
-      fs.writeFileSync(path.join(tempDir, jobId, 'game_005.txt'), 'old', 'utf-8');
-      // Re-ingest with only 4 games
-      await logStore.ingestLogs(jobId, games, ['A', 'B', 'C', 'D']);
-      const oldFile = path.join(tempDir, jobId, 'game_005.txt');
-      assert(!fs.existsSync(oldFile), 'game_005.txt should be cleaned');
     });
 
     // =========================================================================

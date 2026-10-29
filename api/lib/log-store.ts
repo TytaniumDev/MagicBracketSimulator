@@ -2,7 +2,12 @@
  * Log storage abstraction — local filesystem or GCS depending on mode.
  *
  * LOCAL mode: stores logs as files under `logs-data/{jobId}/`
- * GCP mode: stores logs in Cloud Storage via gcs-storage.ts
+ * GCP mode: stores logs in Cloud Storage via gcs-storage.ts (gzipped)
+ *
+ * Raw logs are kept as the worker uploaded them: one file per simulation,
+ * each holding up to GAMES_PER_CONTAINER games (older jobs hold one game per
+ * file). Readers get them split into single games. They are kept forever;
+ * aggregation only adds the derived condensed and structured data.
  */
 
 import * as fs from 'fs';
@@ -48,7 +53,8 @@ interface StoredMeta {
 // ─── Ingest (POST) ──────────────────────────────────────────────────────────
 
 /**
- * Ingest raw game logs for a job. Pre-computes condensed and structured data.
+ * Pre-compute condensed and structured data from a job's raw logs (already
+ * stored, as uploaded by the worker).
  */
 export async function ingestLogs(
   jobId: string,
@@ -61,30 +67,9 @@ export async function ingestLogs(
   const structured = structureGames(expandedLogs, deckNames);
 
   if (isGcpMode()) {
-    // Upload raw logs
-    await gcs.uploadRawLogs(jobId, expandedLogs);
-    // Upload pre-computed JSON
     await gcs.uploadJobArtifact(jobId, 'condensed.json', JSON.stringify(condensed));
     await gcs.uploadJobArtifact(jobId, 'structured.json', JSON.stringify({ games: structured, deckNames }));
   } else {
-    // Local filesystem
-    const jobDir = getJobDir(jobId);
-    if (fs.existsSync(jobDir)) {
-      // Clean old game files
-      for (const f of fs.readdirSync(jobDir)) {
-        if (/^game_\d+\.txt$/.test(f)) fs.unlinkSync(path.join(jobDir, f));
-      }
-    } else {
-      fs.mkdirSync(jobDir, { recursive: true });
-    }
-
-    // Write raw game files
-    expandedLogs.forEach((log, i) => {
-      const filename = `game_${String(i + 1).padStart(3, '0')}.txt`;
-      fs.writeFileSync(path.join(jobDir, filename), log, 'utf-8');
-    });
-
-    // Write metadata with pre-computed data
     const meta: StoredMeta = {
       deckNames,
       deckLists,
@@ -92,6 +77,7 @@ export async function ingestLogs(
       condensed,
       structured,
     };
+    fs.mkdirSync(getJobDir(jobId), { recursive: true });
     fs.writeFileSync(getMetaPath(jobId), JSON.stringify(meta, null, 2), 'utf-8');
   }
 
@@ -152,29 +138,24 @@ function readLocalRawLogs(jobId: string): string[] | null {
   return files.map((f) => fs.readFileSync(path.join(jobDir, f), 'utf-8'));
 }
 
+/** The job's raw logs, one entry per game, or null when none were uploaded. */
 export async function getRawLogs(jobId: string): Promise<string[] | null> {
-  if (isGcpMode()) {
-    const logs = await gcs.getRawLogs(jobId);
-    return logs.length > 0 ? logs : null;
-  }
-  return readLocalRawLogs(jobId);
+  const files = isGcpMode() ? await gcs.getRawLogs(jobId) : readLocalRawLogs(jobId);
+  if (!files || files.length === 0) return null;
+  return files.flatMap(splitConcatenatedGames);
 }
 
 export async function getCondensedLogs(jobId: string): Promise<CondensedGame[] | null> {
   if (isGcpMode()) {
     const precomputed = await gcs.getJobArtifactJson<CondensedGame[]>(jobId, 'condensed.json');
     if (precomputed) return precomputed;
-    // Fallback: compute from raw logs (e.g. FAILED jobs where bulk upload never happened)
-    const raw = await gcs.getRawLogs(jobId);
-    if (raw.length === 0) return null;
-    return condenseGames(raw);
+  } else {
+    const meta = readLocalMeta(jobId);
+    if (meta?.condensed) return meta.condensed;
   }
-  const meta = readLocalMeta(jobId);
-  if (meta?.condensed) return meta.condensed;
-  // Fallback: compute from raw logs
-  const raw = readLocalRawLogs(jobId);
-  if (!raw) return null;
-  return condenseGames(raw);
+  // Fallback: compute from raw logs (e.g. FAILED jobs that were never aggregated)
+  const raw = await getRawLogs(jobId);
+  return raw ? condenseGames(raw) : null;
 }
 
 export async function getStructuredLogs(
@@ -187,20 +168,14 @@ export async function getStructuredLogs(
       'structured.json'
     );
     if (precomputed) return precomputed;
-    // Fallback: compute from raw logs (e.g. FAILED jobs where bulk upload never happened)
-    const raw = await gcs.getRawLogs(jobId);
-    if (raw.length === 0) return null;
-    const games = structureGames(raw, deckNamesHint);
-    return { games, deckNames: deckNamesHint };
   }
-  const meta = readLocalMeta(jobId);
+  const meta = isGcpMode() ? null : readLocalMeta(jobId);
   if (meta?.structured) return { games: meta.structured, deckNames: meta.deckNames };
-  // Fallback: compute from raw logs
-  const raw = readLocalRawLogs(jobId);
+  // Fallback: compute from raw logs (e.g. FAILED jobs that were never aggregated)
+  const raw = await getRawLogs(jobId);
   if (!raw) return null;
   const names = deckNamesHint ?? meta?.deckNames;
-  const games = structureGames(raw, names);
-  return { games, deckNames: names };
+  return { games: structureGames(raw, names), deckNames: names };
 }
 
 
