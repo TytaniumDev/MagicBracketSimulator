@@ -474,7 +474,9 @@ Returns deck win-rate leaderboard across all completed simulations.
 
 `GET /workers`
 
-Lists all active workers and current queue depth.
+Lists all active workers and current queue depth. Workers come from the
+Realtime Database `presence/` entries seen in the last 3 minutes (5 while a
+worker is updating). The web UI reads the same entries directly.
 **Auth:** Firebase Auth required.
 
 **Response:**
@@ -530,7 +532,12 @@ Pass `null` to clear the override.
 
 `POST /workers/heartbeat`
 
-Reports worker liveness and retrieves configuration overrides.
+Reports worker liveness and retrieves configuration overrides. Used by the
+Docker worker about once a minute. The API writes the beat into the worker's
+Realtime Database presence entry (`presence/{workerId}`) and writes the
+Firestore `workers/{id}` doc (name, owner, push URL, version) only when those
+fields change. The desktop worker writes its own presence entry directly and
+does not call this endpoint.
 **Auth:** Worker auth required.
 
 **Body:**

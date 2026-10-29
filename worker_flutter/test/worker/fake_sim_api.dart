@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +7,7 @@ import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:worker_flutter/api_client.dart';
+import 'package:worker_flutter/worker/worker_presence.dart';
 
 /// In-memory stand-in for the API endpoints the worker engine calls, backed
 /// by a [FakeFirebaseFirestore] so tests can seed jobs and read sims back
@@ -109,4 +111,24 @@ class FakeSimApi {
           .doc(jobId)
           .collection('simulations')
           .doc(simId);
+}
+
+/// Records presence writes instead of sending them to the Realtime Database.
+class FakePresenceSink implements PresenceSink {
+  final connectedController = StreamController<bool>.broadcast();
+  final List<Map<String, Object?>> writes = [];
+  int removes = 0;
+  int disconnectArms = 0;
+
+  @override
+  Stream<bool> get connected => connectedController.stream;
+
+  @override
+  Future<void> removeOnDisconnect() async => disconnectArms++;
+
+  @override
+  Future<void> write(Map<String, Object?> fields) async => writes.add(fields);
+
+  @override
+  Future<void> remove() async => removes++;
 }

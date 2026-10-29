@@ -1,35 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
-import { collection, query, where, onSnapshot, getCountFromServer } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, query, where, getCountFromServer } from 'firebase/firestore';
+import { ref, onValue } from 'firebase/database';
+import { db, rtdb } from '../firebase';
 import { getApiBase, fetchWithAuth } from '../api';
 import type { WorkerInfo } from '../types/worker';
 import { reportHandledError } from '../errorReporting';
+import {
+  PRESENCE_PATH,
+  activeWorkersFromPresence,
+  type WorkerPresence,
+} from '@shared/types/worker-presence';
 
-// Stale thresholds matching api/lib/firestore-worker-store.ts
-const STALE_THRESHOLD_MS = 60_000;
-const UPDATING_THRESHOLD_MS = 5 * 60 * 1000;
-
-function isWorkerActive(data: Record<string, unknown>): boolean {
-  const age = Date.now() - new Date(data.lastHeartbeat as string).getTime();
-  return data.status === 'updating' ? age <= UPDATING_THRESHOLD_MS : age <= STALE_THRESHOLD_MS;
-}
-
-function docToWorkerInfo(docId: string, data: Record<string, unknown>): WorkerInfo {
-  return {
-    workerId: docId,
-    workerName: data.workerName as string,
-    status: data.status as WorkerInfo['status'],
-    ...(data.currentJobId ? { currentJobId: data.currentJobId as string } : undefined),
-    capacity: (data.capacity as number) ?? 0,
-    activeSimulations: (data.activeSimulations as number) ?? 0,
-    uptimeMs: (data.uptimeMs as number) ?? 0,
-    lastHeartbeat: data.lastHeartbeat as string,
-    ...(data.version ? { version: data.version as string } : undefined),
-    maxConcurrentOverride: (data.maxConcurrentOverride as number | null) ?? null,
-    ownerEmail: (data.ownerEmail as string | null) ?? null,
-    workerApiUrl: (data.workerApiUrl as string | null) ?? null,
-  };
-}
+/** How often stale presence entries are re-checked between updates. */
+const PRESENCE_RECHECK_MS = 30_000;
 
 // REST fallback for LOCAL mode
 async function fetchWorkerStatusRest(): Promise<{ workers: WorkerInfo[]; queueDepth: number }> {
@@ -50,8 +33,8 @@ interface WorkerStatusResult {
 /**
  * Worker fleet status hook.
  *
- * - GCP mode: Firestore onSnapshot for real-time worker updates (no polling).
- *   Queue depth via lightweight count query.
+ * - GCP mode: Realtime Database presence for live worker updates (no
+ *   Firestore reads). Queue depth via lightweight count query.
  * - LOCAL mode: REST polling every 15 seconds.
  */
 export function useWorkerStatus(enabled = true): WorkerStatusResult {
@@ -71,26 +54,24 @@ export function useWorkerStatus(enabled = true): WorkerStatusResult {
     }
   }, []);
 
-  // GCP mode: Firestore onSnapshot for workers
+  // GCP mode: Realtime Database presence for workers
   useEffect(() => {
-    if (!db || !enabled) return;
+    if (!db || !rtdb || !enabled) return;
 
-    // Query workers with recent heartbeats (use max threshold to get all potentially active)
-    const cutoff = new Date(Date.now() - UPDATING_THRESHOLD_MS).toISOString();
-    const q = query(
-      collection(db, 'workers'),
-      where('lastHeartbeat', '>', cutoff),
-    );
+    // A worker that stops writing sends no update, so re-filter the last
+    // snapshot on a timer to drop it once it goes stale.
+    let entries: Record<string, WorkerPresence> | null = null;
+    const publish = () => setWorkers(activeWorkersFromPresence(entries));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const active = snapshot.docs
-        .filter((doc) => isWorkerActive(doc.data()))
-        .map((doc) => docToWorkerInfo(doc.id, doc.data()));
-      setWorkers(active);
+    const unsubscribe = onValue(ref(rtdb, PRESENCE_PATH), (snapshot) => {
+      entries = snapshot.val();
+      publish();
       setIsLoading(false);
-    }, () => {
+    }, (err) => {
+      reportHandledError(err, { action: 'subscribeWorkerPresence' });
       setIsLoading(false);
     });
+    const recheck = setInterval(publish, PRESENCE_RECHECK_MS);
 
     // Fetch queue depth initially and every 15s
     fetchQueueDepth();
@@ -98,6 +79,7 @@ export function useWorkerStatus(enabled = true): WorkerStatusResult {
 
     return () => {
       unsubscribe();
+      clearInterval(recheck);
       clearInterval(interval);
     };
   }, [enabled, fetchQueueDepth]);

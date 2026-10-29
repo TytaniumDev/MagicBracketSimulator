@@ -30,6 +30,7 @@ import 'update/check_for_updates_handler.dart';
 import 'update/quit_for_update_listener.dart';
 import 'update/updater_telemetry.dart';
 import 'worker/worker_engine.dart';
+import 'worker/worker_presence.dart';
 
 /// Magic Bracket Worker entry point.
 ///
@@ -38,7 +39,8 @@ import 'worker/worker_engine.dart';
 ///   2. Load persistent worker config (workerId, capacity, paths)
 ///   3. Show the dashboard window as a normal app
 ///   4. Set up the tray icon as a secondary affordance
-///   5. Start the worker engine (Firestore listener + API claims + sim runner)
+///   5. Start the worker engine (Firestore listener + API claims + sim runner
+///      + Realtime Database presence)
 ///
 /// Hybrid window/tray model: the app launches with a visible window.
 /// Closing the window is intercepted — `windowManager.setPreventClose(true)`
@@ -299,6 +301,7 @@ Future<void> _bootEngine(WorkerConfig config) async {
   final engine = WorkerEngine(
     config: config,
     firestore: FirebaseFirestore.instance,
+    presenceSink: RtdbPresenceSink(workerId: config.workerId),
   );
 
   // Connect the constructed WorkerEngine to the global tray

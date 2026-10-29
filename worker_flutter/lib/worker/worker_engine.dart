@@ -9,11 +9,11 @@ import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import '../telemetry.dart';
-import 'heartbeat_writer.dart';
 import 'log_uploader.dart';
 import 'sim_api.dart';
 import 'sim_lease_keeper.dart';
 import 'sim_runner.dart';
+import 'worker_presence.dart';
 
 /// Worker lifecycle state observable from the UI.
 class EngineState {
@@ -52,7 +52,8 @@ class EngineState {
 /// Top-level orchestrator. Owns:
 ///   - the Firestore `simulations where state==PENDING` listener, a
 ///     read-only wake-up signal that new work exists
-///   - the HeartbeatWriter (worker status for the web UI)
+///   - the WorkerPresence (Realtime Database entry listing this worker as
+///     online in the web UI)
 ///   - the SimApi (claims, lease extensions and results, all through the
 ///     API like the Docker worker)
 ///   - one SimLeaseKeeper per running sim, which also delivers cancellation
@@ -65,15 +66,15 @@ class WorkerEngine {
   WorkerEngine({
     required this.config,
     required this.firestore,
+    required PresenceSink presenceSink,
     SimRunner? runnerOverride,
     ApiClient? apiClient,
     this.leaseInterval = const Duration(seconds: 60),
   }) : _runner =
            runnerOverride ??
            SimRunner(javaPath: config.javaPath, forgePath: config.forgePath),
-       _heartbeat = HeartbeatWriter(
-         firestore: firestore,
-         workerId: config.workerId,
+       _presence = WorkerPresence(
+         sink: presenceSink,
          workerName: config.workerName,
          capacity: config.maxCapacity,
        ),
@@ -85,7 +86,7 @@ class WorkerEngine {
   /// How often each running sim's lease is extended.
   final Duration leaseInterval;
   final SimRunner _runner;
-  final HeartbeatWriter _heartbeat;
+  final WorkerPresence _presence;
   final ApiClient _api;
   late final SimApi _simApi = SimApi(
     api: _api,
@@ -121,14 +122,14 @@ class WorkerEngine {
     _emit(currentState.copyWith(running: true, lastError: null));
 
     try {
-      await _heartbeat.start();
+      await _presence.start();
     } catch (e, st) {
-      _emit(currentState.copyWith(lastError: 'heartbeat: $e'));
+      _emit(currentState.copyWith(lastError: 'presence: $e'));
       await Telemetry.captureError(
         e,
         st,
         category: TelemetryCategory.engineRuntime,
-        extra: {'phase': 'heartbeat_start'},
+        extra: {'phase': 'presence_start'},
       );
     }
 
@@ -186,17 +187,17 @@ class WorkerEngine {
       if (!c.isCompleted) c.complete();
     }
     _cancelByComposite.clear();
-    await _heartbeat.stop();
+    await _presence.stop();
     _emit(currentState.copyWith(running: false));
   }
 
   /// Change the concurrency cap while the engine is running. Persists the
-  /// value, advertises it on the next heartbeat, and immediately claims
+  /// value, advertises it on the next presence write, and immediately claims
   /// more work if the cap went up. Lowering the cap lets running sims finish;
   /// no new claims happen until the active count drops below it.
   Future<void> setMaxCapacity(int n) async {
     await config.setCapacity(n);
-    _heartbeat.capacity = n;
+    _presence.capacity = n;
     if (currentState.running) unawaited(_tryClaimLoop());
   }
 
@@ -493,7 +494,7 @@ class WorkerEngine {
         .whereType<SimDoc>()
         .toList(growable: false);
     _emit(currentState.copyWith(activeSims: active));
-    _heartbeat.activeSimulations = active.length;
+    _presence.activeSimulations = active.length;
   }
 
   /// Publish [state] unless the engine has been disposed. Sims that were

@@ -49,6 +49,15 @@ by the stale-sweeper Cloud Scheduler job and by Cloud Tasks recovery) resets
 it to PENDING. Idle workers write nothing for this. Sims claimed without a
 lease (workers older than this change) keep the old check: the sim is reset
 once its `workerId` is missing from the 120 s active-workers list.
+
+**Active workers (presence):** the active-workers list comes from Realtime
+Database `presence/{workerId}` entries (`shared/types/worker-presence.ts`):
+an entry seen within the window counts as online. The Docker worker's
+`POST /api/workers/heartbeat` writes its entry through the API every 60 s;
+the desktop worker writes its own entry every 60 s with an onDisconnect
+delete. The API reads presence for recovery (FAILED-sim retry, sims without
+a lease) and for push; the frontend's `useWorkerStatus` subscribes to it.
+None of this touches Firestore.
 Stuck-for-too-long sims (> 2.5 h) and always-retryable FAILED sims are reset
 to PENDING the same way and reclaimed by the next poll. The PATCH handler
 drops a report whose `workerId` no longer owns the sim
@@ -432,6 +441,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Sim lease rules | `api/lib/sim-lease.test.ts`, `worker/src/sim-lease.test.ts`, `worker_flutter/test/worker/sim_lease_keeper_test.dart` | Expiry and claimability, lease extension answers, worker-side keeper stops on cancelled/lost and retries failed calls, idle poll backoff |
 | Desktop worker API calls | `worker_flutter/test/worker/sim_api_test.dart`, `worker_flutter/test/worker/worker_engine_test.dart` | Claim with `lease=1`, lease and PATCH bodies; engine uploads the log before reporting, reports CANCELLED on a cancelled lease and nothing on a lost one |
 | Worker endpoint auth | `api/lib/worker-auth.test.ts` | `isWorkerOrAllowlistedUser`: worker secret, allowlisted user token, rejects non-allowlisted/invalid tokens |
+| Worker presence | `api/test/worker-presence.test.ts`, `worker_flutter/test/worker/worker_presence_test.dart` | Which entries count as online (stale window, updating window), mapping to `WorkerInfo`; desktop writes on connect/reconnect and each tick, arms the onDisconnect delete, removes on stop |
 | Flutter log upload | `worker_flutter/test/worker/log_uploader_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |

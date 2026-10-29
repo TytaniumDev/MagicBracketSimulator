@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "presence": {
+      ".read": "auth != null",
+      "$workerId": {
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid) && (!newData.exists() || newData.child('uid').val() === auth.uid)",
+        ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'workerName', 'workerType', 'status', 'capacity', 'activeSimulations', 'uptimeMs', 'lastSeen']) && newData.child('workerType').val() === 'flutter' && newData.child('lastSeen').val() <= now)"
+      }
+    }
+  }
+}

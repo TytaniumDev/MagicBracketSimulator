@@ -40,6 +40,7 @@ void main() {
       config: config,
       firestore: firestore,
       apiClient: api.client,
+      presenceSink: FakePresenceSink(),
       runnerOverride: stubRunner,
       leaseInterval: const Duration(milliseconds: 50),
     );
