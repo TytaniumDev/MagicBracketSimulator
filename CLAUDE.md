@@ -106,6 +106,7 @@ Areas covered: worker result reporting, API status updates, log upload/storage, 
 - `src/App.tsx` — Router setup (react-router-dom v7)
 - `src/pages/Home.tsx` — Main page: deck input, job creation
 - `src/pages/JobStatus.tsx` — Job progress and results
+- `src/pages/DeckPage.tsx` — Deck page (`/decks/:id`): results plus a compact decklist with Scryfall hover previews
 - `src/contexts/AuthContext.tsx` — Firebase Auth provider
 - `src/api.ts` — API client functions
 - `src/config.ts` — Runtime config loader (reads `config.json`)
@@ -119,6 +120,8 @@ Routes live under `api/app/api/`. Key endpoints:
 - `POST /api/jobs/:id/simulations` — Initialize simulation tracking (worker)
 - `PATCH /api/jobs/:id/simulations/:simId` — Update simulation status (worker)
 - `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Saved pod runs (one job per 4-deck pod); `?jobId=` finds the run a job belongs to
+- `GET /api/decks/:id` — Deck page data: metadata, parsed decklist, results
+- `GET /api/decks/:id/card-impact` — Per-card impact scores (most game-swinging cards), from counters built at aggregation
 - Deck and precon CRUD endpoints
 
 ## Environment & Secrets

@@ -24,8 +24,10 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getRatingStore } from '@/lib/rating-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
 import { errorResponse } from '@/lib/api-response';
+import { toDeckStats } from '@/lib/deck-stats';
+import type { DeckStats } from '@shared/types/deck';
 
-export interface LeaderboardEntry {
+export interface LeaderboardEntry extends DeckStats {
   deckId: string;
   name: string;
   setName: string | null;
@@ -35,33 +37,13 @@ export interface LeaderboardEntry {
   mu: number;
   /** @deprecated Legacy TrueSkill uncertainty; no longer updated. Neutral default (≈8.33) for new decks. */
   sigma: number;
-  /** Bayesian-adjusted win rate as a percentage (prior = 25% over 40 games). */
-  rating: number;
-  gamesPlayed: number;
-  wins: number;
-  winRate: number;
-  /** Mean of winning turnCount across resolved wins. Null when no wins have a recorded turn. */
-  avgWinTurn: number | null;
-  /** 16 bins — indexes 0..14 map to turns 1..15, index 15 is "16+". Null when no data. */
-  winTurnHistogram: number[] | null;
 }
-
-// Prior: expected win rate in a 4-player free-for-all is 25%.
-// Weight: equivalent to "40 games of 25%" mixed in — a new deck scores exactly
-// the prior, and the prior's influence fades as real games accumulate.
-const PRIOR_WIN_RATE = 0.25;
-const PRIOR_WEIGHT = 40;
-const PRIOR_WINS = PRIOR_WEIGHT * PRIOR_WIN_RATE;
 
 // Upper bound when fetching from the store — anything above this means we have
 // bigger problems than leaderboard truncation. The route applies the user's
 // `limit` itself after Bayesian scoring so the store's internal sort order
 // cannot silently drop high-Bayesian decks.
 const STORE_FETCH_CAP = 10_000;
-
-function bayesianScore(wins: number, gamesPlayed: number): number {
-  return ((wins + PRIOR_WINS) / (gamesPlayed + PRIOR_WEIGHT)) * 100;
-}
 
 // In-memory cache with 5-minute TTL
 let cache: { data: LeaderboardEntry[]; minGames: number; limit: number; at: number } | null = null;
@@ -112,11 +94,6 @@ export async function GET(request: NextRequest) {
           primaryCommander = deck.primaryCommander ?? null;
         }
 
-        const winTurnWins = r.winTurnWins ?? 0;
-        const hasHistogram =
-          Array.isArray(r.winTurnHistogram) &&
-          r.winTurnHistogram.length === 16 &&
-          r.winTurnHistogram.some((n) => n > 0);
         return {
           deckId: r.deckId,
           name,
@@ -125,12 +102,7 @@ export async function GET(request: NextRequest) {
           primaryCommander: primaryCommander ?? null,
           mu: r.mu,
           sigma: r.sigma,
-          rating: bayesianScore(r.wins, r.gamesPlayed),
-          gamesPlayed: r.gamesPlayed,
-          wins: r.wins,
-          winRate: r.gamesPlayed > 0 ? r.wins / r.gamesPlayed : 0,
-          avgWinTurn: winTurnWins > 0 ? (r.winTurnSum ?? 0) / winTurnWins : null,
-          winTurnHistogram: hasHistogram ? r.winTurnHistogram! : null,
+          ...toDeckStats(r),
         };
       }),
     );

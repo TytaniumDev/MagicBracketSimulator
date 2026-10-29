@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/react';
 import { LoginButton } from './components/LoginButton';
 import { useAuth } from './contexts/AuthContext';
 import Browse from './pages/Browse';
+import DeckPage from './pages/DeckPage';
 import Home from './pages/Home';
 import JobStatus from './pages/JobStatus';
 import PodRun from './pages/PodRun';
@@ -112,6 +113,7 @@ export default function App() {
                 <Route path="/" element={<Browse />} />
                 <Route path="/submit" element={<Home />} />
                 <Route path="/jobs/:id" element={<JobStatus />} />
+                <Route path="/decks/:id" element={<DeckPage />} />
                 <Route path="/pods" element={<PodRun />} />
                 <Route path="/pods/:id" element={<PodRun />} />
                 <Route path="/worker-setup" element={<WorkerSetup />} />
