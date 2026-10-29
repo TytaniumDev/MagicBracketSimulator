@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DeckSlot } from './types';
+import { addPodPairGames } from './rating-store';
 import * as Sentry from '@sentry/nextjs';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -87,6 +88,32 @@ function dropLegacyColumns(database: Database.Database): void {
       }
     }
   }
+}
+
+/**
+ * Add `ratings.pair_games` (JSON map of other deck id to games together) and
+ * `jobs.ratings_applied`, filled from the legacy match_results rows the
+ * first time they are added.
+ */
+function migrateMatchResultsToPairGames(database: Database.Database): void {
+  const ratingColumns = (database.prepare('PRAGMA table_info(ratings)').all() as { name: string }[]).map((c) => c.name);
+  if (ratingColumns.includes('pair_games')) return;
+
+  database.transaction(() => {
+    database.exec('ALTER TABLE ratings ADD COLUMN pair_games TEXT');
+    database.exec('ALTER TABLE jobs ADD COLUMN ratings_applied INTEGER');
+
+    const pairGames = new Map<string, Record<string, number>>();
+    const rows = database.prepare('SELECT deck_ids FROM match_results').all() as { deck_ids: string }[];
+    for (const row of rows) addPodPairGames(pairGames, JSON.parse(row.deck_ids) as string[]);
+    const upsert = database.prepare(`
+      INSERT INTO ratings (deck_id, games_played, wins, last_updated, pair_games) VALUES (?, 0, 0, ?, ?)
+      ON CONFLICT(deck_id) DO UPDATE SET pair_games = excluded.pair_games
+    `);
+    const now = new Date().toISOString();
+    for (const [deckId, counts] of pairGames) upsert.run(deckId, now, JSON.stringify(counts));
+    database.exec('UPDATE jobs SET ratings_applied = 1 WHERE id IN (SELECT DISTINCT job_id FROM match_results)');
+  })();
 }
 
 export function getDb(): Database.Database {
@@ -323,6 +350,10 @@ export function getDb(): Database.Database {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_match_results_job_id ON match_results(job_id)`);
+
+  // Pair game counts per deck and the rated-job flag replaced match_results
+  // (see rating-store.ts). Fill them from match_results once.
+  migrateMatchResultsToPairGames(db);
 
   // Coverage config (singleton row)
   db.exec(`

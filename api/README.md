@@ -65,7 +65,6 @@ See [API.md](../API.md) for full endpoint documentation with request/response sh
 | `/api/coverage/next-job` | POST | Next uncovered matchup to simulate |
 | `/api/sync/precons` | POST | Re-sync precon deck library |
 | `/api/admin/backfill-ratings` | POST | Rebuild deck ratings from match history |
-| `/api/admin/backfill-win-turns` | POST | Rebuild win-turn histograms |
 | `/api/admin/pull-image` | POST | Broadcast Docker pull-image to workers |
 | `/api/admin/sweep-stale-jobs` | POST | Mark timed-out jobs as FAILED |
 
