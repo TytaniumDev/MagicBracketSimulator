@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerRequest } from '@/lib/auth';
+import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
 import { claimNextSim } from '@/lib/job-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
@@ -17,9 +17,12 @@ import * as Sentry from '@sentry/nextjs';
  * Query params:
  *   workerId   — stable identifier for reclaim heuristics and audit
  *   workerName — display name surfaced on the job detail UI
+ *   lease=1    — reserve the sim with a lease the worker extends via
+ *                POST /api/jobs/:id/simulations/:simId/lease (see sim-lease.ts)
  *
  * Returns 200 { jobId, simId, simIndex } on success, 204 when no work is
- * available. Auth: X-Worker-Secret (shared with the other worker endpoints).
+ * available. Auth: X-Worker-Secret (Docker worker) or an allowlisted user's
+ * Firebase ID token (desktop worker).
  *
  * Every response carries the worker's current concurrency override in the
  * `X-Max-Concurrent-Override` header (a positive integer, or `none` when
@@ -29,20 +32,21 @@ import * as Sentry from '@sentry/nextjs';
  * every poll.
  */
 export async function GET(request: NextRequest) {
-  if (!isWorkerRequest(request)) {
+  if (!(await isWorkerOrAllowlistedUser(request))) {
     return errorResponse('Unauthorized', 401);
   }
 
   const url = new URL(request.url);
   const workerId = url.searchParams.get('workerId');
   const workerName = url.searchParams.get('workerName');
+  const withLease = url.searchParams.get('lease') === '1';
   if (!workerId || !workerName) {
     return badRequestResponse('workerId and workerName query params are required');
   }
 
   try {
     const [claimed, overrideResult] = await Promise.all([
-      claimNextSim(workerId, workerName),
+      claimNextSim(workerId, workerName, { withLease }),
       // Best-effort: if this fails we omit the header and the worker just
       // keeps its last-known override. Don't let it orphan a successful claim.
       workerStore.getMaxConcurrentOverride(workerId).catch((err) => {

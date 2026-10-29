@@ -19,18 +19,18 @@ class SimDoc {
   final String? workerId;
   final String? workerName;
 
-  /// Composite ID used inside the worker's `lease.activeSimIds` array.
-  /// Format: `${jobId}:${simId}`. Used by the lease sweep on the backend.
+  /// Key for a running sim inside the worker engine.
+  /// Format: `${jobId}:${simId}`.
   String get compositeId => '$jobId:$simId';
 
   Map<String, dynamic> toJson() => {
-        'simId': simId,
-        'jobId': jobId,
-        'index': index,
-        'state': state,
-        if (workerId != null) 'workerId': workerId,
-        if (workerName != null) 'workerName': workerName,
-      };
+    'simId': simId,
+    'jobId': jobId,
+    'index': index,
+    'state': state,
+    if (workerId != null) 'workerId': workerId,
+    if (workerName != null) 'workerName': workerName,
+  };
 }
 
 /// Result of running a single simulation (output from sim_runner).

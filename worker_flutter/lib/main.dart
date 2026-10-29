@@ -38,7 +38,7 @@ import 'worker/worker_engine.dart';
 ///   2. Load persistent worker config (workerId, capacity, paths)
 ///   3. Show the dashboard window as a normal app
 ///   4. Set up the tray icon as a secondary affordance
-///   5. Start the worker engine (Firestore listener + lease + sim runner)
+///   5. Start the worker engine (Firestore listener + API claims + sim runner)
 ///
 /// Hybrid window/tray model: the app launches with a visible window.
 /// Closing the window is intercepted — `windowManager.setPreventClose(true)`

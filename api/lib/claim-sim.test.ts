@@ -14,7 +14,10 @@ import {
   setJobFailed,
   deleteSimulations,
   deleteJob,
+  extendSimLease,
+  conditionalUpdateSimulationStatus,
 } from './job-store';
+import { getDb } from './db';
 import type { DeckSlot } from './types';
 
 interface TestResult {
@@ -50,6 +53,13 @@ const DECKS: DeckSlot[] = [
   { name: 'Deck C', dck: 'c' },
   { name: 'Deck D', dck: 'd' },
 ];
+
+/** Pretend the sim's lease ran out a minute ago. */
+function expireLease(jobId: string, simId: string) {
+  getDb()
+    .prepare('UPDATE simulations SET lease_expires_at = ? WHERE job_id = ? AND sim_id = ?')
+    .run(new Date(Date.now() - 60_000).toISOString(), jobId, simId);
+}
 
 function cleanup(jobId: string) {
   deleteSimulations(jobId);
@@ -151,6 +161,100 @@ async function runTests() {
       initializeSimulations(jobId, 1);
       const claimed = claimNextSim('w', 'W');
       assertEqual(claimed, undefined, 'flutter-local job → no claim');
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
+  await test('claim with lease sets leaseExpiresAt about 3 minutes out', () => {
+    const jobId = createJob(DECKS, 4).id;
+    try {
+      initializeSimulations(jobId, 1);
+      claimNextSim('w', 'W', { withLease: true });
+      const sim = getSimulationStatus(jobId, 'sim_000');
+      const msLeft = Date.parse(sim!.leaseExpiresAt ?? '') - Date.now();
+      if (!(msLeft > 2.5 * 60_000 && msLeft <= 3 * 60_000)) {
+        throw new Error(`lease should expire in ~3 min, got ${msLeft}ms`);
+      }
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
+  await test('claim without lease leaves leaseExpiresAt unset', () => {
+    const jobId = createJob(DECKS, 4).id;
+    try {
+      initializeSimulations(jobId, 1);
+      claimNextSim('w', 'W');
+      assertEqual(getSimulationStatus(jobId, 'sim_000')!.leaseExpiresAt, undefined, 'no lease');
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
+  await test('RUNNING sim with a live lease is not claimable', () => {
+    const jobId = createJob(DECKS, 4).id;
+    try {
+      initializeSimulations(jobId, 1);
+      claimNextSim('w1', 'W1', { withLease: true });
+      assertEqual(claimNextSim('w2', 'W2', { withLease: true }), undefined, 'still held by w1');
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
+  await test('RUNNING sim with an expired lease is taken over', () => {
+    const jobId = createJob(DECKS, 4).id;
+    try {
+      initializeSimulations(jobId, 1);
+      claimNextSim('w1', 'W1', { withLease: true });
+      expireLease(jobId, 'sim_000');
+      const claimed = claimNextSim('w2', 'W2', { withLease: true });
+      assertEqual(claimed?.simId, 'sim_000', 'expired sim reclaimed');
+      const sim = getSimulationStatus(jobId, 'sim_000');
+      assertEqual(sim!.workerId, 'w2', 'new owner');
+      if (Date.parse(sim!.leaseExpiresAt ?? '') <= Date.now()) throw new Error('lease should be fresh');
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
+  await test('extendSimLease extends for the owner', () => {
+    const jobId = createJob(DECKS, 4).id;
+    try {
+      initializeSimulations(jobId, 1);
+      claimNextSim('w1', 'W1', { withLease: true });
+      expireLease(jobId, 'sim_000');
+      assertEqual(extendSimLease(jobId, 'sim_000', 'w1'), 'extended', 'status');
+      if (Date.parse(getSimulationStatus(jobId, 'sim_000')!.leaseExpiresAt ?? '') <= Date.now()) {
+        throw new Error('lease should be pushed into the future');
+      }
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
+  await test('extendSimLease reports lost for another worker or a finished sim', () => {
+    const jobId = createJob(DECKS, 4).id;
+    try {
+      initializeSimulations(jobId, 1);
+      claimNextSim('w1', 'W1', { withLease: true });
+      assertEqual(extendSimLease(jobId, 'sim_000', 'w2'), 'lost', 'other worker');
+      conditionalUpdateSimulationStatus(jobId, 'sim_000', ['RUNNING'], { state: 'COMPLETED' });
+      assertEqual(extendSimLease(jobId, 'sim_000', 'w1'), 'lost', 'finished sim');
+      assertEqual(extendSimLease(jobId, 'sim_404', 'w1'), 'lost', 'missing sim');
+    } finally {
+      cleanup(jobId);
+    }
+  });
+
+  await test('extendSimLease reports cancelled for a cancelled sim', () => {
+    const jobId = createJob(DECKS, 4).id;
+    try {
+      initializeSimulations(jobId, 1);
+      claimNextSim('w1', 'W1', { withLease: true });
+      conditionalUpdateSimulationStatus(jobId, 'sim_000', ['RUNNING'], { state: 'CANCELLED' });
+      assertEqual(extendSimLease(jobId, 'sim_000', 'w1'), 'cancelled', 'status');
     } finally {
       cleanup(jobId);
     }

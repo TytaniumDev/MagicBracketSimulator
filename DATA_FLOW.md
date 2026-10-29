@@ -18,12 +18,16 @@ queue.
    one PENDING sim doc per container.
 2. **Notify (best-effort):** the API fires `pushToAllWorkers('/notify', {})`
    to wake online workers immediately. If no worker is reachable, the next
-   poll tick (default 3 s) picks up the work.
+   poll tick picks up the work. The Docker worker polls every 3 s while it
+   finds work and backs off to `MAX_IDLE_POLL_MS` (default 60 s) while idle.
 3. **Worker poll:** each worker runs a loop: acquire a semaphore slot, then
-   `GET /api/jobs/claim-sim?workerId=...&workerName=...`. The endpoint
-   atomically flips the oldest PENDING sim on the oldest active job to
-   RUNNING, promotes the job from QUEUED to RUNNING if this is its first
-   claim, and returns `{ jobId, simId, simIndex }`. A 204 means no work.
+   `GET /api/jobs/claim-sim?workerId=...&workerName=...&lease=1`. The
+   endpoint atomically flips the oldest claimable sim on the oldest active
+   job to RUNNING, promotes the job from QUEUED to RUNNING if this is its
+   first claim, and returns `{ jobId, simId, simIndex }`. A 204 means no
+   work. With `lease=1` the sim is reserved until `leaseExpiresAt` (3 min);
+   a RUNNING sim whose lease has run out counts as claimable, so another
+   worker takes it over (see **Crash recovery**).
    Every response (200 or 204) carries the worker's current concurrency
    override in the `X-Max-Concurrent-Override` header so runtime changes
    propagate within one poll interval even when the push `/config` path is
@@ -31,21 +35,32 @@ queue.
 4. **Run:** the worker calls `GET /api/jobs/:id` for deck data, runs the
    simulation container, and reports status via
    `PATCH /api/jobs/:id/simulations/:simId` (see §2 below).
+5. **Hold the lease:** while the sim runs, the worker calls
+   `POST /api/jobs/:id/simulations/:simId/lease` with `{ workerId }` about
+   once a minute (`keepSimLease` in `worker/src/sim-lease.ts`,
+   `SimLeaseKeeper` in the desktop worker). The answer is `extended` (keep
+   going), `cancelled` (the job was cancelled: stop and report CANCELLED) or
+   `lost` (another worker holds the sim now: stop and report nothing).
 
-**Crash recovery:** if a worker dies mid-sim, the sim stays RUNNING with a
-stale `workerId` and its worker stops heartbeating. After 120 s the API's
-active-workers list no longer contains that worker, and `recoverStaleJob`
-(called by the stale-sweeper Cloud Scheduler job and by Cloud Tasks recovery)
-conditionally flips the sim back to PENDING. The next worker poll reclaims
-it. Stuck-for-too-long sims (> 2.5 h) and always-retryable FAILED sims are
-handled the same way — reset to PENDING, reclaimed by the next poll.
+**Crash recovery (sim leases, `api/lib/sim-lease.ts`):** if a worker dies
+mid-sim, it stops extending the lease. Once `leaseExpiresAt` passes, the
+next claim by any worker takes the sim over, and `recoverStaleJob` (called
+by the stale-sweeper Cloud Scheduler job and by Cloud Tasks recovery) resets
+it to PENDING. Idle workers write nothing for this. Sims claimed without a
+lease (workers older than this change) keep the old check: the sim is reset
+once its `workerId` is missing from the 120 s active-workers list.
+Stuck-for-too-long sims (> 2.5 h) and always-retryable FAILED sims are reset
+to PENDING the same way and reclaimed by the next poll. The PATCH handler
+drops a report whose `workerId` no longer owns the sim
+(`{ updated: false, reason: 'not_owner' }`), so a worker that lost its lease
+can't overwrite the new owner's result.
 
-**Flutter desktop worker:** claims directly against Firestore instead of
-`claim-sim` (`worker_flutter/lib/worker/sim_claim.dart`), using the same
-strategy and transaction as `claimNextSim`: oldest active job first,
-lowest-index PENDING sim, and QUEUED → RUNNING job promotion on the first
-claim. Firestore rules allow that unauthenticated job update only for the
-QUEUED → RUNNING transition and the claim fields.
+**Flutter desktop worker:** claims, extends leases and reports through the
+same endpoints as the Docker worker (`worker_flutter/lib/worker/sim_api.dart`),
+with the signed-in user's Firebase ID token instead of `X-Worker-Secret`
+(`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`). It still listens
+to Firestore for `simulations where state == PENDING`, but only as a
+read-only signal to try a claim.
 
 **No Pub/Sub anywhere in the dispatch path.** Replaced 2026-04-15 after a
 single auth hiccup silently killed the subscription stream for three days.
@@ -89,18 +104,18 @@ parsing:
 | 2    | **POST** `/api/jobs/:id/logs/simulation`     | Raw log upload: `{ filename, logText }`. `logText` is bounded to **10 MB** (`MAX_LOG_BYTES` in `api/lib/log-store.ts`); oversize uploads are rejected with HTTP 413.                                                          |
 
 
-Order in code: status is reported first (PATCH), then raw log is uploaded
-(POST).
+Order in code: the raw log is uploaded first (POST), then the status is
+reported (PATCH). Reporting the job's last sim starts aggregation, which
+reads the uploaded logs, so the upload has to land first. A failed upload is
+logged and the status is still reported.
 
-**Flutter desktop worker:** writes the sim's terminal state straight to
-Firestore (`SimClaimer.reportTerminal`), then POSTs the raw log to
-`/api/jobs/:id/logs/simulation` and, once that upload settles, calls
-`POST /api/jobs/:id/aggregate-if-done`. Waiting for the upload keeps the
-job's last log in the aggregation. Both calls go through `ApiClient` with
-the signed-in user's Firebase ID token; the API accepts that token in place
-of `X-Worker-Secret` when the uid is in the Firestore `allowedUsers`
-collection (`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`). The
-desktop worker has no worker secret.
+**Flutter desktop worker:** same two calls in the same order (`LogUploader`,
+then `SimApi.reportResult`), through `ApiClient` with the signed-in user's
+Firebase ID token; the API accepts that token in place of `X-Worker-Secret`
+when the uid is in the Firestore `allowedUsers` collection
+(`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`). The desktop
+worker has no worker secret. A FAILED report does not count toward the
+job's finished sims; stale-job recovery retries the sim.
 
 **Log upload size cap:** `POST /api/jobs/:id/logs/simulation` enforces the
 10 MB `MAX_LOG_BYTES` cap in three places:
@@ -117,9 +132,8 @@ desktop worker has no worker secret.
    before writing to GCS / the local filesystem.
 
 **Worker behavior on 413:** the worker logs a warning and continues — it does
-NOT retry the upload or fail the simulation. The simulation's status update
-(step 1) has already been persisted, so the sim is reported as COMPLETED
-without its raw log. The aggregation pipeline tolerates missing per-sim logs
+NOT retry the upload or fail the simulation. The sim is then reported as
+COMPLETED without its raw log. The aggregation pipeline tolerates missing per-sim logs
 (it falls back to whatever logs did upload). Operators: if you see
 `[sim_NNN] Log upload failed: HTTP 413` in the worker logs, a Forge run
 produced an unexpectedly large log — investigate the game (infinite loop?
@@ -161,23 +175,6 @@ CANCELLED). Step (d) is the catch-all that unsticks jobs where a worker
 died mid-sim before the dead-worker reclaim could complete the pipeline.
 After that pass it cancels any PENDING/RUNNING sim whose job is already
 FAILED or CANCELLED, so outdated workers can't keep claiming them.
-
-## Lease-based crash recovery (Flutter workers)
-
-Flutter desktop workers (introduced 2026) write a short-lived lease to their `workers/{id}` doc instead of relying solely on the 60-second heartbeat. The lease has two fields:
-
-- `lease.expiresAt`: ISO timestamp set to `now + 15s`, refreshed every 5 seconds by the worker.
-- `lease.activeSimIds`: array of `${jobId}:${simId}` composite IDs for sims the worker currently holds RUNNING.
-
-A Cloud Task hits `POST /api/admin/sweep-leases` every ~12 seconds. The handler:
-1. Queries `workers where lease.expiresAt < now` (Docker workers without a `lease` field are automatically excluded).
-2. For each expired worker, transactionally reverts each `activeSimIds` entry: if the sim is still `RUNNING` and still owned by that workerId, flip to `PENDING`, clear the workerId, set `revertReason = 'lease-expired'`.
-3. Marks the worker `status = 'crashed'` and clears the lease.
-4. Self-reschedules the next sweep via Cloud Tasks.
-
-Worst-case detection time: 15s (lease) + 12s (sweep cadence) = **~27 seconds** from worker disappearance to sims being available for re-claim. The existing 60s heartbeat / 120s TTL recovery and the 15-minute stale-sweeper remain in place as catch-alls.
-
-To bootstrap the sweep chain after a fresh deployment, run `npm run bootstrap:lease-sweep --prefix api` once. The chain is self-sustaining after that.
 
 **When raw log is uploaded (POST logs/simulation):**
 
@@ -431,10 +428,11 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Simulation wins | `api/test/simulation-wins.test.ts` | Simulation win extraction |
 | Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
 | Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, concurrent update scenarios |
-| Per-sim claim | `api/lib/claim-sim.test.ts` | `claimNextSim` (SQLite): oldest-first ordering, job promotion QUEUED→RUNNING, sim RUNNING update, skipping terminal jobs |
-| Per-sim claim (Flutter) | `worker_flutter/test/worker/sim_claim_test.dart` | `SimClaimer.tryClaim`: oldest active job, lowest index, job promotion QUEUED→RUNNING, skipping terminal/orphaned/flutter-local jobs |
+| Per-sim claim | `api/lib/claim-sim.test.ts` | `claimNextSim` (SQLite): oldest-first ordering, job promotion QUEUED→RUNNING, sim RUNNING update, skipping terminal jobs; leases: taking over an expired lease, `extendSimLease` extended/cancelled/lost |
+| Sim lease rules | `api/lib/sim-lease.test.ts`, `worker/src/sim-lease.test.ts`, `worker_flutter/test/worker/sim_lease_keeper_test.dart` | Expiry and claimability, lease extension answers, worker-side keeper stops on cancelled/lost and retries failed calls, idle poll backoff |
+| Desktop worker API calls | `worker_flutter/test/worker/sim_api_test.dart`, `worker_flutter/test/worker/worker_engine_test.dart` | Claim with `lease=1`, lease and PATCH bodies; engine uploads the log before reporting, reports CANCELLED on a cancelled lease and nothing on a lost one |
 | Worker endpoint auth | `api/lib/worker-auth.test.ts` | `isWorkerOrAllowlistedUser`: worker secret, allowlisted user token, rejects non-allowlisted/invalid tokens |
-| Flutter log upload + aggregate trigger | `worker_flutter/test/worker/log_uploader_test.dart`, `worker_flutter/test/worker/job_aggregator_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
+| Flutter log upload | `worker_flutter/test/worker/log_uploader_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |

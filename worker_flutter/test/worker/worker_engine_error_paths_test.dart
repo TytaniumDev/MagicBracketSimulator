@@ -7,6 +7,8 @@ import 'package:worker_flutter/models/sim.dart';
 import 'package:worker_flutter/worker/sim_runner.dart';
 import 'package:worker_flutter/worker/worker_engine.dart';
 
+import 'fake_sim_api.dart';
+
 /// Cloud-mode `WorkerEngine` error paths. The happy-path is covered by
 /// `worker_engine_test.dart`; the cases here pin the contract that
 /// PENDING sims always end in a terminal state (COMPLETED / FAILED)
@@ -75,6 +77,7 @@ void main() {
       final engine = WorkerEngine(
         config: config,
         firestore: firestore,
+        apiClient: FakeSimApi(firestore).client,
         runnerOverride: runner,
       );
       addTearDown(() async => engine.dispose());
@@ -126,6 +129,7 @@ void main() {
     final engine = WorkerEngine(
       config: config,
       firestore: firestore,
+      apiClient: FakeSimApi(firestore).client,
       runnerOverride: _NeverCalledSimRunner(),
     );
     addTearDown(() async => engine.dispose());

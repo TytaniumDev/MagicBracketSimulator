@@ -2,6 +2,7 @@ import { getDb } from './db';
 import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState } from './types';
 import type { JobSource } from '@shared/types/job';
 import { v4 as uuidv4 } from 'uuid';
+import { resolveLeaseExtension, simLeaseExpiry, type ClaimOptions, type SimLeaseStatus } from './sim-lease';
 
 interface Row {
   id: string;
@@ -250,9 +251,15 @@ export function getNextQueuedJob(): Job | undefined {
 export function claimNextSim(
   workerId: string,
   workerName: string,
+  options: ClaimOptions = {},
 ): { jobId: string; simId: string; simIndex: number } | undefined {
   const db = getDb();
-  const nowIso = new Date().toISOString();
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const leaseExpiresAt = options.withLease ? simLeaseExpiry(nowMs) : null;
+  // PENDING, or RUNNING under a lease that ran out (its worker is gone).
+  // ISO strings compare correctly as text.
+  const claimable = `(s.state = 'PENDING' OR (s.state = 'RUNNING' AND s.lease_expires_at IS NOT NULL AND s.lease_expires_at < @now))`;
 
   const tx = db.transaction(() => {
     const row = db
@@ -260,21 +267,22 @@ export function claimNextSim(
         `SELECT s.job_id AS job_id, s.sim_id AS sim_id, s.idx AS idx, j.status AS job_status
          FROM simulations s
          JOIN jobs j ON j.id = s.job_id
-         WHERE s.state = 'PENDING' AND j.status IN ('QUEUED', 'RUNNING') AND (j.source IS NULL OR j.source != 'flutter-local')
+         WHERE ${claimable} AND j.status IN ('QUEUED', 'RUNNING') AND (j.source IS NULL OR j.source != 'flutter-local')
          ORDER BY j.created_at ASC, s.idx ASC
          LIMIT 1`,
       )
-      .get() as { job_id: string; sim_id: string; idx: number; job_status: string } | undefined;
+      .get({ now: nowIso }) as { job_id: string; sim_id: string; idx: number; job_status: string } | undefined;
 
     if (!row) return undefined;
 
     const simUpdate = db
       .prepare(
-        `UPDATE simulations
-         SET state = 'RUNNING', worker_id = ?, worker_name = ?, started_at = ?
-         WHERE job_id = ? AND sim_id = ? AND state = 'PENDING'`,
+        `UPDATE simulations AS s
+         SET state = 'RUNNING', worker_id = @workerId, worker_name = @workerName, started_at = @now,
+             lease_expires_at = @leaseExpiresAt
+         WHERE s.job_id = @jobId AND s.sim_id = @simId AND ${claimable}`,
       )
-      .run(workerId, workerName, nowIso, row.job_id, row.sim_id);
+      .run({ workerId, workerName, now: nowIso, leaseExpiresAt, jobId: row.job_id, simId: row.sim_id });
 
     if (simUpdate.changes === 0) return undefined; // Lost race to another claimer.
 
@@ -422,6 +430,7 @@ interface SimRow {
   winning_turn: number | null;
   winners_json: string | null;
   winning_turns_json: string | null;
+  lease_expires_at: string | null;
 }
 
 function simRowToStatus(row: SimRow): SimulationStatus {
@@ -439,6 +448,7 @@ function simRowToStatus(row: SimRow): SimulationStatus {
     ...(row.winning_turn != null && { winningTurn: row.winning_turn }),
     ...(row.winners_json != null && { winners: JSON.parse(row.winners_json) as string[] }),
     ...(row.winning_turns_json != null && { winningTurns: JSON.parse(row.winning_turns_json) as number[] }),
+    ...(row.lease_expires_at != null && { leaseExpiresAt: row.lease_expires_at }),
   };
 }
 
@@ -582,7 +592,8 @@ export function conditionalResetSimulationToPending(
            started_at = NULL,
            completed_at = NULL,
            duration_ms = NULL,
-           error_message = NULL
+           error_message = NULL,
+           lease_expires_at = NULL
        WHERE job_id = ? AND sim_id = ? AND state IN (${placeholders})`,
     )
     .run(jobId, simId, ...expectedStates);
@@ -658,14 +669,20 @@ export function deleteSimulations(jobId: string): void {
 }
 
 /**
- * No-op in LOCAL/SQLite mode. Flutter workers only run in GCP mode where
- * the Firestore implementation handles this with a transactional check.
+ * Extend the lease on a RUNNING sim held by `workerId`. Reports 'cancelled'
+ * when the sim's job was cancelled and 'lost' when the sim is no longer this
+ * worker's, so the worker knows to stop.
  */
-export function revertSimToPending(
-  _jobId: string,
-  _simId: string,
-  _expectedWorkerId: string,
-): boolean {
-  return false;
+export function extendSimLease(jobId: string, simId: string, workerId: string): SimLeaseStatus {
+  const db = getDb();
+  const tx = db.transaction((): SimLeaseStatus => {
+    const status = resolveLeaseExtension(getSimulationStatus(jobId, simId), workerId);
+    if (status === 'extended') {
+      db.prepare('UPDATE simulations SET lease_expires_at = ? WHERE job_id = ? AND sim_id = ?')
+        .run(simLeaseExpiry(), jobId, simId);
+    }
+    return status;
+  });
+  return tx();
 }
 

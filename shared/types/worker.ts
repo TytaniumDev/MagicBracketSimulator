@@ -25,12 +25,4 @@ export interface WorkerInfo {
    */
   workerType?: 'docker' | 'flutter';
 
-  /**
-   * Lease metadata. Only Flutter workers write this. Lease expiry drives
-   * the lease-sweep recovery path (see api/lib/lease-sweep.ts).
-   */
-  lease?: {
-    expiresAt: string;          // ISO timestamp; sweep query: where('lease.expiresAt', '<', now)
-    activeSimIds: string[];     // sims this worker currently holds RUNNING
-  };
 }

@@ -47,6 +47,7 @@ import { startWorkerApi, stopWorkerApi, HealthStatus } from './worker-api.js';
 import { createLogger } from './logger.js';
 import { captureWorkerException, addWorkerBreadcrumb, flushSentry } from './sentry.js';
 import { parseOverrideHeader } from './override.js';
+import { keepSimLease, nextIdlePollMs, type SimLeaseStatus } from './sim-lease.js';
 
 const log = createLogger('Worker');
 
@@ -263,7 +264,8 @@ async function reportSimulationStatus(
     const res = await fetch(url, {
       method: 'PATCH',
       headers: getApiHeaders(),
-      body: JSON.stringify(update),
+      // workerId lets the API drop the report if another worker took the sim over.
+      body: JSON.stringify({ workerId: currentWorkerId, ...update }),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
     if (res.ok) {
@@ -275,6 +277,33 @@ async function reportSimulationStatus(
     // Non-fatal: simulation status update failing shouldn't crash the sim
     captureWorkerException(err, { component: 'report-sim-status', jobId, simId });
     return true; // Assume accepted on network failure to avoid skipping work
+  }
+}
+
+/**
+ * Extend a running sim's lease. Returns null on failure; the lease keeper
+ * retries on its next tick, well before the 3-minute lease runs out.
+ */
+async function extendSimLease(jobId: string, simId: string): Promise<SimLeaseStatus | null> {
+  const url = `${getApiUrl()}/api/jobs/${jobId}/simulations/${simId}/lease`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ workerId: currentWorkerId }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      captureWorkerException(new Error(`Lease extension failed: HTTP ${res.status}`), {
+        component: 'sim-lease', jobId, simId, workerId: currentWorkerId,
+      });
+      return null;
+    }
+    const data = await res.json() as { status?: SimLeaseStatus };
+    return data.status ?? null;
+  } catch (err) {
+    captureWorkerException(err, { component: 'sim-lease', jobId, simId, workerId: currentWorkerId });
+    return null;
   }
 }
 
@@ -410,6 +439,19 @@ async function processSimulationInternal(
   activeAbortControllers.get(jobId)!.add(abortController);
   allActiveAbortControllers.push(abortController);
 
+  // Hold the sim's lease while it runs. If the API says the job was
+  // cancelled, or another worker took the sim over, stop the container.
+  // A lost sim is no longer ours, so nothing gets reported for it.
+  let leaseLost = false;
+  const stopLease = keepSimLease({
+    extend: () => extendSimLease(jobId, simId),
+    onEnd: (status) => {
+      console.log(`${simLabel} Lease ${status}, stopping`);
+      leaseLost = status === 'lost';
+      abortController.abort();
+    },
+  });
+
   try {
     const MAX_RETRIES = 2;
     const RETRY_DELAY_MS = 30_000;
@@ -422,6 +464,7 @@ async function processSimulationInternal(
         // Container is already running from a previous attempt — don't report status
         return;
       } else if (result.error === 'Cancelled') {
+        if (leaseLost) return;
         console.log(`${simLabel} CANCELLED in ${formatDuration(result.durationMs)}`);
         await reportSimulationStatus(jobId, simId, {
           state: 'CANCELLED',
@@ -441,17 +484,18 @@ async function processSimulationInternal(
         }
         console.log(`${simLabel} COMPLETED in ${formatDuration(result.durationMs)}, logSize=${(result.logText.length / 1024).toFixed(1)}KB, games=${games.length}, winners=${winners.length}`);
 
+        // Upload the log first (non-fatal): reporting the job's last sim
+        // COMPLETED starts aggregation, which reads the uploaded logs.
+        if (result.logText.trim()) {
+          await uploadSingleSimulationLog(jobId, simIndex, result.logText);
+        }
+
         await reportSimulationStatus(jobId, simId, {
           state: 'COMPLETED',
           durationMs: result.durationMs,
           winners,
           winningTurns,
         });
-
-        // Upload log incrementally (non-fatal)
-        if (result.logText.trim()) {
-          await uploadSingleSimulationLog(jobId, simIndex, result.logText);
-        }
         return;
       } else {
         // Container failed — retry locally before reporting FAILED
@@ -463,6 +507,7 @@ async function processSimulationInternal(
 
           // Check if job was cancelled during backoff
           if (abortController.signal.aborted) {
+            if (leaseLost) return;
             console.log(`${simLabel} Cancelled during retry backoff`);
             await reportSimulationStatus(jobId, simId, { state: 'CANCELLED' });
             return;
@@ -485,6 +530,7 @@ async function processSimulationInternal(
       }
     }
   } finally {
+    stopLease();
     // Unregister abort controller from both per-job and global lists
     const controllers = activeAbortControllers.get(jobId);
     if (controllers) {
@@ -870,8 +916,12 @@ async function requestCoverageJob(): Promise<boolean> {
  */
 async function pollForSims(): Promise<void> {
   const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
+  // Each empty poll costs Firestore reads, so idle polling backs off up to
+  // this cap. New jobs still wake the worker at once through /notify.
+  const MAX_IDLE_POLL_MS = parseInt(process.env.MAX_IDLE_POLL_MS || '60000', 10);
+  let idlePollMs = POLL_INTERVAL_MS;
 
-  console.log(`Polling ${getApiUrl()}/api/jobs/claim-sim (capacity=${localCapacity}, idle=${POLL_INTERVAL_MS}ms)`);
+  console.log(`Polling ${getApiUrl()}/api/jobs/claim-sim (capacity=${localCapacity}, idle=${POLL_INTERVAL_MS}-${MAX_IDLE_POLL_MS}ms)`);
 
   while (!isShuttingDown) {
     if (isDraining) {
@@ -888,6 +938,7 @@ async function pollForSims(): Promise<void> {
       const claimUrl = new URL(`${getApiUrl()}/api/jobs/claim-sim`);
       claimUrl.searchParams.set('workerId', currentWorkerId);
       claimUrl.searchParams.set('workerName', currentWorkerName);
+      claimUrl.searchParams.set('lease', '1');
       const res = await fetch(claimUrl.toString(), {
         headers: getApiHeaders(),
         signal: AbortSignal.timeout(API_TIMEOUT_MS),
@@ -912,9 +963,11 @@ async function pollForSims(): Promise<void> {
       simSemaphore!.release();
       const coverageCreated = await requestCoverageJob();
       if (coverageCreated) continue; // Try to claim the coverage sim immediately.
-      await waitForNotifyOrTimeout(POLL_INTERVAL_MS);
+      await waitForNotifyOrTimeout(idlePollMs);
+      idlePollMs = nextIdlePollMs(idlePollMs, POLL_INTERVAL_MS, MAX_IDLE_POLL_MS);
       continue;
     }
+    idlePollMs = POLL_INTERVAL_MS;
 
     const { jobId, simId, simIndex } = claimed;
     // Fire-and-forget so the loop can claim the next sim in parallel.

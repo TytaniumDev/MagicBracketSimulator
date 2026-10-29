@@ -1,6 +1,13 @@
 import { Timestamp, FieldValue, FieldPath } from '@google-cloud/firestore';
 import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, JobSource } from './types';
 import { getFirestore } from './firestore-client';
+import {
+  isSimClaimable,
+  resolveLeaseExtension,
+  simLeaseExpiry,
+  type ClaimOptions,
+  type SimLeaseStatus,
+} from './sim-lease';
 
 const firestore = getFirestore();
 
@@ -496,6 +503,7 @@ export async function claimJob(id: string, workerId?: string, workerName?: strin
 export async function claimNextSim(
   workerId: string,
   workerName: string,
+  options: ClaimOptions = {},
 ): Promise<{ jobId: string; simId: string; simIndex: number } | null> {
   const candidates = await jobsCollection
     .where('status', 'in', ['QUEUED', 'RUNNING'])
@@ -511,13 +519,14 @@ export async function claimNextSim(
     if (total > 0 && completed >= total) continue;
 
     // Fetch sims ordered by index (single-field index, already present).
-    // Filter to PENDING in memory — per-job sim count is small (~25) so
-    // the overhead is negligible, and this avoids the composite index
-    // (state ASC + index ASC) the combined query would otherwise require.
+    // Filter in memory — per-job sim count is small (~25) so the overhead
+    // is negligible, and this avoids the composite index (state ASC +
+    // index ASC) the combined query would otherwise require. A RUNNING sim
+    // whose lease ran out is claimable too: its worker is gone.
     const simsSnap = await simulationsCollection(jobDoc.id)
       .orderBy('index', 'asc')
       .get();
-    const simDocSnap = simsSnap.docs.find((d) => d.data()?.state === 'PENDING');
+    const simDocSnap = simsSnap.docs.find((d) => isSimClaimable(docToSimulationStatus(d.id, d.data())));
     if (!simDocSnap) continue;
 
     try {
@@ -525,7 +534,7 @@ export async function claimNextSim(
         const freshSim = await tx.get(simDocSnap.ref);
         if (!freshSim.exists) return null;
         const simData = freshSim.data();
-        if (simData?.state !== 'PENDING') return null;
+        if (!simData || !isSimClaimable(docToSimulationStatus(freshSim.id, simData))) return null;
 
         const freshJob = await tx.get(jobDoc.ref);
         if (!freshJob.exists) return null;
@@ -537,6 +546,9 @@ export async function claimNextSim(
           workerId,
           workerName,
           startedAt: new Date().toISOString(),
+          leaseExpiresAt: options.withLease
+            ? Timestamp.fromDate(new Date(simLeaseExpiry()))
+            : FieldValue.delete(),
         });
 
         if (jobStatus === 'QUEUED') {
@@ -575,6 +587,27 @@ export async function claimNextSim(
  */
 function simulationsCollection(jobId: string) {
   return jobsCollection.doc(jobId).collection('simulations');
+}
+
+/** Convert a simulation doc to the shared SimulationStatus shape. */
+function docToSimulationStatus(simId: string, data: FirebaseFirestore.DocumentData): SimulationStatus {
+  const leaseExpiresAt = data.leaseExpiresAt as Timestamp | undefined;
+  return {
+    simId,
+    index: data.index ?? 0,
+    state: (data.state ?? 'PENDING') as SimulationState,
+    ...(data.workerId && { workerId: data.workerId }),
+    ...(data.workerName && { workerName: data.workerName }),
+    ...(data.startedAt && { startedAt: data.startedAt }),
+    ...(data.completedAt && { completedAt: data.completedAt }),
+    ...(data.durationMs != null && { durationMs: data.durationMs }),
+    ...(data.errorMessage && { errorMessage: data.errorMessage }),
+    ...(data.winner && { winner: data.winner }),
+    ...(data.winningTurn != null && { winningTurn: data.winningTurn }),
+    ...(data.winners?.length > 0 && { winners: data.winners }),
+    ...(data.winningTurns?.length > 0 && { winningTurns: data.winningTurns }),
+    ...(leaseExpiresAt && { leaseExpiresAt: leaseExpiresAt.toDate().toISOString() }),
+  };
 }
 
 /**
@@ -735,9 +768,32 @@ export async function conditionalResetSimulationToPending(
       completedAt: FieldValue.delete(),
       durationMs: FieldValue.delete(),
       errorMessage: FieldValue.delete(),
+      leaseExpiresAt: FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
     });
     return true;
+  });
+}
+
+/**
+ * Extend the lease on a RUNNING sim held by `workerId`. Reports 'cancelled'
+ * when the sim's job was cancelled and 'lost' when the sim is no longer this
+ * worker's, so the worker knows to stop.
+ */
+export async function extendSimLease(
+  jobId: string,
+  simId: string,
+  workerId: string,
+): Promise<SimLeaseStatus> {
+  const simRef = simulationsCollection(jobId).doc(simId);
+  return firestore.runTransaction(async (tx) => {
+    const snap = await tx.get(simRef);
+    const sim = snap.exists ? docToSimulationStatus(snap.id, snap.data()!) : null;
+    const status = resolveLeaseExtension(sim, workerId);
+    if (status === 'extended') {
+      tx.update(simRef, { leaseExpiresAt: Timestamp.fromDate(new Date(simLeaseExpiry())) });
+    }
+    return status;
   });
 }
 
@@ -751,22 +807,7 @@ export async function getSimulationStatus(
   const doc = await simulationsCollection(jobId).doc(simId).get();
   if (!doc.exists) return null;
 
-  const data = doc.data()!;
-  return {
-    simId: doc.id,
-    index: data.index ?? 0,
-    state: (data.state ?? 'PENDING') as SimulationState,
-    ...(data.workerId && { workerId: data.workerId }),
-    ...(data.workerName && { workerName: data.workerName }),
-    ...(data.startedAt && { startedAt: data.startedAt }),
-    ...(data.completedAt && { completedAt: data.completedAt }),
-    ...(data.durationMs != null && { durationMs: data.durationMs }),
-    ...(data.errorMessage && { errorMessage: data.errorMessage }),
-    ...(data.winner && { winner: data.winner }),
-    ...(data.winningTurn != null && { winningTurn: data.winningTurn }),
-    ...(data.winners?.length > 0 && { winners: data.winners }),
-    ...(data.winningTurns?.length > 0 && { winningTurns: data.winningTurns }),
-  } as SimulationStatus;
+  return docToSimulationStatus(doc.id, doc.data()!);
 }
 
 /**
@@ -817,24 +858,7 @@ export async function getSimulationStatuses(
     .orderBy('index', 'asc')
     .get();
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      simId: doc.id,
-      index: data.index ?? 0,
-      state: (data.state ?? 'PENDING') as SimulationState,
-      ...(data.workerId && { workerId: data.workerId }),
-      ...(data.workerName && { workerName: data.workerName }),
-      ...(data.startedAt && { startedAt: data.startedAt }),
-      ...(data.completedAt && { completedAt: data.completedAt }),
-      ...(data.durationMs != null && { durationMs: data.durationMs }),
-      ...(data.errorMessage && { errorMessage: data.errorMessage }),
-      ...(data.winner && { winner: data.winner }),
-      ...(data.winningTurn != null && { winningTurn: data.winningTurn }),
-      ...(data.winners?.length > 0 && { winners: data.winners }),
-      ...(data.winningTurns?.length > 0 && { winningTurns: data.winningTurns }),
-    } as SimulationStatus;
-  });
+  return snapshot.docs.map((doc) => docToSimulationStatus(doc.id, doc.data()));
 }
 
 /**
@@ -882,45 +906,3 @@ export async function deleteSimulations(jobId: string): Promise<void> {
     await batch.commit();
   }
 }
-
-/**
- * Atomically revert a sim from RUNNING → PENDING if and only if it is
- * currently RUNNING and owned by expectedWorkerId. Returns true if the
- * revert happened, false if the precondition was not met (sim already
- * terminal, or claimed by a different worker, or otherwise no longer ours).
- *
- * The expectedWorkerId guard prevents double-revert if two sweep ticks
- * race, and prevents touching sims that have already been re-claimed by
- * a healthy worker.
- */
-export async function revertSimToPending(
-  jobId: string,
-  simId: string,
-  expectedWorkerId: string,
-): Promise<boolean> {
-  const simRef = simulationsCollection(jobId).doc(simId);
-
-  return await firestore.runTransaction(async (tx) => {
-    const snap = await tx.get(simRef);
-    if (!snap.exists) return false;
-    const data = snap.data();
-    if (!data) return false;
-    if (data.state !== 'RUNNING') return false;
-    if (data.workerId !== expectedWorkerId) return false;
-
-    tx.update(simRef, {
-      state: 'PENDING',
-      workerId: FieldValue.delete(),
-      workerName: FieldValue.delete(),
-      startedAt: FieldValue.delete(),
-      completedAt: FieldValue.delete(),
-      durationMs: FieldValue.delete(),
-      errorMessage: FieldValue.delete(),
-      updatedAt: FieldValue.serverTimestamp(),
-      revertedAt: new Date().toISOString(),
-      revertReason: 'lease-expired',
-    });
-    return true;
-  });
-}
-
