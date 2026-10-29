@@ -24,6 +24,8 @@ loadRuntimeConfig().then(() => {
       tracesSampleRate: 1.0,
       replaysSessionSampleRate: 0.1,
       replaysOnErrorSampleRate: 1.0,
+      // Tells frontend events apart if they share a project with the API.
+      initialScope: { tags: { app: 'frontend' } },
     });
   }
 

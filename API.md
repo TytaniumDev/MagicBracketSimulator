@@ -365,6 +365,11 @@ Returns a deck's metadata, its parsed decklist, and its results across every
 recorded game (`stats` is `null` until the deck has played). Powers the deck
 page at `/decks/:id`. **Auth:** signed-in user.
 
+A deck that left the deck library (e.g. a precon the Archidekt sync removed)
+but still has a rating returns `decklistAvailable: false`, metadata from the
+rating, and empty `commanders`/`cards`. Only an id with neither returns 404,
+which is also reported to Sentry as a warning.
+
 **Response:**
 
 ```json
@@ -378,6 +383,7 @@ page at `/decks/:id`. **Auth:** signed-in user.
     "setName": null,
     "link": "https://moxfield.com/decks/..."
   },
+  "decklistAvailable": true,
   "commanders": [{ "quantity": 1, "name": "Ureni of the Unwritten" }],
   "cards": [{ "quantity": 1, "name": "Sol Ring" }],
   "stats": {

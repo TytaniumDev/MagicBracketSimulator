@@ -35,6 +35,11 @@ export interface DeckDetail {
 
 export interface DeckDetailResponse {
   deck: DeckDetail;
+  /**
+   * False when the deck is no longer in the deck library (e.g. a precon the
+   * Archidekt sync removed) but its results remain. The lists are then empty.
+   */
+  decklistAvailable: boolean;
   commanders: DeckCard[];
   /** Main deck, in decklist order. */
   cards: DeckCard[];

@@ -3,10 +3,9 @@ import { verifyAuth, verifyAllowedUser, unauthorizedResponse, AuthUser } from '@
 import { deleteDeck, getDeckById, readDeckContent } from '@/lib/deck-store-factory';
 import { removeColorIdentity } from '@/lib/deck-metadata';
 import { getRatingStore } from '@/lib/rating-store-factory';
-import { parseDckCards } from '@/lib/dck-cards';
-import { toDeckStats } from '@/lib/deck-stats';
+import { buildDeckDetail } from '@/lib/deck-detail';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
-import type { DeckDetailResponse } from '@shared/types/deck';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,29 +35,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       getRatingStore().getRating(id),
     ]);
 
-    if (!deck || !content) {
+    const body = buildDeckDetail(id, deck, content, rating);
+    if (!body) {
+      // Links to decks come from our own pages, so a miss is a bug worth seeing.
+      Sentry.captureMessage('Deck page: deck not found', {
+        level: 'warning',
+        tags: { component: 'deck-page', deckId: id },
+        extra: { hasDeck: !!deck, hasContent: !!content, hasRating: !!rating },
+      });
       return notFoundResponse('Deck');
     }
-
-    const { commanders, main } = parseDckCards(content.dck);
-    const body: DeckDetailResponse = {
-      deck: {
-        id: deck.id,
-        name: deck.name,
-        primaryCommander: deck.primaryCommander ?? null,
-        colorIdentity: deck.colorIdentity ?? [],
-        isPrecon: deck.isPrecon,
-        setName: deck.setName ?? null,
-        link: deck.link ?? null,
-      },
-      commanders,
-      cards: main,
-      stats: rating && rating.gamesPlayed > 0 ? toDeckStats(rating) : null,
-    };
 
     return NextResponse.json(body);
   } catch (error) {
     console.error('Failed to get deck:', error);
+    Sentry.captureException(error, { tags: { component: 'deck-page' } });
     return errorResponse('Failed to get deck', 500);
   }
 }
