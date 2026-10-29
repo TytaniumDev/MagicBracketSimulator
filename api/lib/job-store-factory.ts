@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, JobResults, DeckSlot, SimulationStatus, SimulationState, WorkerInfo, JobSource } from './types';
+import { Job, JobStatus, JobResults, JobDeck, SimulationStatus, SimulationState, WorkerInfo, JobSource } from './types';
 import { isTerminalSimState } from '@shared/types/state-machine';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -58,7 +58,7 @@ export async function getJobByIdempotencyKey(key: string): Promise<Job | null> {
 }
 
 export async function createJob(
-  decks: DeckSlot[],
+  decks: JobDeck[],
   simulations: number,
   options?: {
     idempotencyKey?: string;
@@ -71,9 +71,12 @@ export async function createJob(
     colorIdentity?: Record<string, string[]>;
   }
 ): Promise<Job> {
+  // With all 4 deck ids the job records names only; workers fetch the
+  // decklists by id (see job-decks.ts).
+  const jobDecks = options?.deckIds?.length === 4 ? decks.map(({ name }) => ({ name })) : decks;
   if (USE_FIRESTORE) {
     return firestoreStore.createJob({
-      decks,
+      decks: jobDecks,
       simulations,
       parallelism: options?.parallelism,
       idempotencyKey: options?.idempotencyKey,
@@ -85,7 +88,7 @@ export async function createJob(
     });
   }
   return (await sqliteStore()).createJob(
-    decks,
+    jobDecks,
     simulations,
     options?.idempotencyKey,
     options?.parallelism,
@@ -598,7 +601,8 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   const deckNames = job.decks.map(d => d.name);
   if (rawLogs && rawLogs.length > 0) {
-    const deckLists = job.decks.map(d => d.dck ?? '');
+    const { resolveJobDecks } = await import('./job-decks');
+    const deckLists = ((await resolveJobDecks(job)) ?? job.decks).map(d => d.dck ?? '');
     await ingestLogs(jobId, rawLogs, deckNames, deckLists);
   }
 

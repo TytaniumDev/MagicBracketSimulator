@@ -3,6 +3,8 @@ import { verifyAuth, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWor
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobCompletely } from '@/lib/job-delete';
 import { getDeckById } from '@/lib/deck-store-factory';
+import { resolveJobDecks } from '@/lib/job-decks';
+import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
 import { parseBody, updateJobSchema } from '@/lib/validation';
 import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
@@ -72,9 +74,10 @@ async function jobToApiResponse(
   };
   // Worker needs decks and/or deckIds to run the job
   if (isWorker) {
+    const decks = await resolveJobDecks(job);
     return {
       ...base,
-      ...(job.decks.length === REQUIRED_DECK_COUNT && { decks: job.decks }),
+      ...(decks && { decks }),
       ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
     };
   }
@@ -99,9 +102,14 @@ async function jobToApiResponse(
 /**
  * GET /api/jobs/[id] - Get job details
  * Dual auth: workers authenticate via X-Worker-Secret, users via Firebase token.
+ *
+ * Workers get the worker view: the job's 4 decks with their .dck content
+ * (see job-decks.ts). The desktop worker, which signs in as an allowlisted
+ * user, asks for it with `?view=worker`.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const isWorker = isWorkerRequest(request);
+  const wantsWorkerView = new URL(request.url).searchParams.get('view') === 'worker';
+  const isWorker = isWorkerRequest(request) || (wantsWorkerView && (await isWorkerOrAllowlistedUser(request)));
   if (!isWorker) {
     try {
       await verifyAuth(request);

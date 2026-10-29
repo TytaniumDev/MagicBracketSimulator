@@ -80,6 +80,11 @@ Creates a new simulation job. Requires user auth.
 
 Returns detailed information about a specific job.
 
+Workers get the worker view, which adds `decks: [{ name, dck }]` (the 4
+decks with their .dck content) and is sent to requests with
+`X-Worker-Secret`, or with `?view=worker` from an allowlisted user (the
+desktop worker). `decks` is left out when a deck can no longer be found.
+
 **Response:**
 
 ```json

@@ -39,9 +39,14 @@ queue.
    override in the `X-Max-Concurrent-Override` header so runtime changes
    propagate within one poll interval even when the push `/config` path is
    unreachable (worker behind NAT / `WORKER_API_URL` unset).
-4. **Run:** the worker calls `GET /api/jobs/:id` for deck data, runs the
-   simulation container, and reports status via
-   `PATCH /api/jobs/:id/simulations/:simId` (see §2 below).
+4. **Run:** the worker calls `GET /api/jobs/:id` for deck data (the Docker
+   worker with `X-Worker-Secret`, the desktop worker with `?view=worker` and
+   its user token; `JobLoader` keeps the last 8 jobs), runs the simulation,
+   and reports status via `PATCH /api/jobs/:id/simulations/:simId` (see §2
+   below). Job docs record only each seat's deck name and id; the worker
+   view adds the .dck content, read from each deck by id and cached for 5
+   minutes (`api/lib/job-decks.ts`). Older jobs that embedded the content
+   are served as stored, and aggregation reads deck lists the same way.
 5. **Hold the lease:** while the sim runs, the worker calls
    `POST /api/jobs/:id/simulations/:simId/lease` with `{ workerId }` about
    once a minute (`keepSimLease` in `worker/src/sim-lease.ts`,

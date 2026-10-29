@@ -9,6 +9,7 @@ import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import '../telemetry.dart';
+import 'job_loader.dart';
 import 'log_uploader.dart';
 import 'sim_api.dart';
 import 'sim_lease_keeper.dart';
@@ -94,6 +95,10 @@ class WorkerEngine {
     workerName: config.workerName,
   );
   late final LogUploader _logUploader = LogUploader(api: _api);
+  late final JobLoader _jobLoader = JobLoader(
+    api: _api,
+    decksPath: config.decksPath,
+  );
 
   final _stateSubject = BehaviorSubject<EngineState>.seeded(
     EngineState.initial(),
@@ -296,7 +301,7 @@ class WorkerEngine {
 
     final simData = {'jobId': sim.jobId, 'simId': sim.simId};
     try {
-      final job = await _loadJobInfo(sim.jobId);
+      final job = await _jobLoader.load(sim.jobId);
       if (job == null) {
         AppLog.event(
           TelemetryCategory.engineRuntime,
@@ -439,43 +444,6 @@ class WorkerEngine {
     logText: '',
     errorMessage: errorMessage,
   );
-
-  Future<JobInfo?> _loadJobInfo(String jobId) async {
-    final doc = await firestore.collection('jobs').doc(jobId).get();
-    if (!doc.exists) return null;
-    final data = doc.data();
-    if (data == null) return null;
-
-    // Job docs store decks as `decks: DeckSlot[]` where each entry has
-    // { name, dck } — the dck field is the full .dck file content as a
-    // string. We materialize these to disk so Forge's CLI can find them.
-    final rawDecks = data['decks'];
-    final filenames = <String>[];
-    if (rawDecks is List) {
-      for (final slot in rawDecks) {
-        if (slot is Map && slot['name'] is String && slot['dck'] is String) {
-          final name = (slot['name'] as String).replaceAll(
-            RegExp(r'[^A-Za-z0-9._-]'),
-            '_',
-          );
-          final filename = '$name.dck';
-          final filePath = '${config.decksPath}/$filename';
-          final f = File(filePath);
-          // Always overwrite — content can change between jobs even for the
-          // same deck name (deck editing).
-          f.parent.createSync(recursive: true);
-          f.writeAsStringSync(slot['dck'] as String);
-          filenames.add(filename);
-        }
-      }
-    }
-
-    return JobInfo(
-      jobId: jobId,
-      deckFilenames: filenames,
-      simulationsPerJob: (data['simulations'] as num?)?.toInt() ?? 1,
-    );
-  }
 
   void _publishActiveSims() {
     final active = _cancelByComposite.keys
