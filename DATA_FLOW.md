@@ -245,13 +245,25 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
      read and rebuilt by the next job or the backfill. `GET
      /api/decks/:id/card-impact` scores cards from these counters
      (`scoreCards`).
-  5. **Legacy stats:** stats used to live in top-level `ratings/{deckId}`,
+  5. **Pod run standings (fire-and-forget, any job with results):**
+     `PodRunStore.applyJob` copies the job's results up to its pod run, if
+     it is in one. Each job in a run carries `podRunId` (SQLite:
+     `jobs.pod_run_id`), and the run keeps per-deck totals in `standings`
+     plus `podsWithResults` (SQLite: `pod_runs.standings_json`,
+     `pods_with_results`). One transaction reads the job, adds its seats with
+     `addPodResults` (`shared/types/pod-run.ts`) and sets the job's
+     `appliedStats.podRun` (SQLite: `jobs.pod_run_applied`). Saving a run
+     (`POST /api/pod-runs`) sets `podRunId` on each of its jobs and totals the
+     ones that already have results in the same way, so a job finishing while
+     its run is saved counts once. Runs saved before standings existed are
+     totalled the first time they are read.
+  6. **Legacy stats:** stats used to live in top-level `ratings/{deckId}`,
      `cardStats/{deckId}` and one `matchResults` doc per game.
      `legacy-deck-stats-migration.ts` moves them under each deck the first
      time a stat store is touched after deploy (pair counts and rated-job
      flags are rebuilt from `matchResults`), then records
      `config/legacyDeckStatsMigration`.
-  5. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
+  7. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
 
 So: **condensing and structuring** of logs happens **only in the API**, during
@@ -302,11 +314,13 @@ unused by the current worker, which uploads per-simulation via
     (i.e., the user was watching a running job). If the initial REST response
     already returned a terminal job, the fetch is skipped to avoid redundancy.
 
-- **Pod run page (`usePodRunJobs`)**
-  - Loads each pod's job with the same one-shot read and `['job', id]` cache key as the job page.
+- **Pod run page (`usePodRun`, `usePodRunJobs`)**
+  - A saved run (`/pods/:id`) reads only `GET /api/pod-runs/:id`, whose `standings` are the run's stored totals ranked by `rankStandings`. While pods are left (`podsWithResults < podCount`) it refetches whenever an `onSnapshot` on `podRuns/{id}` fires (GCP mode) or every 5 seconds (LOCAL mode).
+  - The pods list loads only when the user opens it, using `usePodRunJobs` below. `/pods?jobs=…` links (runs saved before runs were stored) always load every pod and sum standings from them with `aggregatePodStandings`.
+  - `usePodRunJobs` loads each pod's job with the same one-shot read and `['job', id]` cache key as the job page.
   - GCP mode: pods are split by position into batches of 30 (Firestore's `in` limit). Each batch that still has an unfinished pod gets one `onSnapshot` on `jobs where documentId in [...]`, merged with `mergeFirestoreJobUpdate`; the listener is dropped once every pod in its batch is terminal.
   - LOCAL mode: each unfinished pod polls `GET /api/jobs/:id` every 5 seconds.
-  - Standings only count pods with `results`, which aggregation writes before setting COMPLETED.
+  - Standings only count pods with `results`, which aggregation writes before setting COMPLETED (and before copying them to the run).
 
 - **LOCAL mode: TanStack Query polling**
   - TanStack Query `refetchInterval` polls `GET /api/jobs/:id` and `GET /api/jobs/:id/simulations` every 2 seconds.
@@ -471,6 +485,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Flutter log upload | `worker_flutter/test/worker/log_uploader_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |
+| Pod run standings | `api/test/pod-run-store.test.ts`, `frontend/src/utils/pods.test.ts`, `frontend/src/pages/PodRun.test.tsx` | Saving a run totals jobs that already have results, `applyJob` counts each job once and skips jobs in no run, a job stays in its first run, ranking; the saved run page shows stored standings and loads pods only when asked |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |
 

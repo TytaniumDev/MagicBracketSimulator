@@ -1,12 +1,13 @@
 /**
  * Pod-run helpers: split a deck selection larger than one pod into every
- * 4-deck pod, and roll the finished pods' results up into per-deck standings.
+ * 4-deck pod, and sum standings for runs that keep none of their own.
  *
  * Pods are combinations, not ordered permutations. Forge decides turn order
  * per game, so seating the same four decks differently is the same matchup.
  */
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import type { JobResponse } from '@shared/types/job';
+import { addPodResults, rankStandings, type DeckStanding, type PodRunTotals } from '@shared/types/pod-run';
 
 export { MAX_POD_RUN_DECKS } from '@shared/types/pod-run';
 
@@ -87,52 +88,17 @@ export function activePodChunks(
 // Standings
 // ---------------------------------------------------------------------------
 
-export interface DeckStanding {
-  name: string;
-  /** Finished pods this deck played in. */
-  pods: number;
-  gamesPlayed: number;
-  wins: number;
-  /** wins / gamesPlayed, 0..1. In a 4-player pod an even deck sits at 0.25. */
-  winRate: number;
-  /** Win-weighted average winning turn, or null with no wins. */
-  avgWinTurn: number | null;
-}
-
 /**
- * Sum per-deck results across every pod that has them. Pods still queued,
- * running, or failed without results are skipped. Sorted by win rate, then
- * wins, then name.
+ * Standings summed from the jobs themselves, for /pods?jobs=… links (runs
+ * queued before runs were saved, which keep no standings of their own).
+ * Pods still queued, running, or failed without results are skipped.
  */
 export function aggregatePodStandings(jobs: readonly JobResponse[]): DeckStanding[] {
-  const totals = new Map<string, { pods: number; games: number; wins: number; winTurnSum: number; winTurnWins: number }>();
-
+  let totals: PodRunTotals = {};
   for (const job of jobs) {
-    const results = job.results;
-    if (!results || results.gamesPlayed <= 0) continue;
-    for (const name of job.deckNames) {
-      const entry = totals.get(name) ?? { pods: 0, games: 0, wins: 0, winTurnSum: 0, winTurnWins: 0 };
-      const wins = results.wins[name] ?? 0;
-      const avgTurn = results.avgWinTurn[name];
-      entry.pods += 1;
-      entry.games += results.gamesPlayed;
-      entry.wins += wins;
-      if (wins > 0 && typeof avgTurn === 'number' && avgTurn > 0) {
-        entry.winTurnSum += avgTurn * wins;
-        entry.winTurnWins += wins;
-      }
-      totals.set(name, entry);
-    }
+    if (!job.results) continue;
+    const seats = job.deckNames.map((name) => ({ key: name, name }));
+    totals = addPodResults(totals, seats, job.results);
   }
-
-  return [...totals.entries()]
-    .map(([name, t]) => ({
-      name,
-      pods: t.pods,
-      gamesPlayed: t.games,
-      wins: t.wins,
-      winRate: t.games > 0 ? t.wins / t.games : 0,
-      avgWinTurn: t.winTurnWins > 0 ? t.winTurnSum / t.winTurnWins : null,
-    }))
-    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.name.localeCompare(b.name));
+  return rankStandings(totals);
 }

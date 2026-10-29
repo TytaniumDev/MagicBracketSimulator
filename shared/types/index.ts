@@ -12,5 +12,5 @@ export {
   isTerminalJobState,
   TERMINAL_JOB_STATES,
 } from './state-machine';
-export type { PodRunSummary, PodRunResponse } from './pod-run';
+export type { PodRunSummary, PodRunResponse, DeckStanding, DeckTotals, PodRunTotals, PodSeat } from './pod-run';
 export type { DeckCard, DeckStats, DeckDetail, DeckDetailResponse } from './deck';

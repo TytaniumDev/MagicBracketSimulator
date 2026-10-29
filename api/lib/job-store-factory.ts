@@ -637,6 +637,14 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     }
 
     await setJobResults(jobId, results);
+
+    // Copy the results up to the job's pod run, if it's in one. The store
+    // re-reads the job, so a run saved since `job` was read still counts it.
+    const { getPodRunStore } = await import('./pod-run-store-factory');
+    (await getPodRunStore()).applyJob(jobId).catch((err) => {
+      log.error('Pod run standings update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
+      Sentry.captureException(err, { tags: { component: 'pod-run-standings', jobId } });
+    });
   }
 
   // Update per-deck win/game counters for jobs with 4 resolved deck IDs

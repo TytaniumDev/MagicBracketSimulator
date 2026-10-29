@@ -72,6 +72,13 @@ service cloud.firestore {
       }
     }
 
+    // Pod runs: public reads (the pod run page listens for standings
+    // changes), written only by the API.
+    match /podRuns/{runId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Unified decks collection: public reads
     // Only deck owner can delete; precons (ownerId == null) cannot be deleted by any user
     match /decks/{deckId} {

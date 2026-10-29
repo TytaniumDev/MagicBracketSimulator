@@ -1,9 +1,16 @@
 /**
  * SQLite implementation of PodRunStore (LOCAL mode).
  * Job membership lives in pod_run_jobs so a job's runs are an indexed lookup.
+ *
+ * Standings live on the run (`standings_json`, `pods_with_results`); each
+ * job in a run records it in `jobs.pod_run_id`, and `jobs.pod_run_applied`
+ * once its results are in the standings.
  */
 import { v4 as uuidv4 } from 'uuid';
+import { addPodResults, type PodRunTotals } from '@shared/types/pod-run';
+import type { JobResults } from '@shared/types/job';
 import type { PodRun, PodRunStore } from './pod-run-store';
+import { finishedPod } from './pod-run-standings';
 
 function getDb() {
   const { getDb: _getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
@@ -18,6 +25,53 @@ interface Row {
   created_by: string;
   created_at: string;
   idempotency_key: string | null;
+  standings_json: string | null;
+  pods_with_results: number;
+}
+
+interface JobRow {
+  id: string;
+  decks_json: string;
+  deck_ids_json: string | null;
+  result_json: string | null;
+  pod_run_id: string | null;
+  pod_run_applied: number | null;
+}
+
+function jobFinishedPod(job: JobRow) {
+  return finishedPod({
+    decks: JSON.parse(job.decks_json),
+    ...(job.deck_ids_json && { deckIds: JSON.parse(job.deck_ids_json) }),
+    results: job.result_json ? (JSON.parse(job.result_json) as JobResults) : null,
+  });
+}
+
+/**
+ * Record the run on each of its jobs not already in a run, total the ones
+ * that have results, and save the run's standings. Call inside a transaction.
+ */
+function attachJobs(runId: string, jobIds: string[]): { standings: PodRunTotals; podsWithResults: number } {
+  const db = getDb();
+  const selectJob = db.prepare('SELECT * FROM jobs WHERE id = ?');
+  const markJob = db.prepare('UPDATE jobs SET pod_run_id = ?, pod_run_applied = ? WHERE id = ?');
+  let standings: PodRunTotals = {};
+  let podsWithResults = 0;
+  for (const jobId of jobIds) {
+    const job = selectJob.get(jobId) as JobRow | undefined;
+    if (!job || job.pod_run_id) continue;
+    const pod = job.pod_run_applied ? null : jobFinishedPod(job);
+    if (pod) {
+      standings = addPodResults(standings, pod.seats, pod.results);
+      podsWithResults++;
+    }
+    markJob.run(runId, pod ? 1 : job.pod_run_applied, jobId);
+  }
+  db.prepare('UPDATE pod_runs SET standings_json = ?, pods_with_results = ? WHERE id = ?').run(
+    JSON.stringify(standings),
+    podsWithResults,
+    runId,
+  );
+  return { standings, podsWithResults };
 }
 
 function rowToPodRun(row: Row): PodRun {
@@ -33,6 +87,8 @@ function rowToPodRun(row: Row): PodRun {
     createdBy: row.created_by,
     createdAt: new Date(row.created_at),
     ...(row.idempotency_key && { idempotencyKey: row.idempotency_key }),
+    standings: row.standings_json ? JSON.parse(row.standings_json) : {},
+    podsWithResults: row.pods_with_results ?? 0,
   };
 }
 
@@ -52,7 +108,7 @@ export const sqlitePodRunStore: PodRunStore = {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const insertJob = db.prepare('INSERT INTO pod_run_jobs (pod_run_id, job_id, position) VALUES (?, ?, ?)');
-    db.transaction(() => {
+    const totals = db.transaction(() => {
       insertRun.run(
         id,
         JSON.stringify(data.deckIds),
@@ -63,12 +119,21 @@ export const sqlitePodRunStore: PodRunStore = {
         data.idempotencyKey ?? null,
       );
       data.jobIds.forEach((jobId, i) => insertJob.run(id, jobId, i));
+      return attachJobs(id, data.jobIds);
     })();
-    return { ...data, id, createdAt };
+    return { ...data, id, createdAt, ...totals };
   },
 
   async getPodRun(id) {
-    const row = getDb().prepare('SELECT * FROM pod_runs WHERE id = ?').get(id) as Row | undefined;
+    const db = getDb();
+    const select = db.prepare('SELECT * FROM pod_runs WHERE id = ?');
+    let row = select.get(id) as Row | undefined;
+    if (row && row.standings_json == null) {
+      // Saved before standings were kept: total its jobs now.
+      const legacy = rowToPodRun(row);
+      db.transaction(() => attachJobs(id, legacy.jobIds))();
+      row = select.get(id) as Row;
+    }
     return row ? rowToPodRun(row) : null;
   },
 
@@ -89,5 +154,25 @@ export const sqlitePodRunStore: PodRunStore = {
       `)
       .all(jobId) as Row[];
     return rows.map(rowToPodRun);
+  },
+
+  async applyJob(jobId) {
+    const db = getDb();
+    return db.transaction(() => {
+      const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as JobRow | undefined;
+      if (!job?.pod_run_id || job.pod_run_applied) return false;
+      const pod = jobFinishedPod(job);
+      if (!pod) return false;
+      const run = db.prepare('SELECT * FROM pod_runs WHERE id = ?').get(job.pod_run_id) as Row | undefined;
+      if (!run) return false;
+
+      const standings = addPodResults(run.standings_json ? JSON.parse(run.standings_json) : {}, pod.seats, pod.results);
+      db.prepare('UPDATE pod_runs SET standings_json = ?, pods_with_results = pods_with_results + 1 WHERE id = ?').run(
+        JSON.stringify(standings),
+        run.id,
+      );
+      db.prepare('UPDATE jobs SET pod_run_applied = 1 WHERE id = ?').run(jobId);
+      return true;
+    })();
   },
 };
