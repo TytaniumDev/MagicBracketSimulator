@@ -15,6 +15,7 @@ import { useJobLogs } from '../hooks/useJobLogs';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { matchesDeckName } from '../utils/deck-match';
+import { reportHandledError } from '../errorReporting';
 
 type LogViewTab = 'raw' | 'condensed';
 
@@ -117,6 +118,7 @@ export default function JobStatusPage() {
         prev ? { ...prev, status: 'CANCELLED' } : prev,
       );
     } catch (err) {
+      reportHandledError(err, { action: 'cancelJob' });
       setActionError(err instanceof Error ? err.message : 'Cancel failed');
     } finally {
       setIsCancelling(false);
@@ -131,6 +133,7 @@ export default function JobStatusPage() {
       await deleteJob(id);
       navigate('/');
     } catch (err) {
+      reportHandledError(err, { action: 'deleteJob' });
       setActionError(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setIsDeletingJob(false);
@@ -156,6 +159,7 @@ export default function JobStatusPage() {
       if (!data.id) throw new Error('Server returned invalid job');
       navigate(`/jobs/${data.id}`);
     } catch (err) {
+      reportHandledError(err, { action: 'resubmitJob' });
       setActionError(err instanceof Error ? err.message : 'Resubmit failed');
     } finally {
       setIsResubmitting(false);

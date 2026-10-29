@@ -6,6 +6,7 @@ import type { CoverageConfig, CoverageStatus } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { RebuildCardStatsButton } from '../components/RebuildCardStatsButton';
 import { WinTurnTooltip } from '../components/WinTurnTooltip';
+import { reportHandledError } from '../errorReporting';
 
 const TOOLTIP_WIDTH = 320;
 // Approximate — the tooltip's actual height depends on bar rendering, but a
@@ -157,10 +158,16 @@ export default function Leaderboard() {
   useEffect(() => {
     getCoverageConfig()
       .then(setCoverageConfig)
-      .catch((err) => console.error('Failed to fetch coverage config:', err));
+      .catch((err) => {
+        console.error('Failed to fetch coverage config:', err);
+        reportHandledError(err, { action: 'fetchCoverageConfig' });
+      });
     getCoverageStatus()
       .then(setCoverageStatus)
-      .catch((err) => console.error('Failed to fetch coverage status:', err));
+      .catch((err) => {
+        console.error('Failed to fetch coverage status:', err);
+        reportHandledError(err, { action: 'fetchCoverageStatus' });
+      });
   }, []);
 
   const handleToggleCoverage = async () => {
@@ -171,6 +178,7 @@ export default function Leaderboard() {
       setCoverageConfig(updated);
     } catch (err) {
       console.error('Failed to toggle coverage:', err);
+      reportHandledError(err, { action: 'toggleCoverage' });
     } finally {
       setCoverageLoading(false);
     }
@@ -183,6 +191,7 @@ export default function Leaderboard() {
       setCoverageConfig(updated);
     } catch (err) {
       console.error('Failed to update target:', err);
+      reportHandledError(err, { action: 'updateCoverageTarget' });
     } finally {
       setCoverageLoading(false);
     }
@@ -199,6 +208,7 @@ export default function Leaderboard() {
       const data = await res.json();
       setEntries(data.decks ?? []);
     } catch (err) {
+      reportHandledError(err, { action: 'loadLeaderboard' });
       setError(err instanceof Error ? err.message : 'Failed to load leaderboard');
     } finally {
       setIsLoading(false);

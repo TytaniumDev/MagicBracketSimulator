@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, getCountFromServer } from 'fireba
 import { db } from '../firebase';
 import { getApiBase, fetchWithAuth } from '../api';
 import type { WorkerInfo } from '../types/worker';
+import { reportHandledError } from '../errorReporting';
 
 // Stale thresholds matching api/lib/firestore-worker-store.ts
 const STALE_THRESHOLD_MS = 60_000;
@@ -64,8 +65,9 @@ export function useWorkerStatus(enabled = true): WorkerStatusResult {
       const q = query(collection(db, 'jobs'), where('status', '==', 'QUEUED'));
       const snapshot = await getCountFromServer(q);
       setQueueDepth(snapshot.data().count);
-    } catch {
-      // Non-fatal
+    } catch (err) {
+      // Non-fatal: the queue depth just stays stale.
+      reportHandledError(err, { action: 'fetchQueueDepth' });
     }
   }, []);
 

@@ -34,6 +34,7 @@ export async function getFirebaseIdToken(): Promise<string | null> {
     return await user.getIdToken();
   } catch (error) {
     console.error('Error getting Firebase ID token:', error);
+    reportHandledError(error, { action: 'getFirebaseIdToken' });
     return null;
   }
 }
@@ -62,8 +63,9 @@ export async function fetchWithAuth(
     try {
       const appCheckToken = await getToken(appCheck, /* forceRefresh */ false);
       (headers as Record<string, string>)['X-Firebase-AppCheck'] = appCheckToken.token;
-    } catch {
+    } catch (err) {
       // Don't block the request — API will reject if enforcement is on
+      reportHandledError(err, { action: 'getAppCheckToken' });
     }
   }
 

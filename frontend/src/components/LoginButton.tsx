@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supportsGooglePopup } from '../utils/browserDetection';
+import { reportHandledError } from '../errorReporting';
 
 export function LoginButton() {
   const { user, loading, signInWithGoogle, signInWithEmail, signOut } = useAuth();
@@ -18,7 +19,8 @@ export function LoginButton() {
 
     try {
       await signInWithEmail(email, password);
-    } catch {
+    } catch (err) {
+      reportHandledError(err, { action: 'signInWithEmail' });
       setError('Invalid email or password');
     } finally {
       setIsSubmitting(false);

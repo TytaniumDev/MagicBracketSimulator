@@ -10,6 +10,7 @@ import {
 import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { auth, db, googleProvider, isFirebaseConfigured } from '../firebase';
 import { getApiBase, fetchWithAuth } from '../api';
+import { reportHandledError } from '../errorReporting';
 
 const ALLOWED_USERS_COLLECTION = 'allowedUsers';
 
@@ -104,8 +105,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setHasRequestedAccess(data.hasRequest && data.status === 'pending');
         }
       }
-    } catch {
-      // Non-fatal
+    } catch (err) {
+      // Non-fatal: the access request state just stays unknown.
+      reportHandledError(err, { action: 'checkAccessRequestStatus' });
     }
   };
 
@@ -142,6 +144,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       } catch (err) {
         console.error('Error checking allowlist:', err);
+        reportHandledError(err, { action: 'checkAllowlist' });
         setIsAllowed(false);
       } finally {
         setLoading(false);
@@ -165,7 +168,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setIsAdmin(data.isAdmin);
         }
       })
-      .catch(() => {});
+      .catch((err) => reportHandledError(err, { action: 'fetchAdminStatus' }));
   }, [isAllowed, user]);
 
   const signInWithGoogle = async () => {
@@ -205,6 +208,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return await getIdToken(user);
     } catch (error) {
       console.error('Error getting ID token:', error);
+      reportHandledError(error, { action: 'getIdToken' });
       return null;
     }
   };

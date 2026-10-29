@@ -1,6 +1,7 @@
 import { useState, memo } from 'react';
 import type { WorkerInfo } from '../types/worker';
 import { updateWorkerOverride } from '../api';
+import { reportHandledError } from '../errorReporting';
 
 interface WorkerOverrideControlsProps {
   worker: WorkerInfo;
@@ -32,6 +33,7 @@ export const WorkerOverrideControls = memo(function WorkerOverrideControls({ wor
       await updateWorkerOverride(worker.workerId, parsed);
       await onRefresh?.();
     } catch (err) {
+      reportHandledError(err, { action: 'setWorkerOverride', workerId: worker.workerId });
       setError(err instanceof Error ? err.message : 'Failed');
     } finally {
       setSaving(false);
@@ -46,6 +48,7 @@ export const WorkerOverrideControls = memo(function WorkerOverrideControls({ wor
       setInputValue(String(worker.capacity));
       await onRefresh?.();
     } catch (err) {
+      reportHandledError(err, { action: 'clearWorkerOverride', workerId: worker.workerId });
       setError(err instanceof Error ? err.message : 'Failed');
     } finally {
       setSaving(false);

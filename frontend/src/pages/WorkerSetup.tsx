@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getApiBase, fetchWithAuth } from '../api';
+import { reportHandledError } from '../errorReporting';
 
 interface SetupTokenResponse {
   token: string;
@@ -49,6 +50,7 @@ export default function WorkerSetup() {
       const data: SetupTokenResponse = await res.json();
       setTokenData(data);
     } catch (err) {
+      reportHandledError(err, { action: 'generateWorkerSetupToken' });
       setError(err instanceof Error ? err.message : 'Failed to generate token');
     } finally {
       setGenerating(false);
