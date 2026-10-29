@@ -7,6 +7,7 @@ import { slugify } from './saved-decks';
 import { getColorIdentityByKey } from './deck-metadata';
 import * as firestoreDecks from './firestore-decks';
 import { lruTouch, lruEvictIfFull } from './lru';
+import { normalizeDckForForge } from './forge-card-name';
 
 import { USE_FIRESTORE, isGcpMode } from './env';
 
@@ -111,7 +112,13 @@ export async function listAllDecks(): Promise<DeckListItem[]> {
   return [...preconItems, ...savedItems].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Deck name and .dck content, with card names Forge can load. */
 export async function readDeckContent(id: string): Promise<{ name: string; dck: string } | null> {
+  const content = await readStoredDeckContent(id);
+  return content && { ...content, dck: normalizeDckForForge(content.dck) };
+}
+
+async function readStoredDeckContent(id: string): Promise<{ name: string; dck: string } | null> {
   if (USE_FIRESTORE) {
     return firestoreDecks.readDeckContent(id);
   }

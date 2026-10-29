@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { CardImpact } from '@shared/types/card-impact';
-import { formatLift, isPermanent, MIN_CASTS_TO_RANK, topSwingCards } from './card-impact';
+import { formatLift, isPermanent, MIN_CASTS_TO_RANK, onlyDeckCards, topSwingCards } from './card-impact';
 
 function card(name: string, overrides: Partial<CardImpact> = {}): CardImpact {
   return {
@@ -17,6 +17,24 @@ function card(name: string, overrides: Partial<CardImpact> = {}): CardImpact {
     ...overrides,
   };
 }
+
+describe('onlyDeckCards', () => {
+  it('drops cards that are not in the decklist, matching by front face', () => {
+    const kept = onlyDeckCards(
+      [card('Whirlwing Stormbrood'), card('Sol Ring'), card('Copied Dragon')],
+      ['Whirlwing Stormbrood // Dynamic Soar', 'sol ring'],
+    );
+    expect(kept.map((c) => c.name)).toEqual(['Whirlwing Stormbrood', 'Sol Ring']);
+  });
+
+  it('keeps the spell half of a deck card when Scryfall knows its faces', () => {
+    const kept = onlyDeckCards([card('Dynamic Soar'), card('Copied Dragon')], ['Whirlwing Stormbrood'], {
+      'whirlwing stormbrood': {},
+      'dynamic soar': {},
+    });
+    expect(kept.map((c) => c.name)).toEqual(['Dynamic Soar']);
+  });
+});
 
 describe('topSwingCards', () => {
   const notLand = () => false;

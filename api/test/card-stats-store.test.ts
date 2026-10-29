@@ -75,6 +75,19 @@ async function main() {
     assertEqual(stats?.jobIds, ['job-1', 'job-2'], 'job ids');
   });
 
+  await test('counters from an older parser version are dropped and rebuilt', async () => {
+    const staleDeckId = `${deckId}-stale`;
+    await store.addJob(staleDeckId, 'job-old', (stats) => ({ ...stats, games: 7, version: 1 }));
+    assertEqual(await store.get(staleDeckId), null, 'stale stats hidden');
+    await store.addJob(staleDeckId, 'job-old', (stats) => {
+      stats.games += 1;
+      return stats;
+    });
+    const stats = await store.get(staleDeckId);
+    assertEqual(stats?.games, 1, 'rebuilt from scratch');
+    assertEqual(stats?.jobIds, ['job-old'], 'the same job can be counted again');
+  });
+
   const passed = results.filter((r) => r.passed).length;
   const failed = results.length - passed;
   console.log(`\nPassed: ${passed}/${results.length}`);

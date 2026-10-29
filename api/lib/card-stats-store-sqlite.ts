@@ -3,7 +3,7 @@
  * counters as one JSON row.
  */
 import type { CardStatsStore } from './card-stats-store';
-import { emptyDeckCardStats } from './card-impact/stats';
+import { currentDeckCardStats, emptyDeckCardStats } from './card-impact/stats';
 import type { DeckCardStats } from '@shared/types/card-impact';
 
 function getDb() {
@@ -20,13 +20,13 @@ function read(deckId: string): DeckCardStats | null {
 
 export const sqliteCardStatsStore: CardStatsStore = {
   async get(deckId: string): Promise<DeckCardStats | null> {
-    return read(deckId);
+    return currentDeckCardStats(read(deckId));
   },
 
   async addJob(deckId, jobId, update): Promise<boolean> {
     const db = getDb();
     return db.transaction(() => {
-      const current = read(deckId) ?? emptyDeckCardStats();
+      const current = currentDeckCardStats(read(deckId)) ?? emptyDeckCardStats();
       if (current.jobIds.includes(jobId)) return false;
       const next = { ...update(current), jobIds: [...current.jobIds, jobId] };
       db.prepare(

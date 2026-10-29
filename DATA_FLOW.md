@@ -211,8 +211,11 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
      `cardStats/{deckId}` document (SQLite: `card_stats` table) via one
      read-modify-write per deck. The document lists counted job ids, so
      re-running aggregation or the `POST /api/admin/backfill-card-stats`
-     backfill never double counts. `GET /api/decks/:id/card-impact` scores
-     cards from these counters (`scoreCards`).
+     backfill never double counts. Documents also carry `version`
+     (`CARD_STATS_VERSION`); counters from an older parser are discarded on
+     read and rebuilt by the next job or the backfill. `GET
+     /api/decks/:id/card-impact` scores cards from these counters
+     (`scoreCards`).
   5. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
 
@@ -429,7 +432,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Worker endpoint auth | `api/lib/worker-auth.test.ts` | `isWorkerOrAllowlistedUser`: worker secret, allowlisted user token, rejects non-allowlisted/invalid tokens |
 | Flutter log upload + aggregate trigger | `worker_flutter/test/worker/log_uploader_test.dart`, `worker_flutter/test/worker/job_aggregator_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
-| Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs, `addGame`/`scoreCards` lifts, store idempotency per job |
+| Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |
 
