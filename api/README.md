@@ -33,7 +33,6 @@ See [API.md](../API.md) for full endpoint documentation with request/response sh
 | `/api/jobs/[id]` | GET, PATCH, DELETE | Job details / Worker status update / Admin delete |
 | `/api/jobs/[id]/cancel` | POST | Cancel a QUEUED or RUNNING job |
 | `/api/jobs/[id]/recover` | POST | One-shot recovery check for stuck jobs |
-| `/api/jobs/[id]/aggregate-if-done` | POST | Trigger result aggregation when all sims finish |
 | `/api/jobs/[id]/simulations` | GET, POST | List sims / Initialize sim tracking |
 | `/api/jobs/[id]/simulations/[simId]` | PATCH | Worker updates individual simulation status |
 | `/api/jobs/[id]/logs` | POST | Ingest raw log batch |

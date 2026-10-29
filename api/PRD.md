@@ -64,8 +64,7 @@ Workers are long-running Node.js processes that communicate with the API via HTT
 1. Send a heartbeat (`POST /api/workers/heartbeat`) every 30s.
 2. Poll for available simulations (`POST /api/jobs/claim-sim`).
 3. Spawn a Docker container with the Forge simulation engine.
-4. Upload results via `PATCH /api/jobs/:id/simulations/:simId` and `POST /api/jobs/:id/logs/simulation`.
-5. Trigger aggregation when done (`POST /api/jobs/:id/aggregate-if-done`).
+4. Upload results via `POST /api/jobs/:id/logs/simulation` and `PATCH /api/jobs/:id/simulations/:simId`; reporting a job's last sim triggers aggregation.
 
 ### 3.4 Decks
 
@@ -97,7 +96,7 @@ POST /api/jobs
   → Simulations initialized (N = ceil(simulations / GAMES_PER_CONTAINER))
   → Workers poll claim-sim and start claiming
   → Each worker runs Docker container, uploads logs
-  → aggregate-if-done checks if all sims finished
+  → the last sim's PATCH triggers aggregation
   → Job marked COMPLETED / FAILED
 ```
 

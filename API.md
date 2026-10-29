@@ -133,19 +133,6 @@ One-shot recovery check for a stuck job (called by Cloud Tasks after a delay).
 { "status": "ok", "recovered": true, "stillActive": false }
 ```
 
-### Aggregate If Done
-
-`POST /jobs/:id/aggregate-if-done`
-
-Triggers aggregation of simulation results if the job is complete. Called by workers.
-**Auth:** Worker auth required.
-
-**Response:**
-
-```json
-{ "ok": true, "aggregated": true }
-```
-
 ### Bulk Delete Jobs
 
 `POST /jobs/bulk-delete`

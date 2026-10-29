@@ -1,6 +1,7 @@
 /**
  * Auth for the worker endpoints that the Flutter desktop worker also calls
- * (per-sim log upload and the aggregate-if-done fast path).
+ * (sim claims and reports, lease extensions, per-sim log upload and the
+ * job worker view).
  *
  * The Docker worker sends the shared WORKER_SECRET. The desktop worker never
  * has that secret; instead it runs signed in as its owner and sends that
