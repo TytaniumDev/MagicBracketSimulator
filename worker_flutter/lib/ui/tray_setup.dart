@@ -18,11 +18,16 @@ import '../worker/worker_engine.dart';
 ///   - Windows: hides the window; the tray icon is the only remaining
 ///     affordance. A tray click re-shows the window.
 ///
-/// Right-click menu has: Show, Start/Stop worker, Quit.
+/// Right-click menu has: Show, Start/Stop worker, Check for updates (when
+/// [onCheckForUpdates] is set), Quit.
 class TraySetup with TrayListener, WindowListener {
   TraySetup({this.engine});
 
   WorkerEngine? engine;
+
+  /// Runs a user-initiated update check. Set on Windows, where the tray is
+  /// the app's only menu; macOS has "Check for Updates…" in its app menu.
+  Future<void> Function()? onCheckForUpdates;
 
   /// Guard against double-firing the show-window flow on rapid tray
   /// clicks. `setRegular` + `show` + `focus` are individually
@@ -58,45 +63,12 @@ class TraySetup with TrayListener, WindowListener {
   }
 
   Future<void> updateMenu() async {
-    final eng = engine;
-    if (eng == null) {
-      await trayManager.setContextMenu(
-        Menu(
-          items: [
-            MenuItem(key: 'show', label: 'Show dashboard'),
-            MenuItem.separator(),
-            MenuItem(key: 'quit', label: 'Quit Magic Bracket Worker'),
-          ],
-        ),
-      );
-      return;
-    }
-
-    final running = eng.currentState.running;
-    final active = eng.currentState.activeSims.length;
-    final completed = eng.currentState.completedCount;
-
     await trayManager.setContextMenu(
       Menu(
-        items: [
-          MenuItem(
-            key: 'status',
-            label: running
-                ? (active == 0
-                      ? 'Idle • $completed done'
-                      : 'Running $active sim(s)')
-                : 'Stopped',
-            disabled: true,
-          ),
-          MenuItem.separator(),
-          MenuItem(key: 'show', label: 'Show dashboard'),
-          MenuItem(
-            key: 'toggle',
-            label: running ? 'Stop worker' : 'Start worker',
-          ),
-          MenuItem.separator(),
-          MenuItem(key: 'quit', label: 'Quit Magic Bracket Worker'),
-        ],
+        items: trayMenuItems(
+          state: engine?.currentState,
+          canCheckForUpdates: onCheckForUpdates != null,
+        ),
       ),
     );
   }
@@ -177,6 +149,11 @@ class TraySetup with TrayListener, WindowListener {
             }
           }
           break;
+        case 'check_updates':
+          _log('check for updates clicked');
+          // Failures are already reported to Sentry by the handler.
+          await onCheckForUpdates?.call();
+          break;
         case 'quit':
           await quit();
           break;
@@ -242,4 +219,36 @@ class TraySetup with TrayListener, WindowListener {
       _showingDashboard = false;
     }
   }
+}
+
+/// The tray's right-click menu. [state] is null before the engine starts.
+@visibleForTesting
+List<MenuItem> trayMenuItems({
+  required EngineState? state,
+  required bool canCheckForUpdates,
+}) {
+  return [
+    if (state != null) ...[
+      MenuItem(
+        key: 'status',
+        label: state.running
+            ? (state.activeSims.isEmpty
+                  ? 'Idle • ${state.completedCount} done'
+                  : 'Running ${state.activeSims.length} sim(s)')
+            : 'Stopped',
+        disabled: true,
+      ),
+      MenuItem.separator(),
+    ],
+    MenuItem(key: 'show', label: 'Show dashboard'),
+    if (state != null)
+      MenuItem(
+        key: 'toggle',
+        label: state.running ? 'Stop worker' : 'Start worker',
+      ),
+    if (canCheckForUpdates)
+      MenuItem(key: 'check_updates', label: 'Check for updates'),
+    MenuItem.separator(),
+    MenuItem(key: 'quit', label: 'Quit Magic Bracket Worker'),
+  ];
 }

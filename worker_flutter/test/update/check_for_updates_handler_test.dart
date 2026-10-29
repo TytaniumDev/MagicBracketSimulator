@@ -47,6 +47,14 @@ void main() {
       expect(errors, [failure]);
     });
 
+    test('check() reports a failure and rethrows it', () async {
+      final failure = Exception('feed unreachable');
+
+      await expectLater(handler(failWith: failure).check(), throwsA(failure));
+      expect(starts, 1);
+      expect(errors, [failure]);
+    });
+
     test('rejects unknown methods', () async {
       await expectLater(
         handler().handle(const MethodCall('nope')),

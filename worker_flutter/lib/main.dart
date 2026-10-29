@@ -479,6 +479,17 @@ Future<void> _initAutoUpdater() async {
       extra: {'phase': 'init'},
     );
   }
+  // Windows has no app menu, so the tray carries the same check. Added
+  // last so a tray failure can't skip the updater setup above.
+  final tray = _globalTray;
+  if (Platform.isWindows && tray != null) {
+    tray.onCheckForUpdates = menuHandler.check;
+    try {
+      await tray.updateMenu();
+    } catch (e) {
+      _log('AutoUpdater: tray menu update failed: $e');
+    }
+  }
 }
 
 /// Shuts the app down so the update installer can replace it. Uses the
