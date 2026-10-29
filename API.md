@@ -687,26 +687,10 @@ Returns whether the server-side Moxfield API import is currently enabled.
 
 `POST /admin/backfill-ratings`
 
-Rebuilds deck Elo/rating data from scratch across all match results.
+Applies per-deck win stats and pair game counts for the 200 most recent
+completed jobs that haven't been rated yet (a rated job carries
+`appliedStats.ratings`), reading their structured logs.
 **Auth:** Admin access required.
-
-### Backfill Win Turns
-
-`POST /admin/backfill-win-turns`
-
-Rebuilds `winTurnSum`, `winTurnWins`, and `winTurnHistogram` for all decks.
-**Auth:** Admin access required.
-
-**Response:**
-
-```json
-{
-  "updated": 50,
-  "missingRatings": 2,
-  "missingRatingsIds": ["deck-id-missing"],
-  "totalMatchResults": 1000
-}
-```
 
 ### Broadcast Pull Image
 

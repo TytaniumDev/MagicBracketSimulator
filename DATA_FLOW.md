@@ -217,11 +217,18 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
     - **GCP:** raw logs + `condensed.json` + `structured.json` in GCS.
   4. **Per-deck stats (fire-and-forget, job has 4 `deckIds`):**
     - `processJobForRatings` — win/game counters behind the leaderboard and
-     deck page results.
+     deck page results, plus `pairGames` (games played against each other
+     deck, every game counted whether or not its winner resolved). One
+     transaction per job (`RatingStore.applyJob`) reads the job and its 4
+     decks' `decks/{deckId}/stats/rating` docs (SQLite: `ratings` rows with a
+     `pair_games` column), writes them back and sets the job's
+     `appliedStats.ratings` (SQLite: `jobs.ratings_applied`), so re-running
+     aggregation or `POST /api/admin/backfill-ratings` never double counts.
+     There is no per-game record; per-game facts stay in `structured.json`.
     - `processJobForCardStats` (`api/lib/card-impact/service.ts`) — runs
      `parseGameCards` on the raw logs already loaded in step 1 (no extra log
      reads) and adds each game to the deck's card counters in one
-     `cardStats/{deckId}` document (SQLite: `card_stats` table) via one
+     `decks/{deckId}/stats/cards` document (SQLite: `card_stats` table) via one
      read-modify-write per deck. The document lists counted job ids, so
      re-running aggregation or the `POST /api/admin/backfill-card-stats`
      backfill never double counts. The backfill (the leaderboard's admin
@@ -233,6 +240,12 @@ only (local `logs-data/{jobId}/` or GCS). No parsing or aggregation here.
      read and rebuilt by the next job or the backfill. `GET
      /api/decks/:id/card-impact` scores cards from these counters
      (`scoreCards`).
+  5. **Legacy stats:** stats used to live in top-level `ratings/{deckId}`,
+     `cardStats/{deckId}` and one `matchResults` doc per game.
+     `legacy-deck-stats-migration.ts` moves them under each deck the first
+     time a stat store is touched after deploy (pair counts and rated-job
+     flags are rebuilt from `matchResults`), then records
+     `config/legacyDeckStatsMigration`.
   5. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
 
@@ -365,7 +378,8 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 
 **Coverage computation (`coverage-service.ts`):**
 
-- Reads all `match_results` and extracts C(4,2) = 6 deck pairs per game
+- Reads every deck's `pairGames` (`RatingStore.getPairGameCounts`: one
+  collection-group query over the rating docs, one read per deck)
 - Builds a pair → game count map (cached for 5 minutes)
 - Compares against all possible pairs from `listAllDecks()`
 

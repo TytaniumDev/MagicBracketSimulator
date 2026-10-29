@@ -6,7 +6,7 @@
  * error in both projects.
  *
  * INTERNAL TYPES: API-only types (Job, DeckSlot, CreateJobRequest, Precon,
- * DeckRating, MatchResult) that use server-side constructs like Date objects
+ * DeckRating) that use server-side constructs like Date objects
  * and are never serialized directly to the frontend.
  */
 
@@ -124,18 +124,4 @@ export interface DeckRating {
   setName?: string | null;
   isPrecon?: boolean;
   primaryCommander?: string | null;
-}
-
-/** A single resolved game result, stored for idempotency. */
-export interface MatchResult {
-  /** "{jobId}_{gameIndex}" */
-  id: string;
-  jobId: string;
-  gameIndex: number;
-  /** JSON-serializable array of 4 deck IDs */
-  deckIds: string[];
-  /** null if winner could not be resolved from logs */
-  winnerDeckId: string | null;
-  turnCount: number | null;
-  playedAt: string;
 }

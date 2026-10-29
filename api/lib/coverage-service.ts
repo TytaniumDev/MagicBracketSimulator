@@ -1,31 +1,12 @@
 /**
- * Coverage service: computes pair coverage from match_results and generates
- * optimal 4-player pods using a greedy algorithm.
+ * Coverage service: computes pair coverage from the rating store's pair game
+ * counts and generates optimal 4-player pods using a greedy algorithm.
  */
 import { listAllDecks, type DeckListItem } from './deck-store-factory';
 import { getDeckSelectionStore } from './deck-selection-store-factory';
-import { getFirestore } from './firestore-client';
 import { listActiveJobs } from './job-store-factory';
-
-import { USE_FIRESTORE } from './env';
-
-const getFirestoreClient = getFirestore;
-
-/** Canonical key for a pair of deck IDs (alphabetically sorted). */
-function pairKey(a: string, b: string): string {
-  return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-
-/** Extract all C(4,2) = 6 pairs from a 4-deck game. */
-function extractPairs(deckIds: string[]): string[] {
-  const pairs: string[] = [];
-  for (let i = 0; i < deckIds.length; i++) {
-    for (let j = i + 1; j < deckIds.length; j++) {
-      pairs.push(pairKey(deckIds[i], deckIds[j]));
-    }
-  }
-  return pairs;
-}
+import { getRatingStore } from './rating-store-factory';
+import { pairKey } from './rating-store';
 
 export interface CoverageStatus {
   totalPairs: number;
@@ -42,12 +23,12 @@ export interface PairCoverageMap {
   deckPriority: Map<string, number>;
 }
 
-// In-memory cache to avoid re-reading all match_results on every request
+// In-memory cache to avoid re-reading every deck's pair counts on every request
 let coverageCache: { data: PairCoverageMap; ts: number } | null = null;
 const COVERAGE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Compute pair coverage from match_results.
+ * Compute pair coverage from the rating store's pair game counts.
  * Returns a map of pair -> game count and the full list of deck IDs.
  * Results are cached for 5 minutes to reduce database load.
  */
@@ -64,16 +45,7 @@ export async function computePairCoverage(): Promise<PairCoverageMap> {
   const excluded = new Set(excludedDeckIds);
   const allDecks = libraryDecks.filter((d) => !excluded.has(d.id));
   const allDeckIds = allDecks.map((d) => d.id);
-  const counts = new Map<string, number>();
-
-  const incrementPairs = (deckIds: string[]): void => {
-    if (!Array.isArray(deckIds)) return;
-    for (const pair of extractPairs(deckIds)) {
-      counts.set(pair, (counts.get(pair) ?? 0) + 1);
-    }
-  };
-
-  await forEachMatchResult(incrementPairs);
+  const counts = await getRatingStore().getPairGameCounts();
 
   const deckPriority = buildDeckPriority(allDecks);
   const data = { counts, allDeckIds, allDecks, deckPriority };
@@ -244,43 +216,4 @@ export async function generateNextPod(targetGamesPerPair: number): Promise<strin
 export async function hasActiveCoverageJob(): Promise<boolean> {
   const activeJobs = await listActiveJobs();
   return activeJobs.some((job) => job.source === 'coverage');
-}
-
-/**
- * Page size for Firestore match_results scans. Keeps per-RPC memory bounded
- * so the coverage computation never loads the entire collection at once.
- */
-const MATCH_RESULTS_PAGE_SIZE = 1000;
-
-/**
- * Stream every match_results document through `visit`. In GCP mode this
- * uses cursor-based pagination so the in-memory working set is at most
- * MATCH_RESULTS_PAGE_SIZE docs; in LOCAL mode the SQLite row count is
- * small enough that we load all rows eagerly.
- */
-async function forEachMatchResult(visit: (deckIds: string[]) => void): Promise<void> {
-  if (USE_FIRESTORE) {
-    const ref = getFirestoreClient().collection('matchResults');
-    let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
-    while (true) {
-      let query = ref.select('deckIds').orderBy('__name__').limit(MATCH_RESULTS_PAGE_SIZE);
-      if (lastDoc) query = query.startAfter(lastDoc);
-      const snapshot = await query.get();
-      if (snapshot.empty) return;
-      for (const doc of snapshot.docs) {
-        visit(doc.data().deckIds as string[]);
-      }
-      if (snapshot.size < MATCH_RESULTS_PAGE_SIZE) return;
-      lastDoc = snapshot.docs[snapshot.docs.length - 1];
-    }
-  }
-
-  const { getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
-  const db = getDb();
-  const rows = db
-    .prepare('SELECT deck_ids FROM match_results')
-    .all() as { deck_ids: string }[];
-  for (const row of rows) {
-    visit(JSON.parse(row.deck_ids) as string[]);
-  }
 }

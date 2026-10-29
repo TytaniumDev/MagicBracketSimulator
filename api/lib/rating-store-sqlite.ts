@@ -1,8 +1,9 @@
 /**
- * SQLite implementation of RatingStore (LOCAL mode).
+ * SQLite implementation of RatingStore (LOCAL mode). Pair game counts live
+ * in `ratings.pair_games` (JSON); `jobs.ratings_applied` marks applied jobs.
  */
-import type { RatingStore, LeaderboardOptions } from './rating-store';
-import type { DeckRating, MatchResult } from './types';
+import { addPodPairGames, pairKey, type RatingStore, type LeaderboardOptions } from './rating-store';
+import type { DeckRating } from './types';
 
 function getDb() {
   const { getDb: _getDb } = require('./db') as { getDb: () => import('better-sqlite3').Database };
@@ -49,21 +50,31 @@ function rowToRating(row: RatingRow): DeckRating {
   return base;
 }
 
+const RATING_COLUMNS =
+  'deck_id, mu, sigma, games_played, wins, last_updated, win_turn_sum, win_turn_wins, win_turn_histogram';
+
+function readRating(deckId: string): DeckRating | null {
+  const row = getDb()
+    .prepare(`SELECT ${RATING_COLUMNS} FROM ratings WHERE deck_id = ? AND games_played > 0`)
+    .get(deckId) as RatingRow | undefined;
+  return row ? rowToRating(row) : null;
+}
+
+function readPairGames(deckId: string): Record<string, number> {
+  const row = getDb().prepare('SELECT pair_games FROM ratings WHERE deck_id = ?').get(deckId) as
+    | { pair_games: string | null }
+    | undefined;
+  return row?.pair_games ? (JSON.parse(row.pair_games) as Record<string, number>) : {};
+}
+
 export const sqliteRatingStore: RatingStore = {
   async getRating(deckId: string): Promise<DeckRating | null> {
-    const db = getDb();
-    const row = db
-      .prepare(
-        'SELECT deck_id, mu, sigma, games_played, wins, last_updated, win_turn_sum, win_turn_wins, win_turn_histogram FROM ratings WHERE deck_id = ?',
-      )
-      .get(deckId) as RatingRow | undefined;
-    if (!row) return null;
-    return rowToRating(row);
+    return readRating(deckId);
   },
 
-  async updateRatings(updates: DeckRating[]): Promise<void> {
+  async applyJob({ jobId, deckIds, gameCount, update }): Promise<boolean> {
     const db = getDb();
-    const stmt = db.prepare(`
+    const upsertRating = db.prepare(`
       INSERT INTO ratings (deck_id, mu, sigma, games_played, wins, last_updated, win_turn_sum, win_turn_wins, win_turn_histogram)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(deck_id) DO UPDATE SET
@@ -76,9 +87,20 @@ export const sqliteRatingStore: RatingStore = {
         win_turn_wins = excluded.win_turn_wins,
         win_turn_histogram = excluded.win_turn_histogram
     `);
-    const runAll = db.transaction((rows: DeckRating[]) => {
-      for (const r of rows) {
-        stmt.run(
+    const upsertPairGames = db.prepare(`
+      INSERT INTO ratings (deck_id, games_played, wins, last_updated, pair_games) VALUES (?, 0, 0, ?, ?)
+      ON CONFLICT(deck_id) DO UPDATE SET pair_games = excluded.pair_games
+    `);
+
+    return db.transaction(() => {
+      const job = db.prepare('SELECT ratings_applied FROM jobs WHERE id = ?').get(jobId) as
+        | { ratings_applied: number | null }
+        | undefined;
+      if (!job || job.ratings_applied) return false;
+
+      const next = update(deckIds.map(readRating));
+      next?.forEach((r) => {
+        upsertRating.run(
           r.deckId,
           r.mu,
           r.sigma,
@@ -89,49 +111,25 @@ export const sqliteRatingStore: RatingStore = {
           r.winTurnWins ?? null,
           r.winTurnHistogram ? JSON.stringify(r.winTurnHistogram) : null,
         );
-      }
-    });
-    runAll(updates);
-  },
+      });
 
-  async recordMatchResults(results: MatchResult[]): Promise<void> {
-    if (results.length === 0) return;
-    const db = getDb();
-    const stmt = db.prepare(`
-      INSERT OR IGNORE INTO match_results (id, job_id, game_index, deck_ids, winner_deck_id, turn_count, played_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const runAll = db.transaction((rows: MatchResult[]) => {
-      for (const r of rows) {
-        stmt.run(
-          r.id,
-          r.jobId,
-          r.gameIndex,
-          JSON.stringify(r.deckIds),
-          r.winnerDeckId ?? null,
-          r.turnCount ?? null,
-          r.playedAt,
-        );
+      const now = new Date().toISOString();
+      const counts = new Map(deckIds.map((id) => [id, readPairGames(id)]));
+      for (const [deckId, deckCounts] of addPodPairGames(counts, deckIds, gameCount)) {
+        upsertPairGames.run(deckId, now, JSON.stringify(deckCounts));
       }
-    });
-    runAll(results);
-  },
 
-  async hasMatchResultsForJob(jobId: string): Promise<boolean> {
-    const db = getDb();
-    const row = db
-      .prepare('SELECT 1 FROM match_results WHERE job_id = ? LIMIT 1')
-      .get(jobId);
-    return row !== undefined;
+      db.prepare('UPDATE jobs SET ratings_applied = 1 WHERE id = ?').run(jobId);
+      return true;
+    })();
   },
 
   async getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]> {
-    const db = getDb();
-    const minGames = options?.minGames ?? 0;
+    const minGames = Math.max(options?.minGames ?? 0, 1);
     const limit = options?.limit ?? 500;
-    const rows = db
+    const rows = getDb()
       .prepare(`
-        SELECT deck_id, mu, sigma, games_played, wins, last_updated, win_turn_sum, win_turn_wins, win_turn_histogram
+        SELECT ${RATING_COLUMNS}
         FROM ratings
         WHERE games_played >= ?
         ORDER BY (mu - 3 * sigma) DESC
@@ -139,5 +137,19 @@ export const sqliteRatingStore: RatingStore = {
       `)
       .all(minGames, limit) as RatingRow[];
     return rows.map(rowToRating);
+  },
+
+  async getPairGameCounts(): Promise<Map<string, number>> {
+    const rows = getDb().prepare('SELECT deck_id, pair_games FROM ratings WHERE pair_games IS NOT NULL').all() as {
+      deck_id: string;
+      pair_games: string;
+    }[];
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      for (const [other, games] of Object.entries(JSON.parse(row.pair_games) as Record<string, number>)) {
+        if (row.deck_id < other) counts.set(pairKey(row.deck_id, other), games);
+      }
+    }
+    return counts;
   },
 };

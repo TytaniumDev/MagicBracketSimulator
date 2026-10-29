@@ -4,6 +4,7 @@
  */
 import type { DataWipeStore, LeftoverKind } from './data-wipe-store';
 import { getFirestore } from './firestore-client';
+import { deckStatsOfKind } from './deck-stats-refs';
 
 const firestore = getFirestore();
 
@@ -12,6 +13,11 @@ function leftoversQuery(kind: Exclude<LeftoverKind, 'customDecks'>): FirebaseFir
   // Simulations live in a subcollection per job, and survive their parent
   // job doc if it was deleted first, so they're found across all jobs.
   if (kind === 'simulations') return firestore.collectionGroup('simulations');
+  // Deck stats live under each deck (see deck-stats-refs.ts); precons keep
+  // their deck doc but lose its stats.
+  if (kind === 'ratings') return deckStatsOfKind('rating');
+  if (kind === 'cardStats') return deckStatsOfKind('cards');
+  // Legacy per-game docs, replaced by pair counts on the rating docs.
   return firestore.collection(kind);
 }
 

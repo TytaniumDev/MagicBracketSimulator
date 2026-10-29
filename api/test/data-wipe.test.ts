@@ -78,11 +78,18 @@ async function main() {
     simulations: 4,
     createdBy: 'test',
   });
-  await getRatingStore().updateRatings([{ deckId: 'a', mu: 25, sigma: 8, gamesPlayed: 1, wins: 1, lastUpdated: new Date().toISOString() }]);
-  await getRatingStore().recordMatchResults([{
-    id: `${jobIds[0]}_0`, jobId: jobIds[0], gameIndex: 0, deckIds: ['a', 'b', 'c', 'd'],
-    winnerDeckId: 'a', turnCount: 7, playedAt: new Date().toISOString(),
-  }]);
+  const podDeckIds = ['a', 'b', 'c', 'd'];
+  await getRatingStore().applyJob({
+    jobId: jobIds[0],
+    deckIds: podDeckIds,
+    gameCount: 1,
+    update: () => podDeckIds.map((deckId, i) => ({
+      deckId, mu: 25, sigma: 8, gamesPlayed: 1, wins: i === 0 ? 1 : 0, lastUpdated: new Date().toISOString(),
+    })),
+  });
+  // A legacy per-game row, from before pair counts replaced them.
+  db.prepare("INSERT INTO match_results (id, job_id, game_index, deck_ids, winner_deck_id, turn_count, played_at) VALUES (?, ?, 0, ?, 'a', 7, ?)")
+    .run(`${jobIds[0]}_0`, jobIds[0], JSON.stringify(podDeckIds), new Date().toISOString());
   await getCardStatsStore().addJobs('a', [{ jobId: jobIds[0], update: (s) => ({ ...s, games: 1 }) }]);
   saveDeck('My Custom Deck', deck.dck);
   db.prepare("INSERT INTO precons (id, name, filename, dck, synced_at) VALUES ('precon-1', 'Precon', 'precon.dck', ?, ?)").run(deck.dck, new Date().toISOString());
@@ -110,7 +117,7 @@ async function main() {
       { kind: 'jobs', deleted: 2 },
       { kind: 'podRuns', deleted: 1 },
       { kind: 'matchResults', deleted: 1 },
-      { kind: 'ratings', deleted: 1 },
+      { kind: 'ratings', deleted: 4 },
       { kind: 'cardStats', deleted: 1 },
       { kind: 'customDecks', deleted: 1 },
     ], 'steps');

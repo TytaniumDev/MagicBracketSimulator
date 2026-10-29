@@ -1,19 +1,19 @@
 /**
  * Firestore implementation of RatingStore (GCP mode).
  *
- * Collections:
- *   ratings/{deckId}       — DeckRating document
- *   matchResults/{id}      — MatchResult document
+ * One doc per deck at decks/{deckId}/stats/rating (see deck-stats-refs.ts)
+ * holding its DeckRating fields plus `pairGames`, a map of other deck id to
+ * games played together, which pair coverage reads instead of one doc per
+ * game. A job is applied once: its doc records `appliedStats.ratings`.
  */
 import { Timestamp } from '@google-cloud/firestore';
-import type { RatingStore, LeaderboardOptions } from './rating-store';
-import type { DeckRating, MatchResult } from './types';
+import { addPodPairGames, pairKey, type RatingStore, type LeaderboardOptions } from './rating-store';
+import type { DeckRating } from './types';
 import { getFirestore } from './firestore-client';
+import { deckIdOfStats, deckStatsOfKind, deckStatsRef } from './deck-stats-refs';
+import { ensureLegacyDeckStatsMigrated } from './legacy-deck-stats-migration';
 
 const firestore = getFirestore();
-
-const ratingsCol = firestore.collection('ratings');
-const matchResultsCol = firestore.collection('matchResults');
 
 function parseWinTurnHistogram(raw: unknown): number[] | undefined {
   if (!Array.isArray(raw) || raw.length !== 16) return undefined;
@@ -21,7 +21,8 @@ function parseWinTurnHistogram(raw: unknown): number[] | undefined {
   return raw as number[];
 }
 
-function docToRating(deckId: string, d: FirebaseFirestore.DocumentData): DeckRating {
+/** Read a stored rating doc (current or legacy `ratings/{deckId}` shape). */
+export function docToRating(deckId: string, d: FirebaseFirestore.DocumentData): DeckRating {
   const rating: DeckRating = {
     deckId,
     mu: d.mu as number,
@@ -41,74 +42,91 @@ function docToRating(deckId: string, d: FirebaseFirestore.DocumentData): DeckRat
   return rating;
 }
 
+/** The stored fields of a rating, without deckId (the doc's path holds it). */
+export function ratingToDoc(r: DeckRating): Record<string, unknown> {
+  const doc: Record<string, unknown> = {
+    kind: 'rating',
+    mu: r.mu,
+    sigma: r.sigma,
+    gamesPlayed: r.gamesPlayed,
+    wins: r.wins,
+    lastUpdated: Timestamp.fromDate(new Date(r.lastUpdated)),
+  };
+  if (r.deckName !== undefined) doc.deckName = r.deckName;
+  if (r.setName !== undefined) doc.setName = r.setName;
+  if (r.isPrecon !== undefined) doc.isPrecon = r.isPrecon;
+  if (r.primaryCommander !== undefined) doc.primaryCommander = r.primaryCommander;
+  if (r.winTurnSum !== undefined) doc.winTurnSum = r.winTurnSum;
+  if (r.winTurnWins !== undefined) doc.winTurnWins = r.winTurnWins;
+  if (r.winTurnHistogram !== undefined) doc.winTurnHistogram = r.winTurnHistogram;
+  return doc;
+}
+
 export const firestoreRatingStore: RatingStore = {
   async getRating(deckId: string): Promise<DeckRating | null> {
-    const doc = await ratingsCol.doc(deckId).get();
-    if (!doc.exists) return null;
+    await ensureLegacyDeckStatsMigrated();
+    const doc = await deckStatsRef(deckId, 'rating').get();
+    if (!doc.exists || !(doc.get('gamesPlayed') > 0)) return null;
     return docToRating(deckId, doc.data()!);
   },
 
-  async updateRatings(updates: DeckRating[]): Promise<void> {
-    const batch = firestore.batch();
-    const now = Timestamp.now();
-    for (const r of updates) {
-      const doc: Record<string, unknown> = {
-        mu: r.mu,
-        sigma: r.sigma,
-        gamesPlayed: r.gamesPlayed,
-        wins: r.wins,
-        lastUpdated: now,
-      };
-      if (r.deckName !== undefined) doc.deckName = r.deckName;
-      if (r.setName !== undefined) doc.setName = r.setName;
-      if (r.isPrecon !== undefined) doc.isPrecon = r.isPrecon;
-      if (r.primaryCommander !== undefined) doc.primaryCommander = r.primaryCommander;
-      if (r.winTurnSum !== undefined) doc.winTurnSum = r.winTurnSum;
-      if (r.winTurnWins !== undefined) doc.winTurnWins = r.winTurnWins;
-      if (r.winTurnHistogram !== undefined) doc.winTurnHistogram = r.winTurnHistogram;
-      batch.set(ratingsCol.doc(r.deckId), doc);
-    }
-    await batch.commit();
-  },
+  async applyJob({ jobId, deckIds, gameCount, update }): Promise<boolean> {
+    await ensureLegacyDeckStatsMigrated();
+    const jobRef = firestore.collection('jobs').doc(jobId);
+    const refs = deckIds.map((id) => deckStatsRef(id, 'rating'));
 
-  async recordMatchResults(results: MatchResult[]): Promise<void> {
-    if (results.length === 0) return;
-    const now = Timestamp.now();
-    // Firestore batches cap at 500 writes; chunk to stay under the limit.
-    const CHUNK = 500;
-    for (let i = 0; i < results.length; i += CHUNK) {
-      const batch = firestore.batch();
-      for (const r of results.slice(i, i + CHUNK)) {
-        batch.set(matchResultsCol.doc(r.id), {
-          jobId: r.jobId,
-          gameIndex: r.gameIndex,
-          deckIds: r.deckIds,
-          winnerDeckId: r.winnerDeckId ?? null,
-          turnCount: r.turnCount ?? null,
-          playedAt: now,
-        });
-      }
-      await batch.commit();
-    }
-  },
+    return firestore.runTransaction(async (tx) => {
+      const [jobSnap, ...snaps] = await tx.getAll(jobRef, ...refs);
+      if (!jobSnap.exists || jobSnap.get('appliedStats.ratings') === true) return false;
 
-  async hasMatchResultsForJob(jobId: string): Promise<boolean> {
-    const snapshot = await matchResultsCol.where('jobId', '==', jobId).limit(1).get();
-    return !snapshot.empty;
+      const stored = snaps.map((s, i) =>
+        s.exists && s.get('gamesPlayed') > 0 ? docToRating(deckIds[i]!, s.data()!) : null,
+      );
+      const next = update(stored);
+      const pairCounts = addPodPairGames(
+        new Map(deckIds.map((id, i) => [id, { ...(snaps[i]!.get('pairGames') ?? {}) }])),
+        deckIds,
+        gameCount,
+      );
+
+      refs.forEach((ref, i) => {
+        const pairGames = pairCounts.get(deckIds[i]!);
+        const rating = next?.[i];
+        tx.set(ref, rating ? { ...ratingToDoc(rating), pairGames } : { kind: 'rating', pairGames }, { merge: true });
+      });
+      tx.update(jobRef, { 'appliedStats.ratings': true });
+      return true;
+    });
   },
 
   async getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]> {
-    const minGames = options?.minGames ?? 0;
+    await ensureLegacyDeckStatsMigrated();
+    const minGames = Math.max(options?.minGames ?? 0, 1);
     const limit = options?.limit ?? 500;
 
-    const snapshot = await ratingsCol
+    const snapshot = await deckStatsOfKind('rating')
       .where('gamesPlayed', '>=', minGames)
       .orderBy('gamesPlayed', 'desc')
       .limit(limit)
       .get();
 
-    const ratings: DeckRating[] = snapshot.docs.map((doc) => docToRating(doc.id, doc.data()));
+    const ratings = snapshot.docs.map((doc) => docToRating(deckIdOfStats(doc.ref), doc.data()));
     ratings.sort((a, b) => b.mu - 3 * b.sigma - (a.mu - 3 * a.sigma));
     return ratings;
+  },
+
+  async getPairGameCounts(): Promise<Map<string, number>> {
+    await ensureLegacyDeckStatsMigrated();
+    const snapshot = await deckStatsOfKind('rating').select('pairGames').get();
+    const counts = new Map<string, number>();
+    for (const doc of snapshot.docs) {
+      const deckId = deckIdOfStats(doc.ref);
+      const pairGames = (doc.get('pairGames') as Record<string, number> | undefined) ?? {};
+      // Both decks of a pair hold the same count; read it from the first.
+      for (const [other, games] of Object.entries(pairGames)) {
+        if (deckId < other) counts.set(pairKey(deckId, other), games);
+      }
+    }
+    return counts;
   },
 };

@@ -1,8 +1,8 @@
 /**
  * Rating stats service.
  *
- * Records per-job match results and increments per-deck wins/gamesPlayed
- * counters. The leaderboard then ranks decks with a Bayesian-adjusted win
+ * Applies a finished job's games to per-deck wins/gamesPlayed counters and
+ * pair game counts, once per job (see RatingStore.applyJob). The leaderboard then ranks decks with a Bayesian-adjusted win
  * rate (see api/app/api/leaderboard/route.ts).
  *
  * Historical note: this module previously computed TrueSkill (mu/sigma)
@@ -10,7 +10,7 @@
  * ranking. mu/sigma are still present in the DeckRating schema so existing
  * Firestore docs remain valid; new writes leave mu/sigma at neutral defaults.
  */
-import type { DeckRating, MatchResult, StructuredGame } from './types';
+import type { DeckRating, StructuredGame } from './types';
 import { matchesDeckName } from './condenser/deck-match';
 import { getDeckById } from './deck-store-factory';
 import { getRatingStore } from './rating-store-factory';
@@ -29,19 +29,13 @@ const SIGMA_DEFAULT = 25 / 3;
  * @param jobId    The job ID (for idempotency).
  * @param deckIds  4 deck IDs (same order used throughout the job).
  * @param games    Structured game data (already ingested by ingestLogs).
+ * @returns false when the job was already rated.
  */
 export async function processJobForRatings(
   jobId: string,
   deckIds: string[],
   games: StructuredGame[],
-): Promise<void> {
-  const store = getRatingStore();
-
-  if (await store.hasMatchResultsForJob(jobId)) {
-    console.log(`[RatingStats] Job ${jobId} already rated, skipping`);
-    return;
-  }
-
+): Promise<boolean> {
   const deckInfos = await Promise.all(
     deckIds.map(async (id) => {
       const deck = await getDeckById(id);
@@ -55,106 +49,47 @@ export async function processJobForRatings(
     }),
   );
 
-  const initialStoredRatings = await Promise.all(deckIds.map((id) => store.getRating(id)));
-
-  const currentRatings: DeckRating[] = deckIds.map((id, idx) => {
-    const stored = initialStoredRatings[idx];
-    const info = deckInfos[idx]!;
-    const base = stored ?? {
-      deckId: id,
-      mu: MU_DEFAULT,
-      sigma: SIGMA_DEFAULT,
-      gamesPlayed: 0,
-      wins: 0,
-      lastUpdated: new Date().toISOString(),
-    };
-    return {
-      ...base,
-      deckName: info.name ?? undefined,
-      setName: info.setName,
-      isPrecon: info.isPrecon,
-      primaryCommander: info.primaryCommander,
-    };
-  });
-
-  const matchResults: MatchResult[] = [];
-  let resolvedGames = 0;
-  const jobTimestamp = new Date().toISOString();
-
-  for (let i = 0; i < games.length; i++) {
-    const game = games[i]!;
+  // Resolve each game's winner to a seat once, outside the store transaction.
+  const resolved: { winnerIdx: number; winningTurn: number | null }[] = [];
+  games.forEach((game, i) => {
     const winner = game.winner;
-
-    let winnerDeckId: string | null = null;
-    if (winner) {
-      for (const { id, name } of deckInfos) {
-        if (name && matchesDeckName(winner, name)) {
-          winnerDeckId = id;
-          break;
-        }
-      }
-    }
-
-    matchResults.push({
-      id: `${jobId}_${i}`,
-      jobId,
-      gameIndex: i,
-      deckIds,
-      winnerDeckId,
-      turnCount: game.winningTurn ?? null,
-      playedAt: jobTimestamp,
-    });
-
-    if (!winnerDeckId) {
+    const winnerIdx = winner
+      ? deckInfos.findIndex(({ name }) => name !== null && matchesDeckName(winner, name))
+      : -1;
+    if (winnerIdx === -1) {
       Sentry.addBreadcrumb({
         category: 'rating-stats',
         message: `Game ${i} in job ${jobId}: winner "${winner}" could not be resolved to a deck ID`,
         level: 'warning',
         data: { jobId, gameIndex: i, winner, deckNames: deckInfos.map(d => d.name) },
       });
-      continue;
+      return;
     }
+    resolved.push({ winnerIdx, winningTurn: game.winningTurn ?? null });
+  });
 
-    const winnerIdx = deckIds.indexOf(winnerDeckId);
-    if (winnerIdx === -1) continue;
-
-    for (let j = 0; j < deckIds.length; j++) {
-      const current = currentRatings[j]!;
-      const isWinner = j === winnerIdx;
-      let next: DeckRating = {
-        ...current,
-        gamesPlayed: current.gamesPlayed + 1,
-        wins: current.wins + (isWinner ? 1 : 0),
-        lastUpdated: jobTimestamp,
-      };
-      if (isWinner && game.winningTurn != null) {
-        const nextAgg = addWinTurn(
-          {
-            winTurnSum: current.winTurnSum ?? 0,
-            winTurnWins: current.winTurnWins ?? 0,
-            winTurnHistogram:
-              current.winTurnHistogram ?? emptyWinTurnAggregate().winTurnHistogram,
-          },
-          game.winningTurn,
-        );
-        next = {
-          ...next,
-          winTurnSum: nextAgg.winTurnSum,
-          winTurnWins: nextAgg.winTurnWins,
-          winTurnHistogram: nextAgg.winTurnHistogram,
-        };
+  const jobTimestamp = new Date().toISOString();
+  const applied = await getRatingStore().applyJob({
+    jobId,
+    deckIds,
+    gameCount: games.length,
+    update: (stored) => {
+      if (resolved.length === 0) return null;
+      const ratings = stored.map((rating, idx) => withDeckInfo(rating ?? newRating(deckIds[idx]!), deckInfos[idx]!));
+      for (const { winnerIdx, winningTurn } of resolved) {
+        for (let j = 0; j < ratings.length; j++) {
+          ratings[j] = addGame(ratings[j]!, j === winnerIdx, winningTurn, jobTimestamp);
+        }
       }
-      currentRatings[j] = next;
-    }
-    resolvedGames += 1;
-  }
+      return ratings;
+    },
+  });
 
-  await store.recordMatchResults(matchResults);
-
-  if (resolvedGames > 0) {
-    await store.updateRatings(currentRatings);
+  if (!applied) {
+    console.log(`[RatingStats] Job ${jobId} already rated, skipping`);
+  } else if (resolved.length > 0) {
     console.log(
-      `[RatingStats] Job ${jobId}: recorded ${resolvedGames}/${games.length} game(s) for decks [${deckIds.join(', ')}]`,
+      `[RatingStats] Job ${jobId}: recorded ${resolved.length}/${games.length} game(s) for decks [${deckIds.join(', ')}]`,
     );
   } else {
     Sentry.addBreadcrumb({
@@ -164,4 +99,56 @@ export async function processJobForRatings(
       data: { jobId, gameCount: games.length, deckIds },
     });
   }
+  return applied;
+}
+
+interface DeckInfo {
+  name: string | null;
+  setName: string | null;
+  isPrecon: boolean;
+  primaryCommander: string | null;
+}
+
+function newRating(deckId: string): DeckRating {
+  return {
+    deckId,
+    mu: MU_DEFAULT,
+    sigma: SIGMA_DEFAULT,
+    gamesPlayed: 0,
+    wins: 0,
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
+/** Refresh the denormalized deck metadata the leaderboard reads. */
+function withDeckInfo(rating: DeckRating, info: DeckInfo): DeckRating {
+  return {
+    ...rating,
+    deckName: info.name ?? undefined,
+    setName: info.setName,
+    isPrecon: info.isPrecon,
+    primaryCommander: info.primaryCommander,
+  };
+}
+
+/** Count one resolved game for a deck: a game played, and a win with its turn if it won. */
+function addGame(rating: DeckRating, won: boolean, winningTurn: number | null, at: string): DeckRating {
+  const next: DeckRating = {
+    ...rating,
+    gamesPlayed: rating.gamesPlayed + 1,
+    wins: rating.wins + (won ? 1 : 0),
+    lastUpdated: at,
+  };
+  if (!won || winningTurn == null) return next;
+  return {
+    ...next,
+    ...addWinTurn(
+      {
+        winTurnSum: rating.winTurnSum ?? 0,
+        winTurnWins: rating.winTurnWins ?? 0,
+        winTurnHistogram: rating.winTurnHistogram ?? emptyWinTurnAggregate().winTurnHistogram,
+      },
+      winningTurn,
+    ),
+  };
 }
