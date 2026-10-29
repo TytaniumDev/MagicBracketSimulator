@@ -3,6 +3,7 @@
  * optimal 4-player pods using a greedy algorithm.
  */
 import { listAllDecks, type DeckListItem } from './deck-store-factory';
+import { getDeckSelectionStore } from './deck-selection-store-factory';
 import { getFirestore } from './firestore-client';
 import { listActiveJobs } from './job-store-factory';
 
@@ -55,7 +56,13 @@ export async function computePairCoverage(): Promise<PairCoverageMap> {
     return coverageCache.data;
   }
 
-  const allDecks = await listAllDecks();
+  // Decks excluded from selection are left out of coverage pods too.
+  const [libraryDecks, excludedDeckIds] = await Promise.all([
+    listAllDecks(),
+    getDeckSelectionStore().then((store) => store.getExcludedDeckIds()),
+  ]);
+  const excluded = new Set(excludedDeckIds);
+  const allDecks = libraryDecks.filter((d) => !excluded.has(d.id));
   const allDeckIds = allDecks.map((d) => d.id);
   const counts = new Map<string, number>();
 

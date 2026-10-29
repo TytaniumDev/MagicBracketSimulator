@@ -17,10 +17,18 @@ const ARCHIDEKT_OWNER = 'Archidekt_Precons';
 const PAGE_SIZE = 100;
 const RATE_LIMIT_MS = 3000;
 
+/**
+ * Precons released before March of the Machine Commander (April 2023) are
+ * left out: precons got noticeably stronger from that set on, and fewer
+ * decks keeps a full gauntlet of comparisons reasonable.
+ */
+export const PRECON_CUTOFF_DATE = '2023-04-01';
+
 interface ArchidektListDeck {
   id: number;
   name: string;
   updatedAt: string;
+  createdAt: string;
   colors: Record<string, number>; // e.g. { W: 23, U: 15, B: 0, R: 10, G: 12 }
 }
 
@@ -99,6 +107,19 @@ export function archidektColorsToIdentity(colors: Record<string, number>): strin
 }
 
 /**
+ * Archidekt_Precons adds each precon around its release, so the list entry's
+ * createdAt stands in for the release date (YYYY-MM-DD).
+ */
+export function preconReleaseDate(deck: { createdAt: string }): string {
+  return deck.createdAt.slice(0, 10);
+}
+
+/** True for precons released on or after PRECON_CUTOFF_DATE. */
+export function isAfterPreconCutoff(deck: { createdAt: string }): boolean {
+  return preconReleaseDate(deck) >= PRECON_CUTOFF_DATE;
+}
+
+/**
  * Generate a stable slug ID from a precon name.
  */
 function generatePreconId(name: string, allIds: Set<string>): string {
@@ -144,40 +165,40 @@ export async function syncPrecons(): Promise<SyncResult> {
       dedupedByName.set(name, deck);
     }
   }
-  const archidektDecks = [...dedupedByName.values()];
+  const allArchidektDecks = [...dedupedByName.values()];
+  const archidektDecks = allArchidektDecks.filter(isAfterPreconCutoff);
 
   const idDupes = rawArchidektDecks.length - dedupedById.size;
   const nameDupes = dedupedById.size - dedupedByName.size;
   if (idDupes > 0 || nameDupes > 0) {
     console.log(`[PreconSync] Deduplicated ${rawArchidektDecks.length} → ${archidektDecks.length} (${idDupes} duplicate IDs, ${nameDupes} reprint names)`);
   }
-  console.log(`[PreconSync] Found ${archidektDecks.length} precons on Archidekt`);
+  console.log(`[PreconSync] Found ${allArchidektDecks.length} precons on Archidekt, ${archidektDecks.length} released since ${PRECON_CUTOFF_DATE}`);
 
   // 2. Load existing precons from store (indexed by archidektId)
-  const existingByArchidektId = new Map<number, { id: string; archidektUpdatedAt: string | null }>();
+  const existingByArchidektId = new Map<number, { id: string; archidektUpdatedAt: string | null; releasedAt: string | null }>();
   const allExistingPreconIds = new Set<string>();
 
   if (USE_FIRESTORE) {
     const firestoreDecks = await import('./firestore-decks');
-    const allDecks = await firestoreDecks.listAllDecks();
-    for (const deck of allDecks) {
-      if (deck.isPrecon) {
-        allExistingPreconIds.add(deck.id);
-        if (deck.archidektId) {
-          existingByArchidektId.set(deck.archidektId, {
-            id: deck.id,
-            archidektUpdatedAt: (deck as { archidektUpdatedAt?: string | null }).archidektUpdatedAt ?? null,
-          });
-        }
+    for (const precon of await firestoreDecks.listPreconSyncState()) {
+      allExistingPreconIds.add(precon.id);
+      if (precon.archidektId) {
+        existingByArchidektId.set(precon.archidektId, {
+          id: precon.id,
+          archidektUpdatedAt: precon.archidektUpdatedAt,
+          releasedAt: precon.releasedAt,
+        });
       }
     }
   } else {
     const { getDb } = await import('./db');
     const db = getDb();
-    const rows = db.prepare('SELECT id, archidekt_id, archidekt_updated_at FROM precons').all() as {
+    const rows = db.prepare('SELECT id, archidekt_id, archidekt_updated_at, released_at FROM precons').all() as {
       id: string;
       archidekt_id: number | null;
       archidekt_updated_at: string | null;
+      released_at: string | null;
     }[];
     for (const row of rows) {
       allExistingPreconIds.add(row.id);
@@ -185,6 +206,7 @@ export async function syncPrecons(): Promise<SyncResult> {
         existingByArchidektId.set(row.archidekt_id, {
           id: row.id,
           archidektUpdatedAt: row.archidekt_updated_at,
+          releasedAt: row.released_at,
         });
       }
     }
@@ -216,8 +238,9 @@ export async function syncPrecons(): Promise<SyncResult> {
         continue;
       }
 
-      // Skip if unchanged
-      if (existing && existing.archidektUpdatedAt === adeck.updatedAt) {
+      // Skip if unchanged (precons synced before release dates were stored
+      // are refetched once to pick theirs up)
+      if (existing && existing.archidektUpdatedAt === adeck.updatedAt && existing.releasedAt) {
         keepPreconIds.add(existing.id);
         processedArchidektIds.add(adeck.id);
         result.unchanged++;
@@ -227,6 +250,7 @@ export async function syncPrecons(): Promise<SyncResult> {
       // Need to fetch full deck details
       const { name: parsedName, setName } = parsePreconName(adeck.name);
       const colorIdentity = archidektColorsToIdentity(adeck.colors);
+      const releasedAt = preconReleaseDate(adeck);
       const id = existing?.id ?? generatePreconId(parsedName, usedIds);
       usedIds.add(id);
       keepPreconIds.add(id);
@@ -256,6 +280,7 @@ export async function syncPrecons(): Promise<SyncResult> {
               colorIdentity,
               link,
               setName,
+              releasedAt,
               archidektId: adeck.id,
               archidektUpdatedAt: adeck.updatedAt,
             });
@@ -263,8 +288,8 @@ export async function syncPrecons(): Promise<SyncResult> {
             const { getDb } = await import('./db');
             const db = getDb();
             db.prepare(`
-              INSERT INTO precons (id, archidekt_id, name, set_name, filename, primary_commander, color_identity, dck, link, archidekt_updated_at, synced_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              INSERT INTO precons (id, archidekt_id, name, set_name, filename, primary_commander, color_identity, dck, link, archidekt_updated_at, released_at, synced_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(id) DO UPDATE SET
                 archidekt_id = excluded.archidekt_id,
                 name = excluded.name,
@@ -275,6 +300,7 @@ export async function syncPrecons(): Promise<SyncResult> {
                 dck = excluded.dck,
                 link = excluded.link,
                 archidekt_updated_at = excluded.archidekt_updated_at,
+                released_at = excluded.released_at,
                 synced_at = excluded.synced_at
             `).run(
               id,
@@ -287,6 +313,7 @@ export async function syncPrecons(): Promise<SyncResult> {
               dck,
               link,
               adeck.updatedAt,
+              releasedAt,
               new Date().toISOString(),
             );
           }
@@ -315,9 +342,11 @@ export async function syncPrecons(): Promise<SyncResult> {
     }
   }
 
-  // 4. Remove orphaned precons (legacy hand-imported or wrongly synced)
+  // 4. Remove orphaned precons (legacy hand-imported, wrongly synced, or
+  // released before the cutoff). The completeness check uses the full
+  // Archidekt list, since the cutoff alone can remove most existing precons.
   const orphanIds = [...allExistingPreconIds].filter((id) => !keepPreconIds.has(id));
-  if (orphanIds.length > 0 && archidektDecks.length >= allExistingPreconIds.size * 0.5) {
+  if (orphanIds.length > 0 && allArchidektDecks.length >= allExistingPreconIds.size * 0.5) {
     console.log(`[PreconSync] Removing ${orphanIds.length} orphaned precons...`);
     if (USE_FIRESTORE) {
       try {
@@ -350,7 +379,7 @@ export async function syncPrecons(): Promise<SyncResult> {
       }
     }
   } else if (orphanIds.length > 0) {
-    console.warn(`[PreconSync] Skipping orphan deletion: got ${archidektDecks.length} decks but have ${allExistingPreconIds.size} existing — sync may be incomplete`);
+    console.warn(`[PreconSync] Skipping orphan deletion: got ${allArchidektDecks.length} decks but have ${allExistingPreconIds.size} existing — sync may be incomplete`);
   }
 
   console.log(`[PreconSync] Sync complete: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.removed} removed, ${result.errors.length} errors`);

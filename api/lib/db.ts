@@ -253,6 +253,12 @@ export function getDb(): Database.Database {
     )
   `);
 
+  try {
+    db.exec(`ALTER TABLE precons ADD COLUMN released_at TEXT`);
+  } catch {
+    // Column already exists
+  }
+
   // Add per-worker concurrency override and owner email columns
   try {
     db.exec(`ALTER TABLE worker_heartbeats ADD COLUMN max_concurrent_override INTEGER`);
@@ -321,6 +327,15 @@ export function getDb(): Database.Database {
       target_games_per_pair INTEGER NOT NULL DEFAULT 400,
       updated_at TEXT NOT NULL DEFAULT '',
       updated_by TEXT NOT NULL DEFAULT ''
+    )
+  `);
+
+  // Decks left out of deck selection (picker + auto-coverage)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS excluded_decks (
+      deck_id TEXT PRIMARY KEY,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT NOT NULL
     )
   `);
 

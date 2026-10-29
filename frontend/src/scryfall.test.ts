@@ -9,7 +9,7 @@ describe('cardKey', () => {
 });
 
 describe('indexByFace', () => {
-  const card = (name: string): ScryfallCard => ({ name, typeLine: '', manaCost: '', manaValue: 0, imageUrl: null });
+  const card = (name: string): ScryfallCard => ({ name, typeLine: '', manaCost: '', manaValue: 0, imageUrl: null, scryfallUrl: null });
 
   it('finds a card by any of its face names', () => {
     const whirlwing = card('Whirlwing Stormbrood // Dynamic Soar');

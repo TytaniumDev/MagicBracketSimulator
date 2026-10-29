@@ -22,6 +22,7 @@ export interface DeckDoc {
   ownerEmail?: string | null;
   createdAt: FirebaseFirestore.Timestamp;
   setName?: string | null;
+  releasedAt?: string | null;
   archidektId?: number | null;
   archidektUpdatedAt?: string | null;
 }
@@ -38,6 +39,8 @@ export interface DeckListItem {
   ownerEmail?: string | null;
   createdAt: string;
   setName?: string | null;
+  /** Precon release date (YYYY-MM-DD); null for user decks. */
+  releasedAt?: string | null;
   archidektId?: number | null;
 }
 
@@ -69,6 +72,7 @@ function docToDeck(doc: FirebaseFirestore.DocumentSnapshot): DeckDoc | null {
     ownerEmail: data.ownerEmail ?? null,
     createdAt: data.createdAt,
     setName: data.setName ?? null,
+    releasedAt: data.releasedAt ?? null,
     archidektId: data.archidektId ?? null,
     archidektUpdatedAt: data.archidektUpdatedAt ?? null,
   };
@@ -81,7 +85,7 @@ export async function listAllDecks(): Promise<DeckListItem[]> {
   const snapshot = await decksCollection
     .orderBy('isPrecon', 'desc')
     .orderBy('name')
-    .select('name', 'filename', 'primaryCommander', 'colorIdentity', 'isPrecon', 'link', 'ownerId', 'ownerEmail', 'createdAt', 'setName', 'archidektId')
+    .select('name', 'filename', 'primaryCommander', 'colorIdentity', 'isPrecon', 'link', 'ownerId', 'ownerEmail', 'createdAt', 'setName', 'releasedAt', 'archidektId')
     .get();
 
   return snapshot.docs
@@ -100,9 +104,35 @@ export async function listAllDecks(): Promise<DeckListItem[]> {
         ownerEmail: data.ownerEmail ?? null,
         createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
         setName: data.setName ?? null,
+        releasedAt: data.releasedAt ?? null,
         archidektId: data.archidektId ?? null,
       };
     });
+}
+
+/**
+ * What the Archidekt sync needs to diff existing precons against Archidekt.
+ */
+export async function listPreconSyncState(): Promise<{
+  id: string;
+  archidektId: number | null;
+  archidektUpdatedAt: string | null;
+  releasedAt: string | null;
+}[]> {
+  const snapshot = await decksCollection
+    .where('isPrecon', '==', true)
+    .select('archidektId', 'archidektUpdatedAt', 'releasedAt')
+    .get();
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      archidektId: data.archidektId ?? null,
+      archidektUpdatedAt: data.archidektUpdatedAt ?? null,
+      releasedAt: data.releasedAt ?? null,
+    };
+  });
 }
 
 /**
@@ -173,6 +203,7 @@ export async function upsertPrecon(input: {
   colorIdentity?: string[];
   link?: string | null;
   setName?: string | null;
+  releasedAt?: string | null;
   archidektId?: number | null;
   archidektUpdatedAt?: string | null;
 }): Promise<void> {
@@ -189,6 +220,7 @@ export async function upsertPrecon(input: {
     ownerId: null,
     ownerEmail: null,
     setName: input.setName ?? null,
+    releasedAt: input.releasedAt ?? null,
     archidektId: input.archidektId ?? null,
     archidektUpdatedAt: input.archidektUpdatedAt ?? null,
     createdAt: Timestamp.now(),

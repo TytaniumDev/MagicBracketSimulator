@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
+import { verifyAuth, verifyAllowedUser, verifyAdmin, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { deleteDeck, getDeckById, readDeckContent } from '@/lib/deck-store-factory';
 import { removeColorIdentity } from '@/lib/deck-metadata';
 import { getRatingStore } from '@/lib/rating-store-factory';
+import { getDeckSelectionStore } from '@/lib/deck-selection-store-factory';
 import { buildDeckDetail } from '@/lib/deck-detail';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -51,6 +52,39 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.error('Failed to get deck:', error);
     Sentry.captureException(error, { tags: { component: 'deck-page' } });
     return errorResponse('Failed to get deck', 500);
+  }
+}
+
+/**
+ * PATCH /api/decks/[id] - Exclude a deck from selection, or include it again
+ * (admin only). Body: { excluded: boolean }. Returns { excludedDeckIds }.
+ */
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  let user: AuthUser;
+  try {
+    user = await verifyAdmin(request);
+  } catch (error) {
+    return unauthorizedResponse(error instanceof Error ? error.message : undefined);
+  }
+
+  try {
+    const { id } = await params;
+    const body = await request.json().catch(() => null);
+
+    if (!id) {
+      return badRequestResponse('Deck ID is required');
+    }
+    if (typeof body?.excluded !== 'boolean') {
+      return badRequestResponse('excluded must be a boolean');
+    }
+
+    const store = await getDeckSelectionStore();
+    const excludedDeckIds = await store.setDeckExcluded(id, body.excluded, user.email);
+    return NextResponse.json({ excludedDeckIds });
+  } catch (error) {
+    console.error('Failed to update deck selection:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'PATCH /api/decks/[id]' } });
+    return errorResponse('Failed to update deck selection', 500);
   }
 }
 
