@@ -88,6 +88,7 @@ dev_dependencies:
   mockito: ^5.4.5
   build_runner: ^2.4.13
   drift_dev: ^2.20.0
+  fake_async: ^1.3.3
   fake_cloud_firestore: ^4.4.0
   firebase_auth_mocks: ^0.15.2
   # Uploads Dart obfuscation debug-info + sources to Sentry so
