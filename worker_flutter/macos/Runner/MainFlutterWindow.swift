@@ -170,10 +170,40 @@ class MainFlutterWindow: NSWindow {
   }
 
   @objc private func handleCheckForUpdates(_ sender: Any?) {
+    // Bring the app forward first so Sparkle's "Checking…" / "You're up
+    // to date" windows open in front instead of behind other apps.
+    if #available(macOS 14.0, *) {
+      NSApp.activate()
+    } else {
+      NSApp.activate(ignoringOtherApps: true)
+    }
+    guard let channel = autoUpdaterChannel else {
+      showCheckForUpdatesFailure("The updater isn't connected yet.")
+      return
+    }
     // inBackground: false on the Dart side — this is an interactive
     // user-initiated check, so Sparkle should surface a "You're up to
     // date" dialog when there's no new version, instead of staying
-    // silent the way the scheduled hourly poll does.
-    autoUpdaterChannel?.invokeMethod("checkForUpdates", arguments: nil)
+    // silent the way the scheduled hourly poll does. Dart reports any
+    // failure to Sentry; the result is checked here so the click never
+    // silently does nothing.
+    channel.invokeMethod("checkForUpdates", arguments: nil) { [weak self] result in
+      if let error = result as? FlutterError {
+        self?.showCheckForUpdatesFailure(error.message ?? error.code)
+      } else if (result as? NSObject) === FlutterMethodNotImplemented {
+        // Dart hasn't registered its handler yet (still booting).
+        self?.showCheckForUpdatesFailure(
+          "The worker is still starting up. Try again in a few seconds."
+        )
+      }
+    }
+  }
+
+  private func showCheckForUpdatesFailure(_ detail: String) {
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Couldn't check for updates"
+    alert.informativeText = detail
+    alert.runModal()
   }
 }

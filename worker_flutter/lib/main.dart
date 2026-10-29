@@ -26,7 +26,9 @@ import 'sentry_setup.dart';
 import 'telemetry.dart';
 import 'ui/dashboard.dart';
 import 'ui/tray_setup.dart';
+import 'update/check_for_updates_handler.dart';
 import 'update/quit_for_update_listener.dart';
+import 'update/updater_telemetry.dart';
 import 'worker/worker_engine.dart';
 
 /// Magic Bracket Worker entry point.
@@ -408,6 +410,19 @@ Future<void> _activateAppCheck() async {
 }
 
 Future<void> _initAutoUpdater() async {
+  // Sparkle/WinSparkle only report failures through the plugin's event
+  // stream, so without a listener they never reach Sentry.
+  final telemetry = UpdaterTelemetry(
+    onError: (message) {
+      _log('AutoUpdater: $message');
+      Telemetry.captureError(
+        Exception(message),
+        StackTrace.current,
+        category: TelemetryCategory.autoUpdater,
+      );
+    },
+  );
+  autoUpdater.addListener(telemetry);
   // Windows: WinSparkle asks the app to exit once it has launched the new
   // installer. Closing the window only hides it to the tray, so without
   // this the process lingers and the installer hangs waiting for it.
@@ -419,23 +434,25 @@ Future<void> _initAutoUpdater() async {
   // that could throw and skip the rest of the setup. If `setFeedURL`
   // or `setScheduledCheckInterval` fails, Sparkle's appcast polling
   // is disabled, but the menu item should still respond (with the
-  // failure surfaced in the log) instead of clicking into the void.
-  _kAutoUpdaterChannel.setMethodCallHandler((call) async {
-    if (call.method != 'checkForUpdates') {
-      // Unknown method on a channel we control both ends of — bubble
-      // a real error so a wiring mistake surfaces during development
-      // rather than getting silently swallowed.
-      throw MissingPluginException(
-        'magic_bracket/auto_updater: unknown method "${call.method}"',
-      );
-    }
-    _log('AutoUpdater: user-initiated check from menu');
-    try {
-      await autoUpdater.checkForUpdates(inBackground: false);
-    } catch (e, st) {
+  // failure surfaced in Sentry and an alert) instead of clicking into
+  // the void.
+  final menuHandler = CheckForUpdatesHandler(
+    checkForUpdates: () {
+      _log('AutoUpdater: user-initiated check from menu');
+      return autoUpdater.checkForUpdates(inBackground: false);
+    },
+    onCheckStarted: telemetry.watchUserCheck,
+    onError: (e, st) {
       _log('AutoUpdater: user-initiated check failed: $e\n$st');
-    }
-  });
+      return Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.autoUpdater,
+        extra: {'phase': 'menu_check'},
+      );
+    },
+  );
+  _kAutoUpdaterChannel.setMethodCallHandler(menuHandler.handle);
   // Cache bust the raw.githubusercontent.com feed URL so manual update
   // checks do not get served cached responses by macOS/system HTTP cache.
   final cacheBusterUrl =
@@ -453,13 +470,13 @@ Future<void> _initAutoUpdater() async {
     );
   } catch (e, st) {
     // Sparkle init failure (e.g. missing SUPublicEDKey in some configs) is
-    // not fatal — the worker still runs, just without self-update. Log
-    // so we notice in the diagnostic file.
+    // not fatal — the worker still runs, just without self-update.
     _log('AutoUpdater init failed (non-fatal): $e\n$st');
-    Telemetry.breadcrumb(
-      TelemetryCategory.autoUpdater,
-      'AutoUpdater init failed',
-      data: {'error': e.toString()},
+    await Telemetry.captureError(
+      e,
+      st,
+      category: TelemetryCategory.autoUpdater,
+      extra: {'phase': 'init'},
     );
   }
 }
