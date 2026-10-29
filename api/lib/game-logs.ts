@@ -11,6 +11,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * Parsed game log filename components.
@@ -98,7 +99,8 @@ export function findGameLogFiles(logsDir: string, jobId: string): string[] {
       (f) => f.startsWith(prefix) && f.includes('_game_') && f.endsWith('.txt')
     );
     return sortLogFilenames(matchingFiles);
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'game-logs' } });
     return [];
   }
 }
@@ -135,6 +137,7 @@ export function readGameLogs(logsDir: string, jobId: string): string[] {
       }
     }
   } catch (error) {
+    Sentry.captureException(error, { tags: { component: 'game-logs' } });
     console.error(`[GameLogs] Error reading logs:`, error);
   }
 

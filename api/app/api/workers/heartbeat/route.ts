@@ -3,6 +3,7 @@ import { isWorkerRequest, unauthorizedResponse } from '@/lib/auth';
 import * as workerStore from '@/lib/worker-store-factory';
 import type { WorkerInfo } from '@/lib/types';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * POST /api/workers/heartbeat — Worker heartbeat.
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('POST /api/workers/heartbeat error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/workers/heartbeat' } });
     return errorResponse(error instanceof Error ? error.message : 'Heartbeat failed', 500);
   }
 }

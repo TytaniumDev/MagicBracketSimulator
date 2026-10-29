@@ -116,6 +116,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ updated: true });
   } catch (error) {
     log.error('PATCH error', { error: error instanceof Error ? error.message : String(error) });
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'PATCH /api/jobs/[id]/simulations/[simId]' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to update simulation', 500);
   }
 }

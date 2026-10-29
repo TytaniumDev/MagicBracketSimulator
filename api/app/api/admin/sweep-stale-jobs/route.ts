@@ -16,6 +16,7 @@ import { sweepStaleJobs } from '@/lib/stale-sweeper';
 import { errorResponse } from '@/lib/api-response';
 
 import { isLocalMode } from '@/lib/env';
+import * as Sentry from '@sentry/nextjs';
 
 const IS_LOCAL_MODE = isLocalMode();
 
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('[StaleSweeper] Error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/admin/sweep-stale-jobs' } });
     return errorResponse(error instanceof Error ? error.message : 'Sweep failed', 500);
   }
 }

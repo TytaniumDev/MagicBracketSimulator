@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as workerStore from '@/lib/worker-store-factory';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * GET /api/health/workers — Lightweight worker-pool liveness probe.
@@ -32,6 +33,7 @@ export async function GET() {
     const status = online > 0 ? 200 : 503;
     return NextResponse.json(body, { status });
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'health-workers' } });
     return NextResponse.json(
       { online: 0, error: err instanceof Error ? err.message : 'unknown' },
       { status: 503 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, verifyAdmin, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { getCoverageStore } from '@/lib/coverage-store-factory';
 import { errorResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * GET /api/coverage/config — read coverage config (any authenticated user)
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
     return NextResponse.json(config);
   } catch (error) {
     console.error('GET /api/coverage/config error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/coverage/config' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to get config', 500);
   }
 }
@@ -56,6 +58,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse | Respon
     return NextResponse.json(config);
   } catch (error) {
     console.error('PATCH /api/coverage/config error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'PATCH /api/coverage/config' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to update config', 500);
   }
 }

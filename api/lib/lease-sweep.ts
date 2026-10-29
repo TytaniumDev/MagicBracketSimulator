@@ -12,6 +12,7 @@
  * automatically excludes them. There is no risk of touching Docker workers.
  */
 import type { WorkerInfo } from './types';
+import * as Sentry from '@sentry/nextjs';
 
 export interface LeaseSweepDeps {
   getWorkersWithExpiredLeases: (nowMs: number) => Promise<WorkerInfo[]>;
@@ -68,6 +69,7 @@ export async function sweepExpiredLeases(
         const reverted = await deps.revertSimToPending(jobId, simId, worker.workerId);
         if (reverted) result.simsReverted += 1;
       } catch (err) {
+        Sentry.captureException(err, { tags: { component: 'lease-sweep' } });
         const msg = err instanceof Error ? err.message : String(err);
         result.errors.push(`revert ${compositeId} on ${worker.workerId}: ${msg}`);
       }
@@ -75,6 +77,7 @@ export async function sweepExpiredLeases(
     try {
       await deps.markWorkerCrashed(worker.workerId);
     } catch (err) {
+      Sentry.captureException(err, { tags: { component: 'lease-sweep' } });
       const msg = err instanceof Error ? err.message : String(err);
       result.errors.push(`markCrashed ${worker.workerId}: ${msg}`);
     }

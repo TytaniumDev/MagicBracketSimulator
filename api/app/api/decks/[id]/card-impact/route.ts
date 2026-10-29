@@ -4,6 +4,7 @@ import { getCardStatsStore } from '@/lib/card-stats-store-factory';
 import { scoreCards } from '@/lib/card-impact/stats';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import type { DeckCardImpactResponse } from '@shared/types/card-impact';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(body);
   } catch (error) {
     console.error('Failed to get card impact:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/decks/[id]/card-impact' } });
     return errorResponse('Failed to get card impact', 500);
   }
 }

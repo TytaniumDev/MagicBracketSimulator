@@ -8,6 +8,7 @@
  */
 
 import { USE_FIRESTORE as USE_CLOUD_TASKS } from './env';
+import * as Sentry from '@sentry/nextjs';
 
 let tasksClient: InstanceType<typeof import('@google-cloud/tasks').CloudTasksClient> | null = null;
 
@@ -20,6 +21,7 @@ function getClient() {
     tasksClient = new CloudTasksClient();
     return tasksClient;
   } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'cloud-tasks' } });
     console.warn('[CloudTasks] Failed to initialize client:', err);
     return null;
   }
@@ -87,6 +89,7 @@ export async function scheduleRecoveryCheck(jobId: string, delaySeconds = 600): 
       return;
     }
     console.warn(`[CloudTasks] Failed to schedule recovery for job ${jobId}:`, err);
+    Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId } });
   }
 }
 
@@ -106,6 +109,7 @@ export async function cancelRecoveryCheck(jobId: string): Promise<void> {
       return;
     }
     console.warn(`[CloudTasks] Failed to cancel recovery for job ${jobId}:`, err);
+    Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId } });
   }
 }
 
@@ -151,6 +155,7 @@ export async function scheduleLeaseSweep(delaySeconds = 12): Promise<void> {
       },
     });
   } catch (err: unknown) {
+    Sentry.captureException(err, { tags: { component: 'cloud-tasks' } });
     console.error('[CloudTasks] lease-sweep schedule failed:', err);
   }
 }

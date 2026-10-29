@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getFirestore } from '@/lib/firestore-client';
+import * as Sentry from '@sentry/nextjs';
 
 const TOKEN_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 
@@ -113,6 +114,7 @@ export async function GET(request: NextRequest) {
     return htmlResponse(200, 'User Approved',
       `<h2 class="success">User Approved!</h2><p><strong>${data.email}</strong> can now submit simulations on Magic Bracket Simulator.</p>`);
   } catch (error) {
+    Sentry.captureException(error, { tags: { component: 'access-request-approve' } });
     console.error('GET /api/access-requests/approve error:', error);
     return htmlResponse(500, 'Error',
       '<h2 class="error">Something went wrong</h2><p>Failed to approve user. Please try again or approve manually via the Firebase Console.</p>');

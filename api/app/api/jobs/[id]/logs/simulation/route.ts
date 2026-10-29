@@ -3,6 +3,7 @@ import { unauthorizedResponse } from '@/lib/auth';
 import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
 import { uploadSingleSimulationLog, MAX_LOG_BYTES } from '@/lib/log-store';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ uploaded: true }, { status: 201 });
   } catch (error) {
     console.error('POST /api/jobs/[id]/logs/simulation error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/jobs/[id]/logs/simulation' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to upload log', 500);
   }
 }

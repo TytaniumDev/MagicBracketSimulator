@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { optionalAllowedUser, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import { ingestLogs } from '@/lib/log-store';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   } catch (error) {
     console.error('POST /api/jobs/[id]/logs error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/jobs/[id]/logs' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to ingest logs', 500);
   }
 }

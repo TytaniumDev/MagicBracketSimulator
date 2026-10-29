@@ -7,6 +7,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { pushToAllWorkers } from '@/lib/worker-push';
 import { errorResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 const COVERAGE_SIMULATIONS = 100;
 const COVERAGE_PARALLELISM = 1;
@@ -53,9 +54,10 @@ export async function POST(request: NextRequest) {
     await jobStore.initializeSimulations(job.id, containerCount);
 
     // Workers pick up sims via /api/jobs/claim-sim; push-notify for low-latency wake-up.
-    pushToAllWorkers('/notify', {}).catch((err) =>
-      console.warn('[Coverage] Worker notify failed:', err instanceof Error ? err.message : err),
-    );
+    pushToAllWorkers('/notify', {}).catch((err) => {
+      console.warn('[Coverage] Worker notify failed:', err instanceof Error ? err.message : err);
+      Sentry.captureException(err, { tags: { component: 'worker-push' } });
+    });
 
     const deckNames = job.decks.map((d) => d.name);
     console.log(`[Coverage] Created job ${job.id}: ${deckNames.join(' vs ')}`);
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id: job.id, deckNames, source: 'coverage' }, { status: 201 });
   } catch (error) {
     console.error('POST /api/coverage/next-job error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/coverage/next-job' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to create coverage job', 500);
   }
 }

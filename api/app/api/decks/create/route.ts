@@ -5,6 +5,7 @@ import { parseCommanderFromContent } from '@/lib/saved-decks';
 import { getColorIdentity } from '@/lib/scryfall';
 import { fetchDeckAsDck, parseTextAsDck, isMoxfieldUrl, isArchidektUrl, isManaboxUrl, isManaPoolUrl } from '@/lib/ingestion';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * POST /api/decks/create - Create a deck from URL or pasted text
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     );
   } catch (error) {
     console.error('Failed to save deck:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/decks/create' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to save deck', 500);
   }
 }

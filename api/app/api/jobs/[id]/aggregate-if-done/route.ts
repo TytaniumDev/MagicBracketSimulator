@@ -29,6 +29,7 @@ import { aggregateJobResults } from '@/lib/job-store-factory';
 import { errorResponse } from '@/lib/api-response';
 
 import { isLocalMode } from '@/lib/env';
+import * as Sentry from '@sentry/nextjs';
 
 const IS_LOCAL_MODE = isLocalMode();
 
@@ -47,6 +48,7 @@ export async function POST(
     return NextResponse.json({ jobId: id, triggered: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    Sentry.captureException(err, { tags: { component: 'api-route', route: 'POST /api/jobs/[id]/aggregate-if-done' } });
     return errorResponse(`Aggregation failed: ${message}`, 500);
   }
 }

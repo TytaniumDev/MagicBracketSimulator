@@ -3,6 +3,7 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { listAllDecks } from '@/lib/deck-store-factory';
 import { getColorIdentityByKey } from '@/lib/deck-metadata';
 import { errorResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * GET /api/deck-color-identity?names=Deck1,Deck2,...
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Failed to get deck color identity:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/deck-color-identity' } });
     return errorResponse('Failed to get deck color identity', 500);
   }
 }

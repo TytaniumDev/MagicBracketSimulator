@@ -10,6 +10,7 @@ import { slugify } from './saved-decks';
 import { parseCommanderFromContent } from './saved-decks';
 import { uploadPreconsJson } from './gcs-storage';
 import { USE_FIRESTORE } from './env';
+import * as Sentry from '@sentry/nextjs';
 
 const ARCHIDEKT_LIST_URL = 'https://archidekt.com/api/decks/v3/';
 const ARCHIDEKT_OWNER = 'Archidekt_Precons';
@@ -296,6 +297,7 @@ export async function syncPrecons(): Promise<SyncResult> {
             result.added++;
           }
         } catch (err) {
+          Sentry.captureException(err, { tags: { component: 'precon-sync' } });
           const msg = `Failed to sync "${adeck.name}" (${adeck.id}): ${err instanceof Error ? err.message : err}`;
           console.error(`[PreconSync] ${msg}`);
           result.errors.push(msg);
@@ -324,6 +326,7 @@ export async function syncPrecons(): Promise<SyncResult> {
         result.removed += orphanIds.length;
         console.log(`[PreconSync] Removed ${orphanIds.length} orphans`);
       } catch (err) {
+        Sentry.captureException(err, { tags: { component: 'precon-sync' } });
         const msg = `Failed to batch-delete ${orphanIds.length} orphans: ${err instanceof Error ? err.message : err}`;
         console.error(`[PreconSync] ${msg}`);
         result.errors.push(msg);
@@ -340,6 +343,7 @@ export async function syncPrecons(): Promise<SyncResult> {
         result.removed += orphanIds.length;
         console.log(`[PreconSync] Removed ${orphanIds.length} orphans`);
       } catch (err) {
+        Sentry.captureException(err, { tags: { component: 'precon-sync' } });
         const msg = `Failed to delete ${orphanIds.length} orphans: ${err instanceof Error ? err.message : err}`;
         console.error(`[PreconSync] ${msg}`);
         result.errors.push(msg);
@@ -360,6 +364,7 @@ export async function syncPrecons(): Promise<SyncResult> {
       const gcsUrl = await uploadPreconsJson(preconItems);
       console.log(`[PreconSync] Uploaded precons.json to GCS (${preconItems.length} precons): ${gcsUrl}`);
     } catch (err) {
+      Sentry.captureException(err, { tags: { component: 'precon-sync' } });
       // Non-fatal: precons still available via API fallback
       console.error('[PreconSync] Failed to upload precons.json to GCS:', err);
       result.errors.push(`GCS upload failed: ${err instanceof Error ? err.message : err}`);

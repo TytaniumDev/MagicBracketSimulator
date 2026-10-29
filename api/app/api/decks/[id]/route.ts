@@ -91,6 +91,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
       return errorResponse(message, 403);
     }
 
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'DELETE /api/decks/[id]' } });
     return errorResponse(message, 500);
   }
 }

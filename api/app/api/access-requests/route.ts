@@ -6,6 +6,7 @@ import { getFirestore } from '@/lib/firestore-client';
 import { errorResponse } from '@/lib/api-response';
 
 import { isLocalMode } from '@/lib/env';
+import * as Sentry from '@sentry/nextjs';
 
 const IS_LOCAL_MODE = isLocalMode();
 
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
         approveUrl,
       });
     } catch (emailError) {
+      Sentry.captureException(emailError, { tags: { component: 'access-request-email' } });
       console.error('[AccessRequest] Failed to send email notification:', emailError);
     }
 
@@ -94,6 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     );
   } catch (error) {
     console.error('POST /api/access-requests error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/access-requests' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to submit access request', 500);
   }
 }
@@ -129,6 +132,7 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
     return NextResponse.json({ hasRequest: true, status: doc.status });
   } catch (error) {
     console.error('GET /api/access-requests error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/access-requests' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to check access request', 500);
   }
 }

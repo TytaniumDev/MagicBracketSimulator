@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as Sentry from '@sentry/nextjs';
 
 export interface SavedDeck {
   id: string;
@@ -118,6 +119,7 @@ export function listSavedDecks(): SavedDeck[] {
           filename: file,
         });
       } catch (err) {
+        Sentry.captureException(err, { tags: { component: 'saved-decks' } });
         console.error(`Failed to read deck file ${file}:`, err);
         // Skip this file
       }
@@ -128,6 +130,7 @@ export function listSavedDecks(): SavedDeck[] {
     
     return decks;
   } catch (error) {
+    Sentry.captureException(error, { tags: { component: 'saved-decks' } });
     console.error('Failed to list saved decks:', error);
     return [];
   }

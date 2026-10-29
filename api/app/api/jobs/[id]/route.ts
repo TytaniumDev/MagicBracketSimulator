@@ -8,6 +8,7 @@ import { parseBody, updateJobSchema } from '@/lib/validation';
 import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
 import { canJobTransition } from '@shared/types/state-machine';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -25,7 +26,8 @@ async function resolveDeckLinksAndColors(
         const deck = await getDeckById(id);
         links[deckNames[i]] = deck?.link ?? null;
         if (deck?.colorIdentity?.length) colors[deckNames[i]] = deck.colorIdentity;
-      } catch {
+      } catch (err) {
+        Sentry.captureException(err, { tags: { component: 'job-deck-links' } });
         links[deckNames[i]] = null;
       }
     })
@@ -130,6 +132,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(response);
   } catch (error) {
     console.error('GET /api/jobs/[id] error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/jobs/[id]' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to get job', 500);
   }
 }
@@ -172,6 +175,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       try {
         await deleteJobArtifacts(id);
       } catch (err) {
+        Sentry.captureException(err, { tags: { component: 'job-delete-artifacts', jobId: id } });
         console.warn('Failed to delete GCS artifacts:', err);
       }
     }
@@ -179,6 +183,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error('DELETE /api/jobs/[id] error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'DELETE /api/jobs/[id]' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to delete job', 500);
   }
 }
@@ -231,6 +236,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(response);
   } catch (error) {
     console.error('PATCH /api/jobs/[id] error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'PATCH /api/jobs/[id]' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to update job', 500);
   }
 }

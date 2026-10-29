@@ -3,6 +3,7 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getPodRunStore } from '@/lib/pod-run-store-factory';
 import { podRunToResponse } from '@/lib/pod-run-utils';
 import { errorResponse, notFoundResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
     return NextResponse.json(podRunToResponse(run));
   } catch (error) {
     console.error('GET /api/pod-runs/[id] error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/pod-runs/[id]' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to get pod run', 500);
   }
 }

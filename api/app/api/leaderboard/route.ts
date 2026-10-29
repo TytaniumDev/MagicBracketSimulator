@@ -26,6 +26,7 @@ import { getDeckById } from '@/lib/deck-store-factory';
 import { errorResponse } from '@/lib/api-response';
 import { toDeckStats } from '@/lib/deck-stats';
 import type { DeckStats } from '@shared/types/deck';
+import * as Sentry from '@sentry/nextjs';
 
 export interface LeaderboardEntry extends DeckStats {
   deckId: string;
@@ -120,6 +121,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Leaderboard] Failed to fetch leaderboard:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/leaderboard' } });
     return errorResponse('Failed to fetch leaderboard', 500);
   }
 }

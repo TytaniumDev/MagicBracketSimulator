@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
@@ -60,6 +61,7 @@ export async function sendAccessRequestEmail(params: AccessRequestEmailParams): 
     console.log(`[Email] Access request notification sent for ${requesterEmail}`);
     return true;
   } catch (error) {
+    Sentry.captureException(error, { tags: { component: 'email' } });
     console.error('[Email] Failed to send notification:', error);
     return false;
   }

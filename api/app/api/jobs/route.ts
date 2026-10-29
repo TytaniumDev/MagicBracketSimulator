@@ -108,6 +108,7 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
     return NextResponse.json({ jobs: summaries, nextCursor });
   } catch (error) {
     console.error('GET /api/jobs error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/jobs' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to list jobs', 500);
   }
 }
@@ -156,7 +157,8 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
           try {
             const deck = await getDeckById(id);
             return { name: decks[i].name, deck };
-          } catch {
+          } catch (err) {
+            Sentry.captureException(err, { tags: { component: 'job-deck-links' } });
             return { name: decks[i].name, deck: null };
           }
         }),
@@ -189,9 +191,10 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
 
     // Best-effort push to wake any online workers for near-instant pickup.
     // If none are reachable, the next poll (POLL_INTERVAL_MS, ~3s) picks it up.
-    pushToAllWorkers('/notify', {}).catch(err =>
-      console.warn('[Worker Push] Notify failed:', err instanceof Error ? err.message : err),
-    );
+    pushToAllWorkers('/notify', {}).catch(err => {
+      console.warn('[Worker Push] Notify failed:', err instanceof Error ? err.message : err);
+      Sentry.captureException(err, { tags: { component: 'worker-push' } });
+    });
 
     if (isGcpMode()) {
       // Schedule a recovery check at T+10min as defense-in-depth. The
@@ -207,6 +210,7 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     );
   } catch (error) {
     console.error('POST /api/jobs error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/jobs' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to create job', 500);
   }
 }

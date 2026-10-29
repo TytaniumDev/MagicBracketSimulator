@@ -4,6 +4,7 @@ import { claimNextSim } from '@/lib/job-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import { OVERRIDE_HEADER_NAME, encodeOverrideHeader } from '@/lib/override-header';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * GET /api/jobs/claim-sim — Atomically claim the next PENDING simulation.
@@ -44,7 +45,10 @@ export async function GET(request: NextRequest) {
       claimNextSim(workerId, workerName),
       // Best-effort: if this fails we omit the header and the worker just
       // keeps its last-known override. Don't let it orphan a successful claim.
-      workerStore.getMaxConcurrentOverride(workerId).catch(() => undefined),
+      workerStore.getMaxConcurrentOverride(workerId).catch((err) => {
+        Sentry.captureException(err, { tags: { component: 'claim-sim-override', workerId } });
+        return undefined;
+      }),
     ]);
 
     const overrideHeader: Record<string, string> = {};
@@ -55,6 +59,7 @@ export async function GET(request: NextRequest) {
     if (!claimed) return new NextResponse(null, { status: 204, headers: overrideHeader });
     return NextResponse.json(claimed, { headers: overrideHeader });
   } catch (error) {
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/jobs/claim-sim' } });
     return errorResponse(
       error instanceof Error ? error.message : 'Failed to claim sim',
       500,

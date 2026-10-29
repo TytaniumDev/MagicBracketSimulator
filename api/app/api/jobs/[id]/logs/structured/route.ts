@@ -3,6 +3,7 @@ import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
 import { getStructuredLogs } from '@/lib/log-store';
 import * as jobStore from '@/lib/job-store-factory';
 import { errorResponse, notFoundResponse } from '@/lib/api-response';
+import * as Sentry from '@sentry/nextjs';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error('GET /api/jobs/[id]/logs/structured error:', error);
+    Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/jobs/[id]/logs/structured' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to get structured logs', 500);
   }
 }
