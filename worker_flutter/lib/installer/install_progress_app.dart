@@ -101,7 +101,11 @@ class _InstallScreenState extends State<_InstallScreen> {
             const SizedBox(height: 24),
             _StagePanel(stage: 'jre', label: 'Java 17 runtime', last: _last),
             const SizedBox(height: 16),
-            _StagePanel(stage: 'forge', label: 'Forge 2.0.10', last: _last),
+            _StagePanel(
+              stage: 'forge',
+              label: _forgeLabel(widget.installer.wantedForgeVersion),
+              last: _last,
+            ),
             const SizedBox(height: 24),
             if (_error != null)
               Container(
@@ -126,6 +130,10 @@ class _InstallScreenState extends State<_InstallScreen> {
     );
   }
 }
+
+/// "Forge 2.0.15", or plain "Forge" before the manifest says which version.
+String _forgeLabel(String? version) =>
+    version == null ? 'Forge' : 'Forge $version';
 
 class _StagePanel extends StatelessWidget {
   const _StagePanel({
