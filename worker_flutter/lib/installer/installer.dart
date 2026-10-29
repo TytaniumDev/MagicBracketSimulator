@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import 'forge_jar.dart';
 import 'forge_manifest.dart';
 
 /// First-launch installer for the JRE + Forge bundle.
@@ -92,7 +93,7 @@ class Installer {
 
     if (manifest == null) {
       // Offline: accept whatever Forge JAR is present.
-      return _findAnyForgeJar(forge) != null;
+      return findNewestForgeJar(forge) != null;
     }
     final wantedJar = File('$forge/${manifest.jarName}');
     return wantedJar.existsSync();
@@ -142,20 +143,8 @@ class Installer {
   /// run yet AND no JAR exists on disk.
   Future<String?> installedJarName() async {
     if (_lastManifest != null) return _lastManifest!.jarName;
-    return _findAnyForgeJar(await forgePath());
-  }
-
-  String? _findAnyForgeJar(String forgeDir) {
-    final dir = Directory(forgeDir);
-    if (!dir.existsSync()) return null;
-    for (final entry in dir.listSync()) {
-      final name = entry.path.split(Platform.pathSeparator).last;
-      if (name.startsWith('forge-gui-desktop-') &&
-          name.endsWith('-jar-with-dependencies.jar')) {
-        return name;
-      }
-    }
-    return null;
+    final jar = findNewestForgeJar(await forgePath());
+    return jar?.split(Platform.pathSeparator).last;
   }
 
   Future<void> _installJre(String destDir) async {
