@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAdmin, unauthorizedResponse, AuthUser } from '@/lib/auth';
+import { verifyAllowedUser, verifyAdmin, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { getCoverageStore } from '@/lib/coverage-store-factory';
 import { errorResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -9,7 +9,7 @@ import * as Sentry from '@sentry/nextjs';
  */
 export async function GET(request: NextRequest): Promise<NextResponse | Response> {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }

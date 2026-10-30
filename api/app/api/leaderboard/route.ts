@@ -20,7 +20,7 @@
  *   - 5-minute in-memory cache + Cache-Control headers.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { getRatingStore } from '@/lib/rating-store-factory';
 import { getDeckById } from '@/lib/deck-store-factory';
 import { errorResponse } from '@/lib/api-response';
@@ -52,7 +52,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { getCardStatsStore } from '@/lib/card-stats-store-factory';
 import { scoreCards } from '@/lib/card-impact/stats';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
@@ -17,7 +17,7 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }
