@@ -4,6 +4,7 @@
  */
 import { Timestamp } from '@google-cloud/firestore';
 import { getFirestore } from './firestore-client';
+import type { DeckSummary } from './rating-store';
 
 const firestore = getFirestore();
 
@@ -25,6 +26,8 @@ export interface DeckDoc {
   releasedAt?: string | null;
   archidektId?: number | null;
   archidektUpdatedAt?: string | null;
+  /** Set by aggregation once the deck has rated games. */
+  summary?: DeckSummary | null;
 }
 
 export interface DeckListItem {
@@ -42,6 +45,8 @@ export interface DeckListItem {
   /** Precon release date (YYYY-MM-DD); null for user decks. */
   releasedAt?: string | null;
   archidektId?: number | null;
+  /** Win stats, once the deck has rated games. */
+  summary?: DeckSummary | null;
 }
 
 export interface CreateDeckInput {
@@ -75,6 +80,7 @@ function docToDeck(doc: FirebaseFirestore.DocumentSnapshot): DeckDoc | null {
     releasedAt: data.releasedAt ?? null,
     archidektId: data.archidektId ?? null,
     archidektUpdatedAt: data.archidektUpdatedAt ?? null,
+    summary: data.summary ?? null,
   };
 }
 
@@ -85,7 +91,7 @@ export async function listAllDecks(): Promise<DeckListItem[]> {
   const snapshot = await decksCollection
     .orderBy('isPrecon', 'desc')
     .orderBy('name')
-    .select('name', 'filename', 'primaryCommander', 'colorIdentity', 'isPrecon', 'link', 'ownerId', 'ownerEmail', 'createdAt', 'setName', 'releasedAt', 'archidektId')
+    .select('name', 'filename', 'primaryCommander', 'colorIdentity', 'isPrecon', 'link', 'ownerId', 'ownerEmail', 'createdAt', 'setName', 'releasedAt', 'archidektId', 'summary')
     .get();
 
   return snapshot.docs
@@ -106,6 +112,7 @@ export async function listAllDecks(): Promise<DeckListItem[]> {
         setName: data.setName ?? null,
         releasedAt: data.releasedAt ?? null,
         archidektId: data.archidektId ?? null,
+        summary: data.summary ?? null,
       };
     });
 }

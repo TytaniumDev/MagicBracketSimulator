@@ -4,6 +4,7 @@
  * when its docs carry many index entries, as cardStats docs do (one map
  * entry per card).
  */
+import { FieldValue } from '@google-cloud/firestore';
 import type { DataWipeStore, LeftoverKind } from './data-wipe-store';
 import { getFirestore } from './firestore-client';
 import { deckStatsOfKind } from './deck-stats-refs';
@@ -11,7 +12,7 @@ import { deckStatsOfKind } from './deck-stats-refs';
 const firestore = getFirestore();
 
 /** The query whose results are leftovers of each kind. */
-function leftoversQuery(kind: Exclude<LeftoverKind, 'customDecks'>): FirebaseFirestore.Query {
+function leftoversQuery(kind: Exclude<LeftoverKind, 'customDecks' | 'deckSummaries'>): FirebaseFirestore.Query {
   // Simulations live in a subcollection per job, and survive their parent
   // job doc if it was deleted first, so they're found across all jobs.
   if (kind === 'simulations') return firestore.collectionGroup('simulations');
@@ -31,7 +32,7 @@ const LEGACY_COLLECTIONS: Partial<Record<LeftoverKind, string[]>> = {
   cardStats: ['cardStats'],
 };
 
-async function leftoverRefs(kind: LeftoverKind, limit: number): Promise<FirebaseFirestore.DocumentReference[]> {
+async function leftoverRefs(kind: Exclude<LeftoverKind, 'deckSummaries'>, limit: number): Promise<FirebaseFirestore.DocumentReference[]> {
   if (kind === 'customDecks') {
     // Filter in code rather than with `isPrecon == false`, which would miss
     // decks saved without the field.
@@ -48,6 +49,17 @@ async function leftoverRefs(kind: LeftoverKind, limit: number): Promise<Firebase
   return refs;
 }
 
+/** Clear the win stats copied onto deck docs (see DeckSummary). */
+async function clearDeckSummaries(limit: number): Promise<number> {
+  const snapshot = await firestore.collection('decks').where('summary.gamesPlayed', '>', 0).select().limit(limit).get();
+  if (snapshot.empty) return 0;
+  const writer = firestore.bulkWriter();
+  const updates = Promise.all(snapshot.docs.map((doc) => writer.update(doc.ref, { summary: FieldValue.delete() })));
+  await writer.close();
+  await updates;
+  return snapshot.size;
+}
+
 export const firestoreDataWipeStore: DataWipeStore = {
   async listJobIds(limit) {
     // No orderBy: ordering by createdAt would skip job docs without one.
@@ -56,6 +68,7 @@ export const firestoreDataWipeStore: DataWipeStore = {
   },
 
   async deleteLeftovers(kind, limit) {
+    if (kind === 'deckSummaries') return clearDeckSummaries(limit);
     const refs = await leftoverRefs(kind, limit);
     if (refs.length === 0) return 0;
     const writer = firestore.bulkWriter();

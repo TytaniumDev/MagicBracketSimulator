@@ -11,6 +11,7 @@ export const LEFTOVER_KINDS = [
   'simulations',
   'podRuns',
   'ratings',
+  'deckSummaries',
   'cardStats',
   'idempotencyKeys',
   'customDecks',
@@ -26,7 +27,8 @@ export interface DataWipeStore {
 
   /**
    * Delete up to `limit` records of one kind in one batch, for records that
-   * outlive their jobs (e.g. simulations under an already deleted job).
+   * outlive their jobs (e.g. simulations under an already deleted job). For
+   * `deckSummaries` that means clearing the summary on precon deck docs.
    * Returns how many were deleted; 0 means none are left.
    */
   deleteLeftovers(kind: LeftoverKind, limit: number): Promise<number>;

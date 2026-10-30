@@ -245,6 +245,10 @@ no lifecycle rule: raw logs are kept forever.
      `pair_games` column), writes them back and sets the job's
      `appliedStats.ratings` (SQLite: `jobs.ratings_applied`), so re-running
      aggregation or `POST /api/admin/backfill-ratings` never double counts.
+     The same transaction copies each rated deck's `summary: { gamesPlayed,
+     wins, winRate }` onto its `decks/{deckId}` doc, so `GET /api/decks`
+     lists win stats without reading any stats docs (SQLite joins the
+     `ratings` rows in at read time). A data wipe clears these summaries.
      There is no per-game record; per-game facts stay in `structured.json`.
     - `processJobForCardStats` (`api/lib/card-impact/service.ts`) — runs
      `parseGameCards` on the raw logs already loaded in step 1 (no extra log

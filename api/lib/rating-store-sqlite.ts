@@ -2,7 +2,7 @@
  * SQLite implementation of RatingStore (LOCAL mode). Pair game counts live
  * in `ratings.pair_games` (JSON); `jobs.ratings_applied` marks applied jobs.
  */
-import { addPodPairGames, pairKey, type RatingStore, type LeaderboardOptions } from './rating-store';
+import { addPodPairGames, deckSummary, pairKey, type DeckSummary, type RatingStore, type LeaderboardOptions } from './rating-store';
 import type { DeckRating } from './types';
 
 function getDb() {
@@ -153,3 +153,14 @@ export const sqliteRatingStore: RatingStore = {
     return counts;
   },
 };
+
+/**
+ * Every rated deck's summary, by deck id. The local deck list joins these in
+ * at read time; Firestore keeps a copy on each deck doc instead.
+ */
+export function listDeckSummaries(): Map<string, DeckSummary> {
+  const rows = getDb()
+    .prepare('SELECT deck_id, games_played, wins FROM ratings WHERE games_played > 0')
+    .all() as { deck_id: string; games_played: number; wins: number }[];
+  return new Map(rows.map((r) => [r.deck_id, deckSummary({ gamesPlayed: r.games_played, wins: r.wins })]));
+}

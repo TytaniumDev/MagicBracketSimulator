@@ -45,6 +45,21 @@ export interface RatingStore {
   getPairGameCounts(): Promise<Map<string, number>>;
 }
 
+/**
+ * A deck's headline stats, copied onto the deck itself so a list of decks
+ * needs no stats reads. `winRate` is stored, not derived, so decks can be
+ * sorted by it.
+ */
+export interface DeckSummary {
+  gamesPlayed: number;
+  wins: number;
+  winRate: number;
+}
+
+export function deckSummary({ gamesPlayed, wins }: Pick<DeckRating, 'gamesPlayed' | 'wins'>): DeckSummary {
+  return { gamesPlayed, wins, winRate: gamesPlayed > 0 ? wins / gamesPlayed : 0 };
+}
+
 /** Canonical key for a pair of deck IDs (alphabetically sorted). */
 export function pairKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;

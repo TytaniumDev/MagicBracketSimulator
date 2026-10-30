@@ -5,9 +5,10 @@
  * holding its DeckRating fields plus `pairGames`, a map of other deck id to
  * games played together, which pair coverage reads instead of one doc per
  * game. A job is applied once: its doc records `appliedStats.ratings`.
+ * Each rated deck's doc also gets a `summary` (see DeckSummary).
  */
 import { Timestamp } from '@google-cloud/firestore';
-import { addPodPairGames, pairKey, type RatingStore, type LeaderboardOptions } from './rating-store';
+import { addPodPairGames, deckSummary, pairKey, type RatingStore, type LeaderboardOptions } from './rating-store';
 import type { DeckRating } from './types';
 import { getFirestore } from './firestore-client';
 import { deckIdOfStats, deckStatsOfKind, deckStatsRef } from './deck-stats-refs';
@@ -71,10 +72,13 @@ export const firestoreRatingStore: RatingStore = {
   async applyJob({ jobId, deckIds, gameCount, update }): Promise<boolean> {
     const jobRef = firestore.collection('jobs').doc(jobId);
     const refs = deckIds.map((id) => deckStatsRef(id, 'rating'));
+    const deckRefs = deckIds.map((id) => firestore.collection('decks').doc(id));
 
     return firestore.runTransaction(async (tx) => {
-      const [jobSnap, ...snaps] = await tx.getAll(jobRef, ...refs);
+      const [jobSnap, ...rest] = await tx.getAll(jobRef, ...refs, ...deckRefs);
       if (!jobSnap.exists || jobSnap.get('appliedStats.ratings') === true) return false;
+      const snaps = rest.slice(0, refs.length);
+      const deckSnaps = rest.slice(refs.length);
 
       const stored = snaps.map((s, i) =>
         s.exists && s.get('gamesPlayed') > 0 ? docToRating(deckIds[i]!, s.data()!) : null,
@@ -90,6 +94,8 @@ export const firestoreRatingStore: RatingStore = {
         const pairGames = pairCounts.get(deckIds[i]!);
         const rating = next?.[i];
         tx.set(ref, rating ? { ...ratingToDoc(rating), pairGames } : { kind: 'rating', pairGames }, { merge: true });
+        // Update, not set: a deck deleted since the job ran isn't recreated.
+        if (rating && deckSnaps[i]!.exists) tx.update(deckRefs[i]!, { summary: deckSummary(rating) });
       });
       tx.update(jobRef, { 'appliedStats.ratings': true });
       return true;

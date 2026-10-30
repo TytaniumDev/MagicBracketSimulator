@@ -8,6 +8,8 @@ import { getColorIdentityByKey } from './deck-metadata';
 import * as firestoreDecks from './firestore-decks';
 import { lruTouch, lruEvictIfFull } from './lru';
 import { normalizeDckForForge } from './forge-card-name';
+import type { DeckSummary } from './rating-store';
+import { listDeckSummaries } from './rating-store-sqlite';
 
 import { USE_FIRESTORE, isGcpMode } from './env';
 import * as Sentry from '@sentry/nextjs';
@@ -36,6 +38,8 @@ export interface DeckListItem {
   /** Precon release date (YYYY-MM-DD); null for user decks. */
   releasedAt?: string | null;
   archidektId?: number | null;
+  /** Win stats, once the deck has rated games. */
+  summary?: DeckSummary | null;
 }
 
 export interface CreateDeckInput {
@@ -114,7 +118,10 @@ export async function listAllDecks(): Promise<DeckListItem[]> {
     createdAt: '',
   }));
 
-  return [...preconItems, ...savedItems].sort((a, b) => a.name.localeCompare(b.name));
+  const summaries = listDeckSummaries();
+  return [...preconItems, ...savedItems]
+    .map((deck) => ({ ...deck, summary: summaries.get(deck.id) ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Deck name and .dck content, with card names Forge can load. */
@@ -223,6 +230,7 @@ export async function getDeckById(id: string): Promise<DeckListItem | null> {
         setName: deck.setName ?? null,
         releasedAt: deck.releasedAt ?? null,
         archidektId: deck.archidektId ?? null,
+        summary: deck.summary ?? null,
       };
     }
   } else {

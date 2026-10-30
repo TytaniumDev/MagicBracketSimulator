@@ -73,7 +73,7 @@ write goes through the API with the Admin SDK (`firestore.rules`).
 | `jobs/{jobId}` | One 4-deck pod: `seats` `[{deckId, name, link, colorIdentity}]`, status, sim counters, `results` `{gamesPlayed, seats: [{wins, avgWinTurn}]}` in seat order, `podRunId` |
 | `jobs/{jobId}/simulations/{simId}` | One sim: state (PENDING / RUNNING / COMPLETED / FAILED / CANCELLED), `workerId`, `leaseExpiresAt`, winners |
 | `podRuns/{runId}` | A saved run of several pods with its own `standings` |
-| `decks/{deckId}` | Deck metadata and `.dck` content (precons and imports); `excluded: true` hides it from the picker and auto-coverage. A changed list is a new deck; there are no versions. |
+| `decks/{deckId}` | Deck metadata and `.dck` content (precons and imports); `excluded: true` hides it from the picker and auto-coverage; `summary` (games, wins, win rate) is copied from its rating at aggregation. A changed list is a new deck; there are no versions. |
 | `decks/{deckId}/stats/rating`, `.../stats/cards` | TrueSkill and win counters, and per-card impact counters, built at aggregation |
 | `workers/{workerId}` | Durable worker settings only: owner, push URL, concurrency override |
 | `users/{uid}` | Access record, `status: requested \| allowed`. Not readable by clients. |

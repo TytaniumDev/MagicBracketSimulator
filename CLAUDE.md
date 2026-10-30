@@ -158,7 +158,7 @@ Routes live under `api/app/api/`. Key endpoints:
 - `POST /api/admin/sweep-stale-jobs` — Stale sweeper (Cloud Scheduler); other `admin/` routes backfill ratings and card stats
 - `GET /api/leaderboard` — Deck ratings
 - `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Saved pod runs (one job per 4-deck pod); `?jobId=` finds the run a job belongs to
-- `GET /api/decks` — Every deck plus `excludedDeckIds` (decks hidden from the picker and auto-coverage)
+- `GET /api/decks` — Every deck (with its win `summary` once rated) plus `excludedDeckIds` (decks hidden from the picker and auto-coverage)
 - `GET /api/decks/:id` — Deck page data: metadata, parsed decklist, results
 - `PATCH /api/decks/:id` — Exclude a deck from selection or include it again (admin, `{ excluded }`)
 - `GET /api/decks/:id/card-impact` — Per-card impact scores (most game-swinging cards), from counters built at aggregation

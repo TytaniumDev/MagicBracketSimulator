@@ -1,6 +1,7 @@
 /**
  * SQLite implementation of DataWipeStore (LOCAL mode). User decks are .dck
- * files on disk; idempotency keys live on the job rows, so they go with them.
+ * files on disk; idempotency keys live on the job rows, so they go with them,
+ * and deck summaries are read from the ratings table, so they go with it.
  */
 import type { DataWipeStore, LeftoverKind } from './data-wipe-store';
 import { listSavedDecks, deleteSavedDeck } from './saved-decks';
@@ -41,7 +42,7 @@ export const sqliteDataWipeStore: DataWipeStore = {
 
   async deleteLeftovers(kind, limit) {
     if (kind === 'podRuns') return deletePodRuns(limit);
-    if (kind === 'idempotencyKeys') return 0;
+    if (kind === 'idempotencyKeys' || kind === 'deckSummaries') return 0;
     if (kind === 'customDecks') {
       const decks = listSavedDecks().slice(0, limit);
       for (const deck of decks) deleteSavedDeck(deck.filename);
