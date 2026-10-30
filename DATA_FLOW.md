@@ -395,17 +395,24 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 
 **Job creation flow (`POST /api/coverage/next-job`):**
 
-- Auth: worker secret only (no Firebase auth)
+- Auth: an allowed user's Firebase ID token (the desktop worker's signed-in user)
 - Guard: returns 200 with `{ reason }` if no work available. Possible reasons:
   `disabled`, `active-job-exists`, `all-pairs-covered`, `deck-resolution-failed`
 - Creates a job with `simulations: 100`, `parallelism: 1`,
   `source: 'coverage'`
 - Job enters the normal queue — same pipeline as user-created jobs
 
-**Worker integration (`worker.ts` polling loop):**
+**Worker integration (`worker_flutter/lib/worker/coverage_requester.dart`):**
 
-- When no user jobs are queued, worker calls `POST /api/coverage/next-job`
-- If a coverage job is created, worker immediately polls to pick it up
+- When a claim finds no work and the worker has a free slot, `WorkerEngine`
+  asks `CoverageRequester` for a coverage job
+- If a coverage job is created, the engine claims its sims straight away
+- Asks that create nothing are throttled to one per 5 minutes per worker
+  (each ask costs Firestore reads); the ask right after a created job goes
+  through at once
+- The PENDING listener only fires when sims change, so the engine also runs
+  its claim loop every 5 minutes; that tick is how an idle worker asks again
+  after the current coverage job finishes
 - User jobs always take priority — coverage only runs when idle
 
 **Job `source` field:**
@@ -422,7 +429,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | `GET /api/coverage/config` | Any authenticated user | Read coverage config |
 | `PATCH /api/coverage/config` | Admin only | Toggle enabled, set target |
 | `GET /api/coverage/status` | Any authenticated user | Pair coverage progress |
-| `POST /api/coverage/next-job` | Worker secret | Generate and queue next pod |
+| `POST /api/coverage/next-job` | Allowed user (desktop worker) | Generate and queue next pod |
 
 **Frontend (Leaderboard page):**
 
@@ -437,7 +444,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 
 | Layer                    | Processing                                                                                                                                                         | Network (data)                                                                                                                               |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Simulation container** | Writes raw Forge log to stdout                                                                                                                                     | None                                                                                                                                         |
+| **Forge**                | Writes raw Forge log to stdout                                                                                                                                     | None                                                                                                                                         |
 | **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory; retries failed containers locally (2 attempts, 30s backoff)                             | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
 | **API**                  | Stores raw logs in Firestore/SQLite; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED; cancels Cloud Tasks | ← PATCH (status), ← POST (raw log); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
 | **Frontend**             | Listens to Firestore `onSnapshot` (GCP) or polls REST via TanStack Query (local); fetches structured/raw/condensed only when needed                                                                   | ← **Firestore** onSnapshot (GCP) or REST polling (local); ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                         |
@@ -466,6 +473,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Desktop worker API calls | `worker_flutter/test/worker/sim_api_test.dart`, `worker_flutter/test/worker/worker_engine_test.dart` | Claim with `lease=1`, lease and PATCH bodies; engine uploads the log before reporting, reports CANCELLED on a cancelled lease and nothing on a lost one |
 | Worker presence | `api/test/worker-presence.test.ts`, `worker_flutter/test/worker/worker_presence_test.dart` | Which entries count as online (stale window), mapping to `WorkerInfo`; desktop writes on connect/reconnect and each tick, arms the onDisconnect delete, removes on stop |
 | Flutter log upload | `worker_flutter/test/worker/log_uploader_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
+| Auto-coverage asks | `worker_flutter/test/worker/coverage_requester_test.dart`, `worker_flutter/test/worker/worker_engine_test.dart` | Ask throttling, immediate re-ask after a created job, failures never throw; idle engine asks, claims the new job's sims, and asks again on its tick |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
 | Job results per seat | `api/lib/job-results.test.ts`, `api/lib/condenser/deck-match.test.ts`, `api/test/job-decks.test.ts` | Wins and average winning turn per seat, the same deck in two seats, unmatched winners; `seatOfPlayer`; seats filled at job creation and decklists read by seat |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |

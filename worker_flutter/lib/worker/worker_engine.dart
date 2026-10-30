@@ -9,6 +9,7 @@ import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
 import '../telemetry.dart';
+import 'coverage_requester.dart';
 import 'job_loader.dart';
 import 'log_uploader.dart';
 import 'sim_api.dart';
@@ -59,6 +60,8 @@ class EngineState {
 ///     API)
 ///   - one SimLeaseKeeper per running sim, which also delivers cancellation
 ///   - the SimRunner (Java child process spawning)
+///   - the CoverageRequester, which asks for an auto-coverage job when a
+///     claim finds no work
 ///   - a counter on `config.maxCapacity` to bound concurrency
 ///
 /// Lifecycle: [start] kicks everything off. [stop] cancels active sims and
@@ -71,6 +74,7 @@ class WorkerEngine {
     SimRunner? runnerOverride,
     ApiClient? apiClient,
     this.leaseInterval = const Duration(seconds: 60),
+    this.coverageInterval = const Duration(minutes: 5),
   }) : _runner =
            runnerOverride ??
            SimRunner(javaPath: config.javaPath, forgePath: config.forgePath),
@@ -86,6 +90,12 @@ class WorkerEngine {
 
   /// How often each running sim's lease is extended.
   final Duration leaseInterval;
+
+  /// The least time between coverage asks that create nothing, and how
+  /// often an idle engine re-checks for work. The PENDING listener only
+  /// fires when sims change, so without this tick an idle worker would
+  /// never ask again once the current coverage job finishes.
+  final Duration coverageInterval;
   final SimRunner _runner;
   final WorkerPresence _presence;
   final ApiClient _api;
@@ -99,6 +109,10 @@ class WorkerEngine {
     api: _api,
     decksPath: config.decksPath,
   );
+  late final CoverageRequester _coverage = CoverageRequester(
+    api: _api,
+    minInterval: coverageInterval,
+  );
 
   final _stateSubject = BehaviorSubject<EngineState>.seeded(
     EngineState.initial(),
@@ -107,6 +121,7 @@ class WorkerEngine {
   EngineState get currentState => _stateSubject.value;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _pendingSub;
+  Timer? _idleTick;
 
   /// Holds per-sim cancellation completers, so [stop] or a cancelled lease
   /// can ask the corresponding sim runner to terminate.
@@ -181,12 +196,16 @@ class WorkerEngine {
         extra: {'phase': 'pending_listener_setup'},
       );
     }
+
+    _idleTick = Timer.periodic(coverageInterval, (_) => _tryClaimLoop());
   }
 
   Future<void> stop() async {
     _stopped = true;
     await _pendingSub?.cancel();
     _pendingSub = null;
+    _idleTick?.cancel();
+    _idleTick = null;
     // Signal any running sims to terminate.
     for (final c in _cancelByComposite.values) {
       if (!c.isCompleted) c.complete();
@@ -237,7 +256,8 @@ class WorkerEngine {
   }
 
   /// Claim and start sims until we hit capacity or a claim returns
-  /// NoneAvailable. Only called from [_tryClaimLoop].
+  /// NoneAvailable and no coverage job was created. Only called from
+  /// [_tryClaimLoop].
   Future<void> _claimUntilFullOrEmpty() async {
     while (_semaphoreActive < _semaphoreCapacity && !_stopped) {
       final ClaimResult result;
@@ -262,7 +282,9 @@ class WorkerEngine {
             TelemetryCategory.engineRuntime,
             'claim: none available',
           );
-          return;
+          // Nothing queued: ask for a coverage job, and claim its sims
+          // straight away if one was created.
+          if (!await _coverage.maybeRequest()) return;
         case ClaimSucceeded(:final sim):
           AppLog.event(
             TelemetryCategory.engineRuntime,
