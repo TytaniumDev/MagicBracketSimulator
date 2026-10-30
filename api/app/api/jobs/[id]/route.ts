@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAllowedUser, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobCompletely } from '@/lib/job-delete';
 import { resolveJobDecks } from '@/lib/job-decks';
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const isWorker = isWorkerRequest(request) || (wantsWorkerView && (await isWorkerOrAllowlistedUser(request)));
   if (!isWorker) {
     try {
-      await verifyAuth(request);
+      await verifyAllowedUser(request);
     } catch {
       return unauthorizedResponse();
     }

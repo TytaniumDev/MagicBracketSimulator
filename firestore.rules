@@ -2,39 +2,43 @@ rules_version='2'
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Clients only read. Every write (jobs, simulations, decks, workers,
+    // Clients only read, and only approved users: their users/{uid} access
+    // record says 'allowed' (admins and ALLOWED_EMAILS accounts get one from
+    // GET /api/me). Decks and workers carry owner emails, so nothing is
+    // readable signed out. Every write (jobs, simulations, decks, workers,
     // users) goes through the API with the Admin SDK, which bypasses these
     // rules. Worker presence lives in the Realtime Database
     // (database.rules.json).
+    function isApproved() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'allowed';
+    }
 
-    // Jobs and their per-simulation tracking: public reads.
+    // Jobs and their per-simulation tracking.
     match /jobs/{jobId} {
-      allow read: if true;
+      allow read: if isApproved();
       allow write: if false;
 
       match /simulations/{simId} {
-        allow read: if true;
+        allow read: if isApproved();
         allow write: if false;
       }
     }
 
-    // Pod runs: public reads (the pod run page listens for standings
-    // changes).
+    // Pod runs (the pod run page listens for standings changes).
     match /podRuns/{runId} {
-      allow read: if true;
+      allow read: if isApproved();
       allow write: if false;
     }
 
-    // Decks: public reads.
     match /decks/{deckId} {
-      allow read: if true;
+      allow read: if isApproved();
       allow write: if false;
     }
 
-    // Workers: public reads (durable worker settings; online status is
-    // Realtime Database presence).
+    // Durable worker settings; online status is Realtime Database presence.
     match /workers/{workerId} {
-      allow read: if true;
+      allow read: if isApproved();
       allow write: if false;
     }
 
@@ -42,11 +46,11 @@ service cloud.firestore {
     // PENDING listener. Firestore looks up rules by the top-level path for
     // collection-group queries, so the nested match above doesn't apply.
     match /{path=**}/simulations/{simId} {
-      allow read: if true;
+      allow read: if isApproved();
     }
 
     // Catch-all: deny everything else, including users/{uid} access records
-    // (read only by the API).
+    // (read only by the API and by the rule check above).
     match /{document=**} {
       allow read, write: if false;
     }

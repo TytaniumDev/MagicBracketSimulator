@@ -78,3 +78,23 @@ export async function approveUser(uid: string): Promise<UserAccess | null> {
   }
   return before;
 }
+
+/**
+ * Make sure a pre-approved account (an admin or an ALLOWED_EMAILS address)
+ * has an allowed access record, so the Firestore rules, which only see
+ * users/{uid}, let it read. Writes only when the record is missing or not
+ * yet allowed.
+ */
+export async function ensureAllowed(uid: string, email: string): Promise<void> {
+  const ref = usersCollection().doc(uid);
+  await getFirestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.get('status') === 'allowed') return;
+    const approvedAt = Timestamp.now();
+    if (snap.exists) {
+      tx.update(ref, { status: 'allowed', approvedAt });
+    } else {
+      tx.create(ref, { email, displayName: null, message: null, status: 'allowed', requestedAt: null, approvedAt });
+    }
+  });
+}

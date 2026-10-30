@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveJobSeats } from '@/lib/job-seats';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
@@ -73,7 +73,7 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
  */
 export async function GET(request: NextRequest): Promise<NextResponse | Response> {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }

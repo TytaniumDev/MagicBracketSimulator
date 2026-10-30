@@ -6,7 +6,6 @@ import { useDeckLibrary } from '../hooks/useDeckLibrary';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
-import { RequestAccessCard } from '../components/RequestAccessCard';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
@@ -24,7 +23,7 @@ interface DeckOption {
 }
 
 export default function Home() {
-  const { user, isAllowed, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   // Show loading state while auth resolves
   if (loading) {
@@ -44,15 +43,6 @@ export default function Home() {
           Sign in with your Google account to submit Commander bracket simulations.
         </p>
         <LoginButton />
-      </div>
-    );
-  }
-
-  // Signed in but not on allowlist: show access request card
-  if (isAllowed === false) {
-    return (
-      <div className="max-w-4xl mx-auto py-8">
-        <RequestAccessCard />
       </div>
     );
   }

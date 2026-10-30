@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
 import { LoginButton } from './components/LoginButton';
+import { RequestAccessCard } from './components/RequestAccessCard';
 import { useAuth } from './contexts/AuthContext';
 import Browse from './pages/Browse';
 import DeckPage from './pages/DeckPage';
@@ -36,20 +37,20 @@ function Header() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            to="/leaderboard"
-            className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
-          >
-            Rankings
-          </Link>
-          <Link
-            to="/decks"
-            className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
-          >
-            Decks
-          </Link>
           {!loading && user && isAllowed && (
             <>
+              <Link
+                to="/leaderboard"
+                className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
+              >
+                Rankings
+              </Link>
+              <Link
+                to="/decks"
+                className="text-sm text-gray-400 hover:text-gray-300 font-medium transition-colors"
+              >
+                Decks
+              </Link>
               <Link
                 to="/submit"
                 className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
@@ -64,14 +65,6 @@ function Header() {
               </Link>
             </>
           )}
-          {!loading && user && isAllowed === false && (
-            <Link
-              to="/submit"
-              className="px-3 py-1 text-sm bg-amber-600/80 text-amber-100 rounded-full hover:bg-amber-600 font-medium transition-colors"
-            >
-              Request Access
-            </Link>
-          )}
           <LoginButton />
         </div>
       </div>
@@ -80,7 +73,7 @@ function Header() {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, isAllowed, loading } = useAuth();
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 antialiased">
@@ -116,18 +109,25 @@ export default function App() {
                 </div>
               }
             >
-              <Routes>
-                <Route path="/" element={<Browse />} />
-                <Route path="/submit" element={<Home />} />
-                <Route path="/jobs/:id" element={<JobStatus />} />
-                <Route path="/decks" element={<Decks />} />
-                <Route path="/decks/:id" element={<DeckPage />} />
-                <Route path="/pods" element={<PodRun />} />
-                <Route path="/pods/:id" element={<PodRun />} />
-                <Route path="/worker-setup" element={<WorkerSetup />} />
-                <Route path="/leaderboard" element={<Leaderboard />} />
-                <Route path="/sentry-example-page" element={<SentryExamplePage />} />
-              </Routes>
+              {/* Only approved users can read anything (see firestore.rules). */}
+              {!isAllowed ? (
+                <div className="py-8">
+                  <RequestAccessCard />
+                </div>
+              ) : (
+                <Routes>
+                  <Route path="/" element={<Browse />} />
+                  <Route path="/submit" element={<Home />} />
+                  <Route path="/jobs/:id" element={<JobStatus />} />
+                  <Route path="/decks" element={<Decks />} />
+                  <Route path="/decks/:id" element={<DeckPage />} />
+                  <Route path="/pods" element={<PodRun />} />
+                  <Route path="/pods/:id" element={<PodRun />} />
+                  <Route path="/worker-setup" element={<WorkerSetup />} />
+                  <Route path="/leaderboard" element={<Leaderboard />} />
+                  <Route path="/sentry-example-page" element={<SentryExamplePage />} />
+                </Routes>
+              )}
             </Sentry.ErrorBoundary>
           </main>
         </>
