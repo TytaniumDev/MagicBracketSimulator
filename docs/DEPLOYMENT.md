@@ -36,7 +36,7 @@ firebase deploy --only hosting
 ```
 
 **CI/CD:**
-Merges to `main` trigger a GitHub Actions workflow that runs tests and deploys to Firebase Hosting. Ensure **FIREBASE_TOKEN** is configured in GitHub Secrets.
+Merges to `main` trigger `deploy.yml`, which deploys the frontend to Firebase Hosting plus the Firestore and Realtime Database rules. It authenticates to GCP with workload identity (`GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`) loaded from Doppler. The API rolls out through Firebase App Hosting.
 
 ---
 
@@ -88,9 +88,9 @@ When prompted, type `gcloud` to use the legacy flow. The script will install `jq
 
 ### What the Worker Does
 
-- Loads runtime config from Secret Manager (API_URL, GCS_BUCKET, PUBSUB_SUBSCRIPTION, WORKER_SECRET)
-- Subscribes to Pub/Sub for job messages
-- Runs Forge simulations and POSTs results back to the API
+- Loads runtime config from Secret Manager (API_URL, WORKER_SECRET)
+- Polls `GET /api/jobs/claim-sim` for the next sim and holds its lease while it runs
+- Runs Forge simulations, uploads each sim's raw log and reports its status to the API
 - Receives push commands from the API (config overrides, cancellation, job notifications, drain control) via port 9090
 
 ### Credentials
@@ -112,7 +112,7 @@ The `setup-worker.sh` script places a service account key at `worker/sa.json` an
 - **SSH/Tailscale access:** The worker accepts inbound push commands from the API on
   port 9090 (config updates, cancellation, job notifications). In local mode this is
   localhost-only; in GCP mode it uses VPC-internal networking. The worker also makes
-  outbound connections to Pub/Sub, API, and Secret Manager.
+  outbound connections to the API and Secret Manager.
 
 ### Auto-Deploy with Watchtower
 
@@ -153,14 +153,14 @@ The worker can be configured via environment variables (in `.env` or Secret Mana
 | Variable | Description | Default / Example |
 |----------|-------------|-------------------|
 | `GOOGLE_CLOUD_PROJECT` | GCP Project ID (triggers GCP mode if set) | `magic-bracket-simulator` |
-| `API_URL` | Base URL of the API | `http://localhost:3000` or Cloud Run URL |
+| `API_URL` | Base URL of the API | `http://localhost:3000` or `https://api--magic-bracket-simulator.us-central1.hosted.app` |
 | `WORKER_SECRET` | Shared secret for worker authentication | `some-secret-string` |
-| `PUBSUB_SUBSCRIPTION` | Pub/Sub subscription name (GCP mode only) | `job-created-worker` |
 | `SIMULATION_IMAGE` | Docker image for the simulation container | `ghcr.io/tytaniumdev/magicbracketsimulator/simulation:latest` |
 | `WORKER_NAME` | Display name for the worker (visible in UI) | Hostname |
 | `WORKER_ID` | Unique ID for the worker (auto-generated if unset) | `worker-uuid-1234` |
 | `WORKER_OWNER_EMAIL` | Contact email for the worker operator | `admin@example.com` |
-| `POLL_INTERVAL_MS` | Polling interval in ms (Local mode only) | `3000` |
+| `POLL_INTERVAL_MS` | Poll interval in ms while work is found | `3000` |
+| `MAX_IDLE_POLL_MS` | Longest poll interval while idle (backs off up to this) | `60000` |
 | `JOBS_DIR` | Local directory for temporary job files | `/tmp/mbs-jobs` |
 | `WORKER_API_PORT` | Port for the worker's push-based HTTP API | `9090` |
 | `WORKER_API_URL` | Externally reachable URL for the worker API (reported via heartbeat) | `http://<vm-internal-ip>:9090` |

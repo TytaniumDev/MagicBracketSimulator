@@ -1,327 +1,178 @@
 # Magic Bracket Simulator — Architecture Overview
-Last Updated: 2026-02-19
+Last Updated: 2026-10-30
 
-This document describes the system architecture, including the Worker + Simulation split design for parallel, resource-aware simulation execution.
-
----
-
-## Deployment Modes
-
-The system supports two deployment modes, auto-detected by the `GOOGLE_CLOUD_PROJECT` env var:
-
-| Mode | Storage | Queue | Auth | Worker Transport |
-|------|---------|-------|------|------------------|
-| **Local** (env unset) | SQLite + filesystem | HTTP polling | None | `GET /api/jobs/claim-sim` |
-| **GCP** (env set) | Firestore + Cloud Storage | HTTP polling | Firebase Auth | `GET /api/jobs/claim-sim` |
+How the pieces fit together today. `DATA_FLOW.md` (repo root) is the
+detailed, step-by-step source of truth for dispatch, reporting and
+aggregation; this page is the map.
 
 ---
 
-## GCP Cloud Architecture (Production)
+## The pieces
 
 ```mermaid
 flowchart TB
-    subgraph gcp [GCP Cloud]
-        AppHosting[App Hosting<br/>Next.js API]
-        Firestore[(Firestore)]
-        GCS[(Cloud Storage)]
-        FirebaseAuth[Firebase Auth]
-        FirebaseHosting[Firebase Hosting<br/>React Frontend]
-        AppHosting --> Firestore
-        AppHosting --> GCS
-        FirebaseAuth --> AppHosting
+    User((User)) --> Frontend
+
+    subgraph firebase [Firebase / GCP project magic-bracket-simulator]
+        Frontend[Firebase Hosting<br/>React SPA]
+        API[App Hosting<br/>Next.js API]
+        Firestore[(Firestore<br/>live state + precomputed stats)]
+        RTDB[(Realtime Database<br/>worker presence)]
+        GCS[(Cloud Storage<br/>gzipped logs + derived JSON)]
+        Tasks[Cloud Tasks<br/>per-job recovery]
+        Scheduler[Cloud Scheduler<br/>stale sweeper, 15 min]
+        Auth[Firebase Auth<br/>Google sign-in]
     end
 
-    subgraph worker_host [Worker Host Machine]
-        Worker[Worker Container<br/>Node.js + Docker CLI]
-        Watchtower[Watchtower<br/>Auto-update]
-
-        subgraph sims [Simulation Containers]
-            Sim1[sim-xxx-000<br/>Java + Forge]
-            Sim2[sim-xxx-001]
-            SimN[sim-xxx-N]
-        end
-
-        Worker -->|docker run| Sim1
-        Worker -->|docker run| Sim2
-        Worker -->|docker run| SimN
-        Watchtower -.->|auto-update| Worker
+    subgraph desktop [Desktop worker: worker_flutter]
+        Flutter[Flutter app<br/>macOS / Windows]
+        Java[Forge via local Java]
+        Flutter --> Java
     end
 
-    User --> FirebaseHosting
-    FirebaseHosting --> AppHosting
-    Worker -->|GET claim-sim| AppHosting
-    AppHosting -->|push config/cancel/notify| Worker
-    Worker -->|PATCH status| AppHosting
-    Worker -->|POST logs| AppHosting
+    subgraph docker [Docker worker host: worker/]
+        Worker[Worker container<br/>Node.js]
+        Sim[Simulation containers<br/>Java + Forge, 1 per sim]
+        Worker -->|docker run --rm| Sim
+    end
+
+    Frontend -->|REST + ID token| API
+    Frontend -.->|onSnapshot reads| Firestore
+    Frontend -.->|presence reads| RTDB
+    API --> Firestore
+    API --> GCS
+    API --> RTDB
+    Tasks --> API
+    Scheduler --> API
+
+    Worker -->|claim / lease / PATCH / logs<br/>X-Worker-Secret| API
+    API -->|push: config, cancel, notify, drain| Worker
+    Flutter -->|claim / lease / PATCH / logs<br/>user ID token| API
+    Flutter -.->|own presence entry| RTDB
 ```
 
-### GCP Components
-
-| Component | Service | Purpose |
-|-----------|---------|---------|
-| **API** | App Hosting | Next.js app serving API routes |
-| **Frontend** | Firebase Hosting | React SPA |
-| **Job Metadata** | Firestore | Job state, deck references, simulation statuses, results |
-| **Artifacts** | Cloud Storage | Raw logs, condensed logs, structured logs |
-| **Job Queue** | Firestore / HTTP Polling | Queue state is stored in Firestore; workers poll `claim-sim` for PENDING simulations |
-| **Authentication** | Firebase Auth | Google sign-in with email allowlist |
-| **Secrets** | Secret Manager | Worker config |
-
-### Worker Host Components
-
-| Component | Image | Purpose |
-|-----------|-------|---------|
-| **Worker** | `ghcr.io/.../worker` (~100MB) | Node.js orchestrator: receives jobs, spawns simulation containers, aggregates logs. Exposes port 9090 for push-based API control (config, cancel, notify, drain) |
-| **Simulation** | `ghcr.io/.../simulation` (~750MB) | Java 17 + Forge + xvfb: runs exactly 1 game, writes log, exits |
-| **Watchtower** | `nickfedor/watchtower` | Polls GHCR for new worker images, auto-restarts |
+| Piece | Where it runs | What it does |
+|-------|---------------|--------------|
+| **Frontend** (`frontend/`) | Firebase Hosting | Vite + React + Tailwind v4. Writes go through the API; live job, sim and pod-run state comes straight from Firestore `onSnapshot`, worker status from Realtime Database. |
+| **API** (`api/`) | Firebase App Hosting (Cloud Run underneath), 1 instance, 1 GiB | Next.js 15 route handlers. Deck ingestion, job lifecycle, sim claiming and leases, log storage, aggregation, ratings, card stats, pod runs, access control. The only writer to Firestore and GCS. |
+| **Desktop worker** (`worker_flutter/`) | User machines (macOS, Windows) | The path going forward. Cloud mode claims sims from the shared queue through the API with the signed-in user's token; offline mode runs bundled precons locally (drift SQLite). Ships through GitHub Releases + `appcast.xml` (Sparkle / WinSparkle) and installs Forge from `worker_flutter/forge-manifest.json`. |
+| **Docker worker** (`worker/`) | Any Docker host | The original worker, still supported. Polls the API, runs one simulation container per sim with a semaphore sized from CPU/RAM, and exposes port 9090 for push control. Images on GHCR; Watchtower can auto-update it. |
+| **Simulation image** (`simulation/`) | Spawned by the Docker worker | Java 17 + Forge + xvfb. Runs one sim (`GAMES_PER_CONTAINER` games), prints the log, exits. |
+| **Shared types** (`shared/types/`) | Imported by api and frontend | Job, seat, simulation, pod-run, worker-presence and state-machine types. |
 
 ---
 
-## Two-Image Architecture: Worker + Simulation
+## Where data lives
 
-The worker and simulation concerns are split into two Docker images:
+**Firestore** holds live state and precomputed answers. Clients only read;
+every write goes through the API with the Admin SDK (`firestore.rules`).
 
-```mermaid
-flowchart LR
-    subgraph worker_img ["Worker Image (Node.js only, ~100MB)"]
-        Orchestrator[Job Orchestrator]
-        Semaphore[Semaphore<br/>Bounded Concurrency]
-        Reporter[Status Reporter]
-    end
+| Path | Contents |
+|------|----------|
+| `jobs/{jobId}` | One 4-deck pod: `seats` `[{deckId, name, link, colorIdentity}]`, status, sim counters, `results` `{gamesPlayed, seats: [{wins, avgWinTurn}]}` in seat order, `podRunId` |
+| `jobs/{jobId}/simulations/{simId}` | One sim: state (PENDING / RUNNING / COMPLETED / FAILED / CANCELLED), `workerId`, `leaseExpiresAt`, winners |
+| `podRuns/{runId}` | A saved run of several pods with its own `standings` |
+| `decks/{deckId}` | Deck metadata and `.dck` content (precons and imports). A changed list is a new deck; there are no versions. |
+| `decks/{deckId}/stats/rating`, `.../stats/cards` | TrueSkill and win counters, and per-card impact counters, built at aggregation |
+| `workers/{workerId}` | Durable worker settings only: owner, push URL, concurrency override |
+| `users/{uid}` | Access record, `status: requested \| allowed`. Not readable by clients. |
+| `config/coverage`, `config/deckSelection`, `idempotencyKeys/*` | Auto-coverage settings, decks excluded from selection, job-creation idempotency |
 
-    subgraph sim_img ["Simulation Image (Java + Forge, ~750MB)"]
-        RunSim[run_sim.sh]
-        Xvfb[xvfb]
-        ForgeEngine[Forge CLI]
-        RunSim --> Xvfb --> ForgeEngine
-    end
+**Realtime Database** holds `presence/{workerId}`: an entry per online
+worker (`shared/types/worker-presence.ts`, rules in `database.rules.json`).
+The desktop worker writes its own entry with an onDisconnect delete; the
+Docker worker's heartbeat writes it through the API.
 
-    Orchestrator -->|docker run --rm| sim_img
-    Orchestrator --> Semaphore
-    Orchestrator --> Reporter
-```
+**Cloud Storage** (`magic-bracket-simulator-artifacts`) holds per-game
+facts under `jobs/{jobId}/`: raw logs per sim (`raw/game_NNN.txt`, kept
+forever) plus `condensed.json` and `structured.json`, all stored gzipped.
 
-### Why Two Images?
-
-| Benefit | Description |
-|---------|-------------|
-| **Per-simulation progress** | Each game reports status independently via API |
-| **Failure isolation** | 1 crashed simulation does not lose the entire job |
-| **Resource-aware scaling** | Worker fills available CPU/RAM dynamically |
-| **Faster worker updates** | Worker image is ~100MB vs ~800MB monolithic |
-| **Multi-machine scaling** | Add a machine, run `setup-worker.sh`, done |
-
-### Container Mode vs Monolithic Mode
-
-The worker supports two execution modes (auto-detected):
-
-| Mode | Detection | Behavior |
-|------|-----------|----------|
-| **Container** (default) | `FORGE_PATH` not set | Spawns Docker containers (1 per game) |
-| **Monolithic** (legacy) | `FORGE_PATH` set | Runs Forge as child processes (old behavior) |
+**Local mode** swaps these for SQLite (`api/data/jobs.db`) and the
+filesystem (`logs-data/`). The SQLite schema has no migrations: after a
+schema change, delete `jobs.db`.
 
 ---
 
-## Data Flow
+## A job, end to end
 
-### GCP Mode
+1. **Create.** The frontend posts 4 deck ids to `POST /api/jobs` (or the
+   coverage service picks a pod). The API writes the job with its `seats`,
+   creates one PENDING sim doc per container, schedules a Cloud Tasks
+   recovery check, and pushes `/notify` to reachable Docker workers.
+2. **Claim.** Workers poll `GET /api/jobs/claim-sim?lease=1`. The API
+   claims the oldest claimable sim in a transaction, promotes the job from
+   QUEUED to RUNNING on its first claim, and returns the sim. The worker
+   fetches decklists with `GET /api/jobs/:id` (worker view), which reads
+   each seat's `.dck` by deck id.
+3. **Run and hold the lease.** The worker runs Forge and extends the sim's
+   3-minute lease about once a minute. The answer can tell it the job was
+   cancelled or that another worker took the sim over.
+4. **Report.** The worker uploads the raw log
+   (`POST /api/jobs/:id/logs/simulation`) and then reports the result
+   (`PATCH /api/jobs/:id/simulations/:simId`). An atomic counter on the job
+   detects the last sim.
+5. **Aggregate** (API, `aggregateJobResults`). Reads the raw logs, condenses
+   and structures every game, writes `condensed.json` and
+   `structured.json`, maps Forge winner names to seats, and sets the job
+   COMPLETED with per-seat results. Then, fire-and-forget and idempotent per
+   job: deck ratings, card stats, and the pod run's standings.
+6. **Watch.** The frontend listens to the job and its sims in Firestore, so
+   progress and results appear without polling (local mode polls the REST
+   API instead).
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend as Firebase Hosting
-    participant API as App Hosting (API)
-    participant Firestore
-    participant Worker
-    participant SimContainer as Simulation Container
-
-    User->>Frontend: Create job (4 decks)
-    Frontend->>API: POST /api/jobs
-    API->>Firestore: Store job (QUEUED)
-    API->>Firestore: Initialize subcollection (PENDING)
-    API-->>Frontend: 201 Created
-
-    par Parallel simulation containers
-        Worker->>API: GET /api/jobs/claim-sim
-        API->>Firestore: Atomically set oldest PENDING to RUNNING
-        API-->>Worker: sim_000 claimed
-        Worker->>API: GET /api/jobs/:id (deck data)
-        Worker->>SimContainer: docker run simulation (game 1)
-        SimContainer-->>Worker: Exit (log file)
-        Worker->>API: PATCH sim_000 → COMPLETED
-    and
-        Worker->>API: GET /api/jobs/claim-sim
-        API->>Firestore: Atomically set next PENDING to RUNNING
-        API-->>Worker: sim_001 claimed
-        Worker->>API: GET /api/jobs/:id (deck data)
-        Worker->>SimContainer: docker run simulation (game 2)
-        SimContainer-->>Worker: Exit (log file)
-        Worker->>API: PATCH sim_001 → COMPLETED
-    end
-
-    Note over Worker: Aggregate all game logs
-    Worker->>API: POST /api/jobs/:id/logs
-    Worker->>API: PATCH job → COMPLETED
-
-    User->>Frontend: View results (SSE real-time)
-    Frontend->>API: GET /api/jobs/:id/stream (SSE)
-    API-->>Frontend: event: job + event: simulations
-
-    Note over User,Worker: Cancellation (push-based)
-    User->>Frontend: Cancel job
-    Frontend->>API: POST /api/jobs/:id/cancel
-    API->>Firestore: Update job → CANCELLED
-    API->>Worker: POST /cancel {jobId} (push)
-    Worker->>SimContainer: docker kill (abort)
-```
-
-### Per-Simulation Status Flow
-
-The API tracks individual simulation states via a Firestore subcollection (`jobs/{id}/simulations/{simId}`):
-
-| Simulation State | Meaning |
-|-----------------|---------|
-| `PENDING` | Initialized, waiting for worker |
-| `RUNNING` | Container started, game in progress |
-| `COMPLETED` | Game finished successfully |
-| `FAILED` | Container crashed or timed out |
-
-The frontend receives real-time updates via SSE events and renders a `SimulationGrid` component.
+**Crash recovery** uses the sim leases, not worker presence: a sim whose
+lease has expired is claimable again. `recoverStaleJob` runs from the
+per-job Cloud Tasks check and from the 15-minute stale sweeper
+(`POST /api/admin/sweep-stale-jobs`), which also fails jobs stuck in the
+queue and finishes jobs whose sims are all terminal.
 
 ---
 
-## Worker Concurrency Model
+## Access and auth
 
-```mermaid
-flowchart TB
-    subgraph resources ["Host Resources"]
-        CPU["CPU: N cores"]
-        RAM["RAM: X GB"]
-    end
-
-    subgraph worker ["Worker"]
-        Calc["calculateDynamicParallelism()"]
-        Sem["Semaphore(capacity)"]
-    end
-
-    subgraph containers ["Simulation Containers"]
-        C1["sim_000 (1 CPU, 600MB)"]
-        C2["sim_001 (1 CPU, 600MB)"]
-        CN["sim_N (1 CPU, 600MB)"]
-    end
-
-    CPU --> Calc
-    RAM --> Calc
-    Calc -->|capacity| Sem
-    Sem --> C1
-    Sem --> C2
-    Sem --> CN
-```
-
-### Resource Calculation
-
-```
-cpuLimit  = max(1, totalCPUs - 2)        // Reserve 2 cores for system + worker
-memLimit  = floor((freeMB - 2048) / 600)  // Reserve 2GB, 600MB per sim
-capacity  = min(requested, cpuLimit, memLimit)
-```
-
-Each simulation container is constrained to `--memory=600m --cpus=1`.
-
-The semaphore capacity can be dynamically overridden via the worker's push API (`POST /config`). When a user changes the override in the frontend, the API pushes the new value directly to the worker — no need to wait for the next heartbeat poll.
-
-### Concurrency Differences
-
-| Aspect | Container Mode | Monolithic Mode (legacy) |
-|--------|---------------|-------------------------|
-| Tasks in flight | Multiple (1 HTTP poll claim per capacity slot) | 1 job at a time |
-| Sims per task | 1 container per game | N games per child process |
-| Isolation | Full (separate containers) | Shared filesystem |
-| Progress | Per-simulation API updates | Batch-level only |
+- Users sign in with Google (Firebase Auth). The API accepts a user when
+  their `users/{uid}` record is `allowed` or their email is in
+  `ADMIN_EMAILS` / `ALLOWED_EMAILS` (`api/lib/allowed-users.ts`,
+  `api/lib/auth.ts`). New users request access in the app; an admin
+  approves from the email link (`/api/access-requests/approve`).
+- The Docker worker authenticates with `X-Worker-Secret`. The desktop
+  worker sends the signed-in user's ID token and is accepted when that user
+  is allowed (`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`).
+- Local mode has no auth.
 
 ---
 
-## Simulation Container Lifecycle
+## Delivery
 
-Each simulation container:
+| Workflow | What it ships |
+|----------|---------------|
+| `ci.yml` | PR checks: lint, build, test (frontend, api, worker), release-script tests |
+| `worker-flutter-ci.yml` | `flutter analyze` + `flutter test` for the desktop worker |
+| `deploy.yml` | On merge: frontend to Firebase Hosting, Firestore rules + indexes, Realtime Database rules |
+| App Hosting | Builds and rolls out the API from `main`; `rollout-safety-net.yml` forces a rollout if one doesn't appear |
+| `deploy-worker.yml` | Worker and simulation images to GHCR |
+| `release-worker.yml` | Desktop worker builds, GitHub Release, `appcast.xml` |
+| `forge-update.yml` | Nightly Forge version bump PRs (auto-merge) |
+| `sync-api-secrets.yml`, `provision-worker.yml` | Copy secrets from Doppler (source of truth) into GCP Secret Manager |
 
-1. Receives deck files via read-only volume mount
-2. Copies decks into Forge's Commander deck directory
-3. Starts xvfb (virtual display)
-4. Runs Forge CLI: `forge.sh sim -d deck1 deck2 deck3 deck4 -f Commander -n 1 -c 300`
-5. Writes game log to output volume mount
-6. Exits (container auto-removed via `--rm`)
-
-```bash
-docker run --rm \
-  --name sim-<jobId>-sim_000 \
-  --memory=600m --cpus=1 \
-  -v /tmp/mbs-jobs/<jobId>/decks:/home/simulator/.forge/decks/commander:ro \
-  -v /tmp/mbs-jobs/<jobId>/logs:/app/logs \
-  simulation:latest \
-  --decks deck_0.dck deck_1.dck deck_2.dck deck_3.dck \
-  --simulations 1 \
-  --id <jobId>_sim_000
-```
+Errors go to Sentry (org `tytaniumdev`): projects `magic-bracket-api`,
+`magic-bracket-worker` and `magic-bracket-frontend`.
 
 ---
 
-## CI/CD Pipeline
-
-```mermaid
-flowchart LR
-    Push["Push to main"] --> CI["CI: lint + build + test"]
-    CI --> BuildWorker["Build worker image"]
-    CI --> BuildSim["Build simulation image"]
-    BuildWorker --> GHCR["Push to GHCR"]
-    BuildSim --> GHCR
-    GHCR --> Watchtower["Watchtower polls"]
-    Watchtower --> RestartWorker["Restart worker"]
-    RestartWorker --> PullSim["Worker pulls<br/>latest simulation image"]
-```
-
-### Image Update Flow
-
-1. Code pushed to `main` triggers CI + deploy workflow
-2. Both `worker` and `simulation` images are built and pushed to GHCR
-3. Watchtower detects new worker image, restarts the worker container
-4. On startup, worker calls `ensureSimulationImage()` to pull the latest simulation image
-5. New simulation containers use the updated image
-
----
-
-## Repo Layout
-
-| Directory | Purpose |
-|-----------|---------|
-| **frontend/** | React SPA (Vite + Tailwind v4 + Firebase Auth) |
-| **api/** | Next.js 15 API: jobs, decks, simulations |
-| **worker/** | Node.js orchestrator: HTTP polling, container management |
-| **worker/forge-engine/** | Forge assets: `run_sim.sh`, precon decks |
-| **simulation/** | Simulation image Dockerfile (references `worker/forge-engine/`) |
-| **scripts/** | Setup and provisioning scripts |
-| **docs/** | Architecture and implementation docs |
-
----
-
-## Key Code References
+## Key code references
 
 | Concept | Location |
 |---------|----------|
-| Worker orchestration | `worker/src/worker.ts` — `processJobWithContainers`, `runSimulationContainer`, `Semaphore` |
-| Dynamic parallelism | `worker/src/worker.ts` — `calculateDynamicParallelism` |
-| Legacy monolithic mode | `worker/src/worker.ts` — `processJobMonolithic`, `runForgeSim` |
-| Simulation types | `api/lib/types.ts` — `SimulationState`, `SimulationStatus` |
-| Simulation CRUD (Firestore) | `api/lib/firestore-job-store.ts` — `initializeSimulations`, `updateSimulationStatus` |
-| Simulation CRUD (SQLite) | `api/lib/job-store.ts` — simulation table operations |
-| Simulation API endpoints | `api/app/api/jobs/[id]/simulations/` — GET, PATCH |
-| SSE stream (with simulations) | `api/app/api/jobs/[id]/stream/route.ts` |
-| Frontend simulation grid | `frontend/src/components/SimulationGrid.tsx` |
-| Frontend SSE hook | `frontend/src/hooks/useJobStream.ts` |
-| Forge container entrypoint | `worker/forge-engine/run_sim.sh` |
-| Worker Dockerfile | `worker/Dockerfile` |
-| Simulation Dockerfile | `simulation/Dockerfile` |
-| CI/CD deploy | `.github/workflows/deploy-worker.yml` |
-| Worker HTTP API | `worker/src/worker-api.ts` — push-based control endpoints (config, cancel, notify, drain, health) |
-| Worker push helper | `api/lib/worker-push.ts` — `pushToWorker`, `pushToAllWorkers` |
-| Worker provisioning | `scripts/setup-worker.sh`, `scripts/populate-worker-secret.js` |
+| Storage factories (SQLite vs Firestore) | `api/lib/*-store-factory.ts` |
+| Sim claiming and leases | `api/app/api/jobs/claim-sim/`, `api/lib/sim-lease.ts` |
+| Seats and per-seat results | `api/lib/job-seats.ts`, `api/lib/job-results.ts`, `shared/types/job.ts` |
+| Aggregation | `api/lib/job-store-factory.ts` (`aggregateJobResults`), `api/lib/log-store.ts`, `api/lib/condenser/` |
+| Ratings, card stats, pod standings | `api/lib/trueskill-service.ts`, `api/lib/card-impact/`, `api/lib/pod-run-standings.ts` |
+| Recovery | `api/lib/stale-sweeper.ts`, `api/lib/cloud-tasks.ts`, `api/app/api/jobs/[id]/recover/` |
+| Worker presence | `api/lib/worker-presence-store.ts`, `frontend/src/hooks/useWorkerStatus.ts`, `worker_flutter/lib/worker/worker_presence.dart` |
+| Push to Docker workers | `api/lib/worker-push.ts`, `worker/src/worker-api.ts` |
+| Docker worker loop | `worker/src/worker.ts` (`pollForSims`, `processSimulation`, `Semaphore`), `worker/src/docker-runner.ts` (`runSimulationContainer`, `calculateLocalCapacity`) |
+| Desktop worker loop | `worker_flutter/lib/worker/worker_engine.dart`, `sim_api.dart`, `sim_lease_keeper.dart`, `log_uploader.dart` |
+| Live job view | `frontend/src/hooks/useJobStream.ts`, `frontend/src/components/SimulationGrid.tsx` |
+| Forge container entrypoint | `worker/forge-engine/run_sim.sh`, `simulation/Dockerfile` |
