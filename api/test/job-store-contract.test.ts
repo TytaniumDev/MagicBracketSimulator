@@ -146,9 +146,10 @@ async function runTests() {
     const sims = await jobStore.getSimulationStatuses(createdJobId);
     const simId = sims[0].simId;
 
+    const completedAt = '2026-10-30T01:02:03.456Z';
     await jobStore.updateSimulationStatus(createdJobId, simId, {
       state: 'COMPLETED',
-      completedAt: new Date().toISOString(),
+      completedAt,
       durationMs: 5000,
       winners: ['Contract Test A', 'Contract Test B'],
       winningTurns: [8, 12],
@@ -157,6 +158,7 @@ async function runTests() {
     const updated = await jobStore.getSimulationStatus(createdJobId, simId);
     assertEqual(updated!.state, 'COMPLETED', 'state should be COMPLETED');
     assert(typeof updated!.durationMs === 'number', 'durationMs should be set');
+    assertEqual(updated!.completedAt, completedAt, 'completedAt reads back as the same ISO time');
   });
 
   // =========================================================================

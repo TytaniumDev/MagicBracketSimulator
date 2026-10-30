@@ -569,7 +569,7 @@ async function tryClaimSim(
       state: 'RUNNING',
       workerId,
       workerName,
-      startedAt: new Date().toISOString(),
+      startedAt: Timestamp.now(),
       leaseExpiresAt: options.withLease
         ? Timestamp.fromDate(new Date(simLeaseExpiry()))
         : FieldValue.delete(),
@@ -603,6 +603,16 @@ function simulationsCollection(jobId: string) {
   return jobsCollection.doc(jobId).collection('simulations');
 }
 
+/** A sim time from the API (ISO string) as stored: a Firestore Timestamp. */
+function isoToTimestamp(iso: string): Timestamp {
+  return Timestamp.fromDate(new Date(iso));
+}
+
+/** A stored sim time as the API's ISO string. */
+function timestampToIso(value: Timestamp): string {
+  return value.toDate().toISOString();
+}
+
 /** Convert a simulation doc to the shared SimulationStatus shape. */
 function docToSimulationStatus(simId: string, data: FirebaseFirestore.DocumentData): SimulationStatus {
   const leaseExpiresAt = data.leaseExpiresAt as Timestamp | undefined;
@@ -612,8 +622,8 @@ function docToSimulationStatus(simId: string, data: FirebaseFirestore.DocumentDa
     state: (data.state ?? 'PENDING') as SimulationState,
     ...(data.workerId && { workerId: data.workerId }),
     ...(data.workerName && { workerName: data.workerName }),
-    ...(data.startedAt && { startedAt: data.startedAt }),
-    ...(data.completedAt && { completedAt: data.completedAt }),
+    ...(data.startedAt && { startedAt: timestampToIso(data.startedAt) }),
+    ...(data.completedAt && { completedAt: timestampToIso(data.completedAt) }),
     ...(data.durationMs != null && { durationMs: data.durationMs }),
     ...(data.errorMessage && { errorMessage: data.errorMessage }),
     ...(data.winner && { winner: data.winner }),
@@ -697,8 +707,8 @@ export async function updateSimulationStatus(
   if (update.state !== undefined) updateData.state = update.state;
   if (update.workerId !== undefined) updateData.workerId = update.workerId;
   if (update.workerName !== undefined) updateData.workerName = update.workerName;
-  if (update.startedAt !== undefined) updateData.startedAt = update.startedAt;
-  if (update.completedAt !== undefined) updateData.completedAt = update.completedAt;
+  if (update.startedAt !== undefined) updateData.startedAt = isoToTimestamp(update.startedAt);
+  if (update.completedAt !== undefined) updateData.completedAt = isoToTimestamp(update.completedAt);
   if (update.durationMs !== undefined) updateData.durationMs = update.durationMs;
   if (update.errorMessage !== undefined) updateData.errorMessage = update.errorMessage;
   if (update.winner !== undefined) updateData.winner = update.winner;
@@ -736,8 +746,8 @@ export async function conditionalUpdateSimulationStatus(
     if (update.state !== undefined) updateData.state = update.state;
     if (update.workerId !== undefined) updateData.workerId = update.workerId;
     if (update.workerName !== undefined) updateData.workerName = update.workerName;
-    if (update.startedAt !== undefined) updateData.startedAt = update.startedAt;
-    if (update.completedAt !== undefined) updateData.completedAt = update.completedAt;
+    if (update.startedAt !== undefined) updateData.startedAt = isoToTimestamp(update.startedAt);
+    if (update.completedAt !== undefined) updateData.completedAt = isoToTimestamp(update.completedAt);
     if (update.durationMs !== undefined) updateData.durationMs = update.durationMs;
     if (update.errorMessage !== undefined) updateData.errorMessage = update.errorMessage;
     if (update.winner !== undefined) updateData.winner = update.winner;

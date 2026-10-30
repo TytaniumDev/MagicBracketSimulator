@@ -3,6 +3,7 @@
  * Uses @google-cloud/firestore directly (same pattern as firestore-job-store)
  * so it works without Firebase Admin initialization.
  */
+import { Timestamp } from '@google-cloud/firestore';
 import type { CoverageStore, CoverageConfig } from './coverage-store';
 import { getFirestore } from './firestore-client';
 
@@ -25,20 +26,21 @@ export const firestoreCoverageStore: CoverageStore = {
     return {
       enabled: data.enabled ?? false,
       targetGamesPerPair: data.targetGamesPerPair ?? 400,
-      updatedAt: data.updatedAt ?? '',
+      updatedAt: (data.updatedAt as Timestamp | undefined)?.toDate().toISOString() ?? '',
       updatedBy: data.updatedBy ?? '',
     };
   },
 
   async updateConfig(update, updatedBy): Promise<CoverageConfig> {
     const current = await this.getConfig();
+    const updatedAt = Timestamp.now();
     const config: CoverageConfig = {
       enabled: update.enabled ?? current.enabled,
       targetGamesPerPair: update.targetGamesPerPair ?? current.targetGamesPerPair,
-      updatedAt: new Date().toISOString(),
+      updatedAt: updatedAt.toDate().toISOString(),
       updatedBy,
     };
-    await configDoc.set(config);
+    await configDoc.set({ ...config, updatedAt });
     return config;
   },
 };
