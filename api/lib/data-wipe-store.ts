@@ -10,7 +10,6 @@
 export const LEFTOVER_KINDS = [
   'simulations',
   'podRuns',
-  'matchResults',
   'ratings',
   'cardStats',
   'idempotencyKeys',

@@ -10,19 +10,16 @@ import { currentDeckCardStats, emptyDeckCardStats } from './card-impact/stats';
 import type { DeckCardStats } from '@shared/types/card-impact';
 import { getFirestore } from './firestore-client';
 import { deckStatsRef } from './deck-stats-refs';
-import { ensureLegacyDeckStatsMigrated } from './legacy-deck-stats-migration';
 
 const firestore = getFirestore();
 
 export const firestoreCardStatsStore: CardStatsStore = {
   async get(deckId: string): Promise<DeckCardStats | null> {
-    await ensureLegacyDeckStatsMigrated();
     const snap = await deckStatsRef(deckId, 'cards').get();
     return currentDeckCardStats(snap.exists ? (snap.data() as DeckCardStats) : null);
   },
 
   async addJobs(deckId, jobs): Promise<number> {
-    await ensureLegacyDeckStatsMigrated();
     const ref = deckStatsRef(deckId, 'cards');
     return firestore.runTransaction(async (transaction) => {
       const snap = await transaction.get(ref);

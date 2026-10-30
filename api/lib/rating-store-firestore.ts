@@ -11,7 +11,6 @@ import { addPodPairGames, pairKey, type RatingStore, type LeaderboardOptions } f
 import type { DeckRating } from './types';
 import { getFirestore } from './firestore-client';
 import { deckIdOfStats, deckStatsOfKind, deckStatsRef } from './deck-stats-refs';
-import { ensureLegacyDeckStatsMigrated } from './legacy-deck-stats-migration';
 
 const firestore = getFirestore();
 
@@ -21,8 +20,8 @@ function parseWinTurnHistogram(raw: unknown): number[] | undefined {
   return raw as number[];
 }
 
-/** Read a stored rating doc (current or legacy `ratings/{deckId}` shape). */
-export function docToRating(deckId: string, d: FirebaseFirestore.DocumentData): DeckRating {
+/** Read a stored rating doc. */
+function docToRating(deckId: string, d: FirebaseFirestore.DocumentData): DeckRating {
   const rating: DeckRating = {
     deckId,
     mu: d.mu as number,
@@ -43,7 +42,7 @@ export function docToRating(deckId: string, d: FirebaseFirestore.DocumentData): 
 }
 
 /** The stored fields of a rating, without deckId (the doc's path holds it). */
-export function ratingToDoc(r: DeckRating): Record<string, unknown> {
+function ratingToDoc(r: DeckRating): Record<string, unknown> {
   const doc: Record<string, unknown> = {
     kind: 'rating',
     mu: r.mu,
@@ -64,14 +63,12 @@ export function ratingToDoc(r: DeckRating): Record<string, unknown> {
 
 export const firestoreRatingStore: RatingStore = {
   async getRating(deckId: string): Promise<DeckRating | null> {
-    await ensureLegacyDeckStatsMigrated();
     const doc = await deckStatsRef(deckId, 'rating').get();
     if (!doc.exists || !(doc.get('gamesPlayed') > 0)) return null;
     return docToRating(deckId, doc.data()!);
   },
 
   async applyJob({ jobId, deckIds, gameCount, update }): Promise<boolean> {
-    await ensureLegacyDeckStatsMigrated();
     const jobRef = firestore.collection('jobs').doc(jobId);
     const refs = deckIds.map((id) => deckStatsRef(id, 'rating'));
 
@@ -100,7 +97,6 @@ export const firestoreRatingStore: RatingStore = {
   },
 
   async getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]> {
-    await ensureLegacyDeckStatsMigrated();
     const minGames = Math.max(options?.minGames ?? 0, 1);
     const limit = options?.limit ?? 500;
 
@@ -116,7 +112,6 @@ export const firestoreRatingStore: RatingStore = {
   },
 
   async getPairGameCounts(): Promise<Map<string, number>> {
-    await ensureLegacyDeckStatsMigrated();
     const snapshot = await deckStatsOfKind('rating').select('pairGames').get();
     const counts = new Map<string, number>();
     for (const doc of snapshot.docs) {

@@ -17,7 +17,6 @@ function leftoversQuery(kind: Exclude<LeftoverKind, 'customDecks'>): FirebaseFir
   // their deck doc but lose its stats.
   if (kind === 'ratings') return deckStatsOfKind('rating');
   if (kind === 'cardStats') return deckStatsOfKind('cards');
-  // Legacy per-game docs, replaced by pair counts on the rating docs.
   return firestore.collection(kind);
 }
 

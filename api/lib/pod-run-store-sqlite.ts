@@ -25,7 +25,7 @@ interface Row {
   created_by: string;
   created_at: string;
   idempotency_key: string | null;
-  standings_json: string | null;
+  standings_json: string;
   pods_with_results: number;
 }
 
@@ -87,7 +87,7 @@ function rowToPodRun(row: Row): PodRun {
     createdBy: row.created_by,
     createdAt: new Date(row.created_at),
     ...(row.idempotency_key && { idempotencyKey: row.idempotency_key }),
-    standings: row.standings_json ? JSON.parse(row.standings_json) : {},
+    standings: JSON.parse(row.standings_json),
     podsWithResults: row.pods_with_results ?? 0,
   };
 }
@@ -125,15 +125,7 @@ export const sqlitePodRunStore: PodRunStore = {
   },
 
   async getPodRun(id) {
-    const db = getDb();
-    const select = db.prepare('SELECT * FROM pod_runs WHERE id = ?');
-    let row = select.get(id) as Row | undefined;
-    if (row && row.standings_json == null) {
-      // Saved before standings were kept: total its jobs now.
-      const legacy = rowToPodRun(row);
-      db.transaction(() => attachJobs(id, legacy.jobIds))();
-      row = select.get(id) as Row;
-    }
+    const row = getDb().prepare('SELECT * FROM pod_runs WHERE id = ?').get(id) as Row | undefined;
     return row ? rowToPodRun(row) : null;
   },
 
@@ -166,7 +158,7 @@ export const sqlitePodRunStore: PodRunStore = {
       const run = db.prepare('SELECT * FROM pod_runs WHERE id = ?').get(job.pod_run_id) as Row | undefined;
       if (!run) return false;
 
-      const standings = addPodResults(run.standings_json ? JSON.parse(run.standings_json) : {}, pod.seats, pod.results);
+      const standings = addPodResults(JSON.parse(run.standings_json), pod.seats, pod.results);
       db.prepare('UPDATE pod_runs SET standings_json = ?, pods_with_results = pods_with_results + 1 WHERE id = ?').run(
         JSON.stringify(standings),
         run.id,

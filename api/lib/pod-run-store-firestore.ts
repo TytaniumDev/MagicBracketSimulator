@@ -8,7 +8,7 @@
  * both total the job inside a transaction that reads the job, so a job that
  * finishes while its run is being saved is counted exactly once.
  */
-import { Timestamp, type DocumentReference, type DocumentSnapshot, type Transaction } from '@google-cloud/firestore';
+import { Timestamp, type DocumentSnapshot, type Transaction } from '@google-cloud/firestore';
 import { addPodResults, type PodRunTotals } from '@shared/types/pod-run';
 import type { PodRun, PodRunStore } from './pod-run-store';
 import { getFirestore } from './firestore-client';
@@ -66,17 +66,6 @@ async function attachJobs(
   return { standings, podsWithResults };
 }
 
-/** Runs saved before standings were kept get them the first time they're read. */
-async function addMissingStandings(ref: DocumentReference): Promise<DocumentSnapshot> {
-  await firestore.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists || snap.get('standings') !== undefined) return;
-    const totals = await attachJobs(tx, ref.id, snap.get('jobIds') ?? []);
-    tx.update(ref, totals);
-  });
-  return ref.get();
-}
-
 export const firestorePodRunStore: PodRunStore = {
   async createPodRun(data) {
     if (data.idempotencyKey) {
@@ -103,10 +92,7 @@ export const firestorePodRunStore: PodRunStore = {
   },
 
   async getPodRun(id) {
-    const ref = podRunsCollection.doc(id);
-    let snap = await ref.get();
-    if (snap.exists && snap.get('standings') === undefined) snap = await addMissingStandings(ref);
-    return docToPodRun(snap);
+    return docToPodRun(await podRunsCollection.doc(id).get());
   },
 
   async listPodRuns(limit) {
