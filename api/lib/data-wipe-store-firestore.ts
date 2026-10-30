@@ -1,6 +1,8 @@
 /**
- * Firestore implementation of DataWipeStore (GCP mode). Deletes go out as
- * one batched write per call so a wipe stays inside the free tier's limits.
+ * Firestore implementation of DataWipeStore (GCP mode). Deletes go through a
+ * BulkWriter, not one batched write: a batch fails as "transaction too big"
+ * when its docs carry many index entries, as cardStats docs do (one map
+ * entry per card).
  */
 import type { DataWipeStore, LeftoverKind } from './data-wipe-store';
 import { getFirestore } from './firestore-client';
@@ -20,6 +22,15 @@ function leftoversQuery(kind: Exclude<LeftoverKind, 'customDecks'>): FirebaseFir
   return firestore.collection(kind);
 }
 
+/**
+ * Top-level collections from before deck stats moved under each deck. Nothing
+ * reads them any more, but a wipe still clears them with their kind.
+ */
+const LEGACY_COLLECTIONS: Partial<Record<LeftoverKind, string[]>> = {
+  ratings: ['ratings', 'matchResults'],
+  cardStats: ['cardStats'],
+};
+
 async function leftoverRefs(kind: LeftoverKind, limit: number): Promise<FirebaseFirestore.DocumentReference[]> {
   if (kind === 'customDecks') {
     // Filter in code rather than with `isPrecon == false`, which would miss
@@ -27,8 +38,14 @@ async function leftoverRefs(kind: LeftoverKind, limit: number): Promise<Firebase
     const snapshot = await firestore.collection('decks').select('isPrecon').get();
     return snapshot.docs.filter((doc) => doc.get('isPrecon') !== true).slice(0, limit).map((doc) => doc.ref);
   }
-  const snapshot = await leftoversQuery(kind).select().limit(limit).get();
-  return snapshot.docs.map((doc) => doc.ref);
+  const queries = [leftoversQuery(kind), ...(LEGACY_COLLECTIONS[kind] ?? []).map((name) => firestore.collection(name))];
+  const refs: FirebaseFirestore.DocumentReference[] = [];
+  for (const query of queries) {
+    if (refs.length >= limit) break;
+    const snapshot = await query.select().limit(limit - refs.length).get();
+    refs.push(...snapshot.docs.map((doc) => doc.ref));
+  }
+  return refs;
 }
 
 export const firestoreDataWipeStore: DataWipeStore = {
@@ -39,11 +56,13 @@ export const firestoreDataWipeStore: DataWipeStore = {
   },
 
   async deleteLeftovers(kind, limit) {
-    const refs = await leftoverRefs(kind, Math.min(limit, 500));
+    const refs = await leftoverRefs(kind, limit);
     if (refs.length === 0) return 0;
-    const batch = firestore.batch();
-    for (const ref of refs) batch.delete(ref);
-    await batch.commit();
+    const writer = firestore.bulkWriter();
+    // Attach to every delete now so a failed one surfaces here, not as an unhandled rejection.
+    const deletes = Promise.all(refs.map((ref) => writer.delete(ref)));
+    await writer.close();
+    await deletes;
     return refs.length;
   },
 };

@@ -9,7 +9,7 @@ import { deleteJobCompletely } from './job-delete';
 
 /** Jobs per step. Each costs about a hundred Firestore ops and a GCS prefix delete. */
 const JOBS_PER_STEP = 10;
-/** Leftover records per step: one Firestore batch. */
+/** Leftover records per step. */
 const LEFTOVERS_PER_STEP = 500;
 
 export interface WipeStep {
