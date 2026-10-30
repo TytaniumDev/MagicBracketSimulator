@@ -1,4 +1,3 @@
-import { FieldValue } from '@google-cloud/firestore';
 import { WORKER_STALE_MS } from '@shared/types/worker-presence';
 import { getFirestore } from './firestore-client';
 import { readActiveWorkers, setPresenceOverride, writePresence } from './worker-presence-store';
@@ -38,8 +37,7 @@ export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
   }
 
   const docRef = workersCollection.doc(info.workerId);
-  // Older heartbeats set a 24 h TTL; the doc now lives as long as the worker.
-  await docRef.set({ ...durable, ttl: FieldValue.delete() }, { merge: true });
+  await docRef.set(durable, { merge: true });
   const override = (await docRef.get()).data()?.maxConcurrentOverride ?? null;
   await writePresence(info, { maxConcurrentOverride: override });
   registeredWorkers.set(info.workerId, key);

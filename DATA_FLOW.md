@@ -169,7 +169,9 @@ runaway card interaction?) rather than raising the cap.
 **When status is updated (PATCH simulations/[simId]):**
 
 - Persists the simulation status (state, winners, winningTurns, etc.) in the job
-store (SQLite or Firestore).
+store (SQLite or Firestore). Firestore stores every time as a Timestamp
+(sim `startedAt`, `completedAt`, `leaseExpiresAt` included); the API and
+`SimulationStatus` carry them as ISO strings.
 - Uses an **atomic counter** (`FieldValue.increment(1)` on
 `completedSimCount`) to detect when all sims are done — O(1) instead of
 scanning the entire subcollection. When `completedSimCount >= totalSimCount`,
