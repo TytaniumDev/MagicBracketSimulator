@@ -238,8 +238,7 @@ describe('mergeFirestoreJobUpdate', () => {
   const RUNNING_JOB: JobResponse = {
     id: 'job-1',
     name: 'A vs B vs C vs D',
-    deckNames: ['A', 'B', 'C', 'D'],
-    deckIds: ['d1', 'd2', 'd3', 'd4'],
+    seats: ['A', 'B', 'C', 'D'].map((name, i) => ({ deckId: `d${i + 1}`, name, link: null, colorIdentity: [] })),
     status: 'RUNNING',
     simulations: 20,
     gamesCompleted: 4,

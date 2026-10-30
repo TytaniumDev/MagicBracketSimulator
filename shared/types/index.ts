@@ -1,5 +1,5 @@
-export type { JobStatus, JobResults, WorkersSummary, JobResponse, JobSummary } from './job';
-export { GAMES_PER_CONTAINER } from './job';
+export type { JobStatus, JobResults, JobSeat, SeatResult, WorkersSummary, JobResponse, JobSummary } from './job';
+export { GAMES_PER_CONTAINER, seatNames, winsByName } from './job';
 export type { SimulationState, SimulationStatus } from './simulation';
 export type { EventType, GameEvent, TurnManaInfo, DeckTurnInfo, CondensedGame, DeckAction, DeckTurnActions, DeckHistory, StructuredGame } from './log';
 export type { WorkerInfo } from './worker';
@@ -12,5 +12,5 @@ export {
   isTerminalJobState,
   TERMINAL_JOB_STATES,
 } from './state-machine';
-export type { PodRunSummary, PodRunResponse, DeckStanding, DeckTotals, PodRunTotals, PodSeat } from './pod-run';
+export type { PodRunSummary, PodRunResponse, DeckStanding, DeckTotals, PodRunTotals } from './pod-run';
 export type { DeckCard, DeckStats, DeckDetail, DeckDetailResponse } from './deck';

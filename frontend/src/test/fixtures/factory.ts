@@ -1,4 +1,4 @@
-import type { JobResponse, JobResults } from '@shared/types/job';
+import type { JobResponse, JobResults, JobSeat } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
 import type { WorkerInfo } from '@shared/types/worker';
 
@@ -13,6 +13,18 @@ export const DEFAULT_DECK_NAMES = [
   'Tymna // Kraum',
 ];
 
+const DEFAULT_DECK_IDS = ['deck-atraxa', 'deck-korvold', 'deck-yuriko', 'deck-tymna-kraum'];
+
+/** Seats for `names` (the default decks by default), with no link or colors. */
+export function makeSeats(names: readonly string[] = DEFAULT_DECK_NAMES): JobSeat[] {
+  return names.map((name, i) => ({
+    deckId: DEFAULT_DECK_IDS[i] ?? `deck-${i}`,
+    name,
+    link: null,
+    colorIdentity: [],
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Job factory
 // ---------------------------------------------------------------------------
@@ -21,8 +33,7 @@ export function makeJob(overrides: Partial<JobResponse> = {}): JobResponse {
   return {
     id: 'job-abc-123',
     name: 'Test Simulation',
-    deckNames: [...DEFAULT_DECK_NAMES],
-    deckIds: ['deck-atraxa', 'deck-korvold', 'deck-yuriko', 'deck-tymna-kraum'],
+    seats: makeSeats(),
     status: 'COMPLETED',
     simulations: 20,
     gamesCompleted: 20,
@@ -43,19 +54,13 @@ export function makeJob(overrides: Partial<JobResponse> = {}): JobResponse {
 
 export function makeResults(overrides: Partial<JobResults> = {}): JobResults {
   return {
-    wins: {
-      [DEFAULT_DECK_NAMES[0]]: 8,
-      [DEFAULT_DECK_NAMES[1]]: 5,
-      [DEFAULT_DECK_NAMES[2]]: 4,
-      [DEFAULT_DECK_NAMES[3]]: 3,
-    },
-    avgWinTurn: {
-      [DEFAULT_DECK_NAMES[0]]: 9.2,
-      [DEFAULT_DECK_NAMES[1]]: 11.4,
-      [DEFAULT_DECK_NAMES[2]]: 8.5,
-      [DEFAULT_DECK_NAMES[3]]: 12.1,
-    },
     gamesPlayed: 20,
+    seats: [
+      { wins: 8, avgWinTurn: 9.2 },
+      { wins: 5, avgWinTurn: 11.4 },
+      { wins: 4, avgWinTurn: 8.5 },
+      { wins: 3, avgWinTurn: 12.1 },
+    ],
     ...overrides,
   };
 }

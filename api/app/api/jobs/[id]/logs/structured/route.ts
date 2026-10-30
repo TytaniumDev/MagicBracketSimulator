@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Fetch job upfront for deck name hints so we only call getStructuredLogs once
     const job = await jobStore.getJob(id);
-    const deckNames = job?.decks?.map((d) => d.name);
+    const deckNames = job?.seats.map((s) => s.name);
     const result = await getStructuredLogs(id, deckNames && deckNames.length > 0 ? deckNames : undefined);
 
     if (!result) {

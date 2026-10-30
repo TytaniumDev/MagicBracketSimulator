@@ -2,6 +2,7 @@
  * Tests for the stale-sweeper pure predicate and end-to-end sweep flow.
  * Run with: npx tsx lib/stale-sweeper.test.ts
  */
+import { testSeats } from '../test/seats';
 import type { SimulationStatus } from './types';
 import {
   shouldHardCancelSim,
@@ -176,13 +177,7 @@ async function runTests() {
     throw err;
   }
 
-  type DeckSlot = import('./types').DeckSlot;
-  const DECKS: DeckSlot[] = [
-    { name: 'A', dck: 'a' },
-    { name: 'B', dck: 'b' },
-    { name: 'C', dck: 'c' },
-    { name: 'D', dck: 'd' },
-  ];
+  const DECKS = testSeats(['A', 'B', 'C', 'D']);
 
   function makeRunningJob(simCount: number): string {
     const job = jobStoreSqlite.createJob(DECKS, simCount * 4);

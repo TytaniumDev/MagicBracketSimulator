@@ -19,6 +19,7 @@
 import * as path from 'path';
 import { getJob } from '../lib/job-store';
 import { readGameLogs } from '../lib/game-logs';
+import { resolveJobDecks } from '../lib/job-decks';
 
 const JOBS_DIR = path.resolve(process.cwd(), 'jobs');
 const LOG_ANALYZER_URL = process.env.LOG_ANALYZER_URL || 'http://localhost:3001';
@@ -47,8 +48,8 @@ async function main() {
     process.exit(1);
   }
 
-  const deckNames = job.decks.map((d) => d.name);
-  const deckLists = job.decks.map((d) => d.dck);
+  const deckNames = job.seats.map((s) => s.name);
+  const deckLists = (await resolveJobDecks(job))?.map((d) => d.dck);
 
   // Invalidate cached condensed/structured so recomputation uses latest parsing logic
   const invalidateRes = await fetch(`${LOG_ANALYZER_URL}/jobs/${jobId}/cache`, {

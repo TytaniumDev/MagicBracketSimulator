@@ -20,13 +20,51 @@ export type JobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELL
 // Aggregated results
 // ---------------------------------------------------------------------------
 
+/** One seat's results, in the same order as the job's `seats`. */
+export interface SeatResult {
+  wins: number;
+  /** Average turn this seat won on, or null with no wins. */
+  avgWinTurn: number | null;
+}
+
 export interface JobResults {
-  /** Per-deck win counts. Key = deck name, value = number of wins */
-  wins: Record<string, number>;
-  /** Per-deck average winning turn. Key = deck name, value = avg turn */
-  avgWinTurn: Record<string, number>;
   /** Total games actually played (may be < simulations if some failed) */
   gamesPlayed: number;
+  /** Per-seat results, index-aligned with the job's `seats`. */
+  seats: SeatResult[];
+}
+
+// ---------------------------------------------------------------------------
+// Seats: the 4 decks of a job, in play order
+// ---------------------------------------------------------------------------
+
+/**
+ * One seat of a job. Results are keyed by seat (position in `seats`), not
+ * by deck name or id: the same deck may sit in more than one seat. The
+ * deck's name, link and colors are copied in when the job is created, for
+ * display.
+ */
+export interface JobSeat {
+  deckId: string;
+  name: string;
+  /** The deck's external link (Moxfield, Archidekt), if it has one. */
+  link: string | null;
+  /** WUBRG color identity; empty when unknown. */
+  colorIdentity: string[];
+}
+
+/** The seats' deck names, in seat order. */
+export function seatNames(seats: readonly JobSeat[]): string[] {
+  return seats.map((s) => s.name);
+}
+
+/** Wins by deck name, for display. A deck in two seats gets both seats' wins. */
+export function winsByName(seats: readonly JobSeat[], results: JobResults): Record<string, number> {
+  const wins: Record<string, number> = {};
+  seats.forEach(({ name }, i) => {
+    wins[name] = (wins[name] ?? 0) + (results.seats[i]?.wins ?? 0);
+  });
+  return wins;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,9 +85,7 @@ export interface WorkersSummary {
 export interface JobResponse {
   id: string;
   name: string;
-  deckNames: string[];
-  /** Original deck IDs used to create the job (for re-submission). May be absent on older jobs. */
-  deckIds?: string[];
+  seats: JobSeat[];
   status: JobStatus;
   simulations: number;
   gamesCompleted: number;
@@ -67,10 +103,6 @@ export interface JobResponse {
   /** Source of the job (user-submitted or auto-coverage). */
   source?: JobSource;
   results: JobResults | null;
-  /** Present when job has stored deck IDs that resolve to Moxfield/external links */
-  deckLinks?: Record<string, string | null>;
-  /** Per-deck color identity (WUBRG arrays) */
-  colorIdentity?: Record<string, string[]>;
   /** Queue position (present while QUEUED, from SSE stream events) */
   queuePosition?: number;
   /** Worker fleet summary (present while QUEUED, from SSE stream events) */
@@ -84,7 +116,7 @@ export interface JobResponse {
 export interface JobSummary {
   id: string;
   name: string;
-  deckNames: string[];
+  seats: JobSeat[];
   status: JobStatus;
   simulations: number;
   gamesCompleted: number;

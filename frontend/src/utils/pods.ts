@@ -97,8 +97,7 @@ export function aggregatePodStandings(jobs: readonly JobResponse[]): DeckStandin
   let totals: PodRunTotals = {};
   for (const job of jobs) {
     if (!job.results) continue;
-    const seats = job.deckNames.map((name) => ({ key: name, name }));
-    totals = addPodResults(totals, seats, job.results);
+    totals = addPodResults(totals, job.seats, job.results);
   }
   return rankStandings(totals);
 }

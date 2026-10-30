@@ -12,8 +12,9 @@
  * Run with: npx tsx test/job-store-contract.test.ts
  */
 
+import { testSeats } from './seats';
 import * as jobStore from '../lib/job-store-factory';
-import type { DeckSlot, SimulationStatus } from '../lib/types';
+import type { SimulationStatus } from '../lib/types';
 
 // ---------------------------------------------------------------------------
 // Test Utilities
@@ -54,12 +55,7 @@ function assertEqual<T>(actual: T, expected: T, message: string) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TEST_DECKS: DeckSlot[] = [
-  { name: 'Contract Test A', dck: 'deck_a_content' },
-  { name: 'Contract Test B', dck: 'deck_b_content' },
-  { name: 'Contract Test C', dck: 'deck_c_content' },
-  { name: 'Contract Test D', dck: 'deck_d_content' },
-];
+const TEST_DECKS = testSeats(['Contract Test A', 'Contract Test B', 'Contract Test C', 'Contract Test D']);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -76,15 +72,12 @@ async function runTests() {
   let createdJobId: string;
 
   await test('createJob returns a Job with all required fields', async () => {
-    const job = await jobStore.createJob(TEST_DECKS, 8, {
-      parallelism: 4,
-      deckIds: ['deck-1', 'deck-2', 'deck-3', 'deck-4'],
-    });
+    const job = await jobStore.createJob(TEST_DECKS, 8, { parallelism: 4 });
 
     createdJobId = job.id;
 
     assert(typeof job.id === 'string' && job.id.length > 0, 'id should be non-empty string');
-    assert(Array.isArray(job.decks) && job.decks.length === 4, 'decks should be array of 4');
+    assertEqual(JSON.stringify(job.seats), JSON.stringify(TEST_DECKS), 'seats');
     assertEqual(job.status, 'QUEUED', 'status');
     assertEqual(job.simulations, 8, 'simulations');
     assert(job.createdAt instanceof Date, 'createdAt should be Date');
@@ -102,7 +95,7 @@ async function runTests() {
     assertEqual(job!.status, 'QUEUED', 'status');
     assertEqual(job!.simulations, 8, 'simulations');
     assert(job!.createdAt instanceof Date, 'createdAt should be Date');
-    assert(Array.isArray(job!.decks), 'decks should be array');
+    assertEqual(JSON.stringify(job!.seats), JSON.stringify(TEST_DECKS), 'seats');
   });
 
   await test('getJob returns null for nonexistent ID', async () => {
@@ -223,15 +216,14 @@ async function runTests() {
 
   await test('setJobResults stores results and getJob returns them', async () => {
     const testResults = {
-      wins: { 'Contract Test A': 5, 'Contract Test B': 3 },
-      avgWinTurn: { 'Contract Test A': 8, 'Contract Test B': 12 },
       gamesPlayed: 8,
+      seats: [{ wins: 5, avgWinTurn: 8 }, { wins: 3, avgWinTurn: 12 }, { wins: 0, avgWinTurn: null }, { wins: 0, avgWinTurn: null }],
     };
     await jobStore.setJobResults(createdJobId, testResults);
     const job = await jobStore.getJob(createdJobId);
     assert(job!.results !== null && job!.results !== undefined, 'results should be set');
     assertEqual(job!.results!.gamesPlayed, 8, 'gamesPlayed');
-    assertEqual(job!.results!.wins['Contract Test A'], 5, 'wins for Deck A');
+    assertEqual(job!.results!.seats[0]!.wins, 5, 'wins for seat 0');
   });
 
   // =========================================================================

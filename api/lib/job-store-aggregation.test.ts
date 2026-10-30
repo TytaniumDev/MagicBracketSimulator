@@ -10,6 +10,7 @@
  * Run with: npx tsx lib/job-store-aggregation.test.ts
  */
 
+import { testSeats } from '../test/seats';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -66,14 +67,8 @@ async function runTests() {
   const { aggregateJobResults } = await import('./job-store-factory');
   const logStore = await import('./log-store');
 
-  type DeckSlot = import('./types').DeckSlot;
 
-  const DECKS: DeckSlot[] = [
-    { name: 'Deck A', dck: 'a' },
-    { name: 'Deck B', dck: 'b' },
-    { name: 'Deck C', dck: 'c' },
-    { name: 'Deck D', dck: 'd' },
-  ];
+  const DECKS = testSeats(['Deck A', 'Deck B', 'Deck C', 'Deck D']);
 
   const FIXTURE_PATH = path.join(__dirname, 'condenser', 'fixtures', 'real-4game-log.txt');
   const rawFixture = fs.readFileSync(FIXTURE_PATH, 'utf-8');

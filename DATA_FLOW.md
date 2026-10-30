@@ -43,10 +43,12 @@ queue.
    worker with `X-Worker-Secret`, the desktop worker with `?view=worker` and
    its user token; `JobLoader` keeps the last 8 jobs), runs the simulation,
    and reports status via `PATCH /api/jobs/:id/simulations/:simId` (see §2
-   below). Job docs record only each seat's deck name and id; the worker
-   view adds the .dck content, read from each deck by id and cached for 5
-   minutes (`api/lib/job-decks.ts`). Older jobs that embedded the content
-   are served as stored, and aggregation reads deck lists the same way.
+   below). Job docs list their 4 decks as `seats: [{deckId, name, link,
+   colorIdentity}]`, filled from each deck when the job is created
+   (`api/lib/job-seats.ts`). The worker view adds `decks: [{name, dck}]`
+   in seat order, reading each deck's .dck content by id and caching it
+   for 5 minutes (`api/lib/job-decks.ts`); aggregation reads deck lists the
+   same way.
 5. **Hold the lease:** while the sim runs, the worker calls
    `POST /api/jobs/:id/simulations/:simId/lease` with `{ workerId }` about
    once a minute (`keepSimLease` in `worker/src/sim-lease.ts`,
@@ -225,7 +227,14 @@ no lifecycle rule: raw logs are kept forever.
      uploaded.
     - **Local:** `meta.json` (contains `condensed` and `structured`).
     - **GCP:** `condensed.json` + `structured.json` in GCS, gzipped.
-  4. **Per-deck stats (fire-and-forget, job has 4 `deckIds`):**
+  4. **Job results:** `computeJobResults` (`api/lib/job-results.ts`) turns
+     each structured game's winner into a seat with `seatOfPlayer`
+     (`api/lib/condenser/deck-match.ts`: deck name match, and the Forge
+     player number `Ai(N)` when the same deck sits in two seats), then
+     `setJobResults` stores `results: { gamesPlayed, seats: [{ wins,
+     avgWinTurn }] }`, index-aligned with the job's `seats`. The frontend
+     shows wins by deck name with `winsByName` (`shared/types/job.ts`).
+  5. **Per-deck stats (fire-and-forget):**
     - `processJobForRatings` — win/game counters behind the leaderboard and
      deck page results, plus `pairGames` (games played against each other
      deck, every game counted whether or not its winner resolved). One
@@ -250,7 +259,7 @@ no lifecycle rule: raw logs are kept forever.
      read and rebuilt by the next job or the backfill. `GET
      /api/decks/:id/card-impact` scores cards from these counters
      (`scoreCards`).
-  5. **Pod run standings (fire-and-forget, any job with results):**
+  6. **Pod run standings (fire-and-forget, any job with results):**
      `PodRunStore.applyJob` copies the job's results up to its pod run, if
      it is in one. Each job in a run carries `podRunId` (SQLite:
      `jobs.pod_run_id`), and the run keeps per-deck totals in `standings`
@@ -261,7 +270,7 @@ no lifecycle rule: raw logs are kept forever.
      (`POST /api/pod-runs`) sets `podRunId` on each of its jobs and totals the
      ones that already have results in the same way, so a job finishing while
      its run is saved counts once.
-  6. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
+  7. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
 
 So: **condensing and structuring** of logs happens **only in the API**, during
@@ -306,7 +315,7 @@ unused by the current worker, which uploads per-simulation via
   - **Terminal state guard:** Once the cached job data has a terminal status,
     `mergeFirestoreJobUpdate` returns early without applying the Firestore
     snapshot. This prevents stale Firestore cache data from overwriting
-    complete REST API responses (which include deckLinks, colorIdentity, etc.).
+    complete REST API responses.
   - **Conditional final REST fetch:** When Firestore reports a terminal status,
     a final REST fetch is only performed if the job *transitioned* to terminal
     (i.e., the user was watching a running job). If the initial REST response
@@ -325,7 +334,7 @@ unused by the current worker, which uploads per-simulation via
   - Polling stops automatically when the job reaches a terminal state.
 
 - **Strategy: "REST base + real-time overlay"**
-  - Initial data comes from REST (`GET /api/jobs/:id`) which provides the complete formatted `JobResponse` with computed fields (name, durationMs, deckLinks, colorIdentity).
+  - Initial data comes from REST (`GET /api/jobs/:id`) which provides the complete formatted `JobResponse` with computed fields (name, durationMs). Each seat's deck link and colors are on the job doc itself.
   - In GCP mode, Firestore `onSnapshot` overlays real-time field updates on top of the cached REST data.
   - Both modes share the same TanStack Query cache — components are mode-agnostic.
 
@@ -482,6 +491,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Worker presence | `api/test/worker-presence.test.ts`, `worker_flutter/test/worker/worker_presence_test.dart` | Which entries count as online (stale window, updating window), mapping to `WorkerInfo`; desktop writes on connect/reconnect and each tick, arms the onDisconnect delete, removes on stop |
 | Flutter log upload | `worker_flutter/test/worker/log_uploader_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
+| Job results per seat | `api/lib/job-results.test.ts`, `api/lib/condenser/deck-match.test.ts`, `api/test/job-decks.test.ts` | Wins and average winning turn per seat, the same deck in two seats, unmatched winners; `seatOfPlayer`; seats filled at job creation and decklists read by seat |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |
 | Pod run standings | `api/test/pod-run-store.test.ts`, `frontend/src/utils/pods.test.ts`, `frontend/src/pages/PodRun.test.tsx` | Saving a run totals jobs that already have results, `applyJob` counts each job once and skips jobs in no run, a job stays in its first run, ranking; the saved run page shows stored standings and loads pods only when asked |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |

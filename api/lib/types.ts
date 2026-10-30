@@ -15,7 +15,7 @@
 // ---------------------------------------------------------------------------
 
 export type { JobStatus } from '@shared/types/job';
-export type { JobResults } from '@shared/types/job';
+export type { JobResults, JobSeat, SeatResult } from '@shared/types/job';
 export type { JobSource } from '@shared/types/job';
 export { GAMES_PER_CONTAINER } from '@shared/types/job';
 
@@ -46,20 +46,11 @@ export type { WorkerInfo } from '@shared/types/worker';
 import type { JobStatus } from '@shared/types/job';
 import type { JobResults } from '@shared/types/job';
 import type { JobSource } from '@shared/types/job';
+import type { JobSeat } from '@shared/types/job';
 
 export interface DeckSlot {
   name: string;
   dck: string;
-}
-
-/**
- * A seat's deck as recorded on a job. Jobs with 4 deckIds record names only
- * and workers fetch the content by id (see job-decks.ts); `dck` is present
- * on older jobs and on jobs without deck ids.
- */
-export interface JobDeck {
-  name: string;
-  dck?: string;
 }
 
 /**
@@ -68,8 +59,8 @@ export interface JobDeck {
  */
 export interface Job {
   id: string;
-  decks: JobDeck[]; // Always length 4
-  deckIds?: string[]; // Length 4 when set; workers get each deck's content by id
+  /** Always length 4. Workers get each deck's content by id (see job-decks.ts). */
+  seats: JobSeat[];
   status: JobStatus;
   simulations: number;
   parallelism?: number;

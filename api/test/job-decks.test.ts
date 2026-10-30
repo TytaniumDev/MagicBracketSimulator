@@ -1,5 +1,6 @@
 /**
- * Tests for resolveJobDecks: the decklists a worker gets for a job (SQLite).
+ * Tests for job seats and resolveJobDecks, the decklists a worker gets for a
+ * job (SQLite).
  * Runs in a temp directory so it never touches the local dev decks.
  *
  * Run with: npx tsx test/job-decks.test.ts
@@ -33,39 +34,37 @@ function assertEqual<T>(actual: T, expected: T, message: string) {
 async function main() {
   // Imported after the env and cwd are set, since modules read them on load.
   const { resolveJobDecks } = await import('../lib/job-decks');
+  const { resolveJobSeats } = await import('../lib/job-seats');
   const { saveDeck } = await import('../lib/saved-decks');
   const jobStore = await import('../lib/job-store-factory');
 
   const dck = '[Commander]\n1 Sol Ring\n';
   const ids = ['Alpha', 'Beta', 'Gamma', 'Delta'].map((name) => saveDeck(name, dck).filename);
 
-  await test('a job with deck ids records names only', async () => {
-    const job = await jobStore.createJob(ids.map((_, i) => ({ name: `Seat ${i}`, dck })), 4, { deckIds: ids });
-    const stored = await jobStore.getJob(job.id);
-    assertEqual(stored!.decks, [0, 1, 2, 3].map((i) => ({ name: `Seat ${i}` })), 'stored decks');
+  const seats = (deckIds: string[]) =>
+    deckIds.map((deckId, i) => ({ deckId, name: `Seat ${i}`, link: null, colorIdentity: [] }));
+
+  await test('resolveJobSeats copies each deck in order and lists unknown ids', async () => {
+    const { seats: resolved, errors } = await resolveJobSeats([ids[1]!, 'missing.dck', ids[0]!]);
+    assertEqual(resolved.map((s) => [s.deckId, s.name]), [[ids[1], 'beta'], [ids[0], 'alpha']], 'seats');
+    assertEqual(resolved[0]!.link, null, 'link');
+    assertEqual(errors, ['missing.dck'], 'errors');
+  });
+
+  await test('a job stores its seats as given', async () => {
+    const job = await jobStore.createJob(seats(ids), 4);
+    assertEqual((await jobStore.getJob(job.id))!.seats, seats(ids), 'seats');
   });
 
   await test('decks are read by id, keeping the names recorded on the job', async () => {
-    const decks = await resolveJobDecks({ decks: ids.map((_, i) => ({ name: `Seat ${i}` })), deckIds: ids });
+    const decks = await resolveJobDecks({ seats: seats(ids) });
     assertEqual(decks?.map((d) => d.name), ['Seat 0', 'Seat 1', 'Seat 2', 'Seat 3'], 'names');
     assertEqual(decks?.every((d) => d.dck.includes('Sol Ring')), true, 'content');
   });
 
-  await test('decklists embedded on an older job are served as stored', async () => {
-    const embedded = ids.map((_, i) => ({ name: `Old ${i}`, dck: `old ${i}` }));
-    assertEqual(await resolveJobDecks({ decks: embedded }), embedded, 'decks');
-  });
-
   await test('a missing deck means no decks', async () => {
-    const decks = await resolveJobDecks({
-      decks: ids.map((_, i) => ({ name: `Seat ${i}` })),
-      deckIds: [ids[0]!, ids[1]!, ids[2]!, 'missing.dck'],
-    });
+    const decks = await resolveJobDecks({ seats: seats([ids[0]!, ids[1]!, ids[2]!, 'missing.dck']) });
     assertEqual(decks, null, 'decks');
-  });
-
-  await test('a job without deck ids or content has no decks', async () => {
-    assertEqual(await resolveJobDecks({ decks: ids.map((_, i) => ({ name: `Seat ${i}` })) }), null, 'decks');
   });
 
   fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -32,7 +32,7 @@ export function usePodRunJobs(jobIds: readonly string[]): PodRunJobs {
   const result = useQueries({
     queries: jobIds.map((id) => ({
       queryKey: ['job', id],
-      queryFn: () => fetchJob(id, queryClient),
+      queryFn: () => fetchJob(id),
       retry: 1,
       refetchInterval: (q: { state: { data?: JobResponse } }) =>
         db || isTerminal(q.state.data?.status) ? false : LOCAL_POD_POLL_MS,

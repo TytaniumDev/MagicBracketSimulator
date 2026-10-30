@@ -2,7 +2,7 @@
  * Job store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (job-store).
  */
-import { Job, JobStatus, JobResults, JobDeck, SimulationStatus, SimulationState, WorkerInfo, JobSource } from './types';
+import { Job, JobStatus, JobResults, JobSeat, SimulationStatus, SimulationState, WorkerInfo, JobSource } from './types';
 import { isTerminalSimState } from '@shared/types/state-machine';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
@@ -58,41 +58,30 @@ export async function getJobByIdempotencyKey(key: string): Promise<Job | null> {
 }
 
 export async function createJob(
-  decks: JobDeck[],
+  seats: JobSeat[],
   simulations: number,
   options?: {
     idempotencyKey?: string;
     parallelism?: number;
     createdBy?: string;
-    deckIds?: string[];
     source?: JobSource;
-    /** Denormalized deck metadata, Firestore-only. See CreateJobData. */
-    deckLinks?: Record<string, string | null>;
-    colorIdentity?: Record<string, string[]>;
   }
 ): Promise<Job> {
-  // With all 4 deck ids the job records names only; workers fetch the
-  // decklists by id (see job-decks.ts).
-  const jobDecks = options?.deckIds?.length === 4 ? decks.map(({ name }) => ({ name })) : decks;
   if (USE_FIRESTORE) {
     return firestoreStore.createJob({
-      decks: jobDecks,
+      seats,
       simulations,
       parallelism: options?.parallelism,
       idempotencyKey: options?.idempotencyKey,
       createdBy: options?.createdBy ?? 'unknown',
-      deckIds: options?.deckIds,
       source: options?.source,
-      deckLinks: options?.deckLinks,
-      colorIdentity: options?.colorIdentity,
     });
   }
   return (await sqliteStore()).createJob(
-    jobDecks,
+    seats,
     simulations,
     options?.idempotencyKey,
     options?.parallelism,
-    options?.deckIds,
     options?.source
   );
 }
@@ -599,10 +588,10 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   const { getRawLogs, ingestLogs, getStructuredLogs } = await import('./log-store');
   const rawLogs = await getRawLogs(jobId);
 
-  const deckNames = job.decks.map(d => d.name);
+  const deckNames = job.seats.map((s) => s.name);
   if (rawLogs && rawLogs.length > 0) {
     const { resolveJobDecks } = await import('./job-decks');
-    const deckLists = ((await resolveJobDecks(job)) ?? job.decks).map(d => d.dck ?? '');
+    const deckLists = (await resolveJobDecks(job))?.map((d) => d.dck);
     await ingestLogs(jobId, rawLogs, deckNames, deckLists);
   }
 
@@ -611,31 +600,8 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   // Compute aggregated results from structured games
   if (structuredData?.games?.length) {
-    const { matchesDeckName } = await import('./condenser/deck-match');
-    const results: JobResults = { wins: {}, avgWinTurn: {}, gamesPlayed: structuredData.games.length };
-    const turnSums: Record<string, number[]> = {};
-    for (const name of deckNames) {
-      results.wins[name] = 0;
-      results.avgWinTurn[name] = 0;
-      turnSums[name] = [];
-    }
-
-    for (const game of structuredData.games) {
-      if (game.winner) {
-        const matched = deckNames.find(n => matchesDeckName(game.winner!, n)) ?? game.winner;
-        results.wins[matched] = (results.wins[matched] ?? 0) + 1;
-        if (game.winningTurn) {
-          if (!turnSums[matched]) turnSums[matched] = [];
-          turnSums[matched].push(game.winningTurn);
-        }
-      }
-    }
-    for (const [name, turns] of Object.entries(turnSums)) {
-      results.avgWinTurn[name] = turns.length > 0
-        ? Math.round((turns.reduce((a, b) => a + b, 0) / turns.length) * 10) / 10
-        : 0;
-    }
-
+    const { computeJobResults } = await import('./job-results');
+    const results = computeJobResults(structuredData.games, deckNames);
     await setJobResults(jobId, results);
 
     // Copy the results up to the job's pod run, if it's in one. The store
@@ -647,19 +613,21 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
     });
   }
 
-  // Update per-deck win/game counters for jobs with 4 resolved deck IDs
-  if (Array.isArray(job.deckIds) && job.deckIds.length === 4 && structuredData?.games?.length) {
+  const deckIds = job.seats.map((s) => s.deckId);
+
+  // Update per-deck win/game counters
+  if (structuredData?.games?.length) {
     const { processJobForRatings } = await import('./trueskill-service');
-    processJobForRatings(jobId, job.deckIds, structuredData.games).catch((err) => {
+    processJobForRatings(jobId, job.seats, structuredData.games).catch((err) => {
       log.error('Rating stats update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
       Sentry.captureException(err, { tags: { component: 'rating-stats', jobId } });
     });
   }
 
   // Update per-deck card impact counters from the same raw logs (no extra reads)
-  if (Array.isArray(job.deckIds) && job.deckIds.length === 4 && rawLogs && rawLogs.length > 0) {
+  if (rawLogs && rawLogs.length > 0) {
     const { processJobForCardStats } = await import('./card-impact/service');
-    processJobForCardStats(jobId, job.deckIds, deckNames, rawLogs).catch((err) => {
+    processJobForCardStats(jobId, deckIds, deckNames, rawLogs).catch((err) => {
       log.error('Card stats update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
       Sentry.captureException(err, { tags: { component: 'card-stats', jobId } });
     });

@@ -8,6 +8,7 @@
  *
  * Run with: npx tsx test/rating-store.test.ts
  */
+import { testSeats } from './seats';
 import { getRatingStore } from '../lib/rating-store-factory';
 import { createJob } from '../lib/job-store-factory';
 import { addPodPairGames, pairKey, type DeckRating } from '../lib/rating-store';
@@ -35,7 +36,7 @@ async function main() {
   const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((x) => `rating-test-${run}-${x}`) as [string, string, string, string];
   const pod = [a, b, c, d];
   const deck = { name: 'Test Deck', dck: '[Commander]\n1 Sol Ring\n' };
-  const [job1, job2] = await Promise.all([1, 2].map(async () => (await createJob([deck, deck, deck, deck], 4)).id));
+  const [job1, job2] = await Promise.all([1, 2].map(async () => (await createJob(testSeats([deck.name, deck.name, deck.name, deck.name]), 4)).id));
 
   /** Each deck plays `games` more, and the first seat wins them all. */
   const firstSeatWins = (games: number) => (stored: (DeckRating | null)[]) =>

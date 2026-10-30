@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'job_seats.dart';
 
 /// Read-only view of one cloud job. Mirrors the spine of the web
 /// frontend's `JobStatus.tsx` — job metadata, progress, per-deck win
@@ -56,7 +57,7 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = (job['status'] as String?) ?? 'QUEUED';
-    final deckNames = _deckNames(job);
+    final deckNames = jobSeatNames(job);
     final completed = (job['completedSimCount'] as num?)?.toInt() ?? 0;
     final total = (job['totalSimCount'] as num?)?.toInt() ?? sims.length;
     final progress = total == 0 ? 0.0 : (completed / total).clamp(0.0, 1.0);
@@ -72,10 +73,14 @@ class _Body extends StatelessWidget {
       if (state == 'COMPLETED') {
         final List<dynamic> simWinners = s['winners'] is List
             ? s['winners'] as List
-            : (s['winner'] != null ? [s['winner'] as String] : const <String>[]);
+            : (s['winner'] != null
+                  ? [s['winner'] as String]
+                  : const <String>[]);
         final List<dynamic> simTurns = s['winningTurns'] is List
             ? s['winningTurns'] as List
-            : (s['winningTurn'] != null ? [s['winningTurn'] as num] : const <num>[]);
+            : (s['winningTurn'] != null
+                  ? [s['winningTurn'] as num]
+                  : const <num>[]);
 
         for (var i = 0; i < simWinners.length; i++) {
           final winner = simWinners[i] as String? ?? '';
@@ -293,16 +298,6 @@ class _ErrorMessage extends StatelessWidget {
       ),
     );
   }
-}
-
-List<String> _deckNames(Map<String, dynamic> data) {
-  final raw = data['decks'];
-  if (raw is! List) return const [];
-  return raw
-      .whereType<Map>()
-      .map((d) => d['name'] as String?)
-      .whereType<String>()
-      .toList(growable: false);
 }
 
 /// Forge winners come back as `"Ai(N)-deckName"` or just `"deckName"`.

@@ -141,13 +141,13 @@ export default function JobStatusPage() {
   };
 
   const handleRunAgain = async () => {
-    if (!job.deckIds || job.deckIds.length !== REQUIRED_DECK_COUNT) return;
+    if (job.seats.length !== REQUIRED_DECK_COUNT) return;
     setIsResubmitting(true);
     try {
       const response = await fetchWithAuth(`${apiBase}/api/jobs`, {
         method: 'POST',
         body: JSON.stringify({
-          deckIds: job.deckIds,
+          deckIds: job.seats.map((s) => s.deckId),
           simulations: job.simulations,
           idempotencyKey: crypto.randomUUID(),
         }),
@@ -186,7 +186,7 @@ export default function JobStatusPage() {
         <h1 className="text-2xl font-bold">
           {job.simulations} Game Simulation
         </h1>
-        {isTerminal && job.deckIds?.length === REQUIRED_DECK_COUNT && (
+        {isTerminal && job.seats.length === REQUIRED_DECK_COUNT && (
           <button
             type="button"
             onClick={handleRunAgain}
@@ -201,15 +201,13 @@ export default function JobStatusPage() {
       <p className="text-gray-500 text-xs mb-6">ID: {job.id}</p>
 
       {/* Deck Showcase */}
-      {job.deckNames?.length > 0 && (
+      {job.seats.length > 0 && (
         <DeckShowcase
-          deckNames={job.deckNames}
-          colorIdentityByDeckName={logs.colorIdentityByDeckName}
+          seats={job.seats}
           winTally={winTally}
           winTurns={winTurns}
           gamesPlayed={gamesPlayed}
           totalSimulations={job.simulations}
-          deckLinks={job.deckLinks}
           jobStatus={job.status}
         />
       )}

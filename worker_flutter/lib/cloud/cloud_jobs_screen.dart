@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'cloud_job_detail_screen.dart';
+import 'job_seats.dart';
 
 /// Cloud-mode jobs browser — a read-only port of the web frontend's
 /// `Browse.tsx`. Mirrors the same Firestore query (recent jobs, ordered
@@ -60,7 +61,7 @@ class _JobRow extends StatelessWidget {
     final completed = (data['completedSimCount'] as num?)?.toInt() ?? 0;
     final total = (data['totalSimCount'] as num?)?.toInt() ?? 0;
     final progress = total == 0 ? 0.0 : (completed / total).clamp(0.0, 1.0);
-    final deckNames = _deckNames(data);
+    final deckNames = jobSeatNames(data);
     final createdAt = _toDate(data['createdAt']);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
@@ -180,16 +181,6 @@ class _CenterMessage extends StatelessWidget {
       ),
     );
   }
-}
-
-List<String> _deckNames(Map<String, dynamic> data) {
-  final raw = data['decks'];
-  if (raw is! List) return const [];
-  return raw
-      .whereType<Map>()
-      .map((d) => d['name'] as String?)
-      .whereType<String>()
-      .toList(growable: false);
 }
 
 DateTime? _toDate(Object? raw) {

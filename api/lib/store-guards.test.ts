@@ -6,6 +6,7 @@
  * Run with: npx tsx lib/store-guards.test.ts
  */
 
+import { testSeats } from '../test/seats';
 import {
   createJob,
   initializeSimulations,
@@ -15,7 +16,6 @@ import {
   deleteSimulations,
   deleteJob,
 } from './job-store';
-import type { DeckSlot } from './types';
 
 // ---------------------------------------------------------------------------
 // Test Utilities
@@ -52,12 +52,7 @@ function assertEqual<T>(actual: T, expected: T, message: string) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const DECKS: DeckSlot[] = [
-  { name: 'Deck A', dck: 'a' },
-  { name: 'Deck B', dck: 'b' },
-  { name: 'Deck C', dck: 'c' },
-  { name: 'Deck D', dck: 'd' },
-];
+const DECKS = testSeats(['Deck A', 'Deck B', 'Deck C', 'Deck D']);
 
 function createTestJob(): string {
   return createJob(DECKS, 8).id;

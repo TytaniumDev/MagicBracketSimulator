@@ -9,6 +9,7 @@
  * Run with: npx tsx test/data-wipe.test.ts
  */
 
+import { testSeats } from './seats';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -59,7 +60,7 @@ async function main() {
   const { wipeNextStep } = await import('../lib/data-wipe');
 
   const deck = { name: 'Test Deck', dck: '[Commander]\n1 Sol Ring\n' };
-  const decks = [deck, deck, deck, deck];
+  const decks = testSeats([deck.name, deck.name, deck.name, deck.name]);
   const db = getDb();
   const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 

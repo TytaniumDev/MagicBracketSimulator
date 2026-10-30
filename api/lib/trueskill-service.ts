@@ -10,8 +10,8 @@
  * ranking. mu/sigma are still present in the DeckRating schema so existing
  * Firestore docs remain valid; new writes leave mu/sigma at neutral defaults.
  */
-import type { DeckRating, StructuredGame } from './types';
-import { matchesDeckName } from './condenser/deck-match';
+import type { DeckRating, JobSeat, StructuredGame } from './types';
+import { seatOfPlayer } from './condenser/deck-match';
 import { getDeckById } from './deck-store-factory';
 import { getRatingStore } from './rating-store-factory';
 import { addWinTurn, emptyWinTurnAggregate } from './win-turn-aggregate';
@@ -26,16 +26,18 @@ const SIGMA_DEFAULT = 25 / 3;
  * Fire-and-forget — called from aggregateJobResults with a .catch() so
  * failures never break job completion.
  *
- * @param jobId    The job ID (for idempotency).
- * @param deckIds  4 deck IDs (same order used throughout the job).
- * @param games    Structured game data (already ingested by ingestLogs).
+ * @param jobId  The job ID (for idempotency).
+ * @param seats  The job's 4 seats.
+ * @param games  Structured game data (already ingested by ingestLogs).
  * @returns false when the job was already rated.
  */
 export async function processJobForRatings(
   jobId: string,
-  deckIds: string[],
+  seats: JobSeat[],
   games: StructuredGame[],
 ): Promise<boolean> {
+  const deckIds = seats.map((s) => s.deckId);
+  const seatNames = seats.map((s) => s.name);
   const deckInfos = await Promise.all(
     deckIds.map(async (id) => {
       const deck = await getDeckById(id);
@@ -53,15 +55,13 @@ export async function processJobForRatings(
   const resolved: { winnerIdx: number; winningTurn: number | null }[] = [];
   games.forEach((game, i) => {
     const winner = game.winner;
-    const winnerIdx = winner
-      ? deckInfos.findIndex(({ name }) => name !== null && matchesDeckName(winner, name))
-      : -1;
+    const winnerIdx = winner ? seatOfPlayer(winner, seatNames) : -1;
     if (winnerIdx === -1) {
       Sentry.addBreadcrumb({
         category: 'rating-stats',
         message: `Game ${i} in job ${jobId}: winner "${winner}" could not be resolved to a deck ID`,
         level: 'warning',
-        data: { jobId, gameIndex: i, winner, deckNames: deckInfos.map(d => d.name) },
+        data: { jobId, gameIndex: i, winner, seatNames },
       });
       return;
     }

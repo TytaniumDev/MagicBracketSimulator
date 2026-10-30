@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { DeckShowcase } from './DeckShowcase';
-import { DEFAULT_DECK_NAMES, makeResults } from '../test/fixtures';
+import { winsByName } from '@shared/types/job';
+import { DEFAULT_DECK_NAMES, makeResults, makeSeats } from '../test/fixtures';
 
 const DECK_NAMES = DEFAULT_DECK_NAMES;
 
 function renderShowcase(overrides: Partial<Parameters<typeof DeckShowcase>[0]> = {}) {
   const defaults: Parameters<typeof DeckShowcase>[0] = {
-    deckNames: DECK_NAMES,
-    colorIdentityByDeckName: {},
+    seats: makeSeats(),
     winTally: null,
     winTurns: null,
     gamesPlayed: 0,
@@ -38,7 +38,7 @@ describe('DeckShowcase', () => {
   it('displays win counts when winTally is provided', () => {
     const results = makeResults();
     renderShowcase({
-      winTally: results.wins,
+      winTally: winsByName(makeSeats(), results),
       gamesPlayed: results.gamesPlayed,
       jobStatus: 'COMPLETED',
     });
@@ -51,7 +51,7 @@ describe('DeckShowcase', () => {
   it('calculates win percentage correctly (e.g., 8/20 = 40%)', () => {
     const results = makeResults();
     renderShowcase({
-      winTally: results.wins,
+      winTally: winsByName(makeSeats(), results),
       gamesPlayed: results.gamesPlayed,
       jobStatus: 'COMPLETED',
     });
@@ -65,14 +65,9 @@ describe('DeckShowcase', () => {
   // Moxfield links
   // ---------------------------------------------------------------------------
 
-  it('shows Decklist links when deckLinks are provided', () => {
+  it('shows a Decklist link for each seat with a link', () => {
     renderShowcase({
-      deckLinks: {
-        [DECK_NAMES[0]]: 'https://www.moxfield.com/decks/atraxa',
-        [DECK_NAMES[1]]: null,
-        [DECK_NAMES[2]]: null,
-        [DECK_NAMES[3]]: null,
-      },
+      seats: makeSeats().map((seat, i) => (i === 0 ? { ...seat, link: 'https://www.moxfield.com/decks/atraxa' } : seat)),
       jobStatus: 'COMPLETED',
     });
     const links = screen.getAllByText('Decklist');
@@ -87,7 +82,7 @@ describe('DeckShowcase', () => {
   it('highlights the leader deck when job is COMPLETED', () => {
     const results = makeResults();
     renderShowcase({
-      winTally: results.wins,
+      winTally: winsByName(makeSeats(), results),
       gamesPlayed: results.gamesPlayed,
       jobStatus: 'COMPLETED',
     });
@@ -113,7 +108,7 @@ describe('DeckShowcase', () => {
   it('shows "(live)" badge when job is RUNNING', () => {
     const results = makeResults();
     renderShowcase({
-      winTally: results.wins,
+      winTally: winsByName(makeSeats(), results),
       gamesPlayed: results.gamesPlayed,
       jobStatus: 'RUNNING',
     });
@@ -128,7 +123,7 @@ describe('DeckShowcase', () => {
   it('sorts decks by win count descending', () => {
     const results = makeResults();
     renderShowcase({
-      winTally: results.wins,
+      winTally: winsByName(makeSeats(), results),
       gamesPlayed: results.gamesPlayed,
       jobStatus: 'COMPLETED',
     });

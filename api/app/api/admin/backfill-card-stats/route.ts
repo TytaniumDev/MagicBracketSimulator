@@ -4,6 +4,7 @@ import * as jobStore from '@/lib/job-store-factory';
 import * as Sentry from '@sentry/nextjs';
 import { errorResponse } from '@/lib/api-response';
 import type { ParsedCardStatsJob } from '@/lib/card-impact/service';
+import { seatNames } from '@shared/types/job';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     const toCount: ParsedCardStatsJob[] = [];
     for (const job of jobs) {
       if (!job || job.status !== 'COMPLETED') continue;
-      if (!Array.isArray(job.deckIds) || job.deckIds.length !== 4) continue;
+      if (job.seats.length !== 4) continue;
 
       try {
         const rawLogs = await getRawLogs(job.id);
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
           skipped.push(job.id);
           continue;
         }
-        toCount.push(parseCardStatsJob({ jobId: job.id, deckIds: job.deckIds, deckNames: job.decks.map((d) => d.name), rawLogs }));
+        toCount.push(parseCardStatsJob({ jobId: job.id, deckIds: job.seats.map((s) => s.deckId), deckNames: seatNames(job.seats), rawLogs }));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'unknown error';
         errors.push({ jobId: job.id, error: message });

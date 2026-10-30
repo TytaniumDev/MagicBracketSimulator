@@ -26,8 +26,7 @@ export function getDb(): Database.Database {
   db.exec(`
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY,
-      decks_json TEXT NOT NULL DEFAULT '[]',
-      deck_ids_json TEXT,
+      seats_json TEXT NOT NULL,
       status TEXT NOT NULL,
       simulations INTEGER NOT NULL,
       created_at TEXT NOT NULL,

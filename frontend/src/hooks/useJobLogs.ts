@@ -91,12 +91,16 @@ export function useJobLogs(
 
   // Build the names list for color identity lookup
   const allDeckNames = new Set<string>();
-  job?.deckNames?.forEach((n) => allDeckNames.add(n));
+  job?.seats.forEach((s) => allDeckNames.add(s.name));
   structuredDeckNames?.forEach((n) => allDeckNames.add(n));
   const namesList = Array.from(allDeckNames).sort();
 
-  // Color identity: prefer job-level data, fall back to separate fetch
-  const jobHasColorIdentity = !!job?.colorIdentity && Object.keys(job.colorIdentity).length > 0;
+  // Color identity: prefer the seats' colors, fall back to a separate fetch
+  const jobColorIdentity: Record<string, string[]> = {};
+  for (const seat of job?.seats ?? []) {
+    if (seat.colorIdentity.length > 0) jobColorIdentity[seat.name] = seat.colorIdentity;
+  }
+  const jobHasColorIdentity = Object.keys(jobColorIdentity).length > 0;
 
   const colorIdentityQuery = useQuery({
     queryKey: ['colorIdentity', jobId, ...namesList],
@@ -111,7 +115,7 @@ export function useJobLogs(
   });
 
   const colorIdentityByDeckName = jobHasColorIdentity
-    ? job!.colorIdentity!
+    ? jobColorIdentity
     : (colorIdentityQuery.data ?? {});
 
   return {

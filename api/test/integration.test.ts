@@ -173,7 +173,7 @@ async function runTests() {
     const job = data.jobs[0];
     assert(job.id, 'Expected job id');
     assert(job.name, 'Expected name');
-    assert(Array.isArray(job.deckNames) && job.deckNames.length === 4, 'Expected 4 deckNames');
+    assert(Array.isArray(job.seats) && job.seats.length === 4, 'Expected 4 seats');
     assert(job.status, 'Expected status');
     createdJobId = job.id;
   });

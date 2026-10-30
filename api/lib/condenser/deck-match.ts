@@ -36,3 +36,15 @@ export function matchesDeckName(fullName: string, shortName: string): boolean {
 export function resolveWinnerName(fullName: string, deckNames: string[]): string {
   return deckNames.find((name) => matchesDeckName(fullName, name)) ?? fullName;
 }
+
+/**
+ * The seat a Forge player name ("Ai(2)-Blood Rites") belongs to, or -1 when
+ * it matches no seat. When the same deck sits in more than one seat, the
+ * player number picks between them.
+ */
+export function seatOfPlayer(playerName: string, seatNames: readonly string[]): number {
+  const matches = seatNames.flatMap((name, seat) => (matchesDeckName(playerName, name) ? [seat] : []));
+  if (matches.length <= 1) return matches[0] ?? -1;
+  const playerNumber = Number(/^Ai\((\d+)\)-/.exec(playerName)?.[1]);
+  return matches.includes(playerNumber - 1) ? playerNumber - 1 : matches[0]!;
+}

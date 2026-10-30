@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { matchesDeckName } from '../utils/deck-match';
-import type { JobResponse } from '@shared/types/job';
+import { seatNames, winsByName, type JobResponse } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
 import type { StructuredGame } from '@shared/types/log';
 
@@ -146,7 +146,7 @@ export function computeStructuredWins(
  * Three-way fallback chain: server results → structured games → simulation statuses.
  */
 export function resolveEffectiveWins(
-  jobResults: JobResponse['results'],
+  job: Pick<JobResponse, 'seats' | 'results'> | null,
   simResult: SimWinResult,
   structuredResult: StructuredWinResult,
   structuredGames: StructuredGame[] | null,
@@ -154,8 +154,9 @@ export function resolveEffectiveWins(
   const { structuredWinTally, structuredWinTurns } = structuredResult;
   const { simWinTally, simWinTurns, simGamesCompleted } = simResult;
 
+  const jobResults = job?.results ?? null;
   const winTally =
-    jobResults?.wins ??
+    (job && jobResults ? winsByName(job.seats, jobResults) : null) ??
     (structuredWinTally && Object.keys(structuredWinTally).length > 0
       ? structuredWinTally
       : simWinTally);
@@ -183,7 +184,7 @@ export function resolveEffectiveWins(
  * Pure computation hook for the three-way win data fallback chain.
  *
  * Priority order:
- * 1. job.results.wins (server-aggregated, authoritative)
+ * 1. job.results (server-aggregated per seat, authoritative)
  * 2. structuredGames winners (parsed from detailed logs)
  * 3. simulation status winners (real-time tracking)
  */
@@ -193,9 +194,10 @@ export function useWinData(
   structuredGames: StructuredGame[] | null,
   logDeckNames: string[] | null,
 ): WinData {
+  const seats = job?.seats;
   const simResult = useMemo(
-    () => computeSimWins(simulations, job?.deckNames ?? []),
-    [simulations, job?.deckNames],
+    () => computeSimWins(simulations, seats ? seatNames(seats) : []),
+    [simulations, seats],
   );
 
   const structuredResult = useMemo(
@@ -203,5 +205,5 @@ export function useWinData(
     [structuredGames, logDeckNames],
   );
 
-  return resolveEffectiveWins(job?.results ?? null, simResult, structuredResult, structuredGames);
+  return resolveEffectiveWins(job, simResult, structuredResult, structuredGames);
 }

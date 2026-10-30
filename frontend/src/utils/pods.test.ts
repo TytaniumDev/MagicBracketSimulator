@@ -2,11 +2,21 @@ import { describe, it, expect } from 'vitest';
 import { activePodChunks, aggregatePodStandings, countPods, parsePodRunJobIds, podCombinations, podRunPath, savedPodRunPath } from './pods';
 import type { JobResponse } from '@shared/types/job';
 
+/** Seats whose deck ids are the deck names. */
+function seats(names: string[]) {
+  return names.map((name) => ({ deckId: name, name, link: null, colorIdentity: [] }));
+}
+
+/** Per-seat results from wins and average win turns by name. */
+function results(names: string[], wins: Record<string, number>, avgWinTurn: Record<string, number>, gamesPlayed: number) {
+  return { gamesPlayed, seats: names.map((n) => ({ wins: wins[n] ?? 0, avgWinTurn: avgWinTurn[n] ?? null })) };
+}
+
 function makeJob(overrides: Partial<JobResponse> = {}): JobResponse {
   return {
     id: 'job',
     name: '',
-    deckNames: ['A', 'B', 'C', 'D'],
+    seats: seats(['A', 'B', 'C', 'D']),
     status: 'COMPLETED',
     simulations: 8,
     gamesCompleted: 8,
@@ -82,12 +92,12 @@ describe('aggregatePodStandings', () => {
   it('sums wins and games across pods and sorts by win rate', () => {
     const standings = aggregatePodStandings([
       makeJob({
-        deckNames: ['A', 'B', 'C', 'D'],
-        results: { wins: { A: 4, B: 2, C: 1, D: 1 }, avgWinTurn: { A: 8, B: 10, C: 9, D: 12 }, gamesPlayed: 8 },
+        seats: seats(['A', 'B', 'C', 'D']),
+        results: results(['A', 'B', 'C', 'D'], { A: 4, B: 2, C: 1, D: 1 }, { A: 8, B: 10, C: 9, D: 12 }, 8),
       }),
       makeJob({
-        deckNames: ['A', 'B', 'C', 'E'],
-        results: { wins: { A: 2, B: 0, C: 2, E: 4 }, avgWinTurn: { A: 11, C: 7, E: 9 }, gamesPlayed: 8 },
+        seats: seats(['A', 'B', 'C', 'E']),
+        results: results(['A', 'B', 'C', 'E'], { A: 2, B: 0, C: 2, E: 4 }, { A: 11, C: 7, E: 9 }, 8),
       }),
     ]);
 
@@ -103,7 +113,7 @@ describe('aggregatePodStandings', () => {
   it('skips pods without results', () => {
     const standings = aggregatePodStandings([
       makeJob({ status: 'QUEUED', results: null }),
-      makeJob({ results: { wins: { A: 1 }, avgWinTurn: {}, gamesPlayed: 4 } }),
+      makeJob({ results: results(['A', 'B', 'C', 'D'], { A: 1 }, {}, 4) }),
     ]);
     const a = standings.find((s) => s.name === 'A')!;
     expect(a.pods).toBe(1);
