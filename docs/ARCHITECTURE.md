@@ -78,6 +78,9 @@ every write goes through the API with the Admin SDK (`firestore.rules`).
 | `users/{uid}` | Access record, `status: requested \| allowed`. Not readable by clients. |
 | `config/coverage`, `config/deckSelection`, `idempotencyKeys/*` | Auto-coverage settings, decks excluded from selection, job-creation idempotency |
 
+Every time field in Firestore is a `Timestamp`; the API converts them to ISO
+strings at the edge.
+
 **Realtime Database** holds `presence/{workerId}`: an entry per online
 worker (`shared/types/worker-presence.ts`, rules in `database.rules.json`).
 The desktop worker writes its own entry with an onDisconnect delete; the
