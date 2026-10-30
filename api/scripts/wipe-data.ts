@@ -5,18 +5,30 @@
  * Precons, workers, allowed users and config are kept. Works one bounded
  * batch at a time, so it can be stopped and re-run to finish.
  *
- * Usage (from api directory). GCP mode uses Application Default Credentials:
- *   GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run wipe-data -- --yes
- * Without GOOGLE_CLOUD_PROJECT it wipes the local SQLite database instead.
+ * Usage (from api directory). Production, with the service account from
+ * Doppler (needs `doppler login`):
+ *   npm run wipe-data -- --yes
+ * Local SQLite database instead:
+ *   npm run wipe-data -- --yes --local
  */
 
-import { wipeNextStep } from '../lib/data-wipe';
+import { useDopplerCredentials } from './doppler-credentials';
 
 async function main() {
   if (!process.argv.includes('--yes')) {
     console.error('This permanently deletes every run and custom deck. Re-run with --yes to confirm.');
     process.exit(1);
   }
+
+  if (process.argv.includes('--local')) {
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+  } else {
+    useDopplerCredentials();
+    console.log(`Wiping project ${process.env.GOOGLE_CLOUD_PROJECT}`);
+  }
+
+  // Imported only now: lib modules pick their storage mode when they load.
+  const { wipeNextStep } = await import('../lib/data-wipe');
 
   const totals: Record<string, number> = {};
   for (;;) {
