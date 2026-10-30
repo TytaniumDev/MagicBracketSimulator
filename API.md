@@ -8,7 +8,8 @@ This document describes the REST API for the Magic Bracket Simulator.
 
 - Public endpoints require no auth.
 - User endpoints require Firebase Auth: `Authorization: Bearer <firebase-id-token>`
-- Worker endpoints require `X-Worker-Secret: <secret>` header.
+- Worker endpoints take the desktop worker's Firebase ID token like user endpoints: `Authorization: Bearer <firebase-id-token>` from an allowed user.
+- Internal endpoints (called by Cloud Tasks and Cloud Scheduler) require the `X-Worker-Secret: <secret>` header.
 - Admin endpoints require Firebase Auth **and** admin role on the account.
 
 ---
@@ -46,8 +47,7 @@ Returns paginated recent jobs. Supports `limit` and `cursor` query parameters.
       "durationMs": 120000,
       "parallelism": 4,
       "startedAt": "2024-01-15T10:00:01.000Z",
-      "completedAt": "2024-01-15T10:02:01.000Z",
-      "dockerRunDurationsMs": [60000, 60000]
+      "completedAt": "2024-01-15T10:02:01.000Z"
     }
   ],
   "nextCursor": "base64-cursor-or-null"
@@ -85,10 +85,8 @@ Creates a new simulation job. Requires user auth.
 
 Returns detailed information about a specific job.
 
-Workers get the worker view, which adds `decks: [{ name, dck }]` (the 4
-decks with their .dck content) and is sent to requests with
-`X-Worker-Secret`, or with `?view=worker` from an allowlisted user (the
-desktop worker). `decks` is left out when a deck can no longer be found.
+`?view=worker` adds `decks: [{ name, dck }]` (the 4 decks with their .dck
+content); the desktop worker asks for it to run the job's sims. `decks` is left out when a deck can no longer be found.
 
 `results` is null until the job has results. Its `seats` line up with the
 job's `seats` by position (the same deck can sit in two seats), and wins
@@ -120,12 +118,11 @@ are mapped from Forge's winner names to seats at aggregation.
   "errorMessage": null,
   "retryCount": 0,
   "queuePosition": 0,
-  "workers": { "online": 2, "idle": 1, "updating": 0 },
+  "workers": { "online": 2, "idle": 1, "busy": 1 },
   "createdAt": "2024-01-15T10:00:00.000Z",
   "startedAt": "2024-01-15T10:00:01.000Z",
   "completedAt": null,
-  "durationMs": null,
-  "dockerRunDurationsMs": null
+  "durationMs": null
 }
 ```
 
@@ -146,7 +143,7 @@ Cancels a QUEUED or RUNNING job. Requires user auth (must be owner or admin).
 `POST /jobs/:id/recover`
 
 One-shot recovery check for a stuck job (called by Cloud Tasks after a delay).
-**Auth:** Worker auth required.
+**Auth:** Internal (`X-Worker-Secret`).
 
 **Response:**
 
@@ -186,7 +183,7 @@ Deletes multiple jobs (max 50) and their artifacts.
 Atomically claims the next simulation for a worker: a PENDING sim, or a RUNNING
 one whose lease ran out. With `lease=1` the sim is reserved for 3 minutes; the
 worker keeps it by extending the lease (below) while it runs.
-**Auth:** Worker secret, or an allowlisted user's Firebase ID token.
+**Auth:** Allowed user's Firebase ID token (the desktop worker).
 
 **Response:**
 
@@ -222,25 +219,11 @@ Returns status of all individual simulations for a job.
 }
 ```
 
-### Initialize Simulations (Worker)
-
-`POST /jobs/:id/simulations`
-
-Initializes simulation tracking for a job.
-**Auth:** Worker auth required.
-
-**Body:**
-
-```json
-{ "count": 25 }
-```
-
 ### Update Simulation Status (Worker)
 
 `PATCH /jobs/:id/simulations/:simId`
 
 Updates the status of a single simulation.
-**Auth:** Worker auth required.
 
 **Body:**
 
@@ -260,14 +243,14 @@ Valid `state` values: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`
 
 When `workerId` is given and another worker now holds the sim, the update is
 dropped: `{ "updated": false, "reason": "not_owner" }`.
-**Auth:** Worker secret, or an allowlisted user's Firebase ID token.
+**Auth:** Allowed user's Firebase ID token (the desktop worker).
 
 ### Extend Simulation Lease (Worker)
 
 `POST /jobs/:id/simulations/:simId/lease`
 
 Pushes a running sim's lease back 3 minutes. Workers call it about once a minute.
-**Auth:** Worker secret, or an allowlisted user's Firebase ID token.
+**Auth:** Allowed user's Firebase ID token (the desktop worker).
 
 **Body:**
 
@@ -294,7 +277,7 @@ Returns all logs for a job (raw and/or structured).
 `POST /jobs/:id/logs/simulation`
 
 Uploads the raw log for a completed simulation.
-**Auth:** Worker auth required.
+**Auth:** Allowed user's Firebase ID token (the desktop worker).
 
 **Body:**
 
@@ -446,19 +429,6 @@ which is also reported to Sentry as a warning.
 }
 ```
 
-### Get Deck Content
-
-`GET /decks/:id/content`
-
-Returns the raw `.dck` text for a deck. Used by workers to download deck content.
-**Auth:** Worker auth required.
-
-**Response:**
-
-```json
-{ "name": "My Deck", "dck": "1 Sol Ring\n..." }
-```
-
 ### Delete Deck
 
 `DELETE /decks/:id`
@@ -510,8 +480,8 @@ Returns deck win-rate leaderboard across all completed simulations.
 `GET /workers`
 
 Lists all active workers and current queue depth. Workers come from the
-Realtime Database `presence/` entries seen in the last 3 minutes (5 while a
-worker is updating). The web UI reads the same entries directly.
+Realtime Database `presence/` entries seen in the last 3 minutes (none in
+local mode). The web UI reads the same entries directly.
 **Auth:** Firebase Auth required.
 
 **Response:**
@@ -526,8 +496,7 @@ worker is updating). The web UI reads the same entries directly.
       "capacity": 8,
       "activeSimulations": 4,
       "uptimeMs": 3600000,
-      "lastHeartbeat": "2024-01-15T10:00:00.000Z",
-      "ownerEmail": "admin@example.com"
+      "lastHeartbeat": "2024-01-15T10:00:00.000Z"
     }
   ],
   "queueDepth": 5
@@ -539,101 +508,6 @@ worker is updating). The web UI reads the same entries directly.
 `GET /health/workers`
 
 Returns a lightweight check on worker pool health (no auth required).
-
-### Update Worker Config
-
-`PATCH /workers/:id`
-
-Updates per-worker configuration (e.g. concurrency override).
-**Auth:** Firebase Auth required (must be owner or admin).
-
-**Body:**
-
-```json
-{ "maxConcurrentOverride": 4 }
-```
-
-Pass `null` to clear the override.
-
-**Response:**
-
-```json
-{ "ok": true, "maxConcurrentOverride": 4, "pushResult": "success" }
-```
-
-`pushResult` is one of `"success"`, `"failed"`, or `"no_url"`.
-
-### Worker Heartbeat
-
-`POST /workers/heartbeat`
-
-Reports worker liveness and retrieves configuration overrides. Used by the
-Docker worker about once a minute. The API writes the beat into the worker's
-Realtime Database presence entry (`presence/{workerId}`) and writes the
-Firestore `workers/{id}` doc (name, owner, push URL, version) only when those
-fields change. The desktop worker writes its own presence entry directly and
-does not call this endpoint.
-**Auth:** Worker auth required.
-
-**Body:**
-
-```json
-{
-  "workerId": "worker-1",
-  "workerName": "MyWorker",
-  "status": "busy",
-  "capacity": 8,
-  "activeSimulations": 4,
-  "uptimeMs": 3600000,
-  "ownerEmail": "admin@example.com"
-}
-```
-
-**Response:**
-
-```json
-{ "ok": true, "maxConcurrentOverride": null }
-```
-
----
-
-## Worker Setup
-
-### Generate Setup Token
-
-`POST /worker-setup/token`
-
-Generates a time-limited token for bootstrapping a new worker.
-**Auth:** Firebase Auth required.
-
-**Response:**
-
-```json
-{
-  "token": "base64-setup-token",
-  "expiresIn": "24 hours",
-  "apiUrl": "https://api.example.com",
-  "scriptUrl": "https://raw.githubusercontent.com/..."
-}
-```
-
-### Get Worker Config
-
-`POST /worker-setup/config`
-
-Returns AES-256-GCM encrypted worker config (secrets, API URL, worker secret).
-**Auth:** `X-Setup-Token` header required.
-**Headers:** `X-Encryption-Key` (64-char hex string).
-
-**Response:**
-
-```json
-{
-  "iv": "base64-iv",
-  "ciphertext": "base64-ciphertext",
-  "tag": "base64-auth-tag"
-}
-```
 
 ---
 
@@ -648,12 +522,17 @@ These endpoints support the automated coverage-testing system that ensures all p
 Returns coverage configuration (enabled, target matchups, etc.).
 **Auth:** Admin access required.
 
-### Get Next Coverage Job
+### Request Next Coverage Job
 
-`GET /coverage/next-job`
+`POST /coverage/next-job`
 
-Returns the next uncovered matchup to simulate.
-**Auth:** Admin access required.
+Creates a job for the next under-covered precon pod, if coverage is enabled
+and no coverage job is active. An idle worker calls it.
+**Auth:** Allowed user's Firebase ID token (the desktop worker).
+
+**Response:** `201` `{ "id", "deckNames", "source": "coverage" }`, or
+`200` `{ "reason" }` when there's nothing to create (`disabled`,
+`active-job-exists`, `all-pairs-covered`, `deck-resolution-failed`).
 
 ### Get Coverage Status
 
@@ -736,32 +615,19 @@ completed jobs that haven't been rated yet (a rated job carries
 `appliedStats.ratings`), reading their structured logs.
 **Auth:** Admin access required.
 
-### Broadcast Pull Image
-
-`POST /admin/pull-image`
-
-Broadcasts a `pull-image` command to all active workers so they update their Docker image.
-**Auth:** Worker auth required.
-
-**Response:**
-
-```json
-{ "ok": true, "message": "Pull-image broadcast sent" }
-```
-
 ### Sweep Stale Jobs
 
 `POST /admin/sweep-stale-jobs`
 
 Marks jobs FAILED if they have been stuck in RUNNING/QUEUED beyond a timeout threshold.
-**Auth:** Admin access required.
+**Auth:** Internal (`X-Worker-Secret`; Cloud Scheduler).
 
 ### Sync Precons
 
 `POST /sync/precons`
 
 Triggers a re-sync of the preconstructed deck library from the source data.
-**Auth:** Admin access required.
+**Auth:** Internal (`X-Worker-Secret`; Cloud Scheduler).
 
 ---
 

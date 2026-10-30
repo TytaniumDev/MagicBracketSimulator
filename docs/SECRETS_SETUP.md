@@ -1,13 +1,9 @@
 # Secrets and credentials setup
 
-Step-by-step instructions for where to create and store secrets used by Magic Bracket Simulator: Firebase/GCP, frontend build, and worker. **Goal: store no secrets on your local machine** — use Secret Manager and (for CI) GitHub Secrets.
+Step-by-step instructions for where to create and store secrets used by Magic Bracket Simulator: Firebase/GCP, the frontend build and the API. **Goal: store no secrets on your local machine** — use Doppler, Secret Manager and (for CI) GitHub Secrets.
 
-**No .env required:** Scripts and the worker resolve the GCP project from `gcloud config get-value project` when `GOOGLE_CLOUD_PROJECT` is not set. So you can use only:
-
-- `gcloud auth application-default login`
-- `gcloud config set project YOUR_PROJECT_ID`
-
-Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the worker with **no .env file**.
+The desktop worker needs no secrets: it signs in as its user, and its release
+secrets (signing, Sentry) live in Doppler for `release-worker.yml`.
 
 ---
 
@@ -16,9 +12,8 @@ Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the worker
 | Secret / credential | Where to set it | Used by |
 |--------------------|-----------------|---------|
 | Firebase / GCP project config | Firebase Console, GCP Console | Frontend (Firebase Hosting), API (Cloud Run) |
-| GCP credentials (ADC or key) | `gcloud auth application-default login` or key file | worker, scripts (Secret Manager access) |
+| GCP credentials (ADC or key) | `gcloud auth application-default login` or key file | scripts (Secret Manager access) |
 | **API secrets** (WORKER_SECRET, RESEND_API_KEY, ADMIN_EMAIL(S), MOXFIELD_USER_AGENT, SENTRY_DSN) | **Doppler**, synced to GCP Secret Manager by the **Sync API Secrets** workflow (§3.1) | API (Firebase App Hosting) |
-| **worker config** (API_URL, GCS_BUCKET, etc.) | **Google Secret Manager** (`npm run populate-worker-secret`) or worker .env | worker |
 | **CI/CD Secrets** | **Doppler** (project: magic-bracket-simulator, config: dev) | GitHub Actions |
 | **Frontend API URL** | **Committed** in `frontend/public/config.json` (stable App Hosting URL). **Not a secret** — visible when the app loads. Always used as-is; no override. | Frontend (Firebase Hosting) |
 
@@ -26,37 +21,7 @@ Then run `populate-worker-secret`, `get-cloud-run-url` if needed, and the worker
 
 ## 0. Finding your API URL
 
-You need the API URL for **API_URL** (worker). For the frontend, it’s already set in committed `frontend/public/config.json` (stable App Hosting URL: `https://api--magic-bracket-simulator.us-central1.hosted.app` — not a secret, visible when the app loads).
-
-### Option A – gcloud (no browser)
-
-From repo root, with [gcloud](https://cloud.google.com/sdk/gcloud) installed and logged in:
-
-```bash
-# No .env needed if gcloud default project is set:
-gcloud config set project magic-bracket-simulator
-npm run get-cloud-run-url
-
-# Or pass project explicitly:
-npm run get-cloud-run-url -- --project=magic-bracket-simulator
-# or: GOOGLE_CLOUD_PROJECT=magic-bracket-simulator npm run get-cloud-run-url
-```
-
-This lists Cloud Run services and their URLs. For **App Hosting**, use the stable backend URL from Firebase Console (e.g. `https://api--magic-bracket-simulator.us-central1.hosted.app`).
-
-### Option B – Firebase Console
-
-1. Open [Firebase Console](https://console.firebase.google.com/) → your project.
-2. Go to **Build** → **App Hosting**.
-3. Open your backend; the **backend URL** (or “Service URL”) is shown there — that’s your Cloud Run URL.
-
-### Option C – GCP Console
-
-1. Open [Google Cloud Console](https://console.cloud.google.com/) → select your project.
-2. Go to **Cloud Run** (or: **Run** in the left menu).
-3. Click your API service; the **URL** is at the top.
-
-Use this URL when running `npm run populate-worker-secret`. The frontend always uses the committed `config.json` (same stable URL).
+The API runs on Firebase App Hosting at the stable URL `https://api--magic-bracket-simulator.us-central1.hosted.app` (Firebase Console → **Build** → **App Hosting** → your backend). The frontend reads it from the committed `frontend/public/config.json`; it is not a secret.
 
 ---
 
@@ -68,72 +33,6 @@ Use this URL when running `npm run populate-worker-secret`. The frontend always 
 
 - Ensure you have a GCP project (e.g. `magic-bracket-simulator`) linked to Firebase.
 - Firebase Console: [Project settings](https://console.firebase.google.com/project/_/settings/general) – note project ID and (for frontend) the Firebase config (API key, auth domain, etc.).
-
-### 1.2 Service account key for worker
-
-**Where:** GCP Console → **IAM & Admin** → **Service accounts** → select (or create) a service account → **Keys**.
-
-- Docs: [Creating and managing service account keys](https://cloud.google.com/iam/docs/create-key)
-
-**Steps:**
-
-1. In [GCP Console](https://console.cloud.google.com/iam-admin/serviceaccounts), select your project.
-2. Create a service account (e.g. `magic-bracket-worker`) or select an existing one used for the worker.
-3. Grant roles (e.g.):
-   - **Pub/Sub Subscriber** (to pull job messages),
-   - **Storage Object Admin** (or appropriate GCS role for the artifacts bucket),
-   - **Cloud Datastore User** (or **Firestore** roles if using Firestore).
-4. Open the service account → **Keys** → **Add key** → **Create new key** → **JSON**. Download the JSON file.
-5. **On your Mac (or host running worker):**
-   - Save the JSON somewhere safe (e.g. `~/.config/magicbracket/worker-key.json`).
-   - Grant the service account **Secret Manager Secret Accessor** (so the worker can read `simulation-worker-config`). Optionally **Secret Manager Admin** if you will run the populate script with this key.
-   - **No .env required:** Use `gcloud config set project YOUR_PROJECT_ID` and (if not using ADC) set `GOOGLE_APPLICATION_CREDENTIALS` in env or a minimal `.env`. The rest of the worker config comes from Secret Manager (see below).
-
-### 1.3 Worker config via Secret Manager
-
-#### Option A: Automated via GitHub Actions (recommended)
-
-The **Provision Worker** workflow reads secrets from Doppler and syncs them into GCP Secret Manager. No interactive prompts, no gcloud on your dev machine.
-
-1. Ensure your GitHub repo has the `DOPPLER_TOKEN` secret set (**Settings > Secrets > Actions**), which grants access to the Doppler project. The workflow will fetch the following automatically:
-
-   | Secret | Description |
-   |---|---|
-   | `GCP_SA_KEY` | GCP service account key JSON (from step 1.2) |
-   | `WORKER_SECRET` | Shared secret between worker and API |
-   | `API_URL` | Production API URL (see §0) |
-   | `GCS_BUCKET` | Cloud Storage bucket name (e.g. `magic-bracket-simulator-artifacts`) |
-   | `PUBSUB_SUBSCRIPTION` | Pub/Sub subscription for jobs (e.g. `job-created-worker`) |
-   | `PUBSUB_WORKER_REPORT_IN_SUBSCRIPTION` | Pub/Sub subscription for worker report-in (e.g. `worker-report-in-worker`) |
-   | `GHCR_USER` | GitHub username (for Watchtower to pull worker images) |
-   | `GHCR_TOKEN` | GitHub PAT with `read:packages` scope (for Watchtower) |
-
-2. Run the **Provision Worker** workflow from the GitHub Actions tab or via:
-   ```bash
-   gh workflow run provision-worker.yml
-   ```
-
-This populates two secrets in GCP Secret Manager:
-- `simulation-worker-config` — worker runtime config (API_URL, GCS_BUCKET, etc.)
-- `worker-host-config` — host machine config (SA key, GHCR creds, IMAGE_NAME)
-
-#### Option B: Manual (interactive script)
-
-If you prefer not to use GitHub Actions, run the interactive script directly:
-
-```bash
-gcloud config set project magic-bracket-simulator
-npm install
-npm run populate-worker-secret
-```
-
-Use `--defaults` for non-interactive mode: `npm run populate-worker-secret -- --defaults --worker-secret=YOUR_SECRET`
-
-#### IAM requirements
-
-The identity the worker uses (ADC or service account key) must have **Secret Manager Secret Accessor** on the project. Same key can have Pub/Sub, GCS, Firestore roles as before. For the provision workflow, the SA key also needs **Secret Manager Admin** (to create/update secrets).
-
----
 
 ## 2. Firebase Hosting and frontend (no secrets on your machine)
 
@@ -170,7 +69,7 @@ Firebase client config (API key, project ID, etc.) is still set at **build time*
 
 ---
 
-## 3. API (Cloud Run) env and worker secret
+## 3. API (Cloud Run) env and WORKER_SECRET
 
 **Where:** Cloud Run service → **Edit & deploy new revision** → **Variables and secrets** (or equivalent in Cloud Build / Terraform).
 
@@ -178,10 +77,8 @@ Firebase client config (API key, project ID, etc.) is still set at **build time*
 
 Set at least:
 
-- `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, `PUBSUB_TOPIC`, and any secrets already used.
-- **WORKER_SECRET** (optional but recommended): a shared secret string. Set the same value in:
-  - Cloud Run (API) env,
-  - worker config (in Secret Manager via `npm run populate-worker-secret`, or in `.env` if not using Secret Manager).
+- `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET`, and any secrets already used.
+- **WORKER_SECRET**: a shared secret string. Cloud Tasks recovery checks and the Cloud Scheduler jobs (stale sweep, precon sync) send it as `X-Worker-Secret`, and it signs access-request approval links. The scheduler jobs read it from the `worker-secret` secret (see `docs/STALE_SWEEPER.md`, `docs/PRECON_SYNC.md`).
 
 ### 3.1 Firebase App Hosting (API backend) secrets — managed in Doppler
 
@@ -197,8 +94,6 @@ For every `- variable: NAME` / `secret: id` entry in `apphosting.yaml`, the work
 | `ADMIN_EMAIL` | `admin-email` (receives access-request emails) |
 | `ADMIN_EMAILS` | `admin-emails` (comma-separated admin accounts) |
 | `SENTRY_DSN` | `sentry-dsn` (also used for `NEXT_PUBLIC_SENTRY_DSN`) |
-
-`worker-host-config` is excluded; the Provision Worker workflow builds it (§1.3).
 
 To change an API secret:
 
@@ -220,10 +115,7 @@ Without access, the variable is not injected (e.g. a missing `MOXFIELD_USER_AGEN
 
 - [ ] **GCP project:** `gcloud config set project YOUR_PROJECT_ID` (or set `GOOGLE_CLOUD_PROJECT` in env). No .env required.
 - [ ] **GitHub Secrets:** Ensure `DOPPLER_TOKEN` is set in GitHub repo settings.
-- [ ] **Provision Worker:** Run the GitHub Actions workflow to sync secrets from Doppler to GCP Secret Manager.
-- [ ] **Worker machine:** Run `./scripts/setup-worker.sh` — reads from Secret Manager, no manual config.
 - [ ] **Frontend config:** Committed `config.json` has the stable App Hosting URL (always used as-is).
-- [ ] **API (Cloud Run):** WORKER_SECRET and other env set in Cloud Run; same WORKER_SECRET in worker config.
 - [ ] **API (Firebase App Hosting):** API secrets live in Doppler; run the Sync API Secrets workflow after changing them, then roll out. See §3.1.
 
 ---
@@ -238,7 +130,7 @@ The CI pipelines have been migrated to use **Doppler** for secrets management. M
 2. *(Auto-provided)* `GITHUB_TOKEN` is used implicitly by some actions.
 3. *(Optional)* `CLAUDE_CODE_OAUTH_TOKEN` if using AI code review actions.
 
-See §1.3 Option A and §2 for the full list of variables that are securely injected from Doppler during CI.
+See §2 and §3.1 for the full list of variables that are securely injected from Doppler during CI.
 
 ---
 

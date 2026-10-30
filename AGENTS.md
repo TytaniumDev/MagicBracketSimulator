@@ -9,7 +9,6 @@
 ## Tooling
 - **Node.js**: 20 (managed by `npm`)
 - **Flutter**: stable channel, for `worker_flutter/`
-- **Docker**: Required for the Docker worker and simulation image
 
 ## Setup
 - **Install Node Dependencies**: `npm run install:all`
@@ -28,8 +27,6 @@
 - **API Lint**: `cd api && npm run lint`
 - **API Unit Test**: `cd api && npm run test:unit`
 - **API Ingestion Test**: `cd api && npm run test:ingestion`
-- **Worker Build**: `cd worker && npm run build`
-- **Worker Unit Test**: `cd worker && npm run test:unit`
 - **Desktop Worker Analyze**: `cd worker_flutter && flutter analyze --no-fatal-infos`
 - **Desktop Worker Test**: `cd worker_flutter && flutter test`
 
@@ -42,13 +39,11 @@
 ## Deployment
 - **CI**: `.github/workflows/ci.yml` and `.github/workflows/worker-flutter-ci.yml` (run on PR)
 - **Deploy**: `.github/workflows/deploy.yml` (frontend, Firestore and Realtime Database rules, on push to main); the API deploys through Firebase App Hosting from `main`
-- **Worker images**: `.github/workflows/deploy-worker.yml` (GHCR)
 - **Desktop worker**: `.github/workflows/release-worker.yml` (GitHub Release + `appcast.xml`)
+- **Forge updates**: `.github/workflows/forge-update.yml` (nightly; opens an auto-merging PR that bumps `worker_flutter/forge-manifest.json`)
 
 ## Project Structure
 - `frontend/`: React app (Firebase Hosting)
 - `api/`: Next.js API on Firebase App Hosting: ingestion, jobs, sim claiming, aggregation, stats
 - `shared/types/`: Types shared by api and frontend
-- `worker_flutter/`: Desktop worker (macOS, Windows), cloud and offline modes
-- `worker/`: Node.js Docker worker that runs simulation containers
-- `simulation/`: Java + Forge simulation image
+- `worker_flutter/`: Desktop worker (macOS, Windows), cloud and offline modes; the only worker

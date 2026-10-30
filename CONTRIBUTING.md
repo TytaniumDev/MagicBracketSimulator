@@ -11,8 +11,7 @@ Thank you for your interest in contributing!
 
 *   **`api/`**: Next.js 15 app serving API routes and job management.
 *   **`frontend/`**: React SPA (Vite + Tailwind v4 + Firebase Auth).
-*   **`worker/`**: Node.js orchestrator that manages simulation containers (Docker).
-*   **`simulation/`**: Docker image containing Java + Forge for running games.
+*   **`worker_flutter/`**: Desktop worker (Flutter, macOS and Windows) that runs Forge simulations.
 
 ## Development Workflow
 
@@ -32,5 +31,5 @@ Please ensure all tests pass before submitting your PR.
 
 *   **API:** Run `npm run test:unit`, `npm run test:ingestion`, and `npm run test:integration` within `api/`.
 *   **Frontend:** No specific test script. Verify changes visually via `npm run dev`.
-*   **Worker:** Test locally by running `npm run dev` in `worker/` (requires Docker).
-*   **Full Stack:** Run `npm run dev` in the root to start API & Frontend, and `npm run dev` in `worker/` to start the worker.
+*   **Desktop worker:** Run `flutter analyze --no-fatal-infos` and `flutter test` within `worker_flutter/`.
+*   **Full Stack:** Run `npm run dev` in the root to start API & Frontend, and `flutter run -d macos` (or `-d windows`) in `worker_flutter/` for the worker.
