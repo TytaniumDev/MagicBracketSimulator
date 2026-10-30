@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAllowedUser, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAllowedUser, verifyAdmin, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobCompletely } from '@/lib/job-delete';
 import { resolveJobDecks } from '@/lib/job-decks';
-import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
-import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
-import { parseBody, updateJobSchema } from '@/lib/validation';
+import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { seatNames, type JobResponse } from '@shared/types/job';
-import { canJobTransition } from '@shared/types/state-machine';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
 
@@ -42,7 +39,6 @@ async function jobToApiResponse(
     startedAt: job.startedAt?.toISOString(),
     completedAt: job.completedAt?.toISOString(),
     durationMs,
-    dockerRunDurationsMs: job.dockerRunDurationsMs,
     workerId: job.workerId,
     workerName: job.workerName,
     claimedAt: job.claimedAt?.toISOString(),
@@ -57,23 +53,19 @@ async function jobToApiResponse(
 }
 
 /**
- * GET /api/jobs/[id] - Get job details
- * Dual auth: workers authenticate via X-Worker-Secret, users via Firebase token.
+ * GET /api/jobs/[id] - Get job details (allowed users).
  *
- * Workers get the worker view: the job's 4 decks with their .dck content
- * (see job-decks.ts). The desktop worker, which signs in as an allowlisted
- * user, asks for it with `?view=worker`.
+ * `?view=worker` adds the job's 4 decks with their .dck content
+ * (see job-decks.ts). The desktop worker, which signs in as an allowed
+ * user, asks for it to run the job's sims.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const wantsWorkerView = new URL(request.url).searchParams.get('view') === 'worker';
-  const isWorker = isWorkerRequest(request) || (wantsWorkerView && (await isWorkerOrAllowlistedUser(request)));
-  if (!isWorker) {
-    try {
-      await verifyAllowedUser(request);
-    } catch {
-      return unauthorizedResponse();
-    }
+  try {
+    await verifyAllowedUser(request);
+  } catch {
+    return unauthorizedResponse();
   }
+  const isWorker = new URL(request.url).searchParams.get('view') === 'worker';
 
   try {
     const { id } = await params;
@@ -131,58 +123,5 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     console.error('DELETE /api/jobs/[id] error:', error);
     Sentry.captureException(error, { tags: { component: 'api-route', route: 'DELETE /api/jobs/[id]' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to delete job', 500);
-  }
-}
-
-/**
- * PATCH /api/jobs/[id] - Update job (status, gamesCompleted, errorMessage, dockerRunDurationsMs)
- * Used by worker and misc-runner
- */
-export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
-    return unauthorizedResponse('Worker authentication required');
-  }
-
-  try {
-    const { id } = await params;
-    if (!id) {
-      return badRequestResponse('Job ID is required');
-    }
-
-    const body = await request.json();
-    const parsed = parseBody(updateJobSchema, body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: 400 });
-    }
-    const { status, errorMessage, dockerRunDurationsMs, workerId, workerName } = parsed.data;
-
-    const job = await jobStore.getJob(id);
-    if (!job) {
-      return notFoundResponse('Job');
-    }
-
-    // Validate job state transition using the state machine
-    if (typeof status === 'string' && !canJobTransition(job.status, status as JobStatus)) {
-      return errorResponse(`Invalid status transition: ${job.status} → ${status}`, 409);
-    }
-
-    if (status === 'RUNNING') {
-      await jobStore.setJobStartedAt(id, workerId, workerName);
-    } else if (status === 'COMPLETED') {
-      await jobStore.setJobCompleted(id, dockerRunDurationsMs);
-    } else if (status === 'FAILED') {
-      await jobStore.setJobFailed(id, errorMessage ?? 'Unknown error', dockerRunDurationsMs);
-    } else if (typeof status === 'string') {
-      await jobStore.updateJobStatus(id, status as JobStatus);
-    }
-
-    const updated = await jobStore.getJob(id);
-    const isWorker = isWorkerRequest(request);
-    const response = await jobToApiResponse(updated, isWorker);
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('PATCH /api/jobs/[id] error:', error);
-    Sentry.captureException(error, { tags: { component: 'api-route', route: 'PATCH /api/jobs/[id]' } });
-    return errorResponse(error instanceof Error ? error.message : 'Failed to update job', 500);
   }
 }

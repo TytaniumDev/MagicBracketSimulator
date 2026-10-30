@@ -69,7 +69,6 @@ export interface Job {
   gamesCompleted?: number;
   startedAt?: Date;
   completedAt?: Date;
-  dockerRunDurationsMs?: number[];
   workerId?: string;
   workerName?: string;
   claimedAt?: Date;

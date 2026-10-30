@@ -31,7 +31,6 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
     completedAt: data.completedAt?.toDate(),
     gamesCompleted: data.gamesCompleted,
     errorMessage: data.errorMessage,
-    dockerRunDurationsMs: data.dockerRunDurationsMs,
     ...(data.workerId && { workerId: data.workerId }),
     ...(data.workerName && { workerName: data.workerName }),
     ...(data.claimedAt && { claimedAt: data.claimedAt.toDate() }),
@@ -214,18 +213,12 @@ export async function setNeedsAggregation(id: string, value: boolean): Promise<v
 /**
  * Mark job as completed
  */
-export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
-  const updateData: Record<string, unknown> = {
+export async function setJobCompleted(id: string): Promise<void> {
+  await jobsCollection.doc(id).update({
     status: 'COMPLETED' as JobStatus,
     completedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  };
-
-  if (dockerRunDurationsMs) {
-    updateData.dockerRunDurationsMs = dockerRunDurationsMs;
-  }
-
-  await jobsCollection.doc(id).update(updateData);
+  });
 }
 
 /**
@@ -907,7 +900,6 @@ export async function resetJobForRetry(id: string): Promise<boolean> {
     workerId: FieldValue.delete(),
     workerName: FieldValue.delete(),
     claimedAt: FieldValue.delete(),
-    dockerRunDurationsMs: FieldValue.delete(),
     retryCount: currentRetryCount + 1,
     updatedAt: FieldValue.serverTimestamp(),
   });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { optionalAllowedUser, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { optionalAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { ingestLogs } from '@/lib/log-store';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -10,13 +10,11 @@ interface RouteParams {
 
 /**
  * POST /api/jobs/[id]/logs — Ingest raw game logs for a job.
- * Called by the simulation worker after a job completes.
+ * Auth: allowed users.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
-    const user = await optionalAllowedUser(request);
-    if (!user) return unauthorizedResponse();
-  }
+  const user = await optionalAllowedUser(request);
+  if (!user) return unauthorizedResponse();
 
   try {
     const { id } = await params;

@@ -10,7 +10,6 @@ import {
   isPresenceActive,
   presenceToWorkerInfo,
   WORKER_STALE_MS,
-  WORKER_UPDATING_STALE_MS,
   type WorkerPresence,
 } from '@shared/types/worker-presence';
 
@@ -31,11 +30,13 @@ const NOW = Date.parse('2026-10-29T12:00:00.000Z');
 function entry(overrides: Partial<WorkerPresence> = {}): WorkerPresence {
   return {
     workerName: 'box',
+    workerType: 'flutter',
     status: 'idle',
     capacity: 4,
     activeSimulations: 0,
     uptimeMs: 1000,
     lastSeen: NOW - 10_000,
+    uid: 'uid1',
     ...overrides,
   };
 }
@@ -44,44 +45,27 @@ check('seen 10 s ago is active', isPresenceActive(entry(), NOW), true);
 check('seen just inside the window is active', isPresenceActive(entry({ lastSeen: NOW - WORKER_STALE_MS }), NOW), true);
 check('seen past the window is not active', isPresenceActive(entry({ lastSeen: NOW - WORKER_STALE_MS - 1 }), NOW), false);
 check(
-  'updating worker gets the longer window',
-  isPresenceActive(entry({ status: 'updating', lastSeen: NOW - WORKER_UPDATING_STALE_MS + 1 }), NOW),
-  true,
-);
-check(
   'a narrower staleMs is honoured',
   isPresenceActive(entry({ lastSeen: NOW - 130_000 }), NOW, 120_000),
   false,
 );
 check(
-  'an entry without lastSeen (override only) is not active',
-  isPresenceActive({ status: 'idle' } as WorkerPresence, NOW),
+  'an entry without lastSeen is not active',
+  isPresenceActive({} as WorkerPresence, NOW),
   false,
 );
 
 check('presenceToWorkerInfo maps fields', presenceToWorkerInfo('w1', entry({
   status: 'busy',
-  currentJobId: 'job1',
   activeSimulations: 2,
-  version: '1.2.3',
-  maxConcurrentOverride: 3,
-  ownerEmail: 'a@b.c',
-  workerApiUrl: 'http://w1:9090',
-  workerType: 'docker',
 })), {
   workerId: 'w1',
   workerName: 'box',
   status: 'busy',
-  currentJobId: 'job1',
   capacity: 4,
   activeSimulations: 2,
   uptimeMs: 1000,
   lastHeartbeat: new Date(NOW - 10_000).toISOString(),
-  version: '1.2.3',
-  maxConcurrentOverride: 3,
-  ownerEmail: 'a@b.c',
-  workerApiUrl: 'http://w1:9090',
-  workerType: 'docker',
 });
 
 check('null snapshot means no workers', activeWorkersFromPresence(null, NOW), []);

@@ -62,14 +62,6 @@ The re-export exists in `api/lib/types.ts` but nobody uses it. Either remove the
 
 **Recommendation:** Since `@shared/types/job` is the canonical source and both api and frontend can import it directly, remove the re-export from `api/lib/types.ts` to avoid confusion. The re-export pattern is useful for types that the API consumes differently (like `Job` with Date fields), but `REQUIRED_DECK_COUNT` is a plain constant.
 
-### 6. Worker Health Check Gap
-
-**Location:** `worker/src/worker.ts`, `worker/src/worker-api.ts`
-
-The worker exposes a health endpoint and sends heartbeats, but there's no mechanism to detect a worker that's "alive but stuck" — e.g., a simulation container that hangs indefinitely. The worker's semaphore-based concurrency control doesn't have per-simulation timeouts.
-
-**Mitigation:** Add a per-simulation timeout (configurable, e.g., 10 minutes). If a simulation container doesn't exit within the timeout, kill it and report FAILED.
-
 ### 7. Frontend Bundle Size
 
 **Location:** `frontend/`
@@ -85,9 +77,8 @@ The frontend bundles all of Firebase (auth, firestore client) and several large 
 - `api/app/api/jobs/[id]/cancel/route.ts` — no tests
 - `api/app/api/jobs/[id]/recover/route.ts` — no tests
 - `api/lib/deck-resolver.ts` — no tests for Moxfield URL parsing edge cases
-- `worker/src/worker.ts` — no unit tests for `processJobWithContainers`
 
-**Mitigation:** Add targeted tests for the highest-risk paths first (job creation validation, cancel/recover state transitions, worker container orchestration).
+**Mitigation:** Add targeted tests for the highest-risk paths first (job creation validation, cancel/recover state transitions).
 
 ---
 
@@ -97,7 +88,6 @@ The frontend bundles all of Firebase (auth, firestore client) and several large 
 
 **Locations:**
 - `api/lib/job-store-factory.ts` — stale job timeout (30 minutes) hardcoded
-- `worker/src/worker.ts` — polling interval, max retries hardcoded
 - Various files — magic numbers for timeouts, limits
 
 **Mitigation:** Extract to a `shared/constants.ts` or per-service config file.
@@ -117,14 +107,6 @@ Mix of `console.log`, `console.warn`, `console.error` with inconsistent prefixes
 The SSE stream doesn't have explicit cleanup for Firestore snapshot listeners if the client disconnects abruptly. The `request.signal` abort handler covers HTTP-level disconnects, but Firestore `onSnapshot` unsubscribe might leak in edge cases.
 
 **Mitigation:** Add defensive unsubscribe in a `finally` block.
-
-### 12. Docker Socket Security
-
-**Location:** `worker/docker-compose.yml`
-
-The worker mounts the Docker socket (`/var/run/docker.sock`) to spawn simulation containers. This gives the worker container root-equivalent access to the host.
-
-**Mitigation:** For production, consider Docker-in-Docker (dind) or a rootless Docker setup. For the current single-VM deployment this is acceptable.
 
 ### 13. Frontend Accessibility
 

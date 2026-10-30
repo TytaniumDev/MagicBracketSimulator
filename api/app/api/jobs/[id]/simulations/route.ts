@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAllowedUser, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -36,42 +36,5 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.error('GET /api/jobs/[id]/simulations error:', error);
     Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/jobs/[id]/simulations' } });
     return errorResponse(error instanceof Error ? error.message : 'Failed to get simulations', 500);
-  }
-}
-
-/**
- * POST /api/jobs/[id]/simulations — Initialize simulation tracking for a job.
- * Called by the worker when it starts processing a job.
- * Body: { count: number }
- */
-export async function POST(request: NextRequest, { params }: RouteParams) {
-  if (!isWorkerRequest(request)) {
-    return unauthorizedResponse('Worker authentication required');
-  }
-
-  try {
-    const { id } = await params;
-    if (!id) {
-      return badRequestResponse('Job ID is required');
-    }
-
-    const body = await request.json();
-    const { count } = body;
-
-    if (typeof count !== 'number' || count < 1 || count > 200) {
-      return badRequestResponse('count must be a number between 1 and 200');
-    }
-
-    const job = await jobStore.getJob(id);
-    if (!job) {
-      return notFoundResponse('Job');
-    }
-
-    await jobStore.initializeSimulations(id, count);
-    return NextResponse.json({ initialized: count }, { status: 201 });
-  } catch (error) {
-    console.error('POST /api/jobs/[id]/simulations error:', error);
-    Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/jobs/[id]/simulations' } });
-    return errorResponse(error instanceof Error ? error.message : 'Failed to initialize simulations', 500);
   }
 }

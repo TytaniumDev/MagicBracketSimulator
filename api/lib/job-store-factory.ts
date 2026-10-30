@@ -148,20 +148,20 @@ export async function setNeedsAggregation(id: string, value: boolean): Promise<v
   (await sqliteStore()).setNeedsAggregation(id, value);
 }
 
-export async function setJobCompleted(id: string, dockerRunDurationsMs?: number[]): Promise<void> {
+export async function setJobCompleted(id: string): Promise<void> {
   if (USE_FIRESTORE) {
-    await firestoreStore.setJobCompleted(id, dockerRunDurationsMs);
+    await firestoreStore.setJobCompleted(id);
     return;
   }
-  (await sqliteStore()).setJobCompleted(id, { dockerRunDurationsMs });
+  (await sqliteStore()).setJobCompleted(id);
 }
 
-export async function setJobFailed(id: string, errorMessage: string, dockerRunDurationsMs?: number[]): Promise<void> {
+export async function setJobFailed(id: string, errorMessage: string): Promise<void> {
   if (USE_FIRESTORE) {
     await firestoreStore.setJobFailed(id, errorMessage);
     return;
   }
-  (await sqliteStore()).setJobFailed(id, errorMessage, { dockerRunDurationsMs });
+  (await sqliteStore()).setJobFailed(id, errorMessage);
 }
 
 export async function setJobResults(jobId: string, results: JobResults): Promise<void> {

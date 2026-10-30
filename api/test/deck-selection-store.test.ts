@@ -14,7 +14,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deck-selection-test-'));
-process.env.FORGE_ENGINE_PATH = path.join(tmpDir, 'forge-engine');
+process.env.SAVED_DECKS_DIR = path.join(tmpDir, 'decks');
 process.chdir(tmpDir);
 
 let failed = 0;

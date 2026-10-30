@@ -22,10 +22,6 @@ const path = require('path');
 
 const APPHOSTING_YAML = path.join(__dirname, '..', 'api', 'apphosting.yaml');
 
-// Built by the Provision Worker workflow (populate-worker-host-config.js),
-// not copied from a single Doppler key.
-const MANAGED_ELSEWHERE = new Set(['worker-host-config']);
-
 /** [{ variable, secret }] for each env entry in apphosting.yaml that uses a secret. */
 function parseSecretRefs(yamlText) {
   const refs = [];
@@ -45,7 +41,6 @@ function parseSecretRefs(yamlText) {
 function planSync(refs, dopplerSecrets) {
   const plan = new Map(); // secretId -> { variable, value }
   for (const { variable, secret } of refs) {
-    if (MANAGED_ELSEWHERE.has(secret)) continue;
     const value = dopplerSecrets[variable];
     if (value === undefined || value === '') continue;
     const existing = plan.get(secret);
@@ -54,7 +49,7 @@ function planSync(refs, dopplerSecrets) {
     }
     if (!existing) plan.set(secret, { variable, value });
   }
-  const skipped = refs.filter(({ secret }) => !plan.has(secret) && !MANAGED_ELSEWHERE.has(secret));
+  const skipped = refs.filter(({ secret }) => !plan.has(secret));
   return { plan, skipped };
 }
 

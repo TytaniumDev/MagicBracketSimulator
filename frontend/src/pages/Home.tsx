@@ -682,14 +682,12 @@ function SimulationForm() {
  */
 function HomeWorkerStatus() {
   const { user } = useAuth();
-  const { workers, queueDepth, isLoading, refresh } = useWorkerStatus(!!user);
+  const { workers, queueDepth, isLoading } = useWorkerStatus(!!user);
   return (
     <WorkerStatusBanner
       workers={workers}
       queueDepth={queueDepth}
       isLoading={isLoading}
-      onRefresh={refresh}
-      userEmail={user?.email}
     />
   );
 }

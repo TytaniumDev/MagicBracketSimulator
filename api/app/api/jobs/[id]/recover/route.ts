@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerRequest } from '@/lib/auth';
+import { isInternalRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
@@ -14,7 +14,7 @@ interface RouteParams {
  * POST /api/jobs/[id]/recover — One-shot recovery check for a job.
  *
  * Called by Cloud Tasks after a scheduled delay. Authenticates via
- * X-Worker-Secret header (same as worker requests).
+ * X-Worker-Secret header (see isInternalRequest in lib/auth.ts).
  *
  * Logic:
  * 1. If job is terminal → no-op (task should have been cancelled but wasn't)
@@ -23,7 +23,7 @@ interface RouteParams {
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   // Authenticate: accept Cloud Tasks OIDC or worker secret
-  if (!isWorkerRequest(request)) {
+  if (!isInternalRequest(request)) {
     return errorResponse('Unauthorized', 401);
   }
 

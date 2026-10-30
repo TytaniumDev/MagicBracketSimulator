@@ -6,9 +6,8 @@ import '../telemetry.dart';
 
 /// Posts a single simulation's raw stdout log to the cloud API.
 ///
-/// Mirrors `worker/src/worker.ts` `uploadSingleSimulationLog`. Filename
-/// shape is the same so the frontend's per-sim log links work identically
-/// for cloud-mode Flutter workers as they do for the Docker worker.
+/// The filename shape is what the API's per-sim log storage and the
+/// frontend's per-sim log links expect.
 ///
 /// Auth rides on [ApiClient]: the signed-in user's Firebase ID token,
 /// which the API accepts for users who have been given access.

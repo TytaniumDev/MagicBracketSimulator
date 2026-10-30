@@ -10,7 +10,7 @@ The **API Service** is the backend of the Magic Bracket Simulator. It handles:
 - **Job lifecycle management** — creating, queuing, tracking, and cancelling simulation jobs.
 - **Worker coordination** — handing out simulation work, receiving results, and managing heartbeats.
 - **Results storage and aggregation** — structured logs, win tallies, Elo-style ratings, and a leaderboard.
-- **Auth and access control** — Firebase Authentication for user-facing endpoints; HMAC-signed Worker Secret for internal worker communication.
+- **Auth and access control** — Firebase Authentication for user-facing and worker endpoints; a shared secret (`X-Worker-Secret`) for internal calls from Cloud Tasks and Cloud Scheduler.
 
 ---
 
@@ -22,8 +22,8 @@ The **API Service** is the backend of the Magic Bracket Simulator. It handles:
 | Database       | **SQLite** (local dev) · **Firestore** (GCP production)           |
 | Storage        | **Local filesystem** (dev) · **Google Cloud Storage** (GCP prod)  |
 | Auth           | **Firebase Authentication** (Google sign-in)                      |
-| Worker auth    | `X-Worker-Secret` HMAC-signed header                              |
-| Job dispatch   | **Polling** (workers claim simulations via `POST /api/jobs/claim-sim`) |
+| Worker auth    | The desktop worker's Firebase ID token (allowed users)            |
+| Job dispatch   | **Claiming** (workers claim simulations via `GET /api/jobs/claim-sim`) |
 | Concurrency    | Per-job parallelism — each job is split into `N` independent simulations claimed by workers |
 
 ---
@@ -40,14 +40,14 @@ A **Job** represents one bracket simulation request: 4 decks, N games, optionall
 | `deckIds`      | Array of 4 deck IDs                                             |
 | `simulations`  | Total number of games to simulate                               |
 | `status`       | `QUEUED` → `RUNNING` → `COMPLETED` \| `FAILED` \| `CANCELLED`  |
-| `parallelism`  | How many worker containers run in parallel for this job         |
+| `parallelism`  | How many sims of this job may run at once                       |
 | `gamesCompleted` | Running count of finished games                               |
 | `retryCount`   | Number of times the job has been re-queued after a failure      |
 | `errorMessage` | Set on `FAILED`                                                 |
 
 ### 3.2 Simulations
 
-Each Job is divided into **Simulations** (sub-units of work). Each simulation is a fixed batch of games (currently `GAMES_PER_CONTAINER` = 25). Workers atomically claim one simulation at a time via `POST /api/jobs/claim-sim`.
+Each Job is divided into **Simulations** (sub-units of work). Each simulation is a fixed batch of games (currently `GAMES_PER_CONTAINER` = 25). Workers atomically claim one simulation at a time via `GET /api/jobs/claim-sim`.
 
 | State     | Meaning                                 |
 | --------- | --------------------------------------- |
@@ -59,11 +59,11 @@ Each Job is divided into **Simulations** (sub-units of work). Each simulation is
 
 ### 3.3 Workers
 
-Workers are long-running Node.js processes that communicate with the API via HTTP. They:
+Workers are the desktop app (`worker_flutter/`, macOS and Windows), signed in as an allowed user. They:
 
-1. Send a heartbeat (`POST /api/workers/heartbeat`) every 30s.
-2. Poll for available simulations (`POST /api/jobs/claim-sim`).
-3. Spawn a Docker container with the Forge simulation engine.
+1. Write their own presence entry to the Realtime Database about once a minute.
+2. Claim available simulations (`GET /api/jobs/claim-sim?lease=1`) and extend each sim's lease while it runs.
+3. Run Forge as a local Java process.
 4. Upload results via `POST /api/jobs/:id/logs/simulation` and `PATCH /api/jobs/:id/simulations/:simId`; reporting a job's last sim triggers aggregation.
 
 ### 3.4 Decks
@@ -94,8 +94,8 @@ All `deckUrl` and `deckLink` values are validated as well-formed `http:` or `htt
 POST /api/jobs
   → Job created with status QUEUED
   → Simulations initialized (N = ceil(simulations / GAMES_PER_CONTAINER))
-  → Workers poll claim-sim and start claiming
-  → Each worker runs Docker container, uploads logs
+  → Workers claim sims through claim-sim
+  → Each worker runs Forge locally, uploads logs
   → the last sim's PATCH triggers aggregation
   → Job marked COMPLETED / FAILED
 ```
@@ -106,7 +106,8 @@ POST /api/jobs
 | ------------------ | ---------------------------------------------- |
 | Read-only public   | None                                           |
 | User writes        | Firebase Auth Bearer token                     |
-| Worker internal    | `X-Worker-Secret` header                       |
+| Worker             | Firebase Auth Bearer token (allowed user)      |
+| Internal (Cloud Tasks, Scheduler) | `X-Worker-Secret` header        |
 | Admin              | Firebase Auth + admin flag in user record      |
 
 ### 4.4 Coverage Testing

@@ -6,7 +6,6 @@ import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, createJobSchema } from '@/lib/validation';
 import { seatNames, type JobSummary } from '@shared/types/job';
 import { isGcpMode } from '@/lib/job-store-factory';
-import { pushToAllWorkers } from '@/lib/worker-push';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
 import * as Sentry from '@sentry/nextjs';
 import { isJobStuck } from '@/lib/job-utils';
@@ -62,7 +61,6 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
     errorMessage: job.errorMessage,
     startedAt: job.startedAt?.toISOString(),
     completedAt: job.completedAt?.toISOString(),
-    dockerRunDurationsMs: job.dockerRunDurationsMs,
   };
 }
 
@@ -154,13 +152,6 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     // Initialize per-simulation tracking. Workers discover these sims via
     // their GET /api/jobs/claim-sim polling loop; no queue publish needed.
     await jobStore.initializeSimulations(job.id, containerCount);
-
-    // Best-effort push to wake any online workers for near-instant pickup.
-    // If none are reachable, the next poll (POLL_INTERVAL_MS, ~3s) picks it up.
-    pushToAllWorkers('/notify', {}).catch(err => {
-      console.warn('[Worker Push] Notify failed:', err instanceof Error ? err.message : err);
-      Sentry.captureException(err, { tags: { component: 'worker-push' } });
-    });
 
     if (isGcpMode()) {
       // Schedule a recovery check at T+10min as defense-in-depth. The

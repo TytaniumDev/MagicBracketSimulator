@@ -3,7 +3,7 @@
  * Run with: npx tsx lib/validation.test.ts
  */
 
-import { createJobSchema, createPodRunSchema, updateSimulationSchema, updateJobSchema, parseBody } from './validation';
+import { createJobSchema, createPodRunSchema, updateSimulationSchema, parseBody } from './validation';
 
 interface TestResult { name: string; passed: boolean; error?: string; }
 const results: TestResult[] = [];
@@ -141,40 +141,6 @@ async function runTests() {
 
   await test('updateSimulationSchema: empty body passes (all optional)', () => {
     const result = parseBody(updateSimulationSchema, {});
-    assertEqual(result.success, true, 'should succeed');
-  });
-
-  // ── updateJobSchema ─────────────────────────────────────────────────
-
-  await test('updateJobSchema: valid RUNNING status', () => {
-    const result = parseBody(updateJobSchema, {
-      status: 'RUNNING',
-      workerId: 'w1',
-      workerName: 'Worker 1',
-    });
-    assertEqual(result.success, true, 'should succeed');
-  });
-
-  await test('updateJobSchema: valid FAILED with error', () => {
-    const result = parseBody(updateJobSchema, {
-      status: 'FAILED',
-      errorMessage: 'Something went wrong',
-    });
-    assertEqual(result.success, true, 'should succeed');
-  });
-
-  await test('updateJobSchema: rejects invalid status', () => {
-    const result = parseBody(updateJobSchema, {
-      status: 'BOGUS',
-    });
-    assertEqual(result.success, false, 'should fail');
-  });
-
-  await test('updateJobSchema: valid COMPLETED with durations', () => {
-    const result = parseBody(updateJobSchema, {
-      status: 'COMPLETED',
-      dockerRunDurationsMs: [1000, 2000, 3000],
-    });
     assertEqual(result.success, true, 'should succeed');
   });
 

@@ -1,6 +1,6 @@
 /**
- * Worker store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
- * otherwise to SQLite (worker-store).
+ * Worker store factory: delegates to Firestore + Realtime Database presence
+ * when GOOGLE_CLOUD_PROJECT is set, otherwise to SQLite (worker-store).
  */
 import type { WorkerInfo } from './types';
 import * as firestoreStore from './firestore-worker-store';
@@ -16,47 +16,11 @@ async function sqliteStore(): Promise<SqliteWorkerStore> {
   return _sqliteStore;
 }
 
-export async function upsertHeartbeat(info: WorkerInfo): Promise<void> {
-  if (USE_FIRESTORE) {
-    await firestoreStore.upsertHeartbeat(info);
-    return;
-  }
-  (await sqliteStore()).upsertHeartbeat(info);
-}
-
-export async function getActiveWorkers(staleThresholdMs = 180_000): Promise<WorkerInfo[]> {
+export async function getActiveWorkers(staleThresholdMs?: number): Promise<WorkerInfo[]> {
   if (USE_FIRESTORE) {
     return firestoreStore.getActiveWorkers(staleThresholdMs);
   }
-  return (await sqliteStore()).getActiveWorkers(staleThresholdMs);
-}
-
-export async function getMaxConcurrentOverride(workerId: string): Promise<number | null> {
-  if (USE_FIRESTORE) {
-    return firestoreStore.getMaxConcurrentOverride(workerId);
-  }
-  return (await sqliteStore()).getMaxConcurrentOverride(workerId);
-}
-
-export async function setMaxConcurrentOverride(workerId: string, override: number | null): Promise<boolean> {
-  if (USE_FIRESTORE) {
-    return firestoreStore.setMaxConcurrentOverride(workerId, override);
-  }
-  return (await sqliteStore()).setMaxConcurrentOverride(workerId, override);
-}
-
-export async function getWorkerApiUrl(workerId: string): Promise<string | null> {
-  if (USE_FIRESTORE) {
-    return firestoreStore.getWorkerApiUrl(workerId);
-  }
-  return (await sqliteStore()).getWorkerApiUrl(workerId);
-}
-
-export async function getOwnerEmail(workerId: string): Promise<string | null> {
-  if (USE_FIRESTORE) {
-    return firestoreStore.getOwnerEmail(workerId);
-  }
-  return (await sqliteStore()).getOwnerEmail(workerId);
+  return (await sqliteStore()).getActiveWorkers();
 }
 
 export async function getQueueDepth(): Promise<number> {

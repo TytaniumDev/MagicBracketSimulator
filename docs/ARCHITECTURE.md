@@ -30,23 +30,15 @@ flowchart TB
         Flutter --> Java
     end
 
-    subgraph docker [Docker worker host: worker/]
-        Worker[Worker container<br/>Node.js]
-        Sim[Simulation containers<br/>Java + Forge, 1 per sim]
-        Worker -->|docker run --rm| Sim
-    end
-
     Frontend -->|REST + ID token| API
     Frontend -.->|onSnapshot reads| Firestore
     Frontend -.->|presence reads| RTDB
     API --> Firestore
     API --> GCS
-    API --> RTDB
+    API -.->|presence reads| RTDB
     Tasks --> API
     Scheduler --> API
 
-    Worker -->|claim / lease / PATCH / logs<br/>X-Worker-Secret| API
-    API -->|push: config, cancel, notify, drain| Worker
     Flutter -->|claim / lease / PATCH / logs<br/>user ID token| API
     Flutter -.->|own presence entry| RTDB
 ```
@@ -55,9 +47,7 @@ flowchart TB
 |-------|---------------|--------------|
 | **Frontend** (`frontend/`) | Firebase Hosting | Vite + React + Tailwind v4. Writes go through the API; live job, sim and pod-run state comes straight from Firestore `onSnapshot`, worker status from Realtime Database. |
 | **API** (`api/`) | Firebase App Hosting (Cloud Run underneath), 1 instance, 1 GiB | Next.js 15 route handlers. Deck ingestion, job lifecycle, sim claiming and leases, log storage, aggregation, ratings, card stats, pod runs, access control. The only writer to Firestore and GCS. |
-| **Desktop worker** (`worker_flutter/`) | User machines (macOS, Windows) | The path going forward. Cloud mode claims sims from the shared queue through the API with the signed-in user's token; offline mode runs bundled precons locally (drift SQLite). Ships through GitHub Releases + `appcast.xml` (Sparkle / WinSparkle) and installs Forge from `worker_flutter/forge-manifest.json`. |
-| **Docker worker** (`worker/`) | Any Docker host | The original worker, still supported. Polls the API, runs one simulation container per sim with a semaphore sized from CPU/RAM, and exposes port 9090 for push control. Images on GHCR; Watchtower can auto-update it. |
-| **Simulation image** (`simulation/`) | Spawned by the Docker worker | Java 17 + Forge + xvfb. Runs one sim (`GAMES_PER_CONTAINER` games), prints the log, exits. |
+| **Desktop worker** (`worker_flutter/`) | User machines (macOS, Windows) | The only worker. Cloud mode claims sims from the shared queue through the API with the signed-in user's token; offline mode runs bundled precons locally (drift SQLite). Ships through GitHub Releases + `appcast.xml` (Sparkle / WinSparkle) and installs Forge from `worker_flutter/forge-manifest.json`. |
 | **Shared types** (`shared/types/`) | Imported by api and frontend | Job, seat, simulation, pod-run, worker-presence and state-machine types. |
 
 ---
@@ -75,7 +65,6 @@ write goes through the API with the Admin SDK (`firestore.rules`).
 | `podRuns/{runId}` | A saved run of several pods with its own `standings` |
 | `decks/{deckId}` | Deck metadata and `.dck` content (precons and imports); `excluded: true` hides it from the picker and auto-coverage. A changed list is a new deck; there are no versions. |
 | `decks/{deckId}/stats/rating`, `.../stats/cards` | TrueSkill and win counters, and per-card impact counters, built at aggregation |
-| `workers/{workerId}` | Durable worker settings only: owner, push URL, concurrency override |
 | `users/{uid}` | Access record, `status: requested \| allowed`. Not readable by clients. |
 | `config/coverage`, `idempotencyKeys/*` | Auto-coverage settings, job-creation idempotency |
 
@@ -83,17 +72,18 @@ Every time field in Firestore is a `Timestamp`; the API converts them to ISO
 strings at the edge.
 
 **Realtime Database** holds `presence/{workerId}`: an entry per online
-worker (`shared/types/worker-presence.ts`, rules in `database.rules.json`).
-The desktop worker writes its own entry with an onDisconnect delete; the
-Docker worker's heartbeat writes it through the API.
+desktop worker (`shared/types/worker-presence.ts`, rules in
+`database.rules.json`). Each worker writes its own entry about once a minute
+with an onDisconnect delete; the API and frontend only read them.
 
 **Cloud Storage** (`magic-bracket-simulator-artifacts`) holds per-game
 facts under `jobs/{jobId}/`: raw logs per sim (`raw/game_NNN.txt`, kept
 forever) plus `condensed.json` and `structured.json`, all stored gzipped.
 
 **Local mode** swaps these for SQLite (`api/data/jobs.db`) and the
-filesystem (`logs-data/`). The SQLite schema has no migrations: after a
-schema change, delete `jobs.db`.
+filesystem (`logs-data/`, saved decks in `data/decks/`). The SQLite schema
+has no migrations: after a schema change, delete `jobs.db`. Local mode has no
+worker presence, so it never lists workers as online.
 
 ---
 
@@ -101,12 +91,12 @@ schema change, delete `jobs.db`.
 
 1. **Create.** The frontend posts 4 deck ids to `POST /api/jobs` (or the
    coverage service picks a pod). The API writes the job with its `seats`,
-   creates one PENDING sim doc per container, schedules a Cloud Tasks
-   recovery check, and pushes `/notify` to reachable Docker workers.
-2. **Claim.** Workers poll `GET /api/jobs/claim-sim?lease=1`. The API
+   creates one PENDING sim doc per container, and schedules a Cloud Tasks
+   recovery check.
+2. **Claim.** Desktop workers poll `GET /api/jobs/claim-sim?lease=1`. The API
    claims the oldest claimable sim in a transaction, promotes the job from
    QUEUED to RUNNING on its first claim, and returns the sim. The worker
-   fetches decklists with `GET /api/jobs/:id` (worker view), which reads
+   fetches decklists with `GET /api/jobs/:id?view=worker`, which reads
    each seat's `.dck` by deck id.
 3. **Run and hold the lease.** The worker runs Forge and extends the sim's
    3-minute lease about once a minute. The answer can tell it the job was
@@ -142,9 +132,13 @@ queue and finishes jobs whose sims are all terminal.
   `GET /api/me` gives admins and `ALLOWED_EMAILS` accounts an allowed
   record, since the Firestore rules only see that doc. Signed out, or
   before approval, nothing is readable.
-- The Docker worker authenticates with `X-Worker-Secret`. The desktop
-  worker sends the signed-in user's ID token and is accepted when that user
-  is allowed (`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`).
+- The desktop worker signs in as its owner and sends that user's ID token,
+  so the worker routes use the same `verifyAllowedUser` check as every
+  other route.
+- Internal callers (Cloud Tasks recovery checks, the Cloud Scheduler sweep
+  and precon sync) send the shared `WORKER_SECRET` as `X-Worker-Secret`
+  (`isInternalRequest` in `api/lib/auth.ts`). The same secret signs
+  access-request approval links.
 - Local mode has no auth.
 
 ---
@@ -153,14 +147,13 @@ queue and finishes jobs whose sims are all terminal.
 
 | Workflow | What it ships |
 |----------|---------------|
-| `ci.yml` | PR checks: lint, build, test (frontend, api, worker), release-script tests |
+| `ci.yml` | PR checks: lint, build, test (frontend, api), release-script tests |
 | `worker-flutter-ci.yml` | `flutter analyze` + `flutter test` for the desktop worker |
 | `deploy.yml` | On merge: frontend to Firebase Hosting, Firestore rules + indexes, Realtime Database rules |
 | App Hosting | Builds and rolls out the API from `main`; `rollout-safety-net.yml` forces a rollout if one doesn't appear |
-| `deploy-worker.yml` | Worker and simulation images to GHCR |
 | `release-worker.yml` | Desktop worker builds, GitHub Release, `appcast.xml` |
-| `forge-update.yml` | Nightly Forge version bump PRs (auto-merge) |
-| `sync-api-secrets.yml`, `provision-worker.yml` | Copy secrets from Doppler (source of truth) into GCP Secret Manager |
+| `forge-update.yml` | Nightly: bumps `worker_flutter/forge-manifest.json` to the latest Forge release in an auto-merging PR; desktop workers install it on their next launch |
+| `sync-api-secrets.yml` | Copies the API's secrets from Doppler (source of truth) into GCP Secret Manager |
 
 Errors go to Sentry (org `tytaniumdev`): projects `magic-bracket-api`,
 `magic-bracket-worker` and `magic-bracket-frontend`.
@@ -178,8 +171,6 @@ Errors go to Sentry (org `tytaniumdev`): projects `magic-bracket-api`,
 | Ratings, card stats, pod standings | `api/lib/trueskill-service.ts`, `api/lib/card-impact/`, `api/lib/pod-run-standings.ts` |
 | Recovery | `api/lib/stale-sweeper.ts`, `api/lib/cloud-tasks.ts`, `api/app/api/jobs/[id]/recover/` |
 | Worker presence | `api/lib/worker-presence-store.ts`, `frontend/src/hooks/useWorkerStatus.ts`, `worker_flutter/lib/worker/worker_presence.dart` |
-| Push to Docker workers | `api/lib/worker-push.ts`, `worker/src/worker-api.ts` |
-| Docker worker loop | `worker/src/worker.ts` (`pollForSims`, `processSimulation`, `Semaphore`), `worker/src/docker-runner.ts` (`runSimulationContainer`, `calculateLocalCapacity`) |
 | Desktop worker loop | `worker_flutter/lib/worker/worker_engine.dart`, `sim_api.dart`, `sim_lease_keeper.dart`, `log_uploader.dart` |
 | Live job view | `frontend/src/hooks/useJobStream.ts`, `frontend/src/components/SimulationGrid.tsx` |
-| Forge container entrypoint | `worker/forge-engine/run_sim.sh`, `simulation/Dockerfile` |
+| Forge install and runs | `worker_flutter/forge-manifest.json`, `worker_flutter/lib/installer/`, `worker_flutter/lib/worker/sim_runner.dart` |

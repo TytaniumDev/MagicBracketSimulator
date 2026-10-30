@@ -4,11 +4,10 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Clients only read, and only approved users: their users/{uid} access
     // record says 'allowed' (admins and ALLOWED_EMAILS accounts get one from
-    // GET /api/me). Decks and workers carry owner emails, so nothing is
-    // readable signed out. Every write (jobs, simulations, decks, workers,
-    // users) goes through the API with the Admin SDK, which bypasses these
-    // rules. Worker presence lives in the Realtime Database
-    // (database.rules.json).
+    // GET /api/me). Decks carry owner emails, so nothing is readable signed
+    // out. Every write (jobs, simulations, decks, users) goes through the
+    // API with the Admin SDK, which bypasses these rules. Worker presence
+    // lives in the Realtime Database (database.rules.json).
     function isApproved() {
       return request.auth != null
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'allowed';
@@ -32,12 +31,6 @@ service cloud.firestore {
     }
 
     match /decks/{deckId} {
-      allow read: if isApproved();
-      allow write: if false;
-    }
-
-    // Durable worker settings; online status is Realtime Database presence.
-    match /workers/{workerId} {
       allow read: if isApproved();
       allow write: if false;
     }

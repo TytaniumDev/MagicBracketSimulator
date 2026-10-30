@@ -1,8 +1,8 @@
 /**
  * POST /api/admin/sweep-stale-jobs — Run one pass of the stale-job sweeper.
  *
- * Invoked on a 15-minute schedule by Cloud Scheduler. Authed with the existing
- * WORKER_SECRET header (same as /api/admin/pull-image). In local mode the
+ * Invoked on a 15-minute schedule by Cloud Scheduler. Authed with the
+ * WORKER_SECRET header (isInternalRequest in lib/auth.ts). In local mode the
  * auth check is bypassed so the endpoint is callable in dev without setup.
  *
  * Returns a SweepResult JSON describing what was scanned, cancelled, and
@@ -11,7 +11,7 @@
  * shows them.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerRequest } from '@/lib/auth';
+import { isInternalRequest } from '@/lib/auth';
 import { sweepStaleJobs } from '@/lib/stale-sweeper';
 import { errorResponse } from '@/lib/api-response';
 
@@ -21,7 +21,7 @@ import * as Sentry from '@sentry/nextjs';
 const IS_LOCAL_MODE = isLocalMode();
 
 export async function POST(req: NextRequest) {
-  if (!IS_LOCAL_MODE && !isWorkerRequest(req)) {
+  if (!IS_LOCAL_MODE && !isInternalRequest(req)) {
     return errorResponse('Unauthorized', 401);
   }
 

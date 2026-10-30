@@ -10,7 +10,7 @@
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![Flutter](https://img.shields.io/badge/Flutter-02569B?style=flat-square&logo=flutter&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)
 
 <br>
@@ -27,7 +27,7 @@ The worker has two modes:
 - **Cloud:** signs in with Google, picks up jobs from the shared Firestore queue. Results show on the [web leaderboard](https://magic-bracket-simulator.web.app).
 - **Offline:** picks 4 bundled Commander precons, runs the bracket locally, keeps results on your machine.
 
-**Want to run the whole stack locally for development?** See the [Deployment Guide](docs/DEPLOYMENT.md). The legacy Docker worker (`worker/`) is still in the repo and works, but the desktop worker (`worker_flutter/`) is the path going forward.
+**Want to run the whole stack locally for development?** See the [Deployment Guide](docs/DEPLOYMENT.md).
 
 ```bash
 # Frontend + API
@@ -52,7 +52,6 @@ cd worker_flutter && flutter run -d macos    # or: -d windows
 *   [API Reference](API.md)
 *   [Data Flow](DATA_FLOW.md)
 *   [Deployment Guide](docs/DEPLOYMENT.md)
-*   [Implementation Plan](docs/IMPLEMENTATION_PLAN_WORKER_SPLIT.md)
 *   [Mode Setup](docs/MODE_SETUP.md)
 *   [Precon Sync](docs/PRECON_SYNC.md)
 *   [Secrets Setup](docs/SECRETS_SETUP.md)

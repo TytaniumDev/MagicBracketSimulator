@@ -61,7 +61,6 @@ function firestoreDocToJobResponse(
       : (data.gamesCompleted as number ?? 0);
 
   const errorMessage = data.errorMessage as string | undefined;
-  const dockerRunDurationsMs = data.dockerRunDurationsMs as number[] | undefined;
   const workerId = data.workerId as string | undefined;
   const workerName = data.workerName as string | undefined;
   const claimedAt = timestampToIso(data.claimedAt);
@@ -79,7 +78,6 @@ function firestoreDocToJobResponse(
     ...(startedAt ? { startedAt } : undefined),
     ...(completedAt ? { completedAt } : undefined),
     durationMs,
-    ...(dockerRunDurationsMs ? { dockerRunDurationsMs } : undefined),
     ...(workerId ? { workerId } : undefined),
     ...(workerName ? { workerName } : undefined),
     ...(claimedAt ? { claimedAt } : undefined),

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { isWorkerRequest } from '../lib/auth';
+import { isInternalRequest } from '../lib/auth';
 
 // Simple test runner
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -27,34 +27,34 @@ async function runTests() {
   try {
     // Test Case 1: Correct Secret
     process.env.WORKER_SECRET = 'super-secret-key';
-    await test('isWorkerRequest returns true for correct secret', () => {
+    await test('isInternalRequest returns true for correct secret', () => {
       const req = new NextRequest('http://localhost', {
         headers: { 'X-Worker-Secret': 'super-secret-key' }
       });
-      assert(isWorkerRequest(req) === true, 'Should return true');
+      assert(isInternalRequest(req) === true, 'Should return true');
     });
 
     // Test Case 2: Incorrect Secret
-    await test('isWorkerRequest returns false for incorrect secret', () => {
+    await test('isInternalRequest returns false for incorrect secret', () => {
       const req = new NextRequest('http://localhost', {
         headers: { 'X-Worker-Secret': 'wrong-key' }
       });
-      assert(isWorkerRequest(req) === false, 'Should return false');
+      assert(isInternalRequest(req) === false, 'Should return false');
     });
 
     // Test Case 3: Missing Header
-    await test('isWorkerRequest returns false for missing header', () => {
+    await test('isInternalRequest returns false for missing header', () => {
       const req = new NextRequest('http://localhost');
-      assert(isWorkerRequest(req) === false, 'Should return false');
+      assert(isInternalRequest(req) === false, 'Should return false');
     });
 
     // Test Case 4: Missing Env Var
     delete process.env.WORKER_SECRET;
-    await test('isWorkerRequest returns false when WORKER_SECRET is not set', () => {
+    await test('isInternalRequest returns false when WORKER_SECRET is not set', () => {
       const req = new NextRequest('http://localhost', {
         headers: { 'X-Worker-Secret': 'super-secret-key' }
       });
-      assert(isWorkerRequest(req) === false, 'Should return false');
+      assert(isInternalRequest(req) === false, 'Should return false');
     });
 
   } finally {

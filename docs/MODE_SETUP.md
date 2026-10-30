@@ -9,9 +9,13 @@ This project supports two operational modes: **LOCAL** and **GCP**. This guide e
 | Database | SQLite | Firestore |
 | Worker presence | (none) | Realtime Database |
 | File Storage | Local filesystem | Cloud Storage (GCS) |
-| Job Queue | Workers poll `GET /api/jobs/claim-sim` | Workers poll `GET /api/jobs/claim-sim` |
+| Job Queue | `GET /api/jobs/claim-sim` | `GET /api/jobs/claim-sim` |
 | Analysis | Win rate / game stats | Win rate / game stats |
-| Worker | worker/ (Docker) | worker_flutter/ (desktop) or worker/ (Docker) |
+| Worker | (none) | worker_flutter/ (desktop) |
+
+The desktop worker signs in with Firebase and watches the hosted Firestore
+for work, so it only runs sims for GCP mode. LOCAL mode is for working on
+the API and frontend: jobs can be created but stay queued.
 
 ## Mode Detection
 
@@ -28,20 +32,20 @@ At startup, you'll see log messages like:
 
 ## Quick Mode Toggle
 
-The easiest way to run locally is `dev:local` — it switches to local mode, starts the dev servers, and **automatically restores GCP mode + worker when you Ctrl+C**:
+The easiest way to run locally is `dev:local` — it switches to local mode, starts the dev servers, and **automatically restores GCP mode when you Ctrl+C**:
 
 ```bash
 npm run dev:local
 ```
 
-You can also toggle manually (each command also cycles the worker Docker container):
+You can also toggle manually:
 
 ```bash
 npm run mode:local    # switch to LOCAL mode
 npm run mode:hosted   # switch back to HOSTED/GCP mode
 ```
 
-These commands copy or remove `.env.local` override files in `api/` and `frontend/`, and restart the worker Docker container in the matching mode. The `.env.local` files take precedence over `.env` (built-in behavior for both Next.js and Vite), so your `.env` files stay unchanged.
+These commands copy or remove `.env.local` override files in `api/` and `frontend/`. The `.env.local` files take precedence over `.env` (built-in behavior for both Next.js and Vite), so your `.env` files stay unchanged.
 
 ---
 
@@ -53,7 +57,6 @@ These commands copy or remove `.env.local` override files in `api/` and `fronten
    - Realtime Database (worker presence)
    - Cloud Storage bucket
 2. Service account key with permissions for Firestore, Realtime Database and GCS
-3. Docker installed (for worker)
 
 ### Configuration Files
 
@@ -62,35 +65,18 @@ These commands copy or remove `.env.local` override files in `api/` and `fronten
 GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
 GCS_BUCKET="magic-bracket-simulator-artifacts"
 GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
-WORKER_SECRET="shared-secret-for-worker-auth"
+WORKER_SECRET="shared-secret-for-internal-calls"
 NODE_ENV="development"
-FORGE_ENGINE_PATH="../worker/forge-engine"
-```
-
-#### worker/.env
-```bash
-GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
-GOOGLE_CLOUD_PROJECT="magic-bracket-simulator"
-GCS_BUCKET="magic-bracket-simulator-artifacts"
-API_URL="http://localhost:3000"  # or the App Hosting URL
-WORKER_SECRET="shared-secret-for-worker-auth"
-WORKER_API_PORT=9090
-WORKER_API_URL="http://<vm-internal-ip>:9090"  # VPC-internal IP for API→worker push
 ```
 
 ### Running GCP Mode
 
-**Terminal 1: API + Frontend**
 ```bash
 npm run dev
 ```
 
-**Terminal 2: Worker (polls the API for sims)**
-```bash
-docker compose -f worker/docker-compose.yml up --build
-```
-
-Or run the desktop worker (`worker_flutter/`) in Cloud mode.
+Sims run on the desktop worker (`worker_flutter/`) in Cloud mode. It talks
+to the hosted API (`https://api--magic-bracket-simulator.us-central1.hosted.app`).
 
 ### Services in GCP Mode
 
@@ -98,8 +84,7 @@ Or run the desktop worker (`worker_flutter/`) in Cloud mode.
 |---------|---------|---------------|
 | api | API backend (Firestore, RTDB, GCS) | Local or Firebase App Hosting |
 | frontend | React UI | Local or Firebase Hosting |
-| worker | Desktop worker, or the Node.js orchestrator that spawns simulation containers | Your machine |
-| simulation | Java + Forge engine container (ephemeral) | Spawns via `docker run` inside worker |
+| worker | Desktop worker: claims sims and runs Forge as a local Java process | User machines (macOS, Windows) |
 
 ### Deployed API (Firebase App Hosting / Cloud Run)
 
@@ -118,16 +103,15 @@ Simply ensure `GOOGLE_CLOUD_PROJECT` is **not set** in `api/.env`, or delete the
 
 ### Running LOCAL Mode
 ```bash
-npm run dev:local    # starts local mode, restores GCP worker on exit
+npm run dev:local    # starts local mode, restores GCP mode on exit
 ```
 
 ### Services in LOCAL Mode
 
 | Service | Purpose |
 |---------|---------|
-| api | API backend with SQLite |
+| api | API backend with SQLite; saved decks in `api/data/decks/` (`SAVED_DECKS_DIR`) |
 | frontend | React UI |
-| worker (polling) | Node.js orchestrator, polls API for jobs (with push-based job notification for instant wake), spawns simulation containers |
 
 ---
 
@@ -141,19 +125,7 @@ export $(grep -v '^#' .env | xargs)
 npx tsx scripts/seed-decks.ts
 ```
 
-This loads all precon deck files from `worker/forge-engine/precons/` into Firestore.
-
----
-
-## Docker Image
-
-Build the unified worker container:
-
-```bash
-docker compose -f worker/docker-compose.yml build
-```
-
-The worker image contains the Node.js orchestrator. The simulation image (`magic-bracket-simulation`) is either pulled from GHCR or built locally and must be available to the Docker daemon so the worker can spawn it using `docker run`.
+This syncs the precons from Archidekt into Firestore.
 
 ---
 
@@ -162,11 +134,6 @@ The worker image contains the Node.js orchestrator. The simulation image (`magic
 ### "Running in LOCAL mode" when expecting GCP
 - Check that `GOOGLE_CLOUD_PROJECT` is set in `api/.env`
 - Ensure the .env file is being loaded (Next.js loads it automatically)
-
-### Worker can't connect to API
-- Verify `API_URL` in `worker/.env`
-- For local testing, use `http://localhost:3000`
-- For the hosted API, use `https://api--magic-bracket-simulator.us-central1.hosted.app`
 
 ### Firestore permission errors (e.g. `7 PERMISSION_DENIED: User not authorized to perform this action`)
 - **Deployed API (Firebase App Hosting / Cloud Run):** The backend runs as a Cloud Run service account. That identity must have **Cloud Datastore User** so it can read/write Firestore (decks, jobs). Grant the role on the project:
@@ -181,6 +148,5 @@ The worker image contains the Node.js orchestrator. The simulation image (`magic
 - **Local API:** Ensure service account key path is correct and the key’s account has Firestore read/write (e.g. Cloud Datastore User).
 
 ### Jobs stuck in QUEUED
-- Ensure a worker is running and polling `claim-sim` (the frontend's worker banner shows online workers)
-- Check worker logs for errors
-- Verify `WORKER_SECRET` matches between API and worker
+- Ensure a desktop worker is running and signed in with an allowed account (the frontend's worker banner shows online workers)
+- Check the desktop worker's log and Sentry (`magic-bracket-worker`) for errors

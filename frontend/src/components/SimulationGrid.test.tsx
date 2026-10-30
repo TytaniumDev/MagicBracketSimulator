@@ -195,22 +195,6 @@ describe('SimulationGrid', () => {
     expect(screen.getByText('45.0s')).toBeInTheDocument();
   });
 
-  // ---------------------------------------------------------------------------
-  // Worker override controls
-  // ---------------------------------------------------------------------------
-
-  it('does not render worker controls when workers prop is not provided', () => {
-    render(
-      <SimulationGrid
-        simulations={mixedStateSimulations}
-        totalSimulations={20}
-        isAuthenticated={true}
-      />,
-    );
-    // No WorkerOverrideControls should appear without workers prop
-    expect(screen.queryByText('cap:')).not.toBeInTheDocument();
-  });
-
   it('renders correct total game count with placeholder cells', () => {
     // Only 3 of 5 expected containers present → 2 get placeholder cells
     const partialSims = mixedStateSimulations.slice(0, 3);

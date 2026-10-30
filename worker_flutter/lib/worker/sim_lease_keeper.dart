@@ -4,8 +4,8 @@ import '../app_log.dart';
 import '../telemetry.dart';
 import 'sim_api.dart';
 
-/// Keeps one running sim's lease alive. Dart counterpart of `keepSimLease`
-/// in `worker/src/sim-lease.ts`.
+/// Keeps one running sim's lease alive (see `api/lib/sim-lease.ts` for the
+/// API's lease rules).
 ///
 /// Calls [extend] every [interval] (well inside the API's 3-minute lease).
 /// A failed call is logged and retried on the next tick. When the API says

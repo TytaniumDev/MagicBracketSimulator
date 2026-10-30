@@ -3,7 +3,7 @@
  * Protected by WORKER_SECRET header (or local mode).
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerRequest } from '@/lib/auth';
+import { isInternalRequest } from '@/lib/auth';
 import { syncPrecons } from '@/lib/archidekt-sync';
 import { errorResponse } from '@/lib/api-response';
 
@@ -14,7 +14,7 @@ const IS_LOCAL_MODE = isLocalMode();
 
 export async function POST(req: NextRequest) {
   // In GCP mode, require worker secret
-  if (!IS_LOCAL_MODE && !isWorkerRequest(req)) {
+  if (!IS_LOCAL_MODE && !isInternalRequest(req)) {
     return errorResponse('Unauthorized', 401);
   }
 
