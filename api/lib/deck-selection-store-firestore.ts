@@ -1,31 +1,24 @@
 /**
  * Firestore implementation of DeckSelectionStore (GCP mode).
- * All exclusions live in one doc so reading them costs a single read.
+ * An excluded deck carries `excluded: true` on its own doc, so deleting a
+ * deck drops its exclusion with it.
  */
 import { FieldValue } from '@google-cloud/firestore';
 import type { DeckSelectionStore } from './deck-selection-store';
 import { getFirestore } from './firestore-client';
 
-const firestore = getFirestore();
-
-const configDoc = firestore.collection('config').doc('deckSelection');
+const decksCollection = getFirestore().collection('decks');
 
 export const firestoreDeckSelectionStore: DeckSelectionStore = {
   async getExcludedDeckIds(): Promise<string[]> {
-    const doc = await configDoc.get();
-    const ids = doc.exists ? doc.data()!.excludedDeckIds : null;
-    return Array.isArray(ids) ? ids : [];
+    const snapshot = await decksCollection.where('excluded', '==', true).select().get();
+    return snapshot.docs.map((doc) => doc.id).sort();
   },
 
-  async setDeckExcluded(deckId, excluded, updatedBy): Promise<string[]> {
-    await configDoc.set(
-      {
-        excludedDeckIds: excluded ? FieldValue.arrayUnion(deckId) : FieldValue.arrayRemove(deckId),
-        updatedAt: new Date().toISOString(),
-        updatedBy,
-      },
-      { merge: true },
-    );
+  // Who excluded the deck isn't recorded here: deck docs are readable by
+  // the web app, and the admin's email shouldn't be.
+  async setDeckExcluded(deckId, excluded): Promise<string[]> {
+    await decksCollection.doc(deckId).update({ excluded: excluded ? true : FieldValue.delete() });
     return this.getExcludedDeckIds();
   },
 };
