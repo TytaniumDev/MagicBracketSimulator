@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isWorkerRequest } from '@/lib/auth';
 import { getCoverageStore } from '@/lib/coverage-store-factory';
 import { generateNextPod, hasActiveCoverageJob } from '@/lib/coverage-service';
-import { resolveDeckIds } from '@/lib/deck-resolver';
+import { resolveJobSeats } from '@/lib/job-seats';
 import * as jobStore from '@/lib/job-store-factory';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { pushToAllWorkers } from '@/lib/worker-push';
 import { errorResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
+import { seatNames } from '@shared/types/job';
 
 const COVERAGE_SIMULATIONS = 100;
 const COVERAGE_PARALLELISM = 1;
@@ -37,16 +38,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ reason: 'all-pairs-covered' });
     }
 
-    const { decks, errors } = await resolveDeckIds(pod);
+    const { seats, errors } = await resolveJobSeats(pod);
     if (errors.length > 0) {
       console.error(`[Coverage] Failed to resolve decks: ${errors.join(', ')}`);
       return NextResponse.json({ reason: 'deck-resolution-failed', errors });
     }
 
-    const job = await jobStore.createJob(decks, COVERAGE_SIMULATIONS, {
+    const job = await jobStore.createJob(seats, COVERAGE_SIMULATIONS, {
       parallelism: COVERAGE_PARALLELISM,
       createdBy: 'coverage-system',
-      deckIds: pod,
       source: 'coverage',
     });
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       Sentry.captureException(err, { tags: { component: 'worker-push' } });
     });
 
-    const deckNames = job.decks.map((d) => d.name);
+    const deckNames = seatNames(job.seats);
     console.log(`[Coverage] Created job ${job.id}: ${deckNames.join(' vs ')}`);
 
     return NextResponse.json({ id: job.id, deckNames, source: 'coverage' }, { status: 201 });

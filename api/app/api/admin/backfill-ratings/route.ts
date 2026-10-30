@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       const isStuckRunning = isJobStuck(job);
 
       if (!isCompleted && !isStuckRunning) continue;
-      if (!Array.isArray(job.deckIds) || job.deckIds.length !== 4) continue;
+      if (job.seats.length !== 4) continue;
 
       try {
         // If stuck RUNNING, aggregate first to ingest logs and set status
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         if (structuredData?.games?.length) {
           const { processJobForRatings } = await import('@/lib/trueskill-service');
           // Idempotent: a job already rated is skipped by the store.
-          const applied = await processJobForRatings(job.id, job.deckIds, structuredData.games);
+          const applied = await processJobForRatings(job.id, job.seats, structuredData.games);
           (applied ? processed : skipped).push(job.id);
         } else {
           skipped.push(job.id);

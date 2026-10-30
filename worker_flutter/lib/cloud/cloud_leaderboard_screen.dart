@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'cloud_job_detail_screen.dart' show CloudJobDetailScreen;
+import 'job_seats.dart';
 
 /// Lightweight client-side leaderboard.
 ///
@@ -94,7 +95,7 @@ List<_LeaderboardEntry> _aggregate(
     // jobs contribute.
     if (status != 'COMPLETED' && status != 'CANCELLED') continue;
 
-    final deckNames = _deckNames(data);
+    final deckNames = jobSeatNames(data);
     if (deckNames.isEmpty) continue;
     final completedSims = (data['completedSimCount'] as num?)?.toInt() ?? 0;
     if (completedSims == 0) continue;
@@ -117,24 +118,17 @@ List<_LeaderboardEntry> _aggregate(
       // assignment here would chase the iteration backwards to the oldest.
     }
 
-    // Per-deck wins live in `aggregateResults.winsByDeck` once
-    // aggregation has run; fall back to walking sims if missing.
-    final agg = data['aggregateResults'] as Map?;
-    final wins = agg?['winsByDeck'];
-    final turns = agg?['avgWinTurnsByDeck'];
-    if (wins is Map) {
-      wins.forEach((k, v) {
-        final e = byName[k];
-        if (e == null || v is! num) return;
-        e.wins += v.toInt();
-        if (turns is Map) {
-          final t = turns[k];
-          if (t is num) {
-            e.totalWinTurns += (t * v.toInt()).round();
-            e.totalWinTurnSamples += v.toInt();
-          }
-        }
-      });
+    // Per-seat wins and average winning turn, once aggregation has run.
+    final results = jobSeatResults(data);
+    if (results == null) continue;
+    for (var i = 0; i < results.length && i < deckNames.length; i++) {
+      final e = byName[deckNames[i]]!;
+      final (:wins, :avgWinTurn) = results[i];
+      e.wins += wins;
+      if (avgWinTurn != null) {
+        e.totalWinTurns += (avgWinTurn * wins).round();
+        e.totalWinTurnSamples += wins;
+      }
     }
   }
 
@@ -298,14 +292,4 @@ class _Message extends StatelessWidget {
       ),
     );
   }
-}
-
-List<String> _deckNames(Map<String, dynamic> data) {
-  final raw = data['decks'];
-  if (raw is! List) return const [];
-  return raw
-      .whereType<Map>()
-      .map((d) => d['name'] as String?)
-      .whereType<String>()
-      .toList(growable: false);
 }

@@ -335,26 +335,26 @@ describe('JobStatus — admin controls', () => {
 // ---------------------------------------------------------------------------
 
 describe('JobStatus — Run Again', () => {
-  it('shows "Run Again" button when job is COMPLETED with deckIds', () => {
-    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+  it('shows "Run Again" button when job is COMPLETED with its seats', () => {
+    setupMocks({ job: makeJob({ status: 'COMPLETED',  }) });
     renderJobStatus();
     expect(screen.getByText('Run Again')).toBeInTheDocument();
   });
 
-  it('shows "Run Again" button when job is FAILED with deckIds', () => {
-    setupMocks({ job: makeJob({ status: 'FAILED', deckIds: ['a', 'b', 'c', 'd'] }) });
+  it('shows "Run Again" button when job is FAILED with its seats', () => {
+    setupMocks({ job: makeJob({ status: 'FAILED',  }) });
     renderJobStatus();
     expect(screen.getByText('Run Again')).toBeInTheDocument();
   });
 
-  it('shows "Run Again" button when job is CANCELLED with deckIds', () => {
-    setupMocks({ job: makeJob({ status: 'CANCELLED', deckIds: ['a', 'b', 'c', 'd'] }) });
+  it('shows "Run Again" button when job is CANCELLED with its seats', () => {
+    setupMocks({ job: makeJob({ status: 'CANCELLED',  }) });
     renderJobStatus();
     expect(screen.getByText('Run Again')).toBeInTheDocument();
   });
 
   it('hides "Run Again" button when job is RUNNING', () => {
-    setupMocks({ job: makeJob({ status: 'RUNNING', deckIds: ['a', 'b', 'c', 'd'], completedAt: undefined, durationMs: null }) });
+    setupMocks({ job: makeJob({ status: 'RUNNING', completedAt: undefined, durationMs: null }) });
     renderJobStatus();
     expect(screen.queryByText('Run Again')).not.toBeInTheDocument();
   });
@@ -363,7 +363,6 @@ describe('JobStatus — Run Again', () => {
     setupMocks({
       job: makeJob({
         status: 'QUEUED',
-        deckIds: ['a', 'b', 'c', 'd'],
         startedAt: undefined,
         completedAt: undefined,
         durationMs: null,
@@ -371,12 +370,6 @@ describe('JobStatus — Run Again', () => {
         workers: { online: 1, idle: 1, busy: 0 },
       }),
     });
-    renderJobStatus();
-    expect(screen.queryByText('Run Again')).not.toBeInTheDocument();
-  });
-
-  it('hides "Run Again" button when deckIds is missing', () => {
-    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: undefined }) });
     renderJobStatus();
     expect(screen.queryByText('Run Again')).not.toBeInTheDocument();
   });
@@ -389,7 +382,6 @@ describe('JobStatus — Run Again', () => {
       job: makeJob({
         status: 'COMPLETED',
         simulations: 20,
-        deckIds: ['deck-a', 'deck-b', 'deck-c', 'deck-d'],
       }),
     });
     renderJobStatus();
@@ -408,7 +400,7 @@ describe('JobStatus — Run Again', () => {
 
     const callArgs = vi.mocked(fetchWithAuth).mock.calls[0];
     const body = JSON.parse(callArgs[1]!.body as string);
-    expect(body.deckIds).toEqual(['deck-a', 'deck-b', 'deck-c', 'deck-d']);
+    expect(body.deckIds).toEqual(['deck-atraxa', 'deck-korvold', 'deck-yuriko', 'deck-tymna-kraum']);
     expect(body.simulations).toBe(20);
     expect(body.idempotencyKey).toBeDefined();
   });
@@ -417,7 +409,7 @@ describe('JobStatus — Run Again', () => {
     const mockResponse = { ok: true, json: () => Promise.resolve({ id: 'job-new-456' }) };
     vi.mocked(fetchWithAuth).mockResolvedValue(mockResponse as unknown as Response);
 
-    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    setupMocks({ job: makeJob({ status: 'COMPLETED',  }) });
     renderJobStatus();
 
     fireEvent.click(screen.getByText('Run Again'));
@@ -435,7 +427,7 @@ describe('JobStatus — Run Again', () => {
     const pendingPromise = new Promise<Response>((resolve) => { resolveResponse = resolve; });
     vi.mocked(fetchWithAuth).mockReturnValue(pendingPromise);
 
-    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    setupMocks({ job: makeJob({ status: 'COMPLETED',  }) });
     renderJobStatus();
 
     fireEvent.click(screen.getByText('Run Again'));
@@ -451,7 +443,7 @@ describe('JobStatus — Run Again', () => {
   it('shows error when resubmit fails', async () => {
     vi.mocked(fetchWithAuth).mockRejectedValue(new Error('Network error'));
 
-    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    setupMocks({ job: makeJob({ status: 'COMPLETED',  }) });
     renderJobStatus();
 
     fireEvent.click(screen.getByText('Run Again'));
@@ -464,7 +456,7 @@ describe('JobStatus — Run Again', () => {
   it('shows action error inline without hiding the job UI', async () => {
     vi.mocked(fetchWithAuth).mockRejectedValue(new Error('Cancel failed'));
 
-    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    setupMocks({ job: makeJob({ status: 'COMPLETED',  }) });
     renderJobStatus();
 
     fireEvent.click(screen.getByText('Run Again'));
@@ -480,7 +472,7 @@ describe('JobStatus — Run Again', () => {
   it('dismisses action error when close button is clicked', async () => {
     vi.mocked(fetchWithAuth).mockRejectedValue(new Error('Something went wrong'));
 
-    setupMocks({ job: makeJob({ status: 'COMPLETED', deckIds: ['a', 'b', 'c', 'd'] }) });
+    setupMocks({ job: makeJob({ status: 'COMPLETED',  }) });
     renderJobStatus();
 
     fireEvent.click(screen.getByText('Run Again'));

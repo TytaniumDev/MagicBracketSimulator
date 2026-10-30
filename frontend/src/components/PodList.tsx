@@ -13,7 +13,7 @@ export function PodList({ jobs, missingCount }: { jobs: readonly JobResponse[]; 
               to={`/jobs/${job.id}`}
               className="flex items-center justify-between gap-3 bg-gray-800 hover:bg-gray-700 rounded-md px-3 py-2 transition-colors"
             >
-              <span className="text-sm text-gray-200 truncate">{job.deckNames.join(' vs ')}</span>
+              <span className="text-sm text-gray-200 truncate">{job.name}</span>
               <span className="flex items-center gap-3 flex-shrink-0">
                 {job.status === 'RUNNING' && (
                   <span className="text-xs text-gray-400 font-mono">

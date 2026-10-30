@@ -8,7 +8,7 @@
  * Run with: npx tsx lib/condenser/deck-match.test.ts
  */
 
-import { matchesDeckName, resolveWinnerName } from './deck-match';
+import { matchesDeckName, resolveWinnerName, seatOfPlayer } from './deck-match';
 
 // ---------------------------------------------------------------------------
 // Test Utilities
@@ -195,6 +195,28 @@ async function runTests() {
     // Verify no unknown keys leaked in
     const totalWins = Object.values(tally).reduce((s, n) => s + n, 0);
     assertEqual(totalWins, winners.length, 'total wins should equal winners array length');
+  });
+
+  // =========================================================================
+  // seatOfPlayer
+  // =========================================================================
+
+  const seats = ['Blood Rites', 'Counter Blitz', 'World Shaper', 'Doran Big Butts'];
+
+  await test('seatOfPlayer: finds the seat by deck name', () => {
+    assertEqual(seatOfPlayer('Ai(3)-World Shaper', seats), 2, 'seat');
+    assertEqual(seatOfPlayer('Ai(1)-Blood Rites - The Lost Caverns of Ixalan Commander', seats), 0, 'precon seat');
+  });
+
+  await test('seatOfPlayer: -1 when no seat matches', () => {
+    assertEqual(seatOfPlayer('Ai(2)-Unknown Deck', seats), -1, 'seat');
+  });
+
+  await test('seatOfPlayer: the player number picks between seats with the same deck', () => {
+    const twice = ['Blood Rites', 'Counter Blitz', 'Blood Rites', 'World Shaper'];
+    assertEqual(seatOfPlayer('Ai(3)-Blood Rites', twice), 2, 'third player');
+    assertEqual(seatOfPlayer('Ai(1)-Blood Rites', twice), 0, 'first player');
+    assertEqual(seatOfPlayer('Blood Rites', twice), 0, 'no number: first seat');
   });
 
   // =========================================================================

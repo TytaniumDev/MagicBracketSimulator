@@ -31,8 +31,7 @@ interface Row {
 
 interface JobRow {
   id: string;
-  decks_json: string;
-  deck_ids_json: string | null;
+  seats_json: string;
   result_json: string | null;
   pod_run_id: string | null;
   pod_run_applied: number | null;
@@ -40,8 +39,7 @@ interface JobRow {
 
 function jobFinishedPod(job: JobRow) {
   return finishedPod({
-    decks: JSON.parse(job.decks_json),
-    ...(job.deck_ids_json && { deckIds: JSON.parse(job.deck_ids_json) }),
+    seats: JSON.parse(job.seats_json),
     results: job.result_json ? (JSON.parse(job.result_json) as JobResults) : null,
   });
 }

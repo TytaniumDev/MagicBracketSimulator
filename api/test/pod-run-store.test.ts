@@ -125,13 +125,12 @@ async function runTests() {
 
   // --- Standings ---------------------------------------------------------
 
-  const deck = (name: string) => ({ name, dck: '[Main]\n1 Forest\n' });
-  const podJob = async (ids: string[]) =>
-    (await createJob(ids.map((id) => deck(id.toUpperCase())), 4, { deckIds: ids })).id;
-  const podResults = (wins: Record<string, number>, avgWinTurn: Record<string, number> = {}): JobResults => ({
-    wins,
-    avgWinTurn,
+  const seat = (id: string) => ({ deckId: id, name: id.toUpperCase(), link: null, colorIdentity: [] });
+  const podJob = async (ids: string[]) => (await createJob(ids.map(seat), 4)).id;
+  /** Results for a pod of `ids`, with wins and average win turns by deck name. */
+  const podResults = (ids: string[], wins: Record<string, number>, avgWinTurn: Record<string, number> = {}): JobResults => ({
     gamesPlayed: 4,
+    seats: ids.map((id) => ({ wins: wins[seat(id).name] ?? 0, avgWinTurn: avgWinTurn[seat(id).name] ?? null })),
   });
 
   let standingsRunId = '';
@@ -141,7 +140,7 @@ async function runTests() {
   await test('createPodRun totals the jobs that already have results', async () => {
     finishedJob = await podJob(['d1', 'd2', 'd3', 'd4']);
     laterJob = await podJob(['d1', 'd2', 'd3', 'd5']);
-    await setJobResults(finishedJob, podResults({ D1: 3, D2: 1 }, { D1: 6, D2: 9 }));
+    await setJobResults(finishedJob, podResults(['d1', 'd2', 'd3', 'd4'], { D1: 3, D2: 1 }, { D1: 6, D2: 9 }));
 
     const run = await store.createPodRun({
       deckIds: ['d1', 'd2', 'd3', 'd4', 'd5'],
@@ -161,7 +160,7 @@ async function runTests() {
 
   await test('applyJob adds a job once its results are in, and only once', async () => {
     assertEqual(await store.applyJob(laterJob), false, 'no results yet');
-    await setJobResults(laterJob, podResults({ D5: 4 }, { D5: 5 }));
+    await setJobResults(laterJob, podResults(['d1', 'd2', 'd3', 'd5'], { D5: 4 }, { D5: 5 }));
 
     assertEqual(await store.applyJob(laterJob), true, 'first apply');
     assertEqual(await store.applyJob(laterJob), false, 'second apply');
@@ -187,7 +186,7 @@ async function runTests() {
 
   await test('applyJob ignores a job in no run', async () => {
     const loose = await podJob(['d1', 'd2', 'd3', 'd4']);
-    await setJobResults(loose, podResults({ D1: 4 }));
+    await setJobResults(loose, podResults(['d1', 'd2', 'd3', 'd4'], { D1: 4 }));
     assertEqual(await store.applyJob(loose), false, 'applied');
   });
 

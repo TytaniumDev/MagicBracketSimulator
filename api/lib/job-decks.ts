@@ -1,10 +1,9 @@
 /**
  * The decklists a worker needs to run a job.
  *
- * Job docs record each seat's deck name and id, not its .dck content (older
- * jobs embedded the content; those are served as stored). The content is
- * read from the deck by id, as it is now, and cached briefly since every
- * sim of a job asks for the same 4 decks.
+ * Job docs record each seat's deck id and name, not its .dck content. The
+ * content is read from the deck by id and cached briefly, since every sim
+ * of a job asks for the same 4 decks.
  */
 import { readDeckContent } from './deck-store-factory';
 import { lruEvictIfFull, lruTouch } from './lru';
@@ -30,12 +29,9 @@ async function deckContent(deckId: string): Promise<string | null> {
  * The job's 4 decks with their .dck content, keeping the names recorded on
  * the job (winner matching uses them). Null when a deck can't be found.
  */
-export async function resolveJobDecks(job: Pick<Job, 'decks' | 'deckIds'>): Promise<DeckSlot[] | null> {
-  if (job.decks.length !== REQUIRED_DECK_COUNT) return null;
-  if (job.decks.every((d) => typeof d.dck === 'string')) return job.decks as DeckSlot[];
-  if (job.deckIds?.length !== REQUIRED_DECK_COUNT) return null;
-
-  const contents = await Promise.all(job.deckIds.map(deckContent));
+export async function resolveJobDecks(job: Pick<Job, 'seats'>): Promise<DeckSlot[] | null> {
+  if (job.seats.length !== REQUIRED_DECK_COUNT) return null;
+  const contents = await Promise.all(job.seats.map((s) => deckContent(s.deckId)));
   if (contents.some((dck) => dck === null)) return null;
-  return job.decks.map((d, i) => ({ name: d.name, dck: contents[i]! }));
+  return job.seats.map((s, i) => ({ name: s.name, dck: contents[i]! }));
 }

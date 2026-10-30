@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import { resolveDeckIds } from '@/lib/deck-resolver';
-import { getDeckById } from '@/lib/deck-store-factory';
+import { resolveJobSeats } from '@/lib/job-seats';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, createJobSchema } from '@/lib/validation';
-import type { JobSummary } from '@shared/types/job';
+import { seatNames, type JobSummary } from '@shared/types/job';
 import { isGcpMode } from '@/lib/job-store-factory';
 import { pushToAllWorkers } from '@/lib/worker-push';
 import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
@@ -27,7 +26,6 @@ const pendingRecoveryAggregations = new Set<string>();
  */
 function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCompleted: number): JobSummary | null {
   if (!job) return null;
-  const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
@@ -53,8 +51,8 @@ function jobToSummary(job: Awaited<ReturnType<typeof jobStore.getJob>>, gamesCom
 
   return {
     id: job.id,
-    name: deckNames.join(' vs '),
-    deckNames,
+    name: seatNames(job.seats).join(' vs '),
+    seats: job.seats,
     status: effectiveStatus,
     simulations: job.simulations,
     gamesCompleted,
@@ -139,45 +137,15 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     const uniqueDeckIds = new Set(deckIds);
     const hasDuplicates = uniqueDeckIds.size < deckIds.length;
 
-    const { decks, errors } = await resolveDeckIds(deckIds);
+    const { seats, errors } = await resolveJobSeats(deckIds);
     if (errors.length > 0) {
       return badRequestResponse(`Invalid deck IDs: ${errors.join(', ')}`);
     }
 
-    // Denormalize deck metadata into the job doc at creation time so every
-    // downstream job view (Browse list, detail page, leaderboard) doesn't
-    // have to re-fetch 4 deck docs per job. In GCP mode this is a ~4x
-    // Firestore read reduction on the hot path. LOCAL mode is unaffected:
-    // the job-store factory only passes these fields to Firestore.
-    const deckLinks: Record<string, string | null> = {};
-    const colorIdentity: Record<string, string[]> = {};
-    if (isGcpMode()) {
-      const resolved = await Promise.all(
-        deckIds.map(async (id, i) => {
-          try {
-            const deck = await getDeckById(id);
-            return { name: decks[i].name, deck };
-          } catch (err) {
-            Sentry.captureException(err, { tags: { component: 'job-deck-links' } });
-            return { name: decks[i].name, deck: null };
-          }
-        }),
-      );
-      for (const { name, deck } of resolved) {
-        deckLinks[name] = deck?.link ?? null;
-        if (deck?.colorIdentity && deck.colorIdentity.length > 0) {
-          colorIdentity[name] = deck.colorIdentity;
-        }
-      }
-    }
-
-    const job = await jobStore.createJob(decks, simulations, {
+    const job = await jobStore.createJob(seats, simulations, {
       idempotencyKey,
       parallelism,
       createdBy: user.uid,
-      deckIds,
-      ...(Object.keys(deckLinks).length > 0 && { deckLinks }),
-      ...(Object.keys(colorIdentity).length > 0 && { colorIdentity }),
     });
 
     // Each container runs GAMES_PER_CONTAINER games, so we need fewer containers
@@ -186,8 +154,6 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     // Initialize per-simulation tracking. Workers discover these sims via
     // their GET /api/jobs/claim-sim polling loop; no queue publish needed.
     await jobStore.initializeSimulations(job.id, containerCount);
-
-    const deckNames = job.decks.map((d) => d.name);
 
     // Best-effort push to wake any online workers for near-instant pickup.
     // If none are reachable, the next poll (POLL_INTERVAL_MS, ~3s) picks it up.
@@ -205,7 +171,7 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     }
 
     return NextResponse.json(
-      { id: job.id, deckNames, ...(hasDuplicates && { warning: 'Duplicate decks detected. Results may not be meaningful.' }) },
+      { id: job.id, deckNames: seatNames(job.seats), ...(hasDuplicates && { warning: 'Duplicate decks detected. Results may not be meaningful.' }) },
       { status: 201 }
     );
   } catch (error) {

@@ -1,5 +1,5 @@
 import { Timestamp, FieldValue, FieldPath } from '@google-cloud/firestore';
-import { Job, JobStatus, JobResults, JobDeck, SimulationStatus, SimulationState, JobSource } from './types';
+import { Job, JobStatus, JobResults, JobSeat, SimulationStatus, SimulationState, JobSource } from './types';
 import { getFirestore } from './firestore-client';
 import {
   isSimClaimable,
@@ -20,11 +20,9 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
   if (!doc.exists) return null;
   
   const data = doc.data()!;
-  const deckIds = Array.isArray(data.deckIds) && data.deckIds.length === 4 ? data.deckIds as string[] : undefined;
   return {
     id: doc.id,
-    decks: data.decks || [],
-    ...(deckIds != null && { deckIds }),
+    seats: (data.seats ?? []) as JobSeat[],
     status: data.status as JobStatus,
     simulations: data.simulations,
     parallelism: data.parallelism,
@@ -47,21 +45,12 @@ function docToJob(doc: FirebaseFirestore.DocumentSnapshot): Job | null {
 }
 
 export interface CreateJobData {
-  decks: JobDeck[];
+  seats: JobSeat[];
   simulations: number;
   parallelism?: number;
   idempotencyKey?: string;
   createdBy: string;
-  deckIds?: string[];
   source?: JobSource;
-  /**
-   * Denormalized deck metadata, keyed by deck NAME (matches deckNames[]).
-   * Writing these into the job doc at creation time eliminates 4 Firestore
-   * deck reads per job view (Browse + detail pages) and massively reduces
-   * the leaderboard's read fan-out.
-   */
-  deckLinks?: Record<string, string | null>;
-  colorIdentity?: Record<string, string[]>;
 }
 
 /**
@@ -80,10 +69,7 @@ export async function createJob(data: CreateJobData): Promise<Job> {
   const now = Timestamp.now();
 
   const jobData = {
-    decks: data.decks,
-    ...(data.deckIds != null && data.deckIds.length === 4 && { deckIds: data.deckIds }),
-    ...(data.deckLinks && Object.keys(data.deckLinks).length > 0 && { deckLinks: data.deckLinks }),
-    ...(data.colorIdentity && Object.keys(data.colorIdentity).length > 0 && { colorIdentity: data.colorIdentity }),
+    seats: data.seats,
     status: 'QUEUED' as JobStatus,
     simulations: data.simulations,
     parallelism: data.parallelism || 4,
@@ -120,8 +106,7 @@ export async function createJob(data: CreateJobData): Promise<Job> {
 
   return {
     id: jobRef.id,
-    decks: data.decks,
-    ...(data.deckIds != null && data.deckIds.length === 4 && { deckIds: data.deckIds }),
+    seats: data.seats,
     status: 'QUEUED',
     simulations: data.simulations,
     parallelism: data.parallelism || 4,

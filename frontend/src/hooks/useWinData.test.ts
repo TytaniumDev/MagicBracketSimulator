@@ -3,6 +3,7 @@ import { computeSimWins, computeStructuredWins, resolveEffectiveWins } from './u
 import type { SimulationStatus } from '@shared/types/simulation';
 import type { StructuredGame } from '@shared/types/log';
 import type { JobResults } from '@shared/types/job';
+import { makeSeats } from '../test/fixtures';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -193,15 +194,15 @@ describe('resolveEffectiveWins', () => {
 
   it('prefers server results when present', () => {
     const serverResults: JobResults = {
-      wins: { 'Deck A': 5, 'Deck B': 3 },
-      avgWinTurn: { 'Deck A': 8, 'Deck B': 12 },
       gamesPlayed: 8,
+      seats: [{ wins: 5, avgWinTurn: 8 }, { wins: 3, avgWinTurn: 12 }],
     };
+    const seats = makeSeats(['Deck A', 'Deck B']);
     const simResult = computeSimWins(
       [makeSim({ winners: ['Deck C'] })],
       DECK_NAMES,
     );
-    const result = resolveEffectiveWins(serverResults, simResult, noStructured, null);
+    const result = resolveEffectiveWins({ seats, results: serverResults }, simResult, noStructured, null);
     expect(result.winTally).toEqual({ 'Deck A': 5, 'Deck B': 3 });
     expect(result.gamesPlayed).toBe(8);
   });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { getPodRunStore } from '@/lib/pod-run-store-factory';
 import { podRunToSummary } from '@/lib/pod-run-utils';
-import { resolveDeckIds } from '@/lib/deck-resolver';
+import { resolveJobSeats } from '@/lib/job-seats';
 import { parseBody, createPodRunSchema } from '@/lib/validation';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -65,14 +65,14 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     }
     const { deckIds, jobIds, simulations, idempotencyKey } = parsed.data;
 
-    const { decks, errors } = await resolveDeckIds(deckIds);
+    const { seats, errors } = await resolveJobSeats(deckIds);
     if (errors.length > 0) {
       return badRequestResponse(`Invalid deck IDs: ${errors.join(', ')}`);
     }
 
     const run = await (await getPodRunStore()).createPodRun({
       deckIds,
-      deckNames: decks.map((d) => d.name),
+      deckNames: seats.map((s) => s.name),
       jobIds,
       simulations,
       createdBy: user.uid,

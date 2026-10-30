@@ -7,8 +7,8 @@
  * Run with: npx tsx test/cancel-recover.test.ts
  */
 
+import { testSeats } from './seats';
 import * as jobStore from '../lib/job-store-factory';
-import type { DeckSlot } from '../lib/types';
 
 // ---------------------------------------------------------------------------
 // Test Utilities (same pattern as job-store-contract.test.ts)
@@ -38,12 +38,7 @@ function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) throw new Error(`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
-const TEST_DECKS: DeckSlot[] = [
-  { name: 'Cancel Test A', dck: 'deck_a' },
-  { name: 'Cancel Test B', dck: 'deck_b' },
-  { name: 'Cancel Test C', dck: 'deck_c' },
-  { name: 'Cancel Test D', dck: 'deck_d' },
-];
+const TEST_DECKS = testSeats(['Cancel Test A', 'Cancel Test B', 'Cancel Test C', 'Cancel Test D']);
 
 // ---------------------------------------------------------------------------
 // Tests

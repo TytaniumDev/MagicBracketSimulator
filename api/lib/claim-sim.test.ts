@@ -5,6 +5,7 @@
  * Run with: npx tsx lib/claim-sim.test.ts
  */
 
+import { testSeats } from '../test/seats';
 import {
   createJob,
   initializeSimulations,
@@ -18,7 +19,6 @@ import {
   conditionalUpdateSimulationStatus,
 } from './job-store';
 import { getDb } from './db';
-import type { DeckSlot } from './types';
 
 interface TestResult {
   name: string;
@@ -47,12 +47,7 @@ function assertEqual<T>(actual: T, expected: T, message: string) {
   }
 }
 
-const DECKS: DeckSlot[] = [
-  { name: 'Deck A', dck: 'a' },
-  { name: 'Deck B', dck: 'b' },
-  { name: 'Deck C', dck: 'c' },
-  { name: 'Deck D', dck: 'd' },
-];
+const DECKS = testSeats(['Deck A', 'Deck B', 'Deck C', 'Deck D']);
 
 /** Pretend the sim's lease ran out a minute ago. */
 function expireLease(jobId: string, simId: string) {
@@ -156,7 +151,7 @@ async function runTests() {
   });
 
   await test('skips jobs where source is flutter-local', () => {
-    const jobId = createJob(DECKS, 4, undefined, undefined, undefined, 'flutter-local').id;
+    const jobId = createJob(DECKS, 4, undefined, undefined, 'flutter-local').id;
     try {
       initializeSimulations(jobId, 1);
       const claimed = claimNextSim('w', 'W');

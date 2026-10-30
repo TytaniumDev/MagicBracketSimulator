@@ -1,17 +1,16 @@
 import { memo, useMemo } from 'react';
 import { ColorIdentity } from './ColorIdentity';
-import type { JobStatus } from '@shared/types/job';
+import type { JobSeat, JobStatus } from '@shared/types/job';
 
 type JobStatusValue = JobStatus;
 
 interface DeckShowcaseProps {
-  deckNames: string[];
-  colorIdentityByDeckName: Record<string, string[]>;
+  /** The job's seats; each card shows the seat's deck, colors and link. */
+  seats: JobSeat[];
   winTally: Record<string, number> | null;
   winTurns: Record<string, number[]> | null;
   gamesPlayed: number;
   totalSimulations: number;
-  deckLinks?: Record<string, string | null>;
   jobStatus: JobStatusValue;
 }
 
@@ -44,13 +43,11 @@ function ExternalLinkIcon() {
 }
 
 export const DeckShowcase = memo(function DeckShowcase({
-  deckNames,
-  colorIdentityByDeckName,
+  seats,
   winTally,
   winTurns,
   gamesPlayed,
   totalSimulations,
-  deckLinks,
   jobStatus,
 }: DeckShowcaseProps) {
   const isLive = jobStatus === 'RUNNING';
@@ -62,9 +59,9 @@ export const DeckShowcase = memo(function DeckShowcase({
   // so we don't recalculate on every render. This prevents O(N) array reductions
   // (computing avgTurn) from executing inline during the render loop of each deck.
   const { sorted, maxWins, deckStats } = useMemo(() => {
-    const s = [...deckNames].sort((a, b) => {
+    const s = seats.map((seat, index) => ({ seat, index })).sort((a, b) => {
       if (!winTally) return 0;
-      return (winTally[b] ?? 0) - (winTally[a] ?? 0);
+      return (winTally[b.seat.name] ?? 0) - (winTally[a.seat.name] ?? 0);
     });
 
     const m = winTally
@@ -72,7 +69,7 @@ export const DeckShowcase = memo(function DeckShowcase({
       : 0;
 
     const stats: Record<string, { winPct: string | null; avgTurn: string | null }> = {};
-    for (const name of deckNames) {
+    for (const { name } of seats) {
       const wins = winTally?.[name] ?? 0;
       const turns = winTurns?.[name] ?? [];
       stats[name] = {
@@ -82,15 +79,14 @@ export const DeckShowcase = memo(function DeckShowcase({
     }
 
     return { sorted: s, maxWins: m, deckStats: stats };
-  }, [deckNames, winTally, winTurns, gamesPlayed]);
+  }, [seats, winTally, winTurns, gamesPlayed]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-      {sorted.map((name) => {
-        const colorIdentity = colorIdentityByDeckName[name];
+      {sorted.map(({ seat, index }) => {
+        const { name, link, colorIdentity } = seat;
         const wins = winTally?.[name] ?? 0;
         const turns = winTurns?.[name] ?? [];
-        const link = deckLinks?.[name];
         const accentColor = getAccentColor(colorIdentity);
         const isLeader = isTerminal && maxWins > 0 && wins === maxWins;
         const winPct = deckStats[name]?.winPct ?? null;
@@ -98,7 +94,7 @@ export const DeckShowcase = memo(function DeckShowcase({
 
         return (
           <div
-            key={name}
+            key={index}
             className={`
               relative rounded-xl p-5
               bg-gray-800/70 border border-gray-600/50

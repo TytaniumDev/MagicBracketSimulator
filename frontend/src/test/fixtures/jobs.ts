@@ -1,6 +1,6 @@
 import type { JobResponse } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
-import { makeJob, makeResults, makeSimulations, DEFAULT_DECK_NAMES } from './factory';
+import { makeJob, makeResults, makeSeats, makeSimulations, DEFAULT_DECK_NAMES } from './factory';
 
 // ---------------------------------------------------------------------------
 // A named scenario bundles a job with its simulations for easy test setup.
@@ -21,18 +21,16 @@ export const completedWithResults: JobScenario = {
   job: makeJob({
     status: 'COMPLETED',
     results: makeResults(),
-    deckLinks: {
-      [DEFAULT_DECK_NAMES[0]]: 'https://www.moxfield.com/decks/atraxa',
-      [DEFAULT_DECK_NAMES[1]]: 'https://www.moxfield.com/decks/korvold',
-      [DEFAULT_DECK_NAMES[2]]: null,
-      [DEFAULT_DECK_NAMES[3]]: null,
-    },
-    colorIdentity: {
-      [DEFAULT_DECK_NAMES[0]]: ['W', 'U', 'B', 'G'],
-      [DEFAULT_DECK_NAMES[1]]: ['B', 'R', 'G'],
-      [DEFAULT_DECK_NAMES[2]]: ['U', 'B'],
-      [DEFAULT_DECK_NAMES[3]]: ['W', 'U', 'B', 'R'],
-    },
+    seats: makeSeats().map((seat, i) => ({
+      ...seat,
+      link: [
+        'https://www.moxfield.com/decks/atraxa',
+        'https://www.moxfield.com/decks/korvold',
+        null,
+        null,
+      ][i] ?? null,
+      colorIdentity: [['W', 'U', 'B', 'G'], ['B', 'R', 'G'], ['U', 'B'], ['W', 'U', 'B', 'R']][i] ?? [],
+    })),
   }),
   simulations: makeSimulations(5, (i) => ({
     state: 'COMPLETED',

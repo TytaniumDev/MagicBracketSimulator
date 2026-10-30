@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, verifyAdmin, unauthorizedResponse, forbiddenResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobCompletely } from '@/lib/job-delete';
-import { getDeckById } from '@/lib/deck-store-factory';
 import { resolveJobDecks } from '@/lib/job-decks';
 import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
 import { GAMES_PER_CONTAINER, type JobStatus } from '@/lib/types';
 import { parseBody, updateJobSchema } from '@/lib/validation';
-import { REQUIRED_DECK_COUNT, type JobResponse } from '@shared/types/job';
+import { seatNames, type JobResponse } from '@shared/types/job';
 import { canJobTransition } from '@shared/types/state-machine';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -16,33 +15,11 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-async function resolveDeckLinksAndColors(
-  deckIds: string[],
-  deckNames: string[]
-): Promise<{ links: Record<string, string | null>; colors: Record<string, string[]> }> {
-  const links: Record<string, string | null> = {};
-  const colors: Record<string, string[]> = {};
-  await Promise.all(
-    deckIds.map(async (id, i) => {
-      try {
-        const deck = await getDeckById(id);
-        links[deckNames[i]] = deck?.link ?? null;
-        if (deck?.colorIdentity?.length) colors[deckNames[i]] = deck.colorIdentity;
-      } catch (err) {
-        Sentry.captureException(err, { tags: { component: 'job-deck-links' } });
-        links[deckNames[i]] = null;
-      }
-    })
-  );
-  return { links, colors };
-}
-
 async function jobToApiResponse(
   job: Awaited<ReturnType<typeof jobStore.getJob>>,
   isWorker: boolean
 ): Promise<JobResponse | null> {
   if (!job) return null;
-  const deckNames = job.decks.map((d) => d.name);
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
@@ -52,10 +29,10 @@ async function jobToApiResponse(
     ? job.completedSimCount * GAMES_PER_CONTAINER
     : (job.gamesCompleted ?? 0);
 
-  const base = {
+  const response: JobResponse = {
     id: job.id,
-    name: deckNames.join(' vs '),
-    deckNames,
+    name: seatNames(job.seats).join(' vs '),
+    seats: job.seats,
     status: job.status,
     simulations: job.simulations,
     gamesCompleted,
@@ -72,31 +49,11 @@ async function jobToApiResponse(
     retryCount: job.retryCount ?? 0,
     results: job.results ?? null,
   };
-  // Worker needs decks and/or deckIds to run the job
-  if (isWorker) {
-    const decks = await resolveJobDecks(job);
-    return {
-      ...base,
-      ...(decks && { decks }),
-      ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
-    };
-  }
+  if (!isWorker) return response;
 
-  // Resolve deck links and color identity for frontend consumers
-  let deckLinks: Record<string, string | null> | undefined;
-  let colorIdentity: Record<string, string[]> | undefined;
-  if (job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT) {
-    const resolved = await resolveDeckLinksAndColors(job.deckIds, deckNames);
-    deckLinks = resolved.links;
-    if (Object.keys(resolved.colors).length > 0) colorIdentity = resolved.colors;
-  }
-
-  return {
-    ...base,
-    ...(job.deckIds && job.deckIds.length === REQUIRED_DECK_COUNT && { deckIds: job.deckIds }),
-    ...(deckLinks && { deckLinks }),
-    ...(colorIdentity && { colorIdentity }),
-  };
+  // Workers also get each seat's decklist to run the job
+  const decks = await resolveJobDecks(job);
+  return { ...response, ...(decks && { decks }) };
 }
 
 /**

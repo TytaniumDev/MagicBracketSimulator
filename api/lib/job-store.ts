@@ -1,13 +1,12 @@
 import { getDb } from './db';
-import { Job, JobStatus, JobResults, JobDeck, SimulationStatus, SimulationState } from './types';
+import { Job, JobStatus, JobResults, JobSeat, SimulationStatus, SimulationState } from './types';
 import type { JobSource } from '@shared/types/job';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveLeaseExtension, simLeaseExpiry, type ClaimOptions, type SimLeaseStatus } from './sim-lease';
 
 interface Row {
   id: string;
-  decks_json: string;
-  deck_ids_json?: string | null;
+  seats_json: string;
   status: string;
   simulations: number;
   created_at: string;
@@ -28,15 +27,9 @@ interface Row {
 }
 
 function rowToJob(row: Row): Job {
-  const decks = JSON.parse(row.decks_json) as JobDeck[];
-  const deckIds =
-    row.deck_ids_json != null && row.deck_ids_json !== ''
-      ? (JSON.parse(row.deck_ids_json) as string[])
-      : undefined;
   return {
     id: row.id,
-    decks,
-    ...(deckIds != null && deckIds.length === 4 && { deckIds }),
+    seats: JSON.parse(row.seats_json) as JobSeat[],
     status: row.status as JobStatus,
     simulations: row.simulations,
     createdAt: new Date(row.created_at),
@@ -65,11 +58,10 @@ export function getJobByIdempotencyKey(key: string): Job | undefined {
 }
 
 export function createJob(
-  decks: JobDeck[],
+  seats: JobSeat[],
   simulations: number,
   idempotencyKey?: string,
   parallelism?: number,
-  deckIds?: string[],
   source?: string
 ): Job {
   if (idempotencyKey) {
@@ -81,12 +73,11 @@ export function createJob(
   const db = getDb();
 
   db.prepare(
-    `INSERT INTO jobs (id, decks_json, deck_ids_json, status, simulations, created_at, idempotency_key, parallelism, source)
-     VALUES (?, ?, ?, 'QUEUED', ?, ?, ?, ?, ?)`
+    `INSERT INTO jobs (id, seats_json, status, simulations, created_at, idempotency_key, parallelism, source)
+     VALUES (?, ?, 'QUEUED', ?, ?, ?, ?, ?)`
   ).run(
     id,
-    JSON.stringify(decks),
-    deckIds != null && deckIds.length === 4 ? JSON.stringify(deckIds) : null,
+    JSON.stringify(seats),
     simulations,
     createdAt,
     idempotencyKey ?? null,
@@ -95,8 +86,7 @@ export function createJob(
   );
   return {
     id,
-    decks,
-    ...(deckIds != null && deckIds.length === 4 && { deckIds }),
+    seats,
     status: 'QUEUED',
     simulations,
     createdAt: new Date(createdAt),

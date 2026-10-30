@@ -4,6 +4,7 @@
  * Run with: npx tsx test/simulation-wins.test.ts
  */
 
+import { testSeats } from './seats';
 import {
   createJob,
   initializeSimulations,
@@ -12,7 +13,6 @@ import {
   deleteJob,
   deleteSimulations,
 } from '../lib/job-store';
-import type { DeckSlot } from '../lib/types';
 
 // -----------------------------------------------------------------------------
 // Test Utilities
@@ -68,13 +68,7 @@ function assertArrayEqual<T>(actual: T[], expected: T[], message: string) {
 
 // Helper to create a test job and return its ID
 function createTestJob(): string {
-  const decks: DeckSlot[] = [
-    { name: 'Deck A', dck: 'a' },
-    { name: 'Deck B', dck: 'b' },
-    { name: 'Deck C', dck: 'c' },
-    { name: 'Deck D', dck: 'd' },
-  ];
-  const job = createJob(decks, 8);
+  const job = createJob(testSeats(['Deck A', 'Deck B', 'Deck C', 'Deck D']), 8);
   return job.id;
 }
 

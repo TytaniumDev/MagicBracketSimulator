@@ -11,8 +11,8 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { RecentPodRuns } from '../components/RecentPodRuns';
 import { formatRelativeDate } from '../utils/format';
-import type { JobStatus, JobSummary } from '@shared/types/job';
-import { GAMES_PER_CONTAINER } from '@shared/types/job';
+import type { JobSeat, JobStatus, JobSummary } from '@shared/types/job';
+import { GAMES_PER_CONTAINER, seatNames } from '@shared/types/job';
 import { reportHandledError } from '../errorReporting';
 
 function formatDurationMs(ms: number): string {
@@ -25,9 +25,8 @@ function formatDurationMs(ms: number): string {
 
 // Convert a Firestore job document to JobSummary
 function firestoreDocToJobSummary(id: string, data: Record<string, unknown>): JobSummary {
-  const decks = (data.decks as Array<{ name: string; dck: string }>) ?? [];
-  const deckNames = decks.map((d) => d.name);
-  const name = deckNames.join(' vs ');
+  const seats = (data.seats as JobSeat[] | undefined) ?? [];
+  const name = seatNames(seats).join(' vs ');
 
   const createdAt = data.createdAt as Timestamp | null;
   const startedAt = data.startedAt as Timestamp | null;
@@ -50,7 +49,7 @@ function firestoreDocToJobSummary(id: string, data: Record<string, unknown>): Jo
   return {
     id,
     name,
-    deckNames,
+    seats,
     status: data.status as JobStatus,
     simulations: (data.simulations as number) ?? 0,
     gamesCompleted,
@@ -377,7 +376,7 @@ export default function Browse() {
                       <StatusBadge status={run.status} />
                     </div>
                     <p className="text-sm text-gray-400 truncate">
-                      {run.deckNames.join(', ')}
+                      {seatNames(run.seats).join(', ')}
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">

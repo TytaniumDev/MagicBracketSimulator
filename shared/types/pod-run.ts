@@ -3,7 +3,7 @@
 // GET /api/pod-runs, GET /api/pod-runs/:id
 // ---------------------------------------------------------------------------
 
-import type { JobResults } from './job';
+import type { JobResults, JobSeat } from './job';
 
 /** Most decks a single pod run may include. C(10, 4) = 210 pods. */
 export const MAX_POD_RUN_DECKS = 10;
@@ -47,7 +47,7 @@ export interface DeckTotals {
   winTurnWins: number;
 }
 
-/** Running totals, keyed by deck id (or by name for runs without ids). */
+/** Running totals, keyed by deck id. */
 export type PodRunTotals = Record<string, DeckTotals>;
 
 export interface DeckStanding {
@@ -63,23 +63,17 @@ export interface DeckStanding {
   avgWinTurn: number | null;
 }
 
-/** One seat of a finished pod: the key to total it under, and its name in the job's results. */
-export interface PodSeat {
-  key: string;
-  name: string;
-}
-
 /**
  * Add one finished pod's results to `totals`, returning new totals. A pod
  * without games played adds nothing.
  */
-export function addPodResults(totals: PodRunTotals, seats: readonly PodSeat[], results: JobResults): PodRunTotals {
+export function addPodResults(totals: PodRunTotals, seats: readonly JobSeat[], results: JobResults): PodRunTotals {
   if (results.gamesPlayed <= 0) return totals;
   const next = { ...totals };
-  for (const { key, name } of seats) {
+  seats.forEach(({ deckId: key, name }, i) => {
     const entry = next[key] ?? { name, pods: 0, gamesPlayed: 0, wins: 0, winTurnSum: 0, winTurnWins: 0 };
-    const wins = results.wins[name] ?? 0;
-    const avgTurn = results.avgWinTurn[name];
+    const wins = results.seats[i]?.wins ?? 0;
+    const avgTurn = results.seats[i]?.avgWinTurn;
     const hasTurns = wins > 0 && typeof avgTurn === 'number' && avgTurn > 0;
     next[key] = {
       name: entry.name,
@@ -89,7 +83,7 @@ export function addPodResults(totals: PodRunTotals, seats: readonly PodSeat[], r
       winTurnSum: entry.winTurnSum + (hasTurns ? avgTurn * wins : 0),
       winTurnWins: entry.winTurnWins + (hasTurns ? wins : 0),
     };
-  }
+  });
   return next;
 }
 
