@@ -1,6 +1,5 @@
 /**
- * User access store tests: access requests, approval, and the one-time copy
- * of the legacy allowedUsers and accessRequests collections.
+ * User access store tests: access requests and approval.
  *
  * Firestore only (LOCAL mode has no access control), so this skips unless
  * pointed at the Firestore emulator:
@@ -30,35 +29,10 @@ async function main() {
     console.log('Skipping user store tests: Firestore only (set FIRESTORE_EMULATOR_HOST).');
     return;
   }
-  const { getFirestore } = await import('../lib/firestore-client');
   const { getUserAccess, requestAccess, approveUser } = await import('../lib/user-store');
   const { isInAllowedUsers } = await import('../lib/allowed-users');
-  const db = getFirestore();
   const run = Date.now();
   const uid = (name: string) => `user-test-${run}-${name}`;
-
-  // Legacy records, copied by the migration on the store's first call.
-  await db.collection('config').doc('legacyUsersMigration').delete();
-  await db.collection('allowedUsers').doc(uid('old-allowed')).set({ email: 'old@example.com', approvedAt: new Date() });
-  await db.collection('accessRequests').add({
-    uid: uid('old-pending'), email: 'pending@example.com', displayName: 'Pen', message: 'hi',
-    status: 'pending', createdAt: new Date(),
-  });
-  await db.collection('accessRequests').add({
-    uid: uid('old-approved-request'), email: 'done@example.com', status: 'approved', createdAt: new Date(),
-  });
-  await db.collection('users').doc(uid('already-moved')).set({ email: 'kept@example.com', status: 'requested' });
-  await db.collection('allowedUsers').doc(uid('already-moved')).set({ email: 'old@example.com' });
-
-  await test('legacy allowed users and pending requests are copied once', async () => {
-    assertEqual((await getUserAccess(uid('old-allowed')))?.status, 'allowed', 'allowed user');
-    const pending = await getUserAccess(uid('old-pending'));
-    assertEqual([pending?.status, pending?.email, pending?.message], ['requested', 'pending@example.com', 'hi'], 'pending');
-    assertEqual(await getUserAccess(uid('old-approved-request')), null, 'resolved request not copied');
-    const kept = await getUserAccess(uid('already-moved'));
-    assertEqual([kept?.status, kept?.email], ['requested', 'kept@example.com'], 'existing users doc kept');
-    assertEqual((await db.collection('config').doc('legacyUsersMigration').get()).exists, true, 'marker');
-  });
 
   await test('requestAccess records a request once', async () => {
     const request = { email: 'new@example.com', displayName: 'New', message: 'please' };
@@ -83,8 +57,8 @@ async function main() {
   });
 
   await test('requestAccess leaves an allowed user allowed', async () => {
-    assertEqual(await requestAccess(uid('old-allowed'), { email: 'x', displayName: null, message: null }), 'allowed', 'status');
-    assertEqual((await getUserAccess(uid('old-allowed')))?.status, 'allowed', 'still allowed');
+    assertEqual(await requestAccess(uid('new'), { email: 'x', displayName: null, message: null }), 'allowed', 'status');
+    assertEqual((await getUserAccess(uid('new')))?.status, 'allowed', 'still allowed');
   });
 
   if (failed > 0) process.exit(1);

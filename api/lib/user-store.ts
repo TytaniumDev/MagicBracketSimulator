@@ -1,15 +1,12 @@
 /**
  * Access records: one private doc per user at `users/{uid}` (GCP mode),
  * holding their email, whether they asked for access or were given it, and
- * when. Replaces the `allowedUsers` and `accessRequests` collections (copied
- * over once, see legacy-users-migration.ts). Only the API reads or writes
- * these docs.
+ * when. Only the API reads or writes these docs.
  *
  * LOCAL mode has no access control, so callers skip this store there.
  */
 import { Timestamp } from '@google-cloud/firestore';
 import { getFirestore } from './firestore-client';
-import { ensureLegacyUsersMigrated } from './legacy-users-migration';
 
 export type AccessStatus = 'requested' | 'allowed';
 
@@ -35,7 +32,6 @@ function toDate(value: unknown): Date | null {
 
 /** The user's access record, or null if they never asked for access. */
 export async function getUserAccess(uid: string): Promise<UserAccess | null> {
-  await ensureLegacyUsersMigrated();
   const snap = await usersCollection().doc(uid).get();
   if (!snap.exists) return null;
   return {
@@ -57,7 +53,6 @@ export async function requestAccess(
   uid: string,
   request: { email: string; displayName: string | null; message: string | null },
 ): Promise<AccessStatus | null> {
-  await ensureLegacyUsersMigrated();
   const ref = usersCollection().doc(uid);
   return getFirestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);

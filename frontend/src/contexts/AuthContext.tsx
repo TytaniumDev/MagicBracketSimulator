@@ -23,9 +23,7 @@ async function fetchMe(): Promise<MeResponse> {
   if (!res.ok) throw new Error(`GET /api/me failed: ${res.status}`);
   const data = (await res.json()) as Partial<MeResponse>;
   return {
-    // An API from before `isAllowed` was added answered 200 only for
-    // allowed users.
-    isAllowed: data.isAllowed ?? true,
+    isAllowed: data.isAllowed === true,
     isAdmin: data.isAdmin === true,
     hasRequestedAccess: data.hasRequestedAccess === true,
   };

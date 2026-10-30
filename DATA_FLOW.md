@@ -260,15 +260,8 @@ no lifecycle rule: raw logs are kept forever.
      `appliedStats.podRun` (SQLite: `jobs.pod_run_applied`). Saving a run
      (`POST /api/pod-runs`) sets `podRunId` on each of its jobs and totals the
      ones that already have results in the same way, so a job finishing while
-     its run is saved counts once. Runs saved before standings existed are
-     totalled the first time they are read.
-  6. **Legacy stats:** stats used to live in top-level `ratings/{deckId}`,
-     `cardStats/{deckId}` and one `matchResults` doc per game.
-     `legacy-deck-stats-migration.ts` moves them under each deck the first
-     time a stat store is touched after deploy (pair counts and rated-job
-     flags are rebuilt from `matchResults`), then records
-     `config/legacyDeckStatsMigration`.
-  7. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
+     its run is saved counts once.
+  6. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
 
 So: **condensing and structuring** of logs happens **only in the API**, during

@@ -2,7 +2,7 @@
  * Admin data wipe tests (SQLite).
  *
  * Seeds jobs with their simulations and logs, a pod run,
- * ratings, match results, card stats and a user deck, then runs the wipe to
+ * ratings, card stats and a user deck, then runs the wipe to
  * completion and checks that only the precon is left. Runs in a temp
  * directory so it never touches the local dev database.
  *
@@ -87,9 +87,6 @@ async function main() {
       deckId, mu: 25, sigma: 8, gamesPlayed: 1, wins: i === 0 ? 1 : 0, lastUpdated: new Date().toISOString(),
     })),
   });
-  // A legacy per-game row, from before pair counts replaced them.
-  db.prepare("INSERT INTO match_results (id, job_id, game_index, deck_ids, winner_deck_id, turn_count, played_at) VALUES (?, ?, 0, ?, 'a', 7, ?)")
-    .run(`${jobIds[0]}_0`, jobIds[0], JSON.stringify(podDeckIds), new Date().toISOString());
   await getCardStatsStore().addJobs('a', [{ jobId: jobIds[0], update: (s) => ({ ...s, games: 1 }) }]);
   saveDeck('My Custom Deck', deck.dck);
   db.prepare("INSERT INTO precons (id, name, filename, dck, synced_at) VALUES ('precon-1', 'Precon', 'precon.dck', ?, ?)").run(deck.dck, new Date().toISOString());
@@ -116,7 +113,6 @@ async function main() {
       { kind: 'jobs', deleted: 10 },
       { kind: 'jobs', deleted: 2 },
       { kind: 'podRuns', deleted: 1 },
-      { kind: 'matchResults', deleted: 1 },
       { kind: 'ratings', deleted: 4 },
       { kind: 'cardStats', deleted: 1 },
       { kind: 'customDecks', deleted: 1 },
@@ -124,7 +120,7 @@ async function main() {
   });
 
   await test('everything but the precon is gone', () => {
-    for (const table of ['jobs', 'simulations', 'pod_runs', 'pod_run_jobs', 'match_results', 'ratings', 'card_stats']) {
+    for (const table of ['jobs', 'simulations', 'pod_runs', 'pod_run_jobs', 'ratings', 'card_stats']) {
       assertEqual(count(table), 0, table);
     }
     assertEqual(listSavedDecks().length, 0, 'saved decks');

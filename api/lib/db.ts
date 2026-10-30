@@ -1,9 +1,6 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
-import { DeckSlot } from './types';
-import { addPodPairGames } from './rating-store';
-import * as Sentry from '@sentry/nextjs';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'jobs.db');
@@ -17,115 +14,20 @@ function ensureDataDir(): void {
 }
 
 /**
- * Migrate existing jobs from old schema (deck_name, deck_dck, opponents) to new schema (decks_json).
+ * The LOCAL-mode database. Tables are created as they are now; there are no
+ * migrations, so a database file from an older schema has to be deleted
+ * (`api/data/jobs.db`).
  */
-function migrateJobsToDecksJson(database: Database.Database): void {
-  // First check if the legacy columns exist at all
-  const tableInfo = database.prepare('PRAGMA table_info(jobs)').all() as { name: string }[];
-  const columnNames = new Set(tableInfo.map((c) => c.name));
-  
-  // If legacy columns don't exist, nothing to migrate
-  if (!columnNames.has('deck_name') || !columnNames.has('deck_dck') || !columnNames.has('opponents')) {
-    return;
-  }
-
-  // Check if there are rows needing migration (have deck_name but no decks_json)
-  const rowsToMigrate = database
-    .prepare(`SELECT id, deck_name, deck_dck, opponents FROM jobs WHERE deck_name IS NOT NULL AND (decks_json IS NULL OR decks_json = '')`)
-    .all() as { id: string; deck_name: string; deck_dck: string; opponents: string }[];
-
-  if (rowsToMigrate.length === 0) {
-    return;
-  }
-
-  console.log(`[DB Migration] Migrating ${rowsToMigrate.length} jobs to new decks_json schema...`);
-
-  const updateStmt = database.prepare(`UPDATE jobs SET decks_json = ? WHERE id = ?`);
-
-  for (const row of rowsToMigrate) {
-    try {
-      // Parse opponents (array of precon IDs)
-      const opponentIds = JSON.parse(row.opponents) as string[];
-
-      // Build the decks array: first is the user deck, rest are precons
-      const decks: DeckSlot[] = [{ name: row.deck_name, dck: row.deck_dck }];
-
-      for (const oppIdOrName of opponentIds) {
-        // Legacy migration: precon files no longer on disk, use placeholder
-        console.warn(`[DB Migration] Legacy precon reference: ${oppIdOrName}, using placeholder`);
-        decks.push({ name: oppIdOrName, dck: '' });
-      }
-
-      // Update the row
-      updateStmt.run(JSON.stringify(decks), row.id);
-      console.log(`[DB Migration] Migrated job ${row.id}`);
-    } catch (error) {
-      Sentry.captureException(error, { tags: { component: 'db-migration', jobId: row.id } });
-      console.error(`[DB Migration] Failed to migrate job ${row.id}:`, error);
-    }
-  }
-
-  console.log(`[DB Migration] Migration complete.`);
-}
-
-/**
- * Drop legacy columns (deck_name, deck_dck, opponents) after all rows have decks_json.
- * Requires SQLite 3.35+ for DROP COLUMN support.
- */
-function dropLegacyColumns(database: Database.Database): void {
-  const tableInfo = database.prepare('PRAGMA table_info(jobs)').all() as { name: string }[];
-  const columnNames = new Set(tableInfo.map((c) => c.name));
-
-  const legacyColumns = ['deck_name', 'deck_dck', 'opponents'];
-  for (const col of legacyColumns) {
-    if (columnNames.has(col)) {
-      try {
-        database.exec(`ALTER TABLE jobs DROP COLUMN ${col}`);
-        console.log(`[DB Migration] Dropped legacy column: ${col}`);
-      } catch (err) {
-        // SQLite < 3.35 doesn't support DROP COLUMN; just log and continue
-        console.warn(`[DB Migration] Could not drop column ${col}:`, err);
-      }
-    }
-  }
-}
-
-/**
- * Add `ratings.pair_games` (JSON map of other deck id to games together) and
- * `jobs.ratings_applied`, filled from the legacy match_results rows the
- * first time they are added.
- */
-function migrateMatchResultsToPairGames(database: Database.Database): void {
-  const ratingColumns = (database.prepare('PRAGMA table_info(ratings)').all() as { name: string }[]).map((c) => c.name);
-  if (ratingColumns.includes('pair_games')) return;
-
-  database.transaction(() => {
-    database.exec('ALTER TABLE ratings ADD COLUMN pair_games TEXT');
-    database.exec('ALTER TABLE jobs ADD COLUMN ratings_applied INTEGER');
-
-    const pairGames = new Map<string, Record<string, number>>();
-    const rows = database.prepare('SELECT deck_ids FROM match_results').all() as { deck_ids: string }[];
-    for (const row of rows) addPodPairGames(pairGames, JSON.parse(row.deck_ids) as string[]);
-    const upsert = database.prepare(`
-      INSERT INTO ratings (deck_id, games_played, wins, last_updated, pair_games) VALUES (?, 0, 0, ?, ?)
-      ON CONFLICT(deck_id) DO UPDATE SET pair_games = excluded.pair_games
-    `);
-    const now = new Date().toISOString();
-    for (const [deckId, counts] of pairGames) upsert.run(deckId, now, JSON.stringify(counts));
-    database.exec('UPDATE jobs SET ratings_applied = 1 WHERE id IN (SELECT DISTINCT job_id FROM match_results)');
-  })();
-}
-
 export function getDb(): Database.Database {
   if (db) return db;
   ensureDataDir();
   db = new Database(DB_PATH);
 
-  // Create table with new schema if it doesn't exist
   db.exec(`
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY,
       decks_json TEXT NOT NULL DEFAULT '[]',
+      deck_ids_json TEXT,
       status TEXT NOT NULL,
       simulations INTEGER NOT NULL,
       created_at TEXT NOT NULL,
@@ -133,85 +35,24 @@ export function getDb(): Database.Database {
       error_message TEXT,
       idempotency_key TEXT,
       parallelism INTEGER,
-      games_completed INTEGER
+      games_completed INTEGER,
+      started_at TEXT,
+      completed_at TEXT,
+      docker_run_durations_ms TEXT,
+      worker_id TEXT,
+      worker_name TEXT,
+      claimed_at TEXT,
+      retry_count INTEGER DEFAULT 0,
+      needs_aggregation INTEGER DEFAULT 0,
+      source TEXT DEFAULT 'user',
+      ratings_applied INTEGER,
+      pod_run_id TEXT,
+      pod_run_applied INTEGER
     )
   `);
-
-  // Add columns that may be missing from older schemas
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN decks_json TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN idempotency_key TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN parallelism INTEGER`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN games_completed INTEGER`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN started_at TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN completed_at TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN docker_run_durations_ms TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN deck_ids_json TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN worker_id TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN claimed_at TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN worker_name TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN retry_count INTEGER DEFAULT 0`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN needs_aggregation INTEGER DEFAULT 0`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN source TEXT DEFAULT 'user'`);
-  } catch {
-    // Column already exists
-  }
-
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency_key ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL`);
 
-  // Per-simulation tracking table
+  // Per-simulation tracking
   db.exec(`
     CREATE TABLE IF NOT EXISTS simulations (
       sim_id TEXT NOT NULL,
@@ -226,34 +67,15 @@ export function getDb(): Database.Database {
       error_message TEXT,
       winner TEXT,
       winning_turn INTEGER,
+      winners_json TEXT,
+      winning_turns_json TEXT,
+      lease_expires_at TEXT,
       PRIMARY KEY (job_id, sim_id),
       FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
     )
   `);
 
-  // Add worker_name column to simulations if missing (migration)
-  try {
-    db.exec(`ALTER TABLE simulations ADD COLUMN worker_name TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE simulations ADD COLUMN winners_json TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE simulations ADD COLUMN winning_turns_json TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE simulations ADD COLUMN lease_expires_at TEXT`);
-  } catch {
-    // Column already exists
-  }
-
-  // Worker heartbeat tracking table
+  // Worker heartbeat tracking
   db.exec(`
     CREATE TABLE IF NOT EXISTS worker_heartbeats (
       worker_id TEXT PRIMARY KEY,
@@ -264,11 +86,14 @@ export function getDb(): Database.Database {
       active_simulations INTEGER NOT NULL DEFAULT 0,
       uptime_ms INTEGER NOT NULL DEFAULT 0,
       last_heartbeat TEXT NOT NULL,
-      version TEXT
+      version TEXT,
+      max_concurrent_override INTEGER,
+      owner_email TEXT,
+      worker_api_url TEXT
     )
   `);
 
-  // Precons table (synced from Archidekt)
+  // Precons (synced from Archidekt)
   db.exec(`
     CREATE TABLE IF NOT EXISTS precons (
       id TEXT PRIMARY KEY,
@@ -281,34 +106,12 @@ export function getDb(): Database.Database {
       dck TEXT NOT NULL,
       link TEXT,
       archidekt_updated_at TEXT,
-      synced_at TEXT NOT NULL
+      synced_at TEXT NOT NULL,
+      released_at TEXT
     )
   `);
 
-  try {
-    db.exec(`ALTER TABLE precons ADD COLUMN released_at TEXT`);
-  } catch {
-    // Column already exists
-  }
-
-  // Add per-worker concurrency override and owner email columns
-  try {
-    db.exec(`ALTER TABLE worker_heartbeats ADD COLUMN max_concurrent_override INTEGER`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE worker_heartbeats ADD COLUMN owner_email TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec(`ALTER TABLE worker_heartbeats ADD COLUMN worker_api_url TEXT`);
-  } catch {
-    // Column already exists
-  }
-
-  // TrueSkill ratings per deck
+  // Per-deck TrueSkill rating, win turns and pair game counts (rating-store.ts)
   db.exec(`
     CREATE TABLE IF NOT EXISTS ratings (
       deck_id TEXT PRIMARY KEY,
@@ -316,44 +119,13 @@ export function getDb(): Database.Database {
       sigma REAL NOT NULL DEFAULT 8.3333,
       games_played INTEGER NOT NULL DEFAULT 0,
       wins INTEGER NOT NULL DEFAULT 0,
-      last_updated TEXT NOT NULL
+      last_updated TEXT NOT NULL,
+      win_turn_sum INTEGER,
+      win_turn_wins INTEGER,
+      win_turn_histogram TEXT,
+      pair_games TEXT
     )
   `);
-
-  // Per-deck win-turn aggregate (additive migration — introspect current columns, add missing ones)
-  {
-    const ratingsColumns = new Set(
-      (db.prepare('PRAGMA table_info(ratings)').all() as { name: string }[]).map((c) => c.name),
-    );
-    const additions: Array<[string, string]> = [
-      ['win_turn_sum', 'INTEGER'],
-      ['win_turn_wins', 'INTEGER'],
-      ['win_turn_histogram', 'TEXT'],
-    ];
-    for (const [name, type] of additions) {
-      if (!ratingsColumns.has(name)) {
-        db.prepare(`ALTER TABLE ratings ADD COLUMN ${name} ${type}`).run();
-      }
-    }
-  }
-
-  // Per-game match results for idempotency tracking
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS match_results (
-      id TEXT PRIMARY KEY,
-      job_id TEXT NOT NULL,
-      game_index INTEGER NOT NULL,
-      deck_ids TEXT NOT NULL,
-      winner_deck_id TEXT,
-      turn_count INTEGER,
-      played_at TEXT NOT NULL
-    )
-  `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_match_results_job_id ON match_results(job_id)`);
-
-  // Pair game counts per deck and the rated-job flag replaced match_results
-  // (see rating-store.ts). Fill them from match_results once.
-  migrateMatchResultsToPairGames(db);
 
   // Coverage config (singleton row)
   db.exec(`
@@ -384,7 +156,9 @@ export function getDb(): Database.Database {
       simulations INTEGER NOT NULL,
       created_by TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      idempotency_key TEXT UNIQUE
+      idempotency_key TEXT UNIQUE,
+      standings_json TEXT NOT NULL DEFAULT '{}',
+      pods_with_results INTEGER NOT NULL DEFAULT 0
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_pod_runs_created_at ON pod_runs(created_at)`);
@@ -397,20 +171,6 @@ export function getDb(): Database.Database {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_pod_run_jobs_job_id ON pod_run_jobs(job_id)`);
-  // Pod run standings (see pod-run-store.ts). NULL standings_json marks a
-  // run saved before standings were kept.
-  for (const ddl of [
-    'ALTER TABLE pod_runs ADD COLUMN standings_json TEXT',
-    'ALTER TABLE pod_runs ADD COLUMN pods_with_results INTEGER NOT NULL DEFAULT 0',
-    'ALTER TABLE jobs ADD COLUMN pod_run_id TEXT',
-    'ALTER TABLE jobs ADD COLUMN pod_run_applied INTEGER',
-  ]) {
-    try {
-      db.exec(ddl);
-    } catch {
-      // Column already exists
-    }
-  }
 
   // Card impact counters: one JSON document per deck (see lib/card-impact/stats.ts)
   db.exec(`
@@ -419,12 +179,6 @@ export function getDb(): Database.Database {
       data_json TEXT NOT NULL
     )
   `);
-
-  // Run migration for existing jobs (populates decks_json from legacy columns)
-  migrateJobsToDecksJson(db);
-
-  // Drop legacy columns after migration (deck_name, deck_dck, opponents)
-  dropLegacyColumns(db);
 
   return db;
 }

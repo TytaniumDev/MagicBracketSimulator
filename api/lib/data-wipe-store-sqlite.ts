@@ -12,7 +12,6 @@ function getDb() {
 
 const TABLES: Partial<Record<LeftoverKind, string>> = {
   simulations: 'simulations',
-  matchResults: 'match_results',
   ratings: 'ratings',
   cardStats: 'card_stats',
 };
