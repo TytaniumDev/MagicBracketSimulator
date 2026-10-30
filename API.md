@@ -33,7 +33,12 @@ Returns paginated recent jobs. Supports `limit` and `cursor` query parameters.
     {
       "id": "job-uuid",
       "name": "Deck A vs Deck B vs Deck C vs Deck D",
-      "deckNames": ["Deck A", "Deck B", "Deck C", "Deck D"],
+      "seats": [
+        { "deckId": "id1", "name": "Deck A", "link": "https://...", "colorIdentity": ["W", "U"] },
+        { "deckId": "id2", "name": "Deck B", "link": null, "colorIdentity": ["B"] },
+        { "deckId": "id3", "name": "Deck C", "link": null, "colorIdentity": ["R", "G"] },
+        { "deckId": "id4", "name": "Deck D", "link": null, "colorIdentity": [] }
+      ],
       "status": "COMPLETED",
       "simulations": 100,
       "gamesCompleted": 100,
@@ -85,6 +90,10 @@ decks with their .dck content) and is sent to requests with
 `X-Worker-Secret`, or with `?view=worker` from an allowlisted user (the
 desktop worker). `decks` is left out when a deck can no longer be found.
 
+`results` is null until the job has results. Its `seats` line up with the
+job's `seats` by position (the same deck can sit in two seats), and wins
+are mapped from Forge's winner names to seats at aggregation.
+
 **Response:**
 
 ```json
@@ -93,9 +102,21 @@ desktop worker). `decks` is left out when a deck can no longer be found.
   "status": "RUNNING",
   "simulations": 100,
   "gamesCompleted": 50,
-  "deckNames": ["Deck A", "Deck B", "Deck C", "Deck D"],
-  "deckIds": ["id1", "id2", "id3", "id4"],
-  "deckLinks": ["https://...", null, "https://...", null],
+    "seats": [
+      { "deckId": "id1", "name": "Deck A", "link": "https://...", "colorIdentity": ["W", "U"] },
+      { "deckId": "id2", "name": "Deck B", "link": null, "colorIdentity": ["B"] },
+      { "deckId": "id3", "name": "Deck C", "link": null, "colorIdentity": ["R", "G"] },
+      { "deckId": "id4", "name": "Deck D", "link": null, "colorIdentity": [] }
+    ],
+  "results": {
+    "gamesPlayed": 48,
+    "seats": [
+      { "wins": 20, "avgWinTurn": 8.4 },
+      { "wins": 12, "avgWinTurn": 9.1 },
+      { "wins": 10, "avgWinTurn": 10.0 },
+      { "wins": 6, "avgWinTurn": 9.5 }
+    ]
+  },
   "errorMessage": null,
   "retryCount": 0,
   "queuePosition": 0,
