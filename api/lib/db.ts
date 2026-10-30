@@ -37,7 +37,6 @@ export function getDb(): Database.Database {
       games_completed INTEGER,
       started_at TEXT,
       completed_at TEXT,
-      docker_run_durations_ms TEXT,
       worker_id TEXT,
       worker_name TEXT,
       claimed_at TEXT,
@@ -71,24 +70,6 @@ export function getDb(): Database.Database {
       lease_expires_at TEXT,
       PRIMARY KEY (job_id, sim_id),
       FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
-    )
-  `);
-
-  // Worker heartbeat tracking
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS worker_heartbeats (
-      worker_id TEXT PRIMARY KEY,
-      worker_name TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'idle',
-      current_job_id TEXT,
-      capacity INTEGER NOT NULL DEFAULT 0,
-      active_simulations INTEGER NOT NULL DEFAULT 0,
-      uptime_ms INTEGER NOT NULL DEFAULT 0,
-      last_heartbeat TEXT NOT NULL,
-      version TEXT,
-      max_concurrent_override INTEGER,
-      owner_email TEXT,
-      worker_api_url TEXT
     )
   `);
 

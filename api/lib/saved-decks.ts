@@ -8,9 +8,9 @@ export interface SavedDeck {
   filename: string;
 }
 
+/** Local mode's saved decks folder (SAVED_DECKS_DIR, default `data/decks`). */
 function getDecksDir(): string {
-  const forgeEnginePath = process.env.FORGE_ENGINE_PATH || '../worker/forge-engine';
-  return path.resolve(forgeEnginePath, 'decks');
+  return path.resolve(process.env.SAVED_DECKS_DIR || './data/decks');
 }
 
 /**

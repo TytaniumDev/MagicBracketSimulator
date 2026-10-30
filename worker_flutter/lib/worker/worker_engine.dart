@@ -56,7 +56,7 @@ class EngineState {
 ///   - the WorkerPresence (Realtime Database entry listing this worker as
 ///     online in the web UI)
 ///   - the SimApi (claims, lease extensions and results, all through the
-///     API like the Docker worker)
+///     API)
 ///   - one SimLeaseKeeper per running sim, which also delivers cancellation
 ///   - the SimRunner (Java child process spawning)
 ///   - a counter on `config.maxCapacity` to bound concurrency

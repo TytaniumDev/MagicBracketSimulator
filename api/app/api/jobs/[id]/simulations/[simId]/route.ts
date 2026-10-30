@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { unauthorizedResponse } from '@/lib/auth';
-import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { parseBody, updateSimulationSchema } from '@/lib/validation';
 import { canSimTransition, isTerminalSimState } from '@shared/types/state-machine';
@@ -23,12 +22,14 @@ interface RouteParams {
  * (its lease ran out and another worker took it over), the update is
  * dropped with { updated: false, reason: 'not_owner' }.
  *
- * Auth: X-Worker-Secret (Docker worker) or an allowlisted user's Firebase ID
- * token (desktop worker).
+ * Auth: an allowed user's Firebase ID token (the desktop worker signs in
+ * as its owner).
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  if (!(await isWorkerOrAllowlistedUser(request))) {
-    return unauthorizedResponse('Worker authentication required');
+  try {
+    await verifyAllowedUser(request);
+  } catch {
+    return unauthorizedResponse();
   }
 
   try {

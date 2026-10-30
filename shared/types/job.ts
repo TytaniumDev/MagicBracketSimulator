@@ -75,7 +75,6 @@ export interface WorkersSummary {
   online: number;
   idle: number;
   busy: number;
-  updating?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +94,6 @@ export interface JobResponse {
   startedAt?: string;
   completedAt?: string;
   durationMs: number | null;
-  dockerRunDurationsMs?: number[];
   workerId?: string;
   workerName?: string;
   claimedAt?: string;
@@ -126,7 +124,6 @@ export interface JobSummary {
   errorMessage?: string;
   startedAt?: string;
   completedAt?: string;
-  dockerRunDurationsMs?: number[];
   source?: JobSource;
 }
 

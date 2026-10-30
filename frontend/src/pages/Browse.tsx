@@ -59,7 +59,6 @@ function firestoreDocToJobSummary(id: string, data: Record<string, unknown>): Jo
     errorMessage: data.errorMessage as string | undefined,
     startedAt: startedAt ? startedAt.toDate().toISOString() : undefined,
     completedAt: completedAt ? completedAt.toDate().toISOString() : undefined,
-    dockerRunDurationsMs: data.dockerRunDurationsMs as number[] | undefined,
   };
 }
 
@@ -120,7 +119,7 @@ export default function Browse() {
   };
 
   const apiBase = getApiBase();
-  const { workers, queueDepth, isLoading: workersLoading, refresh: refreshWorkers } = useWorkerStatus(!!isAllowed);
+  const { workers, queueDepth, isLoading: workersLoading } = useWorkerStatus(!!isAllowed);
 
   // GCP mode: Firestore onSnapshot for real-time job list
   useEffect(() => {
@@ -282,7 +281,7 @@ export default function Browse() {
 
       {/* Worker Status Banner — only for users who can submit */}
       {isAllowed && (
-        <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} onRefresh={refreshWorkers} userEmail={user?.email} />
+        <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} />
       )}
 
       <RecentPodRuns />

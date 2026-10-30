@@ -27,8 +27,7 @@ enum SimLeaseStatus {
   lost,
 }
 
-/// The desktop worker's side of the sim lifecycle, all through the API
-/// (the same endpoints the Docker worker uses in `worker/src/worker.ts`):
+/// The desktop worker's side of the sim lifecycle, all through the API:
 ///
 ///   - [claim]: `GET /api/jobs/claim-sim?lease=1` flips the next PENDING sim
 ///     to RUNNING for this worker and reserves it with a 3-minute lease.

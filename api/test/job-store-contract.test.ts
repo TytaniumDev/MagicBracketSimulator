@@ -205,11 +205,10 @@ async function runTests() {
   });
 
   await test('setJobCompleted updates job status to COMPLETED', async () => {
-    await jobStore.setJobCompleted(createdJobId, [1000, 2000]);
+    await jobStore.setJobCompleted(createdJobId);
     const job = await jobStore.getJob(createdJobId);
     assertEqual(job!.status, 'COMPLETED', 'status should be COMPLETED');
     assert(job!.completedAt instanceof Date, 'completedAt should be Date');
-    assert(Array.isArray(job!.dockerRunDurationsMs), 'dockerRunDurationsMs should be array');
   });
 
   // =========================================================================

@@ -218,10 +218,13 @@ export function forbiddenResponse(message: string = 'Forbidden'): Response {
 }
 
 /**
- * Check if request is from worker (X-Worker-Secret header matches WORKER_SECRET env)
- * Used for PATCH/GET jobs by worker and misc-runner
+ * True when the request carries the shared WORKER_SECRET in `X-Worker-Secret`.
+ * Only internal callers send it: Cloud Tasks (job recovery checks) and Cloud
+ * Scheduler (stale sweep, precon sync). The names predate the desktop worker,
+ * which signs in as its user instead; they stay because the deployed secret
+ * and scheduler jobs use them.
  */
-export function isWorkerRequest(req: NextRequest): boolean {
+export function isInternalRequest(req: NextRequest): boolean {
   const secret = req.headers.get('X-Worker-Secret');
   const expected = process.env.WORKER_SECRET;
 

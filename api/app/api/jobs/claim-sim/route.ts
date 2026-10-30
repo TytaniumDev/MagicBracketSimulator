@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { claimNextSim } from '@/lib/job-store-factory';
-import * as workerStore from '@/lib/worker-store-factory';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
-import { OVERRIDE_HEADER_NAME, encodeOverrideHeader } from '@/lib/override-header';
 import * as Sentry from '@sentry/nextjs';
 
 /**
  * GET /api/jobs/claim-sim — Atomically claim the next PENDING simulation.
  *
- * The worker's polling entry point. Replaces the Pub/Sub subscription that
- * previously delivered SimulationTaskMessages one-per-sim. The claim flips
+ * The desktop worker's polling entry point. The claim flips
  * the chosen sim from PENDING to RUNNING with the caller's workerId, and
  * promotes its job from QUEUED to RUNNING if this is the first claim.
  *
@@ -21,19 +18,14 @@ import * as Sentry from '@sentry/nextjs';
  *                POST /api/jobs/:id/simulations/:simId/lease (see sim-lease.ts)
  *
  * Returns 200 { jobId, simId, simIndex } on success, 204 when no work is
- * available. Auth: X-Worker-Secret (Docker worker) or an allowlisted user's
- * Firebase ID token (desktop worker).
- *
- * Every response carries the worker's current concurrency override in the
- * `X-Max-Concurrent-Override` header (a positive integer, or `none` when
- * unset). This is the responsive fallback for runtime override changes
- * when the push-based /config path is unavailable (worker behind NAT /
- * WORKER_API_URL unset). The worker applies it via applyOverride() on
- * every poll.
+ * available. Auth: an allowed user's Firebase ID token (the desktop worker
+ * signs in as its owner).
  */
 export async function GET(request: NextRequest) {
-  if (!(await isWorkerOrAllowlistedUser(request))) {
-    return errorResponse('Unauthorized', 401);
+  try {
+    await verifyAllowedUser(request);
+  } catch {
+    return unauthorizedResponse();
   }
 
   const url = new URL(request.url);
@@ -45,23 +37,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [claimed, overrideResult] = await Promise.all([
-      claimNextSim(workerId, workerName, { withLease }),
-      // Best-effort: if this fails we omit the header and the worker just
-      // keeps its last-known override. Don't let it orphan a successful claim.
-      workerStore.getMaxConcurrentOverride(workerId).catch((err) => {
-        Sentry.captureException(err, { tags: { component: 'claim-sim-override', workerId } });
-        return undefined;
-      }),
-    ]);
-
-    const overrideHeader: Record<string, string> = {};
-    if (overrideResult !== undefined) {
-      overrideHeader[OVERRIDE_HEADER_NAME] = encodeOverrideHeader(overrideResult);
-    }
-
-    if (!claimed) return new NextResponse(null, { status: 204, headers: overrideHeader });
-    return NextResponse.json(claimed, { headers: overrideHeader });
+    const claimed = await claimNextSim(workerId, workerName, { withLease });
+    if (!claimed) return new NextResponse(null, { status: 204 });
+    return NextResponse.json(claimed);
   } catch (error) {
     Sentry.captureException(error, { tags: { component: 'api-route', route: 'GET /api/jobs/claim-sim' } });
     return errorResponse(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { extendSimLease } from '@/lib/job-store-factory';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -17,12 +17,14 @@ interface RouteParams {
  * cancelled; stop) or 'lost' (the sim is no longer this worker's; stop
  * without reporting a result).
  *
- * Auth: X-Worker-Secret (Docker worker) or an allowlisted user's Firebase ID
- * token (desktop worker).
+ * Auth: an allowed user's Firebase ID token (the desktop worker signs in
+ * as its owner).
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  if (!(await isWorkerOrAllowlistedUser(request))) {
-    return errorResponse('Unauthorized', 401);
+  try {
+    await verifyAllowedUser(request);
+  } catch {
+    return unauthorizedResponse();
   }
 
   const { id, simId } = await params;

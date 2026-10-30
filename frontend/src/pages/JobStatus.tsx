@@ -12,7 +12,6 @@ import { Spinner } from '../components/Spinner';
 import { useJobStream } from '../hooks/useJobStream';
 import { useWinData } from '../hooks/useWinData';
 import { useJobLogs } from '../hooks/useJobLogs';
-import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { matchesDeckName } from '../utils/deck-match';
 import { reportHandledError } from '../errorReporting';
@@ -45,7 +44,6 @@ export default function JobStatusPage() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { workers, refresh: refreshWorkers } = useWorkerStatus(!!user);
   const apiBase = getApiBase();
 
   // UI-only state
@@ -263,34 +261,20 @@ export default function JobStatusPage() {
               <div className="bg-gray-800/50 rounded p-3">
                 <div className="text-gray-400 text-xs mb-1">Workers</div>
                 {job.workers ? (
-                  (() => {
-                    const updating = job.workers.updating ?? 0;
-                    const active = job.workers.online - updating;
-                    const hasActive = active > 0;
-                    const hasOnlyUpdating = job.workers.online > 0 && !hasActive;
-                    return hasActive ? (
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-                        <span className="text-white font-medium">
-                          {job.workers.online} online
-                          {job.workers.idle > 0 && ` (${job.workers.idle} idle)`}
-                          {updating > 0 && ` (${updating} updating)`}
-                        </span>
-                      </div>
-                    ) : hasOnlyUpdating ? (
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
-                        <span className="text-amber-400 font-medium">
-                          {updating} worker{updating !== 1 ? 's' : ''} updating
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-                        <span className="text-red-400 font-medium">No workers online</span>
-                      </div>
-                    );
-                  })()
+                  job.workers.online > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-white font-medium">
+                        {job.workers.online} online
+                        {job.workers.idle > 0 && ` (${job.workers.idle} idle)`}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                      <span className="text-red-400 font-medium">No workers online</span>
+                    </div>
+                  )
                 ) : (
                   <span className="text-gray-500">Checking...</span>
                 )}
@@ -349,18 +333,6 @@ export default function JobStatusPage() {
             <span>{formatDurationMs(job.durationMs)}</span>
           </div>
         )}
-        {job.dockerRunDurationsMs != null && job.dockerRunDurationsMs.length > 0 && (
-          <div>
-            <span className="text-gray-400">Docker runs: </span>
-            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-300">
-              {job.dockerRunDurationsMs.map((ms, i) => (
-                <span key={i}>
-                  Run {i + 1}: {formatDurationMs(ms)}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
         {job.status === 'RUNNING' && (() => {
           const progressGames = simulations.length > 0
             ? simGamesCompleted
@@ -395,9 +367,6 @@ export default function JobStatusPage() {
           <SimulationGrid
             simulations={simulations}
             totalSimulations={job.simulations}
-            workers={workers}
-            userEmail={user?.email}
-            onWorkerRefresh={refreshWorkers}
             isAuthenticated={!!user}
           />
         )}

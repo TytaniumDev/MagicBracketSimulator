@@ -1,99 +1,18 @@
 name: Nightly Forge Update
 
+# The desktop worker (worker_flutter) downloads Forge itself, using
+# worker_flutter/forge-manifest.json fetched from main on every boot.
+# Bumping that manifest is how a new Forge reaches desktop installs: this
+# job opens an auto-merging PR whenever a newer Forge release is out.
+
 on:
   schedule:
     - cron: '0 6 * * *' # 6 AM UTC daily
   workflow_dispatch:
 
 jobs:
-  check-and-build:
-    name: Check for new Forge release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      rebuilt: ${{ steps.check.outputs.rebuilt }}
-      forge_version: ${{ steps.resolve.outputs.version }}
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Resolve latest Forge version
-        id: resolve
-        run: ./scripts/resolve-forge-version.sh
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set image name
-        run: ./scripts/set-image-names.sh
-
-      - name: Check if tag already exists
-        id: check
-        env:
-          FORGE_VERSION: ${{ steps.resolve.outputs.version }}
-        run: ./scripts/check-docker-tag.sh
-
-      - name: Set up QEMU
-        if: steps.check.outputs.rebuilt == 'true'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        if: steps.check.outputs.rebuilt == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push simulation image
-        if: steps.check.outputs.rebuilt == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./simulation/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            FORGE_VERSION=${{ steps.resolve.outputs.version }}
-          tags: |
-            ${{ env.SIMULATION_IMAGE }}:latest
-            ${{ env.SIMULATION_IMAGE }}:forge-${{ steps.resolve.outputs.version }}
-
-  notify-workers:
-    name: Notify workers to pull new image
-    needs: check-and-build
-    if: needs.check-and-build.outputs.rebuilt == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
-
-      - name: Load Doppler secrets
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-        run: ./scripts/load-doppler-secrets.sh API_URL WORKER_SECRET
-
-      - name: Notify workers
-        continue-on-error: true
-        env:
-          API_URL: ${{ env.API_URL }}
-          WORKER_SECRET: ${{ env.WORKER_SECRET }}
-        run: ./scripts/notify-workers.sh
-
-  # The desktop worker (worker_flutter) doesn't use the simulation image:
-  # it downloads Forge itself, using worker_flutter/forge-manifest.json
-  # fetched from main on every boot. Bumping that manifest is how a new
-  # Forge reaches desktop installs, so keep it on the same release the
-  # image tracks. Runs independently of the image build so a manifest
-  # that fell behind gets caught up even when the image is current.
   update-desktop-manifest:
     name: Update desktop worker Forge manifest
-    needs: check-and-build
     runs-on: ubuntu-latest
     # Git/gh use APPCAST_PR_TOKEN, the same PAT release-worker.yml uses
     # for appcast PRs: PRs opened with GITHUB_TOKEN don't trigger CI, so
@@ -108,10 +27,14 @@ jobs:
           token: ${{ secrets.APPCAST_PR_TOKEN }}
           fetch-depth: 1
 
+      - name: Resolve latest Forge version
+        id: resolve
+        run: ./scripts/resolve-forge-version.sh
+
       - name: Check manifest version
         id: current
         env:
-          FORGE_VERSION: ${{ needs.check-and-build.outputs.forge_version }}
+          FORGE_VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
           CURRENT=$(jq -r '.version' worker_flutter/forge-manifest.json)
@@ -130,7 +53,7 @@ jobs:
       - name: Download Forge release
         if: steps.current.outputs.stale == 'true'
         env:
-          FORGE_VERSION: ${{ needs.check-and-build.outputs.forge_version }}
+          FORGE_VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           curl -fsSL --retry 4 -o "$RUNNER_TEMP/forge.tar.bz2" \
             "https://github.com/Card-Forge/forge/releases/download/forge-${FORGE_VERSION}/forge-installer-${FORGE_VERSION}.tar.bz2"
@@ -138,7 +61,7 @@ jobs:
       - name: Rewrite manifest
         if: steps.current.outputs.stale == 'true'
         env:
-          FORGE_VERSION: ${{ needs.check-and-build.outputs.forge_version }}
+          FORGE_VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           python3 .github/scripts/update_forge_manifest.py \
             --manifest worker_flutter/forge-manifest.json \
@@ -148,7 +71,7 @@ jobs:
       - name: Push branch, open PR, enable auto-merge
         if: steps.current.outputs.stale == 'true'
         env:
-          FORGE_VERSION: ${{ needs.check-and-build.outputs.forge_version }}
+          FORGE_VERSION: ${{ steps.resolve.outputs.version }}
           BRANCH: ${{ steps.current.outputs.branch }}
           GH_TOKEN: ${{ secrets.APPCAST_PR_TOKEN }}
         run: |

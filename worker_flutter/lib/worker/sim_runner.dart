@@ -9,8 +9,7 @@ import '../models/sim.dart';
 /// result. Each call corresponds to one Forge sim invocation (which can run
 /// `simsPerInvocation` games — typically 1 for fine-grained progress).
 ///
-/// This is the macOS-native equivalent of `worker/src/worker.ts` Docker
-/// container spawning. Verified against Forge 2.0.10 in May 2026:
+/// Verified against Forge 2.0.10 in May 2026:
 ///   bash forge.sh sim -d d1 d2 d3 d4 -f Commander -n 1 -c 600
 /// runs one Commander game headlessly on macOS (no xvfb) and writes the
 /// full game log to stdout. Exit 0 on completion.
@@ -183,8 +182,9 @@ class ParsedGameLog {
 /// And the most recent `Game outcome: Turn N` line preceding it is the turn
 /// the game ended on.
 ///
-/// Mirrors `worker/src/extractWinner.ts` / `extractWinningTurn.ts` so the
-/// two implementations stay in sync. See DATA_FLOW.md.
+/// Mirrors `extractWinner` / `extractWinningTurn` in
+/// `api/lib/condenser/turns.ts` so the two implementations stay in sync. See
+/// DATA_FLOW.md.
 ParsedGameLog parseGameLog(String logText) {
   final winners = <String>[];
   final winningTurns = <int>[];

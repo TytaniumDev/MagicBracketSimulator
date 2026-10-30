@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { unauthorizedResponse } from '@/lib/auth';
-import { isWorkerOrAllowlistedUser } from '@/lib/worker-auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { uploadSingleSimulationLog, MAX_LOG_BYTES } from '@/lib/log-store';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -72,13 +71,15 @@ async function readBodyWithLimit(
 /**
  * POST /api/jobs/[id]/logs/simulation — Upload a single simulation's raw log.
  * Called by the worker incrementally after each simulation completes.
- * Auth: WORKER_SECRET (Docker worker) or an allowlisted user's ID token
- * (Flutter desktop worker).
+ * Auth: an allowed user's Firebase ID token (the desktop worker signs in
+ * as its owner).
  * Body: { filename: string, logText: string }
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  if (!(await isWorkerOrAllowlistedUser(request))) {
-    return unauthorizedResponse('Worker authentication required');
+  try {
+    await verifyAllowedUser(request);
+  } catch {
+    return unauthorizedResponse();
   }
 
   // Early reject oversize uploads via Content-Length header so we never

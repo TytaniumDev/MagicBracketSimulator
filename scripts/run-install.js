@@ -35,7 +35,6 @@ function main() {
       'npm install',
       'npm install --prefix api',
       'npm install --prefix frontend',
-      'npm install --prefix worker',
     ].join(' && ');
     const r = spawnSync('wsl', ['-e', 'bash', '-c', wslCmd], { stdio: 'inherit' });
     process.exit(r.status != null ? r.status : r.signal ? 128 + r.signal : 0);
@@ -48,8 +47,6 @@ function main() {
   r = spawnSync('npm', ['install', '--prefix', 'api'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
   r = spawnSync('npm', ['install', '--prefix', 'frontend'], opts);
-  if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
-  r = spawnSync('npm', ['install', '--prefix', 'worker'], opts);
   if (r.status !== 0) process.exit(r.status != null ? r.status : 1);
 }
 

@@ -84,26 +84,6 @@ export async function fetchWithAuth(
 }
 
 /**
- * Update a worker's max concurrent override.
- * Pass null to clear the override and revert to hardware auto-detection.
- */
-export async function updateWorkerOverride(
-  workerId: string,
-  maxConcurrentOverride: number | null
-): Promise<{ ok: boolean }> {
-  const apiBase = resolveApiBase();
-  const res = await fetchWithAuth(`${apiBase}/api/workers/${encodeURIComponent(workerId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ maxConcurrentOverride }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-/**
  * Create a simulation job for one 4-deck pod. Returns the new job's id.
  */
 export async function createJob(body: {

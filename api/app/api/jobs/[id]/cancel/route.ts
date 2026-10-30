@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import { pushToAllWorkers } from '@/lib/worker-push';
 import { cancelRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
@@ -42,12 +41,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     cancelRecoveryCheck(id).catch(err => {
       console.warn('[Recovery] Cancel check failed:', err instanceof Error ? err.message : err);
       Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId: id } });
-    });
-
-    // Push cancel to all active workers (best-effort)
-    pushToAllWorkers('/cancel', { jobId: id }).catch(err => {
-      console.warn('[Worker Push] Cancel push failed:', err instanceof Error ? err.message : err);
-      Sentry.captureException(err, { tags: { component: 'worker-push', jobId: id } });
     });
 
     // Trigger log aggregation so structured.json gets created from completed sims

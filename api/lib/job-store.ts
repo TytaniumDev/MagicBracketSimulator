@@ -17,7 +17,6 @@ interface Row {
   games_completed?: number | null;
   started_at?: string | null;
   completed_at?: string | null;
-  docker_run_durations_ms?: string | null;
   worker_id?: string | null;
   worker_name?: string | null;
   claimed_at?: string | null;
@@ -38,7 +37,6 @@ function rowToJob(row: Row): Job {
     ...(row.games_completed != null && { gamesCompleted: row.games_completed }),
     ...(row.started_at && { startedAt: new Date(row.started_at) }),
     ...(row.completed_at && { completedAt: new Date(row.completed_at) }),
-    ...(row.docker_run_durations_ms != null && row.docker_run_durations_ms !== '' && { dockerRunDurationsMs: JSON.parse(row.docker_run_durations_ms) as number[] }),
     ...(row.worker_id && { workerId: row.worker_id }),
     ...(row.worker_name && { workerName: row.worker_name }),
     ...(row.claimed_at && { claimedAt: new Date(row.claimed_at) }),
@@ -153,7 +151,6 @@ export function setNeedsAggregation(id: string, value: boolean): void {
 
 export interface SetJobCompletedOptions {
   completedAt?: Date;
-  dockerRunDurationsMs?: number[];
 }
 
 /**
@@ -163,25 +160,22 @@ export interface SetJobCompletedOptions {
 export function setJobCompleted(id: string, options?: SetJobCompletedOptions): boolean {
   const db = getDb();
   const completedAt = options?.completedAt ?? new Date();
-  const dockerRunDurationsJson = options?.dockerRunDurationsMs != null ? JSON.stringify(options.dockerRunDurationsMs) : null;
   const result = db
-    .prepare('UPDATE jobs SET status = ?, completed_at = ?, docker_run_durations_ms = ? WHERE id = ?')
-    .run('COMPLETED', completedAt.toISOString(), dockerRunDurationsJson, id);
+    .prepare('UPDATE jobs SET status = ?, completed_at = ? WHERE id = ?')
+    .run('COMPLETED', completedAt.toISOString(), id);
   return result.changes > 0;
 }
 
 export interface SetJobFailedOptions {
   completedAt?: Date;
-  dockerRunDurationsMs?: number[];
 }
 
 export function setJobFailed(id: string, errorMessage: string, options?: SetJobFailedOptions): boolean {
   const db = getDb();
   const completedAt = options?.completedAt ?? new Date();
-  const dockerRunDurationsJson = options?.dockerRunDurationsMs != null ? JSON.stringify(options.dockerRunDurationsMs) : null;
   const result = db
-    .prepare('UPDATE jobs SET status = ?, error_message = ?, completed_at = ?, docker_run_durations_ms = ? WHERE id = ?')
-    .run('FAILED', errorMessage, completedAt.toISOString(), dockerRunDurationsJson, id);
+    .prepare('UPDATE jobs SET status = ?, error_message = ?, completed_at = ? WHERE id = ?')
+    .run('FAILED', errorMessage, completedAt.toISOString(), id);
   return result.changes > 0;
 }
 
@@ -644,7 +638,6 @@ export function resetJobForRetry(id: string): boolean {
       worker_id = NULL,
       worker_name = NULL,
       claimed_at = NULL,
-      docker_run_durations_ms = NULL,
       retry_count = COALESCE(retry_count, 0) + 1
     WHERE id = ?`
   ).run(id);

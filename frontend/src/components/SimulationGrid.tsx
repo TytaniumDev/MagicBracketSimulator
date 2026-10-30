@@ -1,15 +1,10 @@
 import { useState, useMemo, memo, useCallback } from 'react';
 import type { SimulationStatus, SimulationState } from '../types/simulation';
 import { GAMES_PER_CONTAINER } from '../types/simulation';
-import type { WorkerInfo } from '../types/worker';
-import { WorkerOverrideControls } from './WorkerOverrideControls';
 
 interface SimulationGridProps {
   simulations: SimulationStatus[];
   totalSimulations: number;
-  workers?: WorkerInfo[];
-  userEmail?: string | null;
-  onWorkerRefresh?: () => Promise<void>;
   isAuthenticated?: boolean;
 }
 
@@ -136,7 +131,7 @@ const GameCellDisplay = memo(function GameCellDisplay({
   );
 });
 
-export const SimulationGrid = memo(function SimulationGrid({ simulations, totalSimulations, workers, userEmail, onWorkerRefresh, isAuthenticated = false }: SimulationGridProps) {
+export const SimulationGrid = memo(function SimulationGrid({ simulations, totalSimulations, isAuthenticated = false }: SimulationGridProps) {
   const [hoveredGame, setHoveredGame] = useState<GameCell | null>(null);
 
   const handleMouseEnter = useCallback((game: GameCell) => {
@@ -147,17 +142,6 @@ export const SimulationGrid = memo(function SimulationGrid({ simulations, totalS
     setHoveredGame(null);
   }, []);
 
-
-  // Build a lookup from workerId to WorkerInfo
-  const workerMap = useMemo(() => {
-    const map = new Map<string, WorkerInfo>();
-    if (workers) {
-      for (const w of workers) {
-        map.set(w.workerId, w);
-      }
-    }
-    return map;
-  }, [workers]);
 
   // Expand containers into game cells and group by worker
   const { groups, gameCounts } = useMemo(() => {
@@ -263,55 +247,34 @@ export const SimulationGrid = memo(function SimulationGrid({ simulations, totalS
 
       {/* Grouped grids */}
       <div className="space-y-3">
-        {groups.map((group) => {
-          const worker = group.workerId ? workerMap.get(group.workerId) : null;
-          const isOwner = worker && userEmail && worker.ownerEmail
-            && worker.ownerEmail.toLowerCase() === userEmail.toLowerCase();
-
-          return (
-            <div key={group.workerId ?? '__pending__'}>
-              {/* Group header */}
-              <div className="flex items-center gap-1.5 mb-1 text-xs">
-                {group.workerId ? (
-                  <>
-                    <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-gray-400 font-mono">{group.label}</span>
-                  </>
-                ) : (
-                  <span className="text-gray-500">{group.label}</span>
-                )}
-                <span className="text-gray-600">({group.cells.length})</span>
-
-                {/* Inline capacity controls for owned workers */}
-                {isAuthenticated && isOwner && worker && (
-                  <WorkerOverrideControls worker={worker} onRefresh={onWorkerRefresh} compact />
-                )}
-
-                {/* Read-only override for non-owned workers */}
-                {isAuthenticated && !isOwner && worker && worker.maxConcurrentOverride != null && (
-                  <span className="text-gray-500 ml-1">
-                    cap: {worker.maxConcurrentOverride}
-                    {worker.maxConcurrentOverride > worker.capacity && (
-                      <span className="text-amber-400 ml-1">!</span>
-                    )}
-                  </span>
-                )}
-              </div>
-              {/* Grid */}
-              <div className={`flex flex-wrap ${gapSize}`}>
-                {group.cells.map((game) => (
-                  <GameCellDisplay
-                    key={`${game.containerSimId}-g${game.gameIndex}`}
-                    game={game}
-                    cellSize={cellSize}
-                    onMouseEnter={handleMouseEnter}
-                    onMouseLeave={handleMouseLeave}
-                  />
-                ))}
-              </div>
+        {groups.map((group) => (
+          <div key={group.workerId ?? '__pending__'}>
+            {/* Group header */}
+            <div className="flex items-center gap-1.5 mb-1 text-xs">
+              {group.workerId ? (
+                <>
+                  <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                  <span className="text-gray-400 font-mono">{group.label}</span>
+                </>
+              ) : (
+                <span className="text-gray-500">{group.label}</span>
+              )}
+              <span className="text-gray-600">({group.cells.length})</span>
             </div>
-          );
-        })}
+            {/* Grid */}
+            <div className={`flex flex-wrap ${gapSize}`}>
+              {group.cells.map((game) => (
+                <GameCellDisplay
+                  key={`${game.containerSimId}-g${game.gameIndex}`}
+                  game={game}
+                  cellSize={cellSize}
+                  onMouseEnter={handleMouseEnter}
+                  onMouseLeave={handleMouseLeave}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Tooltip details */}

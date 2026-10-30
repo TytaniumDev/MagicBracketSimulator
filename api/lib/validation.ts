@@ -37,22 +37,6 @@ export const updateSimulationSchema = z.object({
 export type UpdateSimulationInput = z.infer<typeof updateSimulationSchema>;
 
 // ---------------------------------------------------------------------------
-// PATCH /api/jobs/[id] — Update job
-// ---------------------------------------------------------------------------
-
-const jobStatusEnum = z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']);
-
-export const updateJobSchema = z.object({
-  status: jobStatusEnum.optional(),
-  errorMessage: z.string().optional(),
-  dockerRunDurationsMs: z.array(z.number()).optional(),
-  workerId: z.string().optional(),
-  workerName: z.string().optional(),
-});
-
-export type UpdateJobInput = z.infer<typeof updateJobSchema>;
-
-// ---------------------------------------------------------------------------
 // POST /api/pod-runs — Save a pod run
 // ---------------------------------------------------------------------------
 

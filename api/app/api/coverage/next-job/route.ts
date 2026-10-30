@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isWorkerRequest } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { getCoverageStore } from '@/lib/coverage-store-factory';
 import { generateNextPod, hasActiveCoverageJob } from '@/lib/coverage-service';
 import { resolveJobSeats } from '@/lib/job-seats';
 import * as jobStore from '@/lib/job-store-factory';
 import { GAMES_PER_CONTAINER } from '@/lib/types';
-import { pushToAllWorkers } from '@/lib/worker-push';
 import { errorResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
 import { seatNames } from '@shared/types/job';
@@ -14,12 +13,15 @@ const COVERAGE_SIMULATIONS = 100;
 const COVERAGE_PARALLELISM = 1;
 
 /**
- * POST /api/coverage/next-job — worker requests next coverage job
- * Auth: worker secret only
+ * POST /api/coverage/next-job — an idle worker requests the next coverage job.
+ * Auth: an allowed user's Firebase ID token (the desktop worker signs in as
+ * its owner).
  */
 export async function POST(request: NextRequest) {
-  if (!isWorkerRequest(request)) {
-    return errorResponse('Unauthorized', 401);
+  try {
+    await verifyAllowedUser(request);
+  } catch {
+    return unauthorizedResponse();
   }
 
   try {
@@ -53,12 +55,7 @@ export async function POST(request: NextRequest) {
     const containerCount = Math.ceil(COVERAGE_SIMULATIONS / GAMES_PER_CONTAINER);
     await jobStore.initializeSimulations(job.id, containerCount);
 
-    // Workers pick up sims via /api/jobs/claim-sim; push-notify for low-latency wake-up.
-    pushToAllWorkers('/notify', {}).catch((err) => {
-      console.warn('[Coverage] Worker notify failed:', err instanceof Error ? err.message : err);
-      Sentry.captureException(err, { tags: { component: 'worker-push' } });
-    });
-
+    // Workers pick up the new sims on their next /api/jobs/claim-sim poll.
     const deckNames = seatNames(job.seats);
     console.log(`[Coverage] Created job ${job.id}: ${deckNames.join(' vs ')}`);
 

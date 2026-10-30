@@ -17,7 +17,7 @@ import * as path from 'path';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'data-wipe-test-'));
 const logsDir = path.join(tmpDir, 'logs-data');
 process.env.LOGS_DATA_DIR = logsDir;
-process.env.FORGE_ENGINE_PATH = path.join(tmpDir, 'forge-engine');
+process.env.SAVED_DECKS_DIR = path.join(tmpDir, 'decks');
 delete process.env.GOOGLE_CLOUD_PROJECT;
 process.chdir(tmpDir);
 
