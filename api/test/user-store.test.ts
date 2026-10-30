@@ -29,7 +29,7 @@ async function main() {
     console.log('Skipping user store tests: Firestore only (set FIRESTORE_EMULATOR_HOST).');
     return;
   }
-  const { getUserAccess, requestAccess, approveUser } = await import('../lib/user-store');
+  const { getUserAccess, requestAccess, approveUser, ensureAllowed } = await import('../lib/user-store');
   const { isInAllowedUsers } = await import('../lib/allowed-users');
   const run = Date.now();
   const uid = (name: string) => `user-test-${run}-${name}`;
@@ -59,6 +59,24 @@ async function main() {
   await test('requestAccess leaves an allowed user allowed', async () => {
     assertEqual(await requestAccess(uid('new'), { email: 'x', displayName: null, message: null }), 'allowed', 'status');
     assertEqual((await getUserAccess(uid('new')))?.status, 'allowed', 'still allowed');
+  });
+
+  await test('ensureAllowed gives a pre-approved account an allowed record', async () => {
+    await ensureAllowed(uid('admin'), 'admin@example.com');
+    const access = await getUserAccess(uid('admin'));
+    assertEqual(access?.status, 'allowed', 'status');
+    assertEqual(access?.email, 'admin@example.com', 'email');
+  });
+
+  await test('ensureAllowed allows a pending request and leaves an allowed record as it was', async () => {
+    await requestAccess(uid('pending'), { email: 'p@example.com', displayName: 'P', message: 'hi' });
+    await ensureAllowed(uid('pending'), 'p@example.com');
+    const access = await getUserAccess(uid('pending'));
+    assertEqual(access?.status, 'allowed', 'status');
+    assertEqual(access?.message, 'hi', 'request kept');
+    const approvedAt = access?.approvedAt?.getTime();
+    await ensureAllowed(uid('pending'), 'p@example.com');
+    assertEqual((await getUserAccess(uid('pending')))?.approvedAt?.getTime(), approvedAt, 'approvedAt unchanged');
   });
 
   if (failed > 0) process.exit(1);

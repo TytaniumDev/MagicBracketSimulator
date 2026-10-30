@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { getApiBase, fetchWithAuth } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { reportHandledError } from '../errorReporting';
@@ -21,18 +20,9 @@ export function RequestAccessCard() {
           <span className="text-amber-400 text-xl">&#9203;</span>
           <h2 className="text-xl font-semibold text-amber-200">Access Request Pending</h2>
         </div>
-        <p className="text-gray-300 mb-4">
+        <p className="text-gray-300">
           Your access request has been submitted. You'll be notified when you're approved.
         </p>
-        <p className="text-gray-400 text-sm mb-4">
-          In the meantime, you can browse all past simulation results.
-        </p>
-        <Link
-          to="/"
-          className="inline-block px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-sm transition-colors"
-        >
-          Browse Simulations
-        </Link>
       </div>
     );
   }
@@ -45,15 +35,9 @@ export function RequestAccessCard() {
           <span className="text-green-400 text-xl">&#10003;</span>
           <h2 className="text-xl font-semibold text-green-200">Access Request Sent</h2>
         </div>
-        <p className="text-gray-300 mb-4">
-          We'll let you know when you're approved. In the meantime, browse past simulations.
+        <p className="text-gray-300">
+          We'll let you know when you're approved.
         </p>
-        <Link
-          to="/"
-          className="inline-block px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-sm transition-colors"
-        >
-          Browse Simulations
-        </Link>
       </div>
     );
   }
@@ -90,10 +74,10 @@ export function RequestAccessCard() {
     <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 max-w-lg mx-auto">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-gray-400 text-xl">&#128274;</span>
-        <h2 className="text-xl font-semibold text-gray-200">Request Simulation Access</h2>
+        <h2 className="text-xl font-semibold text-gray-200">Request Access</h2>
       </div>
       <p className="text-gray-300 mb-4">
-        You can browse all past simulation results. To submit your own bracket simulations, request access below.
+        Magic Bracket Simulator is invite-only. Request access to browse results and run your own simulations.
       </p>
       <div className="mb-4">
         <textarea

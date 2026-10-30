@@ -37,9 +37,14 @@ export async function isAllowedAccount(
   email: string,
   lookup: (uid: string) => Promise<boolean> = isInAllowedUsers,
 ): Promise<boolean> {
-  const normalized = email.toLowerCase();
-  if (isAdmin(normalized) || ALLOWED_EMAILS.includes(normalized)) return true;
+  if (isPreapprovedEmail(email)) return true;
   return lookup(uid);
+}
+
+/** Admins and emails in ALLOWED_EMAILS: allowed without an access record. */
+export function isPreapprovedEmail(email: string): boolean {
+  const normalized = email.toLowerCase();
+  return isAdmin(normalized) || ALLOWED_EMAILS.includes(normalized);
 }
 
 /**

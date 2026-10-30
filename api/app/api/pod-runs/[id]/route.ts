@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import { getPodRunStore } from '@/lib/pod-run-store-factory';
 import { podRunToResponse } from '@/lib/pod-run-utils';
 import { errorResponse, notFoundResponse } from '@/lib/api-response';
@@ -15,7 +15,7 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams): Promise<NextResponse | Response> {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }

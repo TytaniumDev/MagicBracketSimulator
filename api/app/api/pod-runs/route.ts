@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { getPodRunStore } from '@/lib/pod-run-store-factory';
 import { podRunToSummary } from '@/lib/pod-run-utils';
 import { resolveJobSeats } from '@/lib/job-seats';
@@ -18,7 +18,7 @@ const MAX_LIST_LIMIT = 50;
  */
 export async function GET(request: NextRequest): Promise<NextResponse | Response> {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }

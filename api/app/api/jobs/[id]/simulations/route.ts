@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
+import { verifyAllowedUser, unauthorizedResponse, isWorkerRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -14,7 +14,7 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }

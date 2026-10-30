@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, verifyAllowedUser, verifyAdmin, unauthorizedResponse, AuthUser } from '@/lib/auth';
+import { verifyAllowedUser, verifyAdmin, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { deleteDeck, getDeckById, readDeckContent } from '@/lib/deck-store-factory';
 import { removeColorIdentity } from '@/lib/deck-metadata';
 import { getRatingStore } from '@/lib/rating-store-factory';
@@ -18,7 +18,7 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    await verifyAuth(request);
+    await verifyAllowedUser(request);
   } catch {
     return unauthorizedResponse();
   }
