@@ -262,6 +262,73 @@ void main() {
       );
     });
   });
+
+  group('auto-coverage', () {
+    /// Answers the first coverage request by seeding [jobId] and the rest
+    /// with `active-job-exists`, the way the API allows one coverage job at
+    /// a time.
+    void createCoverageJobOnce(String jobId) {
+      var created = false;
+      api.coverageHandler = () async {
+        if (created) return {'reason': 'active-job-exists'};
+        created = true;
+        await seedJob(jobId: jobId, simCount: 2);
+        return {'id': jobId};
+      };
+    }
+
+    test('an idle engine asks for a coverage job and runs it', () async {
+      createCoverageJobOnce('cov1');
+      await engine.start();
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 2,
+        timeout: const Duration(seconds: 3),
+      );
+      expect(api.calls, containsAll(['claim sim-0', 'claim sim-1']));
+    });
+
+    test('asks at most once per interval while none is created', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      await engine.start();
+      await _waitForCondition(
+        () async => api.coverageRequests >= 1,
+        timeout: const Duration(seconds: 3),
+      );
+
+      // Another trigger runs the claim loop again with nothing queued.
+      await engine.setMaxCapacity(3);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(api.coverageRequests, 1);
+    });
+
+    test('an idle engine asks again on its next tick', () async {
+      final ticking = WorkerEngine(
+        config: config,
+        firestore: firestore,
+        apiClient: api.client,
+        presenceSink: FakePresenceSink(),
+        runnerOverride: stubRunner,
+        leaseInterval: const Duration(milliseconds: 50),
+        coverageInterval: const Duration(milliseconds: 100),
+      );
+      addTearDown(ticking.dispose);
+      var asks = 0;
+      api.coverageHandler = () async {
+        asks++;
+        if (asks < 2) return {'reason': 'all-pairs-covered'};
+        if (asks > 2) return {'reason': 'active-job-exists'};
+        await seedJob(jobId: 'cov2', simCount: 1);
+        return {'id': 'cov2'};
+      };
+
+      await ticking.start();
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 1,
+        timeout: const Duration(seconds: 3),
+      );
+      expect(api.calls, contains('claim sim-0'));
+    });
+  });
 }
 
 /// Block until [check] returns true. Polls every 20ms.

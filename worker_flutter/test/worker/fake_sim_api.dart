@@ -13,10 +13,11 @@ import 'package:worker_flutter/worker/worker_presence.dart';
 /// by a [FakeFirebaseFirestore] so tests can seed jobs and read sims back
 /// the way the real API stores them.
 ///
-/// Handles claim-sim, the job worker view, lease extension, sim PATCH and
-/// log upload, and
-/// records each call in [calls] (e.g. `patch sim-0 COMPLETED`) so tests can
-/// assert on order.
+/// Handles claim-sim, the job worker view, lease extension, sim PATCH, log
+/// upload and coverage requests. Records each sim call in [calls] (e.g.
+/// `patch sim-0 COMPLETED`) so tests can assert on order; coverage requests
+/// are only counted, in [coverageRequests], because an idle engine makes
+/// them at times that depend on scheduling.
 class FakeSimApi {
   FakeSimApi(this.firestore);
 
@@ -30,6 +31,15 @@ class FakeSimApi {
 
   /// What lease extensions answer.
   String leaseStatus = 'extended';
+
+  /// How many coverage jobs were asked for.
+  int coverageRequests = 0;
+
+  /// Answers `POST /api/coverage/next-job`: `{id}` for a created job (sent
+  /// as 201) or `{reason}` when there is nothing to do.
+  Future<Map<String, dynamic>> Function() coverageHandler = () async => {
+    'reason': 'disabled',
+  };
 
   late final ApiClient client = ApiClient(
     baseUrl: 'https://api.test',
@@ -45,6 +55,14 @@ class FakeSimApi {
     final segments = req.url.pathSegments;
     if (req.method == 'GET' && req.url.path == '/api/jobs/claim-sim') {
       return _claim(req.url.queryParameters);
+    }
+    if (req.method == 'POST' && req.url.path == '/api/coverage/next-job') {
+      coverageRequests++;
+      final answer = await coverageHandler();
+      return http.Response(
+        json.encode(answer),
+        answer['id'] is String ? 201 : 200,
+      );
     }
     // /api/jobs/:id/...
     final jobId = segments.length > 2 ? segments[2] : '';
