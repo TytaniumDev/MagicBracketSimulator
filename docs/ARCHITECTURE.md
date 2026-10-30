@@ -64,8 +64,9 @@ flowchart TB
 
 ## Where data lives
 
-**Firestore** holds live state and precomputed answers. Clients only read;
-every write goes through the API with the Admin SDK (`firestore.rules`).
+**Firestore** holds live state and precomputed answers. Clients only read,
+and only approved users (their `users/{uid}` record is `allowed`); every
+write goes through the API with the Admin SDK (`firestore.rules`).
 
 | Path | Contents |
 |------|----------|
@@ -138,6 +139,9 @@ queue and finishes jobs whose sims are all terminal.
   `ADMIN_EMAILS` / `ALLOWED_EMAILS` (`api/lib/allowed-users.ts`,
   `api/lib/auth.ts`). New users request access in the app; an admin
   approves from the email link (`/api/access-requests/approve`).
+  `GET /api/me` gives admins and `ALLOWED_EMAILS` accounts an allowed
+  record, since the Firestore rules only see that doc. Signed out, or
+  before approval, nothing is readable.
 - The Docker worker authenticates with `X-Worker-Secret`. The desktop
   worker sends the signed-in user's ID token and is accepted when that user
   is allowed (`isWorkerOrAllowlistedUser` in `api/lib/worker-auth.ts`).

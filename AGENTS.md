@@ -35,7 +35,7 @@
 
 ## Hard Constraints
 - Every caught error is reported to Sentry; never swallow one silently.
-- Clients only read Firestore. Every write goes through the API (worker presence in Realtime Database is the one exception).
+- Clients only read Firestore, and only approved users. Every write goes through the API (worker presence in Realtime Database is the one exception).
 - No backwards-compat or migration code for data shapes. After a SQLite schema change, delete `api/data/jobs.db`.
 - The API runs on one 1 GiB instance: never hold more than one job's raw logs in memory.
 
