@@ -41,8 +41,8 @@ export const SliderWithInput = memo(function SliderWithInput({
 
   return (
     <div className={className}>
-      <label className="block text-sm font-medium text-gray-300 mb-2">
-        {label}:{' '}
+      <label className="mb-2 flex items-center justify-between gap-3 text-sm font-medium text-fg">
+        {label}
         <input
           type="number"
           min={min}
@@ -50,7 +50,7 @@ export const SliderWithInput = memo(function SliderWithInput({
           step={step}
           value={value}
           onChange={handleInputChange}
-          className="w-16 px-2 py-0.5 ml-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-16 rounded border border-line-strong bg-surface-raised px-2 py-0.5 text-fg focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </label>
       <input
@@ -61,9 +61,9 @@ export const SliderWithInput = memo(function SliderWithInput({
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
         aria-label={label}
-        className="w-full accent-blue-500"
+        className="w-full accent-accent"
       />
-      <div className="flex justify-between text-xs text-gray-500 mt-1">
+      <div className="mt-1 flex justify-between text-xs text-fg-muted tabular-nums">
         {labels.map((n) => (
           <span key={n}>{n}</span>
         ))}

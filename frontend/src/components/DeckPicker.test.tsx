@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactElement } from 'react';
 import type { LibraryDeck } from '../api';
 import { DeckPicker } from './DeckPicker';
+import { useCommanderCards } from '../hooks/useCommanderCards';
+import type { DeckSection } from '../utils/deck-order';
 
 const deck = (overrides: Partial<LibraryDeck>): LibraryDeck => ({
   id: 'abzan-armor',
@@ -52,6 +54,21 @@ function stubScreenWidth(wide: boolean) {
   }));
 }
 
+const section = (title: string, decks: LibraryDeck[], setName: string | null = null): DeckSection => ({
+  title,
+  setName,
+  releasedAt: null,
+  decks,
+});
+
+type PickerProps = Omit<Parameters<typeof DeckPicker>[0], 'commanderOf'>;
+
+/** DeckPicker with commander cards looked up the way the page does it. */
+function Picker(props: PickerProps) {
+  const commanderOf = useCommanderCards(props.sections.flatMap((s) => s.decks));
+  return <DeckPicker {...props} commanderOf={commanderOf} />;
+}
+
 function renderPicker(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
@@ -67,7 +84,7 @@ describe('DeckPicker', () => {
 
   it('shows each deck with its set code and commander card on wide screens', async () => {
     stubScreenWidth(true);
-    renderPicker(<DeckPicker groups={[{ title: 'Precons', decks: DECKS }]} selectedIds={[]} onToggle={() => {}} />);
+    renderPicker(<Picker sections={[section('Precons', DECKS)]} selectedIds={[]} onToggle={() => {}} />);
 
     const abzan = screen.getByRole('checkbox', { name: 'Select deck Abzan Armor' });
     expect(abzan).toHaveAttribute('aria-checked', 'false');
@@ -83,7 +100,7 @@ describe('DeckPicker', () => {
   it('marks selected decks and reports toggles', () => {
     stubScreenWidth(true);
     const onToggle = vi.fn();
-    renderPicker(<DeckPicker groups={[{ title: 'Precons', decks: DECKS }]} selectedIds={['ahoy-mateys']} onToggle={onToggle} />);
+    renderPicker(<Picker sections={[section('Precons', DECKS)]} selectedIds={['ahoy-mateys']} onToggle={onToggle} />);
 
     expect(screen.getByRole('checkbox', { name: 'Select deck Ahoy Mateys' })).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select deck Abzan Armor' }));
@@ -95,8 +112,8 @@ describe('DeckPicker', () => {
     const onToggle = vi.fn();
     const onDelete = vi.fn();
     renderPicker(
-      <DeckPicker
-        groups={[{ title: 'Precons', decks: [DECKS[0]] }]}
+      <Picker
+        sections={[section('Precons', [DECKS[0]])]}
         selectedIds={[]}
         onToggle={onToggle}
         renderActions={() => <button type="button" onClick={onDelete}>Delete</button>}
@@ -108,11 +125,24 @@ describe('DeckPicker', () => {
     expect(onToggle).not.toHaveBeenCalled();
   });
 
+  it('labels set sections with their set code and year', async () => {
+    stubScreenWidth(true);
+    renderPicker(
+      <Picker
+        sections={[{ title: 'Tarkir: Dragonstorm', setName: 'Tarkir: Dragonstorm', releasedAt: '2025-04-11', decks: [DECKS[0]] }]}
+        selectedIds={[]}
+        onToggle={() => {}}
+      />,
+    );
+    const heading = screen.getByRole('heading', { name: /Tarkir: Dragonstorm/ });
+    expect(await within(heading).findByText('TDM · 2025')).toBeInTheDocument();
+  });
+
   it('skips empty groups', () => {
     stubScreenWidth(true);
     renderPicker(
-      <DeckPicker
-        groups={[{ title: 'Community Decks', decks: [] }, { title: 'Precons', decks: DECKS }]}
+      <Picker
+        sections={[section('Community Decks', []), section('Precons', DECKS)]}
         selectedIds={[]}
         onToggle={() => {}}
       />,
@@ -123,7 +153,7 @@ describe('DeckPicker', () => {
 
   it('shows compact rows on phones, and tapping the art opens the full card', async () => {
     stubScreenWidth(false);
-    renderPicker(<DeckPicker groups={[{ title: 'Precons', decks: DECKS }]} selectedIds={[]} onToggle={() => {}} />);
+    renderPicker(<Picker sections={[section('Precons', DECKS)]} selectedIds={[]} onToggle={() => {}} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'View Felothar the Steadfast' }));
     const dialog = screen.getByRole('dialog', { name: 'Felothar the Steadfast' });

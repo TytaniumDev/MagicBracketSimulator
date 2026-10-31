@@ -5,10 +5,8 @@ import type { Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getApiBase, fetchWithAuth, deleteJobs } from '../api';
 import { useAuth } from '../contexts/AuthContext';
-import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
 import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
-import { useWorkerStatus } from '../hooks/useWorkerStatus';
 import { RecentPodRuns } from '../components/RecentPodRuns';
 import { formatRelativeDate } from '../utils/format';
 import type { JobSeat, JobStatus, JobSummary } from '@shared/types/job';
@@ -119,7 +117,6 @@ export default function Browse() {
   };
 
   const apiBase = getApiBase();
-  const { workers, queueDepth, isLoading: workersLoading } = useWorkerStatus(!!isAllowed);
 
   // GCP mode: Firestore onSnapshot for real-time job list
   useEffect(() => {
@@ -277,11 +274,6 @@ export default function Browse() {
             </p>
           )}
         </div>
-      )}
-
-      {/* Worker Status Banner — only for users who can submit */}
-      {isAllowed && (
-        <WorkerStatusBanner workers={workers} queueDepth={queueDepth} isLoading={workersLoading} />
       )}
 
       <RecentPodRuns />

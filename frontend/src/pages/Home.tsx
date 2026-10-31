@@ -1,28 +1,23 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApiBase, fetchWithAuth, createJob, createPodRun, type LibraryDeck } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { useDeckLibrary } from '../hooks/useDeckLibrary';
+import { useCommanderCards } from '../hooks/useCommanderCards';
+import { AddDeckForm } from '../components/AddDeckForm';
 import { DeckPicker } from '../components/DeckPicker';
+import { PodSlots } from '../components/PodSlots';
+import { RunControl } from '../components/RunControl';
 import { IconButton } from '../components/ui/IconButton';
-import { ExternalLinkIcon, TrashIcon } from '../components/ui/icons';
-import { SliderWithInput } from '../components/SliderWithInput';
+import { Popover } from '../components/ui/Popover';
+import { ExternalLinkIcon, PlusIcon, TrashIcon } from '../components/ui/icons';
 import { LoginButton } from '../components/LoginButton';
-import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
-import { useWorkerStatus } from '../hooks/useWorkerStatus';
-import { GAMES_PER_CONTAINER } from '../types/simulation';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import { MAX_POD_RUN_DECKS, podCombinations, podRunPath, savedPodRunPath } from '../utils/pods';
+import { DECK_SORT_OPTIONS, orderDecks, type DeckSort } from '../utils/deck-order';
 import { reportHandledError } from '../errorReporting';
 
 type Deck = LibraryDeck;
-
-interface DeckOption {
-  id: string;
-  name: string;
-  type: 'saved' | 'precon';
-  deck: Deck;
-}
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -57,32 +52,6 @@ function SimulationForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Add deck state
-  const [deckUrl, setDeckUrl] = useState('');
-  const [deckText, setDeckText] = useState('');
-  const [deckName, setDeckName] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  // Moxfield API availability (null = loading, true = direct fetch works, false = manual paste required)
-  const [moxfieldEnabled, setMoxfieldEnabled] = useState<boolean | null>(null);
-
-  // Detect if URL is from Moxfield
-  const isMoxfieldUrl = (() => {
-    try {
-      const parsed = new URL(deckUrl.trim());
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-      if (parsed.hostname !== 'moxfield.com' && parsed.hostname !== 'www.moxfield.com') return false;
-      return /^\/decks\//.test(parsed.pathname);
-    } catch {
-      return false;
-    }
-  })();
-  // Only show manual paste UI if Moxfield API is NOT enabled
-  const showManualPaste = isMoxfieldUrl && moxfieldEnabled === false;
-
-  // Deck selection state
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [simulations, setSimulations] = useState(100);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,14 +60,16 @@ function SimulationForm() {
   // Tied to the selection and game count: changing either starts fresh.
   const [idempotency, setIdempotency] = useState<{ key: string; signature: string } | null>(null);
   const [podsQueued, setPodsQueued] = useState(0);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sort, setSort] = useState<DeckSort>('set');
 
   // Deck library, minus decks excluded from selection on the Decks page
   const library = useDeckLibrary();
   const { refetch: loadDecks } = library;
   const decksLoading = library.isLoading;
   const deckError = library.data?.communityDecksFailed ? 'Failed to load community decks. Please try again.' : null;
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const apiBase = getApiBase();
 
@@ -112,6 +83,7 @@ function SimulationForm() {
     return (library.data?.decks ?? []).filter((d) => !excluded.has(d.id));
   }, [library.data]);
   const excludedCount = (library.data?.decks.length ?? 0) - allDecks.length;
+  const commanderOf = useCommanderCards(allDecks);
 
   const filteredDecks = useMemo(() => {
     if (!searchQuery.trim()) return allDecks;
@@ -124,34 +96,14 @@ function SimulationForm() {
         (d.ownerEmail && d.ownerEmail.toLowerCase().includes(q))
     );
   }, [allDecks, searchQuery]);
+  const sections = useMemo(() => orderDecks(filteredDecks, sort), [filteredDecks, sort]);
 
-  const precons = useMemo(() => filteredDecks.filter((d) => d.isPrecon), [filteredDecks]);
-  const communityDecks = useMemo(() => filteredDecks.filter((d) => !d.isPrecon), [filteredDecks]);
-
-  // Build combined deck options (used for selection display)
-  const deckOptions: DeckOption[] = useMemo(
-    () =>
-      allDecks.map((d) => ({
-        id: d.id,
-        name: d.name,
-        type: d.isPrecon ? ('precon' as const) : ('saved' as const),
-        deck: d,
-      })),
-    [allDecks]
+  const selectedDecks = useMemo(
+    () => selectedDeckIds.map((id) => allDecks.find((d) => d.id === id)).filter((d): d is Deck => !!d),
+    [selectedDeckIds, allDecks],
   );
 
-  // Check if Moxfield direct import is available
-  useEffect(() => {
-    fetchWithAuth(`${apiBase}/api/moxfield-status`)
-      .then((res) => res.json())
-      .then((data) => setMoxfieldEnabled(data.enabled))
-      .catch((err) => {
-        reportHandledError(err, { action: 'checkMoxfieldStatus' });
-        setMoxfieldEnabled(false);
-      });
-  }, [apiBase]);
-
-  const handleDeckToggle = (id: string) => {
+  const handleDeckToggle = useCallback((id: string) => {
     setSelectedDeckIds((prev) => {
       if (prev.includes(id)) {
         return prev.filter((x) => x !== id);
@@ -162,68 +114,15 @@ function SimulationForm() {
       }
       return [...prev, id];
     });
-  };
+  }, []);
 
-  const handleSaveDeck = async () => {
-    setSaveError(null);
-    setSaveMessage(null);
-    setIsSaving(true);
+  const handleDeckRemove = useCallback((id: string) => {
+    setSelectedDeckIds((prev) => prev.filter((x) => x !== id));
+  }, []);
 
-    try {
-      let body: Record<string, string>;
-      const tryingMoxfieldUrl = isMoxfieldUrl && !!deckUrl.trim();
-
-      if (isMoxfieldUrl && deckUrl.trim()) {
-        body = { deckUrl: deckUrl.trim() };
-      } else if (isMoxfieldUrl && deckText.trim()) {
-        body = { deckText: deckText.trim(), deckLink: deckUrl.trim() };
-        if (deckName.trim()) {
-          body.deckName = deckName.trim();
-        }
-      } else if (deckUrl.trim()) {
-        body = { deckUrl: deckUrl.trim() };
-      } else {
-        throw new Error(showManualPaste ? 'Please paste your deck list from Moxfield' : 'Please enter a deck URL');
-      }
-
-      const doPost = async () => {
-        const res = await fetchWithAuth(`${apiBase}/api/decks/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        return { response: res, data };
-      };
-
-      let result = await doPost();
-
-      if (tryingMoxfieldUrl && !result.response.ok) {
-        result = await doPost();
-        if (!result.response.ok) {
-          setMoxfieldEnabled(false);
-          setSaveError(
-            'Couldn\'t import from Moxfield automatically. Please paste your deck list below (Export → MTGO on Moxfield).'
-          );
-          return;
-        }
-      }
-
-      if (!result.response.ok) {
-        throw new Error(result.data.error || 'Failed to save deck');
-      }
-
-      setSaveMessage(`Deck saved: "${result.data.name}"`);
-      await loadDecks();
-      setDeckUrl('');
-      setDeckText('');
-      setDeckName('');
-    } catch (err) {
-      reportHandledError(err, { action: 'saveDeck' });
-      setSaveError(err instanceof Error ? err.message : 'Failed to save deck');
-    } finally {
-      setIsSaving(false);
-    }
+  const handleDeckAdded = async (deckId: string) => {
+    await loadDecks();
+    setSelectedDeckIds((prev) => (prev.includes(deckId) || prev.length >= MAX_POD_RUN_DECKS ? prev : [...prev, deckId]));
   };
 
   const handleDeleteDeck = async (deck: Deck) => {
@@ -232,6 +131,7 @@ function SimulationForm() {
     }
 
     setIsDeleting(deck.id);
+    setDeleteError(null);
 
     try {
       const response = await fetchWithAuth(`${apiBase}/api/decks/${encodeURIComponent(deck.id)}`, {
@@ -243,14 +143,11 @@ function SimulationForm() {
         throw new Error(data.error || 'Failed to delete deck');
       }
 
-      if (selectedDeckIds.includes(deck.id)) {
-        setSelectedDeckIds((prev) => prev.filter((id) => id !== deck.id));
-      }
-
+      setSelectedDeckIds((prev) => prev.filter((id) => id !== deck.id));
       await loadDecks();
     } catch (err) {
       reportHandledError(err, { action: 'deleteDeck' });
-      setSaveError(err instanceof Error ? err.message : 'Failed to delete deck');
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete deck');
     } finally {
       setIsDeleting(null);
     }
@@ -323,270 +220,140 @@ function SimulationForm() {
     }
   };
 
+  const runLabel = isSubmitting
+    ? isPodRun
+      ? `Queuing pods (${podsQueued}/${pods.length})...`
+      : 'Submitting...'
+    : isPodRun
+      ? `Queue ${pods.length} pods`
+      : 'Run simulation';
+
   return (
-    <div className="max-w-7xl mx-auto">
-      {/* Worker pool health banner: shows when no workers are online so
-          users understand why newly-created jobs will sit in QUEUED. */}
-      <HomeWorkerStatus />
-
-      {/* Add Deck Section */}
-      <div className="bg-gray-800 rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Add a Deck</h2>
-        <p className="text-sm text-gray-400 mb-4">
-          Import a deck from Moxfield, Archidekt, or ManaBox.
-        </p>
-
-        <div className="flex gap-2 mb-3">
-          <input
-            type="url"
-            value={deckUrl}
-            onChange={(e) => setDeckUrl(e.target.value)}
-            placeholder="https://moxfield.com/decks/... or https://archidekt.com/decks/..."
-            aria-label="Deck URL"
-            className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="button"
-            onClick={handleSaveDeck}
-            disabled={isSaving || !deckUrl.trim()}
-            className={`px-4 py-2 rounded-md ${
-              isSaving || !deckUrl.trim()
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-green-600 text-white hover:bg-green-700'
-            }`}
-          >
-            {isSaving ? 'Adding...' : 'Add Deck'}
-          </button>
-        </div>
-
-        {showManualPaste && (
-          <>
-            <div className="bg-amber-900/30 border border-amber-600 rounded-md p-3 mb-4">
-              <p className="text-sm text-amber-200 mb-2">
-                <strong>Moxfield requires manual export.</strong> Follow these steps:
-              </p>
-              <ol className="text-sm text-amber-100/80 list-decimal list-inside space-y-1">
-                <li>Open your deck on Moxfield (link above)</li>
-                <li>Click the <span className="text-amber-100 font-medium">Export</span> button (top right)</li>
-                <li>Select <span className="text-amber-100 font-medium">MTGO</span> format</li>
-                <li>Click <span className="text-amber-100 font-medium">Copy to Clipboard</span></li>
-                <li>Paste below</li>
-              </ol>
-            </div>
-
-            <div className="mb-3">
-              <input
-                type="text"
-                value={deckName}
-                onChange={(e) => setDeckName(e.target.value)}
-                placeholder="Deck name (optional)"
-                aria-label="Deck name (optional)"
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <textarea
-              value={deckText}
-              onChange={(e) => setDeckText(e.target.value)}
-              placeholder={`Paste your deck list here...\n\nExample:\n1 Sol Ring\n1 Command Tower\n1 Arcane Signet`}
-              aria-label="Deck list text"
-              rows={8}
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-y"
-            />
-
-            <button
-              type="button"
-              onClick={handleSaveDeck}
-              disabled={isSaving || !deckText.trim()}
-              className={`mt-3 w-full py-2 rounded-md font-medium ${
-                isSaving || !deckText.trim()
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-            >
-              {isSaving ? 'Adding...' : 'Add Deck'}
-            </button>
-          </>
-        )}
-
-        {saveMessage && (
-          <div className="mt-3 bg-green-900/50 border border-green-500 text-green-200 px-4 py-2 rounded-md text-sm">
-            {saveMessage}
-          </div>
-        )}
-        {saveError && (
-          <div className="mt-3 bg-red-900/50 border border-red-500 text-red-200 px-4 py-2 rounded-md text-sm">
-            {saveError}
-          </div>
-        )}
+    <form onSubmit={handleSubmit} className="max-w-7xl mx-auto flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl leading-9 font-bold text-fg">New simulation</h1>
+        <Popover
+          button={
+            <>
+              <PlusIcon />
+              Add deck
+            </>
+          }
+          buttonClassName="flex h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-sm font-semibold text-fg hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          panelLabel="Add a deck"
+          panelClassName="w-[26rem]"
+        >
+          <AddDeckForm onAdded={handleDeckAdded} />
+        </Popover>
       </div>
 
-      {/* Run Simulation Section */}
-      <form onSubmit={handleSubmit} className="bg-gray-800 rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Run Simulation</h2>
-        <p className="text-sm text-gray-400 mb-4">
-          Select 4 decks to battle against each other, or up to {MAX_POD_RUN_DECKS} to
-          queue every 4-deck pod and see how they fare overall.
-        </p>
+      {/* Sticks under the app bar (h-16) so Run stays in reach while scrolling the grid. */}
+      <div className="sticky top-16 z-30 -mx-4 flex items-center gap-3 bg-canvas/95 px-4 py-2 backdrop-blur-sm">
+        <PodSlots decks={selectedDecks} commanderOf={commanderOf} onRemove={handleDeckRemove} />
+        <RunControl
+          label={runLabel}
+          disabled={isSubmitting || !canSubmit}
+          games={simulations}
+          onGamesChange={setSimulations}
+          podCount={pods.length}
+        />
+      </div>
 
-        {/* Deck Selection */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-gray-300">
-              Pick 4 to {MAX_POD_RUN_DECKS} Decks ({selectedDeckIds.length} selected)
-              {searchQuery.trim() && (
-                <span className="ml-2 text-gray-400 font-normal">
-                  Showing {filteredDecks.length} of {allDecks.length}
-                </span>
-              )}
-            </label>
-            {selectedDeckIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectedDeckIds([])}
-                className="text-xs text-gray-400 hover:text-white"
-              >
-                Clear selection
-              </button>
-            )}
-          </div>
+      {submitError && (
+        <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
+          {submitError}
+        </div>
+      )}
+      {deleteError && (
+        <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-2 rounded-md text-sm">
+          {deleteError}
+        </div>
+      )}
 
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by name, set, or commander..."
+          aria-label="Search decks"
+          className="min-w-0 flex-1 basis-60 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as DeckSort)}
+          aria-label="Sort decks"
+          className="h-9 rounded-lg border border-line-strong bg-surface px-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+        >
+          {DECK_SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {(searchQuery.trim() || excludedCount > 0) && (
+        <p className="text-xs text-fg-muted">
+          {searchQuery.trim() && `Showing ${filteredDecks.length} of ${allDecks.length}. `}
           {excludedCount > 0 && (
-            <p className="mb-2 text-xs text-gray-400">
+            <>
               {excludedCount} excluded {excludedCount === 1 ? 'deck is' : 'decks are'} hidden.{' '}
-              <Link to="/decks" className="text-blue-400 hover:underline">
+              <Link to="/decks" className="text-accent hover:underline">
                 Manage decks
               </Link>
-            </p>
+            </>
           )}
+        </p>
+      )}
 
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, set, or commander..."
-            aria-label="Search decks"
-            className="w-full mb-2 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          />
-
-          {decksLoading && (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full mr-3" />
-              <span className="text-sm text-gray-400">Loading decks...</span>
-            </div>
-          )}
-
-          {deckError && !decksLoading && (
-            <div className="bg-red-900/30 border border-red-600 rounded-md p-3 mb-3">
-              <p className="text-sm text-red-200">{deckError}</p>
-              <button
-                type="button"
-                onClick={() => loadDecks()}
-                className="mt-2 text-sm text-red-300 hover:text-white underline"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-
-          {!decksLoading && (
-            <DeckPicker
-              groups={[
-                { title: 'Community Decks', decks: communityDecks },
-                { title: 'Preconstructed Decks', decks: precons },
-              ]}
-              selectedIds={selectedDeckIds}
-              onToggle={handleDeckToggle}
-              renderActions={(deck) => (
-                <>
-                  {deck.link && (
-                    <IconButton href={deck.link} label={`View ${deck.name} on ${deck.isPrecon ? 'Archidekt' : 'its source site'}`}>
-                      <ExternalLinkIcon />
-                    </IconButton>
-                  )}
-                  {!deck.isPrecon && deck.ownerId === user?.uid && (
-                    <IconButton
-                      tone="danger"
-                      label={`Delete deck ${deck.name}`}
-                      onClick={() => handleDeleteDeck(deck)}
-                      disabled={isDeleting === deck.id}
-                    >
-                      <TrashIcon />
-                    </IconButton>
-                  )}
-                </>
-              )}
-            />
-          )}
-
-          {/* Selected decks summary */}
-          {selectedDeckIds.length > 0 && (
-            <div className="mt-3 text-sm text-gray-300">
-              <span className="font-medium">Selected: </span>
-              {selectedDeckIds.map((id) => {
-                const deck = deckOptions.find((d) => d.id === id);
-                return deck?.name ?? id;
-              }).join(isPodRun ? ', ' : ' vs ')}
-              {isPodRun && (
-                <div className="mt-1 text-gray-400">
-                  {pods.length} pods × {simulations} games = {pods.length * simulations} games total
-                </div>
-              )}
-            </div>
-          )}
+      {decksLoading && (
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin h-6 w-6 border-2 border-accent border-t-transparent rounded-full mr-3" />
+          <span className="text-sm text-fg-muted">Loading decks...</span>
         </div>
+      )}
 
-        <SliderWithInput
-          label={isPodRun ? 'Games per Pod' : 'Number of Games'}
-          value={simulations}
-          onChange={setSimulations}
-          min={GAMES_PER_CONTAINER}
-          max={100}
-          step={GAMES_PER_CONTAINER}
-          className="mb-4"
+      {deckError && !decksLoading && (
+        <div className="bg-red-900/30 border border-red-600 rounded-md p-3">
+          <p className="text-sm text-red-200">{deckError}</p>
+          <button
+            type="button"
+            onClick={() => loadDecks()}
+            className="mt-2 text-sm text-red-300 hover:text-white underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!decksLoading && (
+        <DeckPicker
+          sections={sections}
+          commanderOf={commanderOf}
+          selectedIds={selectedDeckIds}
+          onToggle={handleDeckToggle}
+          renderActions={(deck) => (
+            <>
+              {deck.link && (
+                <IconButton href={deck.link} label={`View ${deck.name} on ${deck.isPrecon ? 'Archidekt' : 'its source site'}`}>
+                  <ExternalLinkIcon />
+                </IconButton>
+              )}
+              {!deck.isPrecon && deck.ownerId === user?.uid && (
+                <IconButton
+                  tone="danger"
+                  label={`Delete deck ${deck.name}`}
+                  onClick={() => handleDeleteDeck(deck)}
+                  disabled={isDeleting === deck.id}
+                >
+                  <TrashIcon />
+                </IconButton>
+              )}
+            </>
+          )}
         />
-
-        {submitError && (
-          <div className="mb-4 bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
-            {submitError}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={isSubmitting || !canSubmit}
-          className={`w-full py-3 rounded-md font-semibold ${
-            isSubmitting || !canSubmit
-              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {isSubmitting
-            ? isPodRun
-              ? `Queuing pods (${podsQueued}/${pods.length})...`
-              : 'Submitting...'
-            : isPodRun
-              ? `Queue ${pods.length} Pods`
-              : 'Run Simulations'}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-/**
- * Thin wrapper so the simulation form doesn't need to know about the
- * worker-status hook. Rendered above the form on Home so users see
- * "No workers online" before they spend time building a job.
- */
-function HomeWorkerStatus() {
-  const { user } = useAuth();
-  const { workers, queueDepth, isLoading } = useWorkerStatus(!!user);
-  return (
-    <WorkerStatusBanner
-      workers={workers}
-      queueDepth={queueDepth}
-      isLoading={isLoading}
-    />
+      )}
+    </form>
   );
 }

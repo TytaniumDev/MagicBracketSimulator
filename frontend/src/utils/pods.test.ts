@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { activePodChunks, aggregatePodStandings, countPods, parsePodRunJobIds, podCombinations, podRunPath, savedPodRunPath } from './pods';
+import { activePodChunks, aggregatePodStandings, countPods, parsePodRunJobIds, podCombinations, podRunPath, savedPodRunPath, slotCount } from './pods';
 import type { JobResponse } from '@shared/types/job';
 
 /** Seats whose deck ids are the deck names. */
@@ -120,5 +120,18 @@ describe('aggregatePodStandings', () => {
     expect(a.gamesPlayed).toBe(4);
     expect(a.avgWinTurn).toBeNull();
     expect(standings.find((s) => s.name === 'D')!.wins).toBe(0);
+  });
+});
+
+describe('slotCount', () => {
+  it('shows one pod of slots until it is full', () => {
+    expect(slotCount(0)).toBe(4);
+    expect(slotCount(3)).toBe(4);
+  });
+
+  it('adds a spare slot once a pod is full, up to the run limit', () => {
+    expect(slotCount(4)).toBe(5);
+    expect(slotCount(9)).toBe(10);
+    expect(slotCount(10)).toBe(10);
   });
 });

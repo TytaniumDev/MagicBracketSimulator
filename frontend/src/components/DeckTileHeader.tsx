@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import type { LibraryDeck } from '../api';
 import { deckTooltip } from '../utils/deck-tile';
+import { MarqueeText } from './ui/MarqueeText';
 
 export interface DeckTileHeaderProps {
   deck: LibraryDeck;
-  /** Short set code ("TDM") shown after a precon's name; null when unknown. */
+  /** Short set code ("TDM") shown at the right of a precon's name line; null when unknown. */
   setCode: string | null;
   selected: boolean;
   onToggle: (deckId: string) => void;
@@ -30,8 +31,8 @@ export function DeckTileHeader({ deck, setCode, selected, onToggle, actions }: D
         title={deckTooltip(deck)}
         className="min-w-0 flex-1 text-left after:absolute after:inset-0 after:rounded-[10px] focus:outline-none focus-visible:after:ring-2 focus-visible:after:ring-accent"
       >
-        <span className="flex min-w-0 items-baseline gap-1.5">
-          <span className="truncate text-sm font-semibold text-fg">{deck.name}</span>
+        <span className="flex min-w-0 items-baseline gap-2">
+          <MarqueeText text={deck.name} className="flex-1 text-sm font-semibold text-fg" />
           {setCode && <span className="shrink-0 font-mono text-[11px] text-fg-muted">{setCode}</span>}
         </span>
       </button>

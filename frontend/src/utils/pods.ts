@@ -7,9 +7,18 @@
  */
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import type { JobResponse } from '@shared/types/job';
-import { addPodResults, rankStandings, type DeckStanding, type PodRunTotals } from '@shared/types/pod-run';
+import { addPodResults, rankStandings, MAX_POD_RUN_DECKS, type DeckStanding, type PodRunTotals } from '@shared/types/pod-run';
 
-export { MAX_POD_RUN_DECKS } from '@shared/types/pod-run';
+export { MAX_POD_RUN_DECKS };
+
+/**
+ * How many deck slots the picker shows: one pod's worth until it's full,
+ * then one spare slot to show more decks can be added, up to a full run.
+ */
+export function slotCount(selected: number): number {
+  if (selected < REQUIRED_DECK_COUNT) return REQUIRED_DECK_COUNT;
+  return Math.min(MAX_POD_RUN_DECKS, selected + 1);
+}
 
 /** Every way to pick `size` items from `items`, in input order. */
 export function podCombinations<T>(items: readonly T[], size: number = REQUIRED_DECK_COUNT): T[][] {

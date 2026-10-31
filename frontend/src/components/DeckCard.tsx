@@ -16,7 +16,7 @@ export function DeckCard({ commander, previewHandlers, ...header }: DeckCardProp
   return (
     <li
       {...previewHandlers(commander?.name ?? '', commander?.imageUrl)}
-      className={`relative flex flex-col rounded-[10px] border bg-surface transition-colors ${tileBorderClass(header.selected)}`}
+      className={`group relative flex flex-col rounded-[10px] border bg-surface transition-colors ${tileBorderClass(header.selected)}`}
     >
       <div className="flex flex-col gap-2 px-3 pt-2.5 pb-2">
         <DeckTileHeader {...header} />
