@@ -69,10 +69,13 @@ project needed; tests use `fake_cloud_firestore` + `firebase_auth_mocks`.
 
 ## Release pipeline
 
-Every push to `main` triggers `.github/workflows/release-worker.yml`,
-which builds both platforms in parallel, all-or-nothing publishes to
-a `build-<sha7>` GitHub Release. Tagged `worker-v*` pushes produce
-the named official releases.
+`.github/workflows/release-worker.yml` runs on pushes to `main` that
+change the app (anything under `worker_flutter/` except tests, docs and
+`appcast.xml`), `forge-manifest.json` or the release pipeline. It
+builds both platforms in parallel and publishes them all-or-nothing to
+an auto-numbered `worker-v*` GitHub Release, then updates
+`appcast.xml`. API and frontend merges don't release the worker.
+Hand-pushed `worker-v*` tags and a manual run release too.
 
 See `worker_flutter/macos/fastlane/SETUP.md` for the macOS signing
 pipeline detail.

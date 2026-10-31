@@ -46,13 +46,17 @@ macOS and Windows. Users download it from the `/worker-setup` page or the
 [latest release](https://github.com/TytaniumDev/MagicBracketSimulator/releases/latest),
 sign in with Google, and the worker claims sims from the hosted API.
 
-- **Releases:** every merge to `main` runs `release-worker.yml`, which builds,
-  signs and publishes both platforms to a GitHub Release and updates
-  `worker_flutter/appcast.xml`. Installed apps update themselves through
-  Sparkle (macOS) and WinSparkle (Windows).
+- **Releases:** a merge to `main` that changes the app (`worker_flutter/`,
+  except its tests, docs and `appcast.xml`), the Forge manifest or the
+  release pipeline runs `release-worker.yml`, which builds, signs and
+  publishes both platforms to a GitHub Release and updates
+  `worker_flutter/appcast.xml`. API and frontend merges don't release the
+  worker. Installed apps update themselves through Sparkle (macOS) and
+  WinSparkle (Windows).
 - **Forge:** the app installs the Forge release named in
   `worker_flutter/forge-manifest.json`, which it fetches from `main` at
   launch. `forge-update.yml` runs nightly and opens an auto-merging PR that
-  bumps the manifest when Forge publishes a new release, so no app build is
-  needed for a Forge update.
+  bumps the manifest when Forge publishes a new release. The app reads the
+  manifest only at launch, so that merge also cuts a worker release: the
+  update restarts running workers, which then install the new Forge.
 - **Worker settings** (name, concurrency) live in the app.

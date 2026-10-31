@@ -56,7 +56,7 @@ flutter test
 
 ### CI
 
-CI runs on PRs to `main`. `.github/workflows/ci.yml` runs `scripts/lint.sh` (frontend + api lint), `scripts/build.sh` (frontend and api builds), `scripts/test.sh` (frontend vitest, api `test:unit` + `test:ingestion`) and the release-script tests. `worker-flutter-ci.yml` runs `flutter analyze` and `flutter test`. After merge, `deploy.yml` deploys the frontend to Firebase Hosting plus Firestore and Realtime Database rules, App Hosting rolls out the API, and `release-worker.yml` publishes a desktop worker build. `forge-update.yml` runs nightly and opens an auto-merging PR that bumps `worker_flutter/forge-manifest.json` when Forge has a new release; desktop workers install it on their next launch.
+CI runs on PRs to `main`. `.github/workflows/ci.yml` runs `scripts/lint.sh` (frontend + api lint), `scripts/build.sh` (frontend and api builds), `scripts/test.sh` (frontend vitest, api `test:unit` + `test:ingestion`) and the release-script tests. `worker-flutter-ci.yml` runs `flutter analyze` and `flutter test`. After merge, `deploy.yml` deploys the frontend to Firebase Hosting plus Firestore and Realtime Database rules, App Hosting rolls out the API, and `release-worker.yml` publishes a desktop worker build when the merge changed `worker_flutter/` app code or assets (not its tests or docs), the Forge manifest, or the release pipeline. `forge-update.yml` runs nightly and opens an auto-merging PR that bumps `worker_flutter/forge-manifest.json` when Forge has a new release; that merge cuts a worker release, and desktop workers install the new Forge when they restart into it.
 
 ## Architecture
 
