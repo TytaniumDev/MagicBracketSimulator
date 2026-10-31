@@ -9,11 +9,11 @@ import { useScryfallCards } from './useDeck';
  * when Scryfall doesn't know the name).
  */
 export function useCommanderCards(decks: LibraryDeck[]): (deck: LibraryDeck) => ScryfallCard | undefined {
-  const names = useMemo(
-    () => [...new Set(decks.map((d) => d.primaryCommander).filter((n): n is string => !!n))],
+  const commanders = useMemo(
+    () => [...new Set(decks.map((d) => d.primaryCommander).filter((n): n is string => !!n))].map((name) => ({ name })),
     [decks],
   );
-  const { data: lookup } = useScryfallCards(names);
+  const { data: lookup } = useScryfallCards(commanders);
   return useCallback(
     (deck: LibraryDeck) => (deck.primaryCommander ? lookup?.[cardKey(deck.primaryCommander)] : undefined),
     [lookup],

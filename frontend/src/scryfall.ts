@@ -2,7 +2,7 @@
  * Card details from Scryfall, for decklist grouping and hover previews.
  *
  * Uses the /cards/collection endpoint (up to 75 cards per request) so a
- * 100-card deck costs two requests. Called straight from the browser:
+ * 100-card deck costs two requests when every printing is found. Called straight from the browser:
  * Scryfall allows CORS, and it keeps card lookups off our API and Firestore.
  */
 
@@ -80,21 +80,50 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-/**
- * Fetch card details for `names`, keyed by `cardKey` of each face name (see
- * `indexByFace`). Names Scryfall doesn't recognize are simply absent.
- */
-export async function fetchScryfallCards(names: string[]): Promise<Record<string, ScryfallCard>> {
-  // Scryfall resolves split and double-faced cards by their front face
-  // ("Fire" → "Fire // Ice") but not always by the joined name.
-  const unique = [...new Set(names.map((n) => n.split(' // ')[0].trim()))];
-  const cards: ScryfallCard[] = [];
+/** A card to look up: its name, plus the printing when the decklist names one. */
+export interface CardLookup {
+  name: string;
+  /** Set code, e.g. "c21". */
+  setCode?: string;
+  /** Collector number within `setCode`, e.g. "263". */
+  collectorNumber?: string;
+}
 
-  for (const batch of chunk(unique, MAX_IDENTIFIERS_PER_REQUEST)) {
+/** One entry of a /cards/collection request. */
+type ScryfallIdentifier =
+  | { set: string; collector_number: string }
+  | { name: string; set: string }
+  | { name: string };
+
+/**
+ * Scryfall resolves split and double-faced cards by their front face
+ * ("Fire" → "Fire // Ice") but not always by the joined name.
+ */
+function frontFace(name: string): string {
+  return name.split(' // ')[0].trim();
+}
+
+/**
+ * The ways to find a card, most specific first: its exact printing, the card
+ * in its set (when only the set is known, or the collector number is off),
+ * then the card by name alone, which gets Scryfall's default printing.
+ */
+const LOOKUP_ORDER: ((card: CardLookup) => ScryfallIdentifier | null)[] = [
+  (card) =>
+    card.setCode && card.collectorNumber
+      ? { set: card.setCode.toLowerCase(), collector_number: card.collectorNumber }
+      : null,
+  (card) => (card.setCode ? { name: frontFace(card.name), set: card.setCode.toLowerCase() } : null),
+  (card) => ({ name: frontFace(card.name) }),
+];
+
+async function fetchCollection(identifiers: ScryfallIdentifier[]): Promise<ScryfallCard[]> {
+  const cards: ScryfallCard[] = [];
+  for (const batch of chunk(identifiers, MAX_IDENTIFIERS_PER_REQUEST)) {
     const res = await fetch(COLLECTION_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ identifiers: batch.map((name) => ({ name })) }),
+      body: JSON.stringify({ identifiers: batch }),
     });
     if (!res.ok) {
       throw new Error(`Scryfall lookup failed (${res.status})`);
@@ -102,6 +131,44 @@ export async function fetchScryfallCards(names: string[]): Promise<Record<string
     const body = (await res.json()) as { data?: ScryfallCardJson[] };
     cards.push(...(body.data ?? []).map(toScryfallCard));
   }
+  return cards;
+}
 
-  return indexByFace(cards);
+/**
+ * Fetch card details for `cards`, keyed by `cardKey` of each face name (see
+ * `indexByFace`). Each card shows its own printing when the decklist names one
+ * Scryfall knows, and otherwise falls back down `LOOKUP_ORDER`. A returned
+ * card only counts when its name matches, so a wrong collector number can't
+ * show some other card. Names Scryfall doesn't recognize are simply absent.
+ */
+export async function fetchScryfallCards(cards: CardLookup[]): Promise<Record<string, ScryfallCard>> {
+  const byKey = new Map<string, CardLookup>();
+  for (const card of cards) {
+    const key = cardKey(card.name);
+    if (!byKey.has(key)) byKey.set(key, card);
+  }
+
+  let pending = [...byKey.values()];
+  const found: ScryfallCard[] = [];
+  for (const identify of LOOKUP_ORDER) {
+    const asked = pending.flatMap((card) => {
+      const identifier = identify(card);
+      return identifier ? [{ card, identifier }] : [];
+    });
+    if (asked.length === 0) continue;
+
+    const index = indexByFace(await fetchCollection(asked.map((a) => a.identifier)));
+    const answered = new Set<CardLookup>();
+    for (const { card } of asked) {
+      const match = index[cardKey(card.name)];
+      if (match) {
+        found.push(match);
+        answered.add(card);
+      }
+    }
+    pending = pending.filter((card) => !answered.has(card));
+    if (pending.length === 0) break;
+  }
+
+  return indexByFace(found);
 }
