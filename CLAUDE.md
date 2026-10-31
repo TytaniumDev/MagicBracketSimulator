@@ -105,10 +105,11 @@ Areas covered: worker result reporting, API status updates, log upload/storage, 
 
 - `src/App.tsx` — Router setup (react-router-dom v7)
 - `src/index.css` — Design tokens (Tailwind v4 `@theme`): `canvas`, `surface`, `surface-raised`, `line`, `fg`, `fg-muted`, `accent`, `mana-*`. Use these in new and touched UI instead of raw palette colors
-- `src/components/ui/` — Small shared primitives (`ColorBar`, `IconButton`, icons)
+- `src/components/ui/` — Small shared primitives (`ColorBar`, `IconButton`, `Popover`, `MarqueeText`, icons)
 - `src/components/DeckPicker.tsx` — Deck selection grid: `DeckCard` (full commander card, hover to enlarge) on wide screens, `DeckRow` on phones; commander images and set codes come from Scryfall in the browser
 - `src/pages/Browse.tsx` — Home page (`/`): recent jobs and pod runs
-- `src/pages/Home.tsx` — Submit page (`/submit`): deck picker, job and pod run creation
+- `src/pages/Home.tsx` — Submit page (`/submit`): Add deck popover, sticky `PodSlots` + `RunControl` (games per pod behind the gear), sort menu (`utils/deck-order.ts`) and the deck picker
+- `src/components/WorkerStatusPill.tsx` — Workers online, in the app bar on every page
 - `src/pages/JobStatus.tsx` — Job progress and results (`/jobs/:id`)
 - `src/pages/PodRun.tsx` — Pod runs (`/pods`, `/pods/:id`): standings across a run's pods
 - `src/pages/Leaderboard.tsx` — Deck ratings (`/leaderboard`)

@@ -14,3 +14,14 @@ export function formatRelativeDate(isoString: string): string {
 
   return date.toLocaleDateString();
 }
+
+/** "45s", "12m", "3h 5m". */
+export function formatUptime(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
+}

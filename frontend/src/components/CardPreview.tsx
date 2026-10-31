@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 const DEFAULT_PREVIEW_WIDTH = 250;
+/** A preview width that makes a card's rules text readable. */
+export const READABLE_PREVIEW_WIDTH = 320;
 const PREVIEW_GAP = 8;
 const PREVIEW_MARGIN = 8;
 

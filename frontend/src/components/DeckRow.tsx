@@ -15,7 +15,7 @@ interface DeckRowProps extends DeckTileHeaderProps {
 export function DeckRow({ commander, onViewCard, ...header }: DeckRowProps) {
   return (
     <li
-      className={`relative grid grid-cols-[64px_1fr] overflow-hidden rounded-[10px] border bg-surface transition-colors ${tileBorderClass(header.selected)}`}
+      className={`group relative grid grid-cols-[64px_1fr] overflow-hidden rounded-[10px] border bg-surface transition-colors ${tileBorderClass(header.selected)}`}
     >
       {commander?.imageUrl ? (
         <button

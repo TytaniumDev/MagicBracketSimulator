@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
 import { LoginButton } from './components/LoginButton';
 import { RequestAccessCard } from './components/RequestAccessCard';
+import { WorkerStatusPill } from './components/WorkerStatusPill';
 import { useAuth } from './contexts/AuthContext';
 import Browse from './pages/Browse';
 import DeckPage from './pages/DeckPage';
@@ -17,8 +18,8 @@ function Header() {
   const { user, isAllowed, loading } = useAuth();
 
   return (
-    <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+    <header className="border-b border-line bg-canvas/80 backdrop-blur-sm sticky top-0 z-50">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Link to="/">
             <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
@@ -63,6 +64,7 @@ function Header() {
               >
                 Worker Setup
               </Link>
+              <WorkerStatusPill />
             </>
           )}
           <LoginButton />
@@ -76,7 +78,7 @@ export default function App() {
   const { user, isAllowed, loading } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 antialiased">
+    <div className="min-h-screen bg-canvas text-fg antialiased">
       {loading ? (
         <div className="flex items-center justify-center min-h-screen">
           <div className="animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full" />
