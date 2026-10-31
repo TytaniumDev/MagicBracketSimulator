@@ -10,6 +10,9 @@ export interface DeckSelectionStore {
   /** Ids of every deck excluded from selection. */
   getExcludedDeckIds(): Promise<string[]>;
 
-  /** Exclude a deck from selection, or include it again. Returns the updated ids. */
-  setDeckExcluded(deckId: string, excluded: boolean, updatedBy: string): Promise<string[]>;
+  /**
+   * Exclude decks from selection, or include them again, in one write.
+   * Returns the updated ids.
+   */
+  setDecksExcluded(deckIds: string[], excluded: boolean, updatedBy: string): Promise<string[]>;
 }

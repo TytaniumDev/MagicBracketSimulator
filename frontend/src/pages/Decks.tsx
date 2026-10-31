@@ -6,7 +6,7 @@ import { IconButton } from '../components/ui/IconButton';
 import { ExternalLinkIcon, EyeIcon, EyeOffIcon } from '../components/ui/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useCommanderCards } from '../hooks/useCommanderCards';
-import { useDeckLibrary, useSetDeckExcluded } from '../hooks/useDeckLibrary';
+import { useDeckLibrary, useSetDecksExcluded } from '../hooks/useDeckLibrary';
 import { orderDecks, type DeckSection } from '../utils/deck-order';
 import type { DeckTileTarget } from '../utils/deck-tile';
 
@@ -23,9 +23,8 @@ const deckPageTarget = (deck: LibraryDeck): DeckTileTarget => ({
 export default function Decks() {
   const { isAdmin } = useAuth();
   const library = useDeckLibrary();
-  const setExcluded = useSetDeckExcluded();
+  const setExcluded = useSetDecksExcluded();
   const [searchQuery, setSearchQuery] = useState('');
-  const [busy, setBusy] = useState(false);
 
   const decks = useMemo(() => library.data?.decks ?? [], [library.data]);
   const excluded = useMemo(() => new Set(library.data?.excludedDeckIds ?? []), [library.data]);
@@ -42,20 +41,10 @@ export default function Decks() {
     return orderDecks(matching, 'set');
   }, [decks, searchQuery]);
 
-  // One request per deck, in order, so the last response holds every change.
-  const toggle = async (targets: LibraryDeck[], exclude: boolean) => {
-    setBusy(true);
-    try {
-      for (const deck of targets) {
-        if (excluded.has(deck.id) !== exclude) {
-          await setExcluded.mutateAsync({ deckId: deck.id, excluded: exclude });
-        }
-      }
-    } catch {
-      // Reported to Sentry by the mutation cache; the error shows below.
-    } finally {
-      setBusy(false);
-    }
+  // Only decks whose state changes are sent, all in one save.
+  const toggle = (targets: LibraryDeck[], exclude: boolean) => {
+    const deckIds = targets.filter((d) => excluded.has(d.id) !== exclude).map((d) => d.id);
+    if (deckIds.length > 0) setExcluded.mutate({ deckIds, excluded: exclude });
   };
 
   const renderActions = (deck: LibraryDeck) => (
@@ -70,7 +59,6 @@ export default function Decks() {
           label={`Include ${deck.name} in selection`}
           pressed={!excluded.has(deck.id)}
           onClick={() => toggle([deck], !excluded.has(deck.id))}
-          disabled={busy}
         >
           {excluded.has(deck.id) ? <EyeOffIcon /> : <EyeIcon />}
         </IconButton>
@@ -89,9 +77,8 @@ export default function Decks() {
         {isAdmin && (
           <button
             type="button"
-            disabled={busy}
             onClick={() => toggle(section.decks, !allExcluded)}
-            className="text-accent hover:underline disabled:cursor-wait"
+            className="text-accent hover:underline"
           >
             {allExcluded ? 'Include all' : 'Exclude all'}
           </button>

@@ -5,7 +5,7 @@ import Decks from './Decks';
 import type { LibraryDeck } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { useCommanderCards } from '../hooks/useCommanderCards';
-import { useDeckLibrary, useSetDeckExcluded } from '../hooks/useDeckLibrary';
+import { useDeckLibrary, useSetDecksExcluded } from '../hooks/useDeckLibrary';
 import { useSetCodes } from '../hooks/useSetCodes';
 
 vi.mock('../contexts/AuthContext');
@@ -32,7 +32,7 @@ const DECKS = [
   deck({ id: 'jeskai-striker', name: 'Jeskai Striker', colorIdentity: ['U', 'R', 'W'], primaryCommander: 'Shiko and Narset, Unified' }),
 ];
 
-const mutateAsync = vi.fn().mockResolvedValue([]);
+const mutate = vi.fn();
 
 function setup({ isAdmin = false, excludedDeckIds = [] as string[] } = {}) {
   vi.mocked(useAuth).mockReturnValue({ isAdmin } as unknown as ReturnType<typeof useAuth>);
@@ -41,10 +41,10 @@ function setup({ isAdmin = false, excludedDeckIds = [] as string[] } = {}) {
     isLoading: false,
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof useDeckLibrary>);
-  vi.mocked(useSetDeckExcluded).mockReturnValue({
-    mutateAsync,
+  vi.mocked(useSetDecksExcluded).mockReturnValue({
+    mutate,
     isError: false,
-  } as unknown as ReturnType<typeof useSetDeckExcluded>);
+  } as unknown as ReturnType<typeof useSetDecksExcluded>);
   vi.mocked(useCommanderCards).mockReturnValue((d) =>
     d.primaryCommander ? { name: d.primaryCommander, imageUrl: `https://img/${d.id}.jpg` } as ReturnType<ReturnType<typeof useCommanderCards>> : undefined,
   );
@@ -60,7 +60,7 @@ function setup({ isAdmin = false, excludedDeckIds = [] as string[] } = {}) {
 
 describe('Decks page', () => {
   beforeEach(() => {
-    mutateAsync.mockClear();
+    mutate.mockClear();
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -92,14 +92,21 @@ describe('Decks page', () => {
     const abzan = screen.getByRole('button', { name: 'Include Abzan Armor in selection' });
     expect(abzan).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(abzan);
-    expect(mutateAsync).toHaveBeenCalledWith({ deckId: 'abzan-armor', excluded: false });
+    expect(mutate).toHaveBeenCalledWith({ deckIds: ['abzan-armor'], excluded: false });
   });
 
-  it('excludes every included deck in a set with Exclude all', async () => {
+  it('excludes every included deck in a set with one save', () => {
     setup({ isAdmin: true, excludedDeckIds: ['abzan-armor'] });
 
     fireEvent.click(screen.getByRole('button', { name: 'Exclude all' }));
-    await vi.waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    expect(mutateAsync).toHaveBeenCalledWith({ deckId: 'jeskai-striker', excluded: true });
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate).toHaveBeenCalledWith({ deckIds: ['jeskai-striker'], excluded: true });
+  });
+
+  it('includes a whole set with one save', () => {
+    setup({ isAdmin: true, excludedDeckIds: ['abzan-armor', 'jeskai-striker'] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Include all' }));
+    expect(mutate).toHaveBeenCalledWith({ deckIds: ['abzan-armor', 'jeskai-striker'], excluded: false });
   });
 });
