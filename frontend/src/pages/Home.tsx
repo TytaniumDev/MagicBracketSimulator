@@ -4,13 +4,12 @@ import { getApiBase, fetchWithAuth, createJob, createPodRun, type LibraryDeck } 
 import { useAuth } from '../contexts/AuthContext';
 import { useDeckLibrary } from '../hooks/useDeckLibrary';
 import { useCommanderCards } from '../hooks/useCommanderCards';
-import { AddDeckForm } from '../components/AddDeckForm';
+import { AddDeckButton } from '../components/AddDeckButton';
 import { DeckPicker } from '../components/DeckPicker';
 import { PodSlots } from '../components/PodSlots';
 import { RunControl } from '../components/RunControl';
 import { IconButton } from '../components/ui/IconButton';
-import { Popover } from '../components/ui/Popover';
-import { ExternalLinkIcon, PlusIcon, TrashIcon } from '../components/ui/icons';
+import { ExternalLinkIcon, TrashIcon } from '../components/ui/icons';
 import { LoginButton } from '../components/LoginButton';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import { MAX_POD_RUN_DECKS, podCombinations, podRunPath, savedPodRunPath } from '../utils/pods';
@@ -232,19 +231,7 @@ function SimulationForm() {
     <form onSubmit={handleSubmit} className="max-w-7xl mx-auto flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl leading-9 font-bold text-fg">New simulation</h1>
-        <Popover
-          button={
-            <>
-              <PlusIcon />
-              Add deck
-            </>
-          }
-          buttonClassName="flex h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-sm font-semibold text-fg hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          panelLabel="Add a deck"
-          panelClassName="w-[26rem]"
-        >
-          <AddDeckForm onAdded={handleDeckAdded} />
-        </Popover>
+        <AddDeckButton onAdded={handleDeckAdded} />
       </div>
 
       {/* Sticks under the app bar (h-16) so Run stays in reach while scrolling the grid. */}

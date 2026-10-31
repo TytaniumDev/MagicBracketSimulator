@@ -78,6 +78,12 @@ describe('Decks page', () => {
     expect(screen.queryByRole('button', { name: /Include .* in selection/ })).not.toBeInTheDocument();
   });
 
+  it('has the Add deck button from New Simulation', () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Add deck' }));
+    expect(screen.getByRole('dialog', { name: 'Add a deck' })).toBeInTheDocument();
+  });
+
   it('fades excluded decks', () => {
     setup({ excludedDeckIds: ['abzan-armor'] });
 

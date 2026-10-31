@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { LibraryDeck } from '../api';
+import { AddDeckButton } from '../components/AddDeckButton';
 import { DeckGrid } from '../components/DeckGrid';
 import { Spinner } from '../components/Spinner';
 import { IconButton } from '../components/ui/IconButton';
@@ -92,7 +93,10 @@ export default function Decks() {
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-4">
       <header>
-        <h1 className="text-2xl leading-9 font-bold text-fg">Decks</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl leading-9 font-bold text-fg">Decks</h1>
+          <AddDeckButton onAdded={() => library.refetch()} />
+        </div>
         <p className="mt-1 text-sm text-fg-muted">
           Faded decks are excluded: hidden from New Simulation and skipped by auto-coverage.
           {isAdmin && ' Their results stay.'}

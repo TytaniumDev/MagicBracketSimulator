@@ -115,7 +115,7 @@ Areas covered: worker result reporting, API status updates, log upload/storage, 
 - `src/pages/Leaderboard.tsx` — Deck ratings (`/leaderboard`)
 - `src/pages/WorkerSetup.tsx` — Desktop worker downloads (`/worker-setup`)
 - `src/pages/DeckPage.tsx` — Deck page (`/decks/:id`): results plus a compact decklist with Scryfall hover previews
-- `src/pages/Decks.tsx` — Decks page (`/decks`): every deck as a commander card grouped by set, linking to its deck page; excluded decks are faded and admins toggle them
+- `src/pages/Decks.tsx` — Decks page (`/decks`): every deck as a commander card grouped by set, linking to its deck page; excluded decks are faded and admins toggle them. Shares `AddDeckButton` with New Simulation
 - `src/contexts/AuthContext.tsx` — Firebase Auth provider
 - `src/hooks/useJobStream.ts` — Live job + sims (Firestore `onSnapshot`, REST polling in local mode)
 - `src/hooks/useWorkerStatus.ts` — Online workers from Realtime Database presence
