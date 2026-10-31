@@ -4,7 +4,8 @@
  * and upserts them into the deck store (SQLite or Firestore).
  * Sources from https://archidekt.com/commander-precons
  */
-import { fetchArchidektDeck } from './ingestion/archidekt';
+import { fetchArchidektDeck, isArchidektRateLimit } from './ingestion/archidekt';
+import { withRetry, type RetryOptions } from './retry';
 import { toDck } from './ingestion/to-dck';
 import { slugify } from './saved-decks';
 import { parseCommanderFromContent } from './saved-decks';
@@ -16,6 +17,8 @@ const ARCHIDEKT_LIST_URL = 'https://archidekt.com/api/decks/v3/';
 const ARCHIDEKT_OWNER = 'Archidekt_Precons';
 const PAGE_SIZE = 100;
 const RATE_LIMIT_MS = 3000;
+/** Wait 15s, then 30s, when Archidekt answers a deck fetch with 429. */
+const RATE_LIMIT_RETRY: RetryOptions = { maxAttempts: 3, delayMs: 15_000, backoffMultiplier: 2 };
 
 interface ArchidektListDeck {
   id: number;
@@ -249,7 +252,7 @@ export async function syncPrecons(): Promise<SyncResult> {
       const task = (async () => {
         try {
           // Fetch full deck from Archidekt
-          const parsedDeck = await fetchArchidektDeck(String(adeck.id));
+          const parsedDeck = await fetchPreconDeck(adeck.id);
           const dck = toDck(parsedDeck);
           const primaryCommander = parseCommanderFromContent(dck) ?? (parsedDeck.commanders[0]?.name || null);
           const link = `https://archidekt.com/decks/${adeck.id}`;
@@ -386,6 +389,16 @@ export async function syncPrecons(): Promise<SyncResult> {
   }
 
   return result;
+}
+
+/** Fetch one precon, retrying while Archidekt rate-limits the sync. */
+export function fetchPreconDeck(archidektId: number, retry: RetryOptions = RATE_LIMIT_RETRY) {
+  return withRetry(
+    () => fetchArchidektDeck(String(archidektId)),
+    retry,
+    `Archidekt rate limit on deck ${archidektId}`,
+    isArchidektRateLimit,
+  );
 }
 
 function sleep(ms: number): Promise<void> {

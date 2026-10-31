@@ -17,7 +17,7 @@ interface RouteParams {
  * X-Worker-Secret header (see isInternalRequest in lib/auth.ts).
  *
  * Logic:
- * 1. If job is terminal → no-op (task should have been cancelled but wasn't)
+ * 1. If job is terminal → no-op (tasks are never deleted when a job ends)
  * 2. If job is still active → run recoverStaleJob
  * 3. If job is still active after recovery → reschedule in 5 min
  */
