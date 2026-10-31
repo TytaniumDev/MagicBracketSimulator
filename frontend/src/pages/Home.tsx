@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getApiBase, fetchWithAuth, createJob, createPodRun, type LibraryDeck } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { useDeckLibrary } from '../hooks/useDeckLibrary';
-import { ColorIdentity } from '../components/ColorIdentity';
+import { DeckPicker } from '../components/DeckPicker';
+import { IconButton } from '../components/ui/IconButton';
+import { ExternalLinkIcon, TrashIcon } from '../components/ui/icons';
 import { SliderWithInput } from '../components/SliderWithInput';
 import { LoginButton } from '../components/LoginButton';
 import { WorkerStatusBanner } from '../components/WorkerStatusBanner';
@@ -322,7 +324,7 @@ function SimulationForm() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       {/* Worker pool health banner: shows when no workers are online so
           users understand why newly-created jobs will sit in QUEUED. */}
       <HomeWorkerStatus />
@@ -467,158 +469,55 @@ function SimulationForm() {
             className="w-full mb-2 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           />
 
-          <div className="max-h-80 overflow-y-auto bg-gray-700 rounded-md p-3">
-            {decksLoading && (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full mr-3" />
-                <span className="text-sm text-gray-400">Loading decks...</span>
-              </div>
-            )}
-
-            {deckError && !decksLoading && (
-              <div className="bg-red-900/30 border border-red-600 rounded-md p-3 mb-3">
-                <p className="text-sm text-red-200">{deckError}</p>
-                <button
-                  type="button"
-                  onClick={() => loadDecks()}
-                  className="mt-2 text-sm text-red-300 hover:text-white underline"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {!decksLoading && (
-              <>
-            {/* Community Decks Group */}
-            {communityDecks.length > 0 && (
-              <div className="mb-4">
-                <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-                  Community Decks
-                </div>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {communityDecks.map((deck) => (
-                    <li
-                      key={deck.id}
-                      className={`flex items-center gap-2 bg-gray-600 rounded border border-transparent hover:bg-gray-500 transition-colors ${
-                        selectedDeckIds.includes(deck.id) ? 'bg-blue-600/30 border-blue-500' : ''
-                      }`}
-                    >
-                      <div
-                        role="checkbox"
-                        aria-checked={selectedDeckIds.includes(deck.id)}
-                        aria-label={`Select deck ${deck.name}`}
-                        tabIndex={0}
-                        onClick={() => handleDeckToggle(deck.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === ' ' || e.key === 'Enter') {
-                            e.preventDefault();
-                            handleDeckToggle(deck.id);
-                          }
-                        }}
-                        className="flex-1 flex items-center p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 text-white"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm flex items-center">
-                            <span className="truncate">{deck.name}</span>
-                            <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
-                          </span>
-                          <div className="text-xs text-gray-400 mt-0.5">
-                            {deck.ownerEmail ?? 'unknown'}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 pr-2">
-                        {deck.link && (
-                          <a
-                            href={deck.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:underline"
-                            aria-label={`View source for ${deck.name}`}
-                          >
-                            Source
-                          </a>
-                        )}
-                        {deck.ownerId === user?.uid && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDeck(deck)}
-                            disabled={isDeleting === deck.id}
-                            aria-label={`Delete deck ${deck.name}`}
-                            className={`px-2 py-0.5 rounded text-xs ${
-                              isDeleting === deck.id
-                                ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
-                                : 'bg-red-600/50 text-red-200 hover:bg-red-600'
-                            }`}
-                          >
-                            {isDeleting === deck.id ? '...' : 'X'}
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Preconstructed Decks Group */}
-            <div>
-              <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-                Preconstructed Decks
-              </div>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {precons.map((deck) => (
-                  <li
-                    key={deck.id}
-                    className={`flex items-center gap-2 bg-gray-600 rounded border border-transparent hover:bg-gray-500 transition-colors ${
-                      selectedDeckIds.includes(deck.id) ? 'bg-blue-600/30 border-blue-500' : ''
-                    }`}
-                  >
-                    <div
-                      role="checkbox"
-                      aria-checked={selectedDeckIds.includes(deck.id)}
-                      aria-label={`Select deck ${deck.name}`}
-                      tabIndex={0}
-                      onClick={() => handleDeckToggle(deck.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === ' ' || e.key === 'Enter') {
-                          e.preventDefault();
-                          handleDeckToggle(deck.id);
-                        }
-                      }}
-                      className="flex-1 flex items-center p-2 rounded cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 text-white"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm flex items-center">
-                          <span className="truncate">{deck.name}</span>
-                          <ColorIdentity colorIdentity={deck.colorIdentity} className="ml-1.5" />
-                        </span>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          {deck.setName ?? 'precon'}
-                        </div>
-                      </div>
-                    </div>
-                    {deck.link && (
-                      <div className="flex items-center pr-2">
-                        <a
-                          href={deck.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-400 hover:underline"
-                          aria-label={`View Archidekt for ${deck.name}`}
-                        >
-                          Archidekt
-                        </a>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+          {decksLoading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full mr-3" />
+              <span className="text-sm text-gray-400">Loading decks...</span>
             </div>
-            </>
-            )}
-          </div>
+          )}
+
+          {deckError && !decksLoading && (
+            <div className="bg-red-900/30 border border-red-600 rounded-md p-3 mb-3">
+              <p className="text-sm text-red-200">{deckError}</p>
+              <button
+                type="button"
+                onClick={() => loadDecks()}
+                className="mt-2 text-sm text-red-300 hover:text-white underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!decksLoading && (
+            <DeckPicker
+              groups={[
+                { title: 'Community Decks', decks: communityDecks },
+                { title: 'Preconstructed Decks', decks: precons },
+              ]}
+              selectedIds={selectedDeckIds}
+              onToggle={handleDeckToggle}
+              renderActions={(deck) => (
+                <>
+                  {deck.link && (
+                    <IconButton href={deck.link} label={`View ${deck.name} on ${deck.isPrecon ? 'Archidekt' : 'its source site'}`}>
+                      <ExternalLinkIcon />
+                    </IconButton>
+                  )}
+                  {!deck.isPrecon && deck.ownerId === user?.uid && (
+                    <IconButton
+                      tone="danger"
+                      label={`Delete deck ${deck.name}`}
+                      onClick={() => handleDeleteDeck(deck)}
+                      disabled={isDeleting === deck.id}
+                    >
+                      <TrashIcon />
+                    </IconButton>
+                  )}
+                </>
+              )}
+            />
+          )}
 
           {/* Selected decks summary */}
           {selectedDeckIds.length > 0 && (

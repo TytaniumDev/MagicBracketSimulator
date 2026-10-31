@@ -9,7 +9,7 @@ describe('cardKey', () => {
 });
 
 describe('indexByFace', () => {
-  const card = (name: string): ScryfallCard => ({ name, typeLine: '', manaCost: '', manaValue: 0, imageUrl: null, scryfallUrl: null });
+  const card = (name: string): ScryfallCard => ({ name, typeLine: '', manaCost: '', manaValue: 0, imageUrl: null, artCropUrl: null, scryfallUrl: null });
 
   it('finds a card by any of its face names', () => {
     const whirlwing = card('Whirlwing Stormbrood // Dynamic Soar');
@@ -32,11 +32,16 @@ describe('toScryfallCard', () => {
       name: 'Delver of Secrets // Insectile Aberration',
       cmc: 1,
       card_faces: [
-        { type_line: 'Creature — Human Wizard', mana_cost: '{U}', image_uris: { normal: 'front.jpg' } },
+        { type_line: 'Creature — Human Wizard', mana_cost: '{U}', image_uris: { normal: 'front.jpg', art_crop: 'front-art.jpg' } },
         { type_line: 'Creature — Human Insect', mana_cost: '', image_uris: { normal: 'back.jpg' } },
       ],
     });
-    expect(card).toMatchObject({ typeLine: 'Creature — Human Wizard', manaCost: '{U}', imageUrl: 'front.jpg' });
+    expect(card).toMatchObject({
+      typeLine: 'Creature — Human Wizard',
+      manaCost: '{U}',
+      imageUrl: 'front.jpg',
+      artCropUrl: 'front-art.jpg',
+    });
   });
 
   it('shows only the main cost of adventure-style cards', () => {

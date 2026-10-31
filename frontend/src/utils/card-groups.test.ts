@@ -3,7 +3,7 @@ import { groupDeckCards, primaryType } from './card-groups';
 import type { ScryfallCard } from '../scryfall';
 
 function info(name: string, typeLine: string, manaValue = 0): ScryfallCard {
-  return { name, typeLine, manaCost: '', manaValue, imageUrl: null, scryfallUrl: null };
+  return { name, typeLine, manaCost: '', manaValue, imageUrl: null, artCropUrl: null, scryfallUrl: null };
 }
 
 const LOOKUP: Record<string, ScryfallCard> = {

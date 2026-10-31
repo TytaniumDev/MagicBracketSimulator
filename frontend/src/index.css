@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens. Use these semantic names (bg-surface, text-fg-muted,
+ * border-line, bg-accent, bg-mana-u, ...) in new and touched components
+ * rather than raw Tailwind palette colors.
+ */
+@theme {
+  /* Neutrals, tinted toward the brand violet */
+  --color-canvas: #121119;
+  --color-surface: #1b1a25;
+  --color-surface-raised: #272536;
+  --color-line: #2c2a3d;
+  --color-line-strong: #3d3a55;
+  --color-fg: #eeedf6;
+  --color-fg-muted: #9e9bb8;
+
+  /* Accent, from the logo's purple */
+  --color-accent: #a78bfa;
+  --color-accent-strong: #8b5cf6;
+  --color-accent-fg: #160f2b;
+
+  /* Mana colors, tuned to read on dark surfaces */
+  --color-mana-w: #f2e6b8;
+  --color-mana-u: #3d8fe0;
+  --color-mana-b: #7b6a85;
+  --color-mana-r: #e0583f;
+  --color-mana-g: #35a465;
+  --color-mana-c: #b5aea4;
+}

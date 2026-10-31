@@ -10,6 +10,7 @@ const solRing: ScryfallCard = {
   manaCost: '{1}',
   manaValue: 1,
   imageUrl: 'https://cards.scryfall.io/sol-ring.jpg',
+  artCropUrl: null,
   scryfallUrl: 'https://scryfall.com/card/c21/263/sol-ring',
 };
 
