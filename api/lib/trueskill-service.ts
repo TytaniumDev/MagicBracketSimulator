@@ -10,7 +10,7 @@
  * ranking. mu/sigma are still present in the DeckRating schema so existing
  * Firestore docs remain valid; new writes leave mu/sigma at neutral defaults.
  */
-import type { DeckRating, JobSeat, StructuredGame } from './types';
+import type { DeckRating, GameSummary, JobSeat } from './types';
 import { seatOfPlayer } from './condenser/deck-match';
 import { getDeckById } from './deck-store-factory';
 import { getRatingStore } from './rating-store-factory';
@@ -28,13 +28,13 @@ const SIGMA_DEFAULT = 25 / 3;
  *
  * @param jobId  The job ID (for idempotency).
  * @param seats  The job's 4 seats.
- * @param games  Structured game data (already ingested by ingestLogs).
+ * @param games  Each game's winner and winning turn (from the game index).
  * @returns false when the job was already rated.
  */
 export async function processJobForRatings(
   jobId: string,
   seats: JobSeat[],
-  games: StructuredGame[],
+  games: readonly GameSummary[],
 ): Promise<boolean> {
   const deckIds = seats.map((s) => s.deckId);
   const seatNames = seats.map((s) => s.name);

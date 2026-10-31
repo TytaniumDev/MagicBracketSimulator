@@ -159,11 +159,11 @@ async function runTests() {
         await aggregateJobResults(jobId);
         const job = jobStore.getJob(jobId);
         assertEqual(job!.status, 'COMPLETED', 'job should be COMPLETED');
-        const metaPath = path.join(tempDir, jobId, 'meta.json');
-        assert(fs.existsSync(metaPath), 'meta.json should exist');
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        assert(Array.isArray(meta.condensed), 'should have condensed');
-        assert(Array.isArray(meta.structured), 'should have structured');
+        const indexPath = path.join(tempDir, jobId, 'games.json');
+        assert(fs.existsSync(indexPath), 'games.json should exist');
+        const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+        assertEqual(index.games.length, 4, 'one index entry per game');
+        assertEqual(job!.results?.gamesPlayed, 4, 'results count every game');
       } finally {
         cleanup(jobId);
       }
@@ -180,8 +180,8 @@ async function runTests() {
         await aggregateJobResults(jobId);
         const job = jobStore.getJob(jobId);
         assertEqual(job!.status, 'CANCELLED', 'status should remain CANCELLED');
-        const metaPath = path.join(tempDir, jobId, 'meta.json');
-        assert(fs.existsSync(metaPath), 'meta.json should exist (logs ingested for CANCELLED job)');
+        const indexPath = path.join(tempDir, jobId, 'games.json');
+        assert(fs.existsSync(indexPath), 'games.json should exist (logs indexed for CANCELLED job)');
       } finally {
         cleanup(jobId);
       }
@@ -195,8 +195,8 @@ async function runTests() {
         jobStore.updateSimulationStatus(jobId, 'sim_000', { state: 'CANCELLED' });
         jobStore.updateJobStatus(jobId, 'CANCELLED');
         await aggregateJobResults(jobId);
-        const metaPath = path.join(tempDir, jobId, 'meta.json');
-        assert(!fs.existsSync(metaPath), 'meta.json should not exist when no raw logs');
+        const indexPath = path.join(tempDir, jobId, 'games.json');
+        assert(!fs.existsSync(indexPath), 'games.json should not exist when no raw logs');
       } finally {
         cleanup(jobId);
       }
@@ -231,8 +231,8 @@ async function runTests() {
         await aggregateJobResults(jobId);
         const job = jobStore.getJob(jobId);
         assertEqual(job!.status, 'COMPLETED', 'should be COMPLETED (partial)');
-        const metaPath = path.join(tempDir, jobId, 'meta.json');
-        assert(fs.existsSync(metaPath), 'meta.json should exist with partial logs');
+        const indexPath = path.join(tempDir, jobId, 'games.json');
+        assert(fs.existsSync(indexPath), 'games.json should exist with partial logs');
       } finally {
         cleanup(jobId);
       }

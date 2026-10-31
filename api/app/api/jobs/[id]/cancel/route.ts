@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId: id } });
     });
 
-    // Trigger log aggregation so structured.json gets created from completed sims
+    // Trigger log aggregation so the game index gets created from completed sims
     jobStore.aggregateJobResults(id).catch(err => {
       console.error(`[Aggregation] Failed for cancelled job ${id}:`, err);
       Sentry.captureException(err, { tags: { component: 'cancel-aggregation', jobId: id } });

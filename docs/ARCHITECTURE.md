@@ -78,7 +78,9 @@ with an onDisconnect delete; the API and frontend only read them.
 
 **Cloud Storage** (`magic-bracket-simulator-artifacts`) holds per-game
 facts under `jobs/{jobId}/`: raw logs per sim (`raw/game_NNN.txt`, kept
-forever) plus `condensed.json` and `structured.json`, all stored gzipped.
+forever) plus `games.json`, the game index (where each game's log is and
+who won), all stored gzipped. A game's condensed and structured views are
+built from its raw log when someone opens that game.
 
 **Local mode** swaps these for SQLite (`api/data/jobs.db`) and the
 filesystem (`logs-data/`, saved decks in `data/decks/`). The SQLite schema
@@ -105,9 +107,9 @@ worker presence, so it never lists workers as online.
    (`POST /api/jobs/:id/logs/simulation`) and then reports the result
    (`PATCH /api/jobs/:id/simulations/:simId`). An atomic counter on the job
    detects the last sim.
-5. **Aggregate** (API, `aggregateJobResults`). Reads the raw logs, condenses
-   and structures every game, writes `condensed.json` and
-   `structured.json`, maps Forge winner names to seats, and sets the job
+5. **Aggregate** (API, `aggregateJobResults`). Walks the raw logs a few
+   files at a time (a job can have 1000 games), writes the game index
+   `games.json`, maps Forge winner names to seats, and sets the job
    COMPLETED with per-seat results. Then, fire-and-forget and idempotent per
    job: deck ratings, card stats, and the pod run's standings.
 6. **Watch.** The frontend listens to the job and its sims in Firestore, so

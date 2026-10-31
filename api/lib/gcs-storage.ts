@@ -16,7 +16,7 @@ const bucket = storage.bucket(BUCKET_NAME);
  * (Content-Encoding: gzip); `download()` decompresses them on read, so
  * readers see the original text.
  * @param jobId The job ID
- * @param filename The filename (e.g., 'condensed.json', 'raw/game_001.txt')
+ * @param filename The filename (e.g., 'games.json', 'raw/game_001.txt')
  * @param data The data to upload (string or Buffer)
  * @returns The GCS URI of the uploaded file
  */
@@ -53,7 +53,7 @@ export async function uploadJobArtifact(
 /**
  * Get a job artifact from GCS
  * @param jobId The job ID
- * @param filename The filename (e.g., 'condensed.json')
+ * @param filename The filename (e.g., 'games.json')
  * @returns The file contents as a string, or null if not found
  */
 export async function getJobArtifact(
@@ -79,7 +79,7 @@ export async function getJobArtifact(
 /**
  * Get a job artifact as JSON
  * @param jobId The job ID
- * @param filename The filename (e.g., 'condensed.json')
+ * @param filename The filename (e.g., 'games.json')
  * @returns The parsed JSON, or null if not found
  */
 export async function getJobArtifactJson<T>(
@@ -123,25 +123,6 @@ export async function deleteJobArtifacts(jobId: string): Promise<void> {
     console.error(`Error deleting artifacts for job ${jobId}:`, error);
     throw error;
   }
-}
-
-/**
- * Get every raw log file for a job, in filename order. A file holds one
- * simulation's games (one game per file for older jobs).
- * @param jobId The job ID
- * @returns Array of raw log contents
- */
-export async function getRawLogs(jobId: string): Promise<string[]> {
-  const artifacts = await listJobArtifacts(jobId);
-  const rawLogFiles = artifacts
-    .filter(f => f.startsWith('raw/') && f.endsWith('.txt'))
-    .sort();
-
-  const logs = await Promise.all(
-    rawLogFiles.map(f => getJobArtifact(jobId, f))
-  );
-
-  return logs.filter((log): log is string => log !== null);
 }
 
 /**

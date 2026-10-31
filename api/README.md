@@ -36,11 +36,9 @@ See [API.md](../API.md) for full endpoint documentation with request/response sh
 | `/api/jobs/[id]/simulations` | GET | List sims |
 | `/api/jobs/[id]/simulations/[simId]` | PATCH | Worker updates individual simulation status |
 | `/api/jobs/[id]/simulations/[simId]/lease` | POST | Worker extends a running sim's lease |
-| `/api/jobs/[id]/logs` | POST | Ingest raw log batch |
 | `/api/jobs/[id]/logs/simulation` | POST | Upload single simulation log file |
-| `/api/jobs/[id]/logs/raw` | GET | Retrieve raw game logs |
-| `/api/jobs/[id]/logs/condensed` | GET | Retrieve AI-condensed game logs |
-| `/api/jobs/[id]/logs/structured` | GET | Retrieve structured (parsed) game logs |
+| `/api/jobs/[id]/logs/games` | GET | List a job's games and their winners |
+| `/api/jobs/[id]/logs/games/[n]` | GET | One game's raw, condensed and structured logs |
 | `/api/jobs/claim-sim` | GET | Worker atomically claims next pending simulation |
 | `/api/jobs/bulk-delete` | POST | Admin bulk delete (max 50 jobs) |
 | `/api/decks` | GET | List all decks (precons + community) |

@@ -2,7 +2,7 @@
  * Shared types for game log analysis data.
  *
  * These types represent the JSON shapes returned by the log endpoints
- * (/api/jobs/:id/logs/condensed, /api/jobs/:id/logs/structured) and
+ * (/api/jobs/:id/logs/games, /api/jobs/:id/logs/games/:n) and
  * consumed by the frontend for visualization.
  */
 
@@ -85,4 +85,27 @@ export interface StructuredGame {
   perDeckTurns?: Record<string, DeckTurnInfo>;
   winner?: string;
   winningTurn?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Per-game log endpoints
+// ---------------------------------------------------------------------------
+
+/** One game's outcome, as listed by GET /api/jobs/:id/logs/games. */
+export interface GameSummary {
+  winner?: string;
+  winningTurn?: number;
+}
+
+/** GET /api/jobs/:id/logs/games: every game of a job, in play order. */
+export interface GameListResponse {
+  deckNames?: string[];
+  games: GameSummary[];
+}
+
+/** GET /api/jobs/:id/logs/games/:n: one game's logs, parsed on request. */
+export interface GameLogResponse {
+  raw: string;
+  condensed: CondensedGame;
+  structured: StructuredGame;
 }

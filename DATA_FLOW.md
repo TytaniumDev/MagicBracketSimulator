@@ -164,8 +164,8 @@ later. The first check is named after the job and deleted when the job
 ends; a follow-up that fires after the job ended does nothing. Replaces
 the former background polling scanner.
 - **Job cancellation** (`POST /api/jobs/:id/cancel`): triggers aggregation so
-`structured.json` gets created from whatever sims completed before
-cancellation.
+the game index (`games.json`) gets created from whatever sims completed
+before cancellation.
 - **Stale-job sweeper** (`POST /api/admin/sweep-stale-jobs`, see
 `api/lib/stale-sweeper.ts` and `docs/STALE_SWEEPER.md`): fired by Cloud
 Scheduler every 15 minutes. For each active job it (a) hard-fails any
@@ -190,24 +190,27 @@ no lifecycle rule: raw logs are kept forever.
 **When aggregation runs (`aggregateJobResults`):**
 
 - **Where:** API server (job-store-factory + log-store).
+- **Memory:** the API is one 1 GiB instance and jobs go up to 1000 games, so
+  aggregation never holds a job's logs at once. Raw logs are about 100 KB per
+  game, and parsing a whole 1000-game job in one pass peaked at about 1.6 GB.
 - **Steps:**
-  1. `**getRawLogs(jobId)`** — loads all raw logs for the job (from local disk
-    or GCS) and splits each simulation's file into single games
-    (`splitConcatenatedGames`). Every reader of raw logs goes through it.
-  2. `**ingestLogs(jobId, rawLogs, deckNames, deckLists)**` (log-store):
-    - `splitConcatenatedGames` on each log (a no-op on logs already split)
-     → list of per-game raw strings.
-    - `**condenseGames(expandedLogs)**` — full condense pipeline
-    (api/lib/condenser): filter, classify, turn metrics, etc. →
-    `CondensedGame[]`.
-    - `**structureGames(expandedLogs, deckNames)**` — full structure pipeline →
-    `StructuredGame[]`.
-  3. **Storage:** only the derived data is written; raw logs stay as
-     uploaded.
-    - **Local:** `meta.json` (contains `condensed` and `structured`).
-    - **GCP:** `condensed.json` + `structured.json` in GCS, gzipped.
+  1. `**buildGameIndex(jobId, deckNames, visit)**` (log-store) walks the raw
+    logs with `forEachRawGame`: it reads 8 simulation files at a time (from
+    local disk or GCS), splits each into single games
+    (`splitConcatenatedGames`) and yields to other requests between files.
+    Every reader of raw logs goes through `forEachRawGame`. For each game it:
+    - runs `**structureGame(game, deckNames)**` and keeps only the winner and
+     winning turn, plus where the game is (file and position in it);
+    - calls `visit(game)`, which aggregation uses to run `parseGameCards`
+     for card stats (step 5), so the logs are read once.
+  2. **Storage:** `saveGameIndex` writes the index, `{ deckNames, games: [{
+     file, index, winner?, winningTurn? }] }` (about 90 bytes a game). Raw
+     logs stay as uploaded; no condensed or structured data is stored.
+    - **Local:** `logs-data/{jobId}/games.json`.
+    - **GCP:** `jobs/{jobId}/games.json` in GCS, gzipped.
+  3. The index's games feed steps 4 and 5.
   4. **Job results:** `computeJobResults` (`api/lib/job-results.ts`) turns
-     each structured game's winner into a seat with `seatOfPlayer`
+     each indexed game's winner into a seat with `seatOfPlayer`
      (`api/lib/condenser/deck-match.ts`: deck name match, and the Forge
      player number `Ai(N)` when the same deck sits in two seats), then
      `setJobResults` stores `results: { gamesPlayed, seats: [{ wins,
@@ -222,17 +225,18 @@ no lifecycle rule: raw logs are kept forever.
      `pair_games` column), writes them back and sets the job's
      `appliedStats.ratings` (SQLite: `jobs.ratings_applied`), so re-running
      aggregation or `POST /api/admin/backfill-ratings` never double counts.
-     There is no per-game record; per-game facts stay in `structured.json`.
-    - `processJobForCardStats` (`api/lib/card-impact/service.ts`) — runs
-     `parseGameCards` on the raw logs already loaded in step 1 (no extra log
-     reads) and adds each game to the deck's card counters in one
+     There is no per-game record in Firestore; per-game facts stay in the raw
+     logs and `games.json`.
+    - `processJobsForCardStats` (`api/lib/card-impact/service.ts`) — takes
+     the `parseGameCards` summaries made in step 1 (no extra log reads) and
+     adds each game to the deck's card counters in one
      `decks/{deckId}/stats/cards` document (SQLite: `card_stats` table) via one
      read-modify-write per deck. The document lists counted job ids, so
      re-running aggregation or the `POST /api/admin/backfill-card-stats`
      backfill never double counts. The backfill (the leaderboard's admin
      "Rebuild card stats" button pages through it) batches each page of jobs
-     into one write per deck, parsing each job's raw logs as it reads them
-     (`parseCardStatsJob`) so only one job's logs are in memory at a time.
+     into one write per deck, parsing each game with `forEachRawGame` as it
+     reads it, so only a few raw log files are in memory at a time.
      Documents also carry `version`
      (`CARD_STATS_VERSION`); counters from an older parser are discarded on
      read and rebuilt by the next job or the backfill. `GET
@@ -252,8 +256,10 @@ no lifecycle rule: raw logs are kept forever.
   7. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
 
-So: **condensing and structuring** of logs happens **only in the API**, during
-aggregation, using the raw logs that workers previously uploaded.
+So: **condensing and structuring** of logs happens **only in the API**:
+aggregation structures each game once to index it, and the per-game log
+endpoint (section 4) builds a game's condensed and structured views again
+when someone opens that game.
 
 **Life total tracking:** `calculateLifePerTurn()` in `api/lib/condenser/turns.ts`
 parses Forge's native `Life: Life: PlayerName oldValue > newValue` log entries
@@ -271,13 +277,6 @@ deck names stored in the DB (e.g. `"Blood Rites"`). It handles exact match,
 `Ai(N)-` prefix with endsWith, and precon set suffixes (startsWith after
 stripping the Ai prefix). A frontend copy lives at
 `frontend/src/utils/deck-match.ts`.
-
-**Legacy route (unused):**
-
-- `**POST /api/jobs/:id/logs`** — bulk log ingest: accepts `{ gameLogs,
- deckNames, deckLists }` all at once. Still exists in the codebase but is
-unused by the current worker, which uploads per-simulation via
-`/logs/simulation` instead.
 
 ---
 
@@ -328,128 +327,35 @@ unused by the current worker, which uploads per-simulation via
 
 **After job is COMPLETED/FAILED/CANCELLED (when UI needs logs):**
 
-- **GET** `/api/jobs/:id/logs/structured`
-  - Returns `{ games: StructuredGame[], deckNames?: string[] }` — precomputed
-  structured games (e.g. for Deck Actions view).
-- When the user opens the log panel:
-  - **GET** `/api/jobs/:id/logs/raw` → raw log strings (e.g. `gameLogs[]`).
-  - **GET** `/api/jobs/:id/logs/condensed` → precomputed `CondensedGame[]`.
-- **Fallback computation:** if precomputed artifacts (`condensed.json`,
-`structured.json`) don't exist (e.g. for FAILED jobs where aggregation
-never ran), logs are recomputed on-the-fly from raw logs in `log-store.ts`.
+Nothing loads until the user clicks "Load Deck Actions" or opens the detailed
+logs. Then `useJobLogs` fetches:
+
+- **GET** `/api/jobs/:id/logs/games` → `{ deckNames?, games: [{ winner?,
+  winningTurn? }] }` (`GameListResponse`), from the stored game index. It
+  fills the game picker and is the second step of the win tally fallback in
+  `useWinData`.
+- **GET** `/api/jobs/:id/logs/games/:n` → one game, counted from 0:
+  `{ raw, condensed, structured }` (`GameLogResponse`). The API reads that
+  game's raw log file and runs `condenseGame` and `structureGame` on it.
+  Deck Actions shows `structured`; the detailed logs' tabs show `condensed`
+  and `raw`. Picking another game fetches only that game (about 450 KB), and
+  the last game stays on screen until it arrives.
+- **Fallback computation:** a job with raw logs but no `games.json` (a FAILED
+  job whose aggregation never ran) gets its index built on the fly by
+  `getGameIndex`; it is not saved.
 
 So the frontend only receives **job + sim status** via Firestore onSnapshot
-(GCP) or REST polling (local); **raw/condensed/structured** are separate GETs
-that hit the artifacts produced during API-side aggregation (or recomputed on
-demand).
+(GCP) or REST polling (local); game logs are separate GETs, one game at a
+time.
 
----
-
-## 5. Race conditions & guard rails
-
-Three guards prevent double-counting and stale state in the simulation
-reporting path:
-
-1. **Terminal state guard** (`PATCH simulations/[simId]/route.ts`): Before
-applying any state update, the handler checks whether the sim is already
-COMPLETED or CANCELLED. If so, it returns `{ updated: false,
-reason: 'terminal_state' }` and skips the write. This prevents a worker
-that's just finishing a sim from writing stale RUNNING updates on top of a
-COMPLETED status (e.g. if the sweeper reclaimed the sim concurrently).
-
-2. **Conditional COMPLETED update** (`PATCH simulations/[simId]/route.ts`):
-When transitioning to COMPLETED, uses `conditionalUpdateSimulationStatus`
-which only applies the write if the sim's current state is PENDING, RUNNING,
-or FAILED. If the sim was already COMPLETED (e.g. a retried duplicate
-arrives), the update is skipped and aggregation is not triggered.
-
-3. **Aggregation idempotency** (`aggregateJobResults` in
-`job-store-factory.ts`): Checks `job.status !== 'COMPLETED' &&
-job.status !== 'FAILED'` before running. If the job was already aggregated
-(e.g. by a concurrent call from the scanner and the PATCH handler), the
-second call exits immediately.
-
----
-
-## 6. Auto-coverage system
-
-The coverage system automatically queues simulation jobs to ensure all deck
-pairs have sufficient game data for reliable Bayesian win-rate rankings.
-
-**Configuration (stored in `coverage_config` table/Firestore doc):**
-
-- `enabled` (boolean, default false) — toggle for the system
-- `targetGamesPerPair` (number, default 400) — minimum games required per pair
-
-**Coverage computation (`coverage-service.ts`):**
-
-- Reads every deck's `pairGames` (`RatingStore.getPairGameCounts`: one
-  collection-group query over the rating docs, one read per deck)
-- Builds a pair → game count map (cached for 5 minutes)
-- Compares against all possible pairs from `listAllDecks()`
-
-**Pod generation (greedy algorithm):**
-
-1. Pick the pair (A, B) with the fewest games played
-2. Greedily add deck C that maximizes under-covered pairs with {A, B, C}
-3. Greedily add deck D that maximizes under-covered pairs with {A, B, C, D}
-4. Result: a 4-player pod covering up to 6 under-covered pairs
-
-**Job creation flow (`POST /api/coverage/next-job`):**
-
-- Auth: an allowed user's Firebase ID token (the desktop worker's signed-in user)
-- Guard: returns 200 with `{ reason }` if no work available. Possible reasons:
-  `disabled`, `active-job-exists`, `all-pairs-covered`, `deck-resolution-failed`
-- Creates a job with `simulations: 100`, `parallelism: 1`,
-  `source: 'coverage'`
-- Job enters the normal queue — same pipeline as user-created jobs
-
-**Worker integration (`worker_flutter/lib/worker/coverage_requester.dart`):**
-
-- When a claim finds no work and the worker has a free slot, `WorkerEngine`
-  asks `CoverageRequester` for a coverage job
-- If a coverage job is created, the engine claims its sims straight away
-- Asks that create nothing are throttled to one per 5 minutes per worker
-  (each ask costs Firestore reads); the ask right after a created job goes
-  through at once
-- The PENDING listener only fires when sims change, so the engine also runs
-  its claim loop every 5 minutes; that tick is how an idle worker asks again
-  after the current coverage job finishes
-- User jobs always take priority — coverage only runs when idle
-
-**Job `source` field:**
-
-- `'user'` (default) — user-created via `POST /api/jobs`
-- `'coverage'` — system-generated by the coverage system
-- Stored in `jobs` table (SQLite) / Firestore doc
-- Coverage jobs skip user rate limiting
-
-**API endpoints:**
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `GET /api/coverage/config` | Any authenticated user | Read coverage config |
-| `PATCH /api/coverage/config` | Admin only | Toggle enabled, set target |
-| `GET /api/coverage/status` | Any authenticated user | Pair coverage progress |
-| `POST /api/coverage/next-job` | Allowed user (desktop worker) | Generate and queue next pod |
-
-**Frontend (Leaderboard page):**
-
-- Progress bar: shows covered/total pairs and percentage
-- Admin toggle: enables/disables the coverage system
-- Target selector: configurable target games per pair (100, 200, 400, 800)
-
----
-
-## End-to-end summary
 
 
 | Layer                    | Processing                                                                                                                                                         | Network (data)                                                                                                                               |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Forge**                | Writes raw Forge log to stdout                                                                                                                                     | None                                                                                                                                         |
 | **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory; retries failed containers locally (2 attempts, 30s backoff)                             | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
-| **API**                  | Stores raw logs in Firestore/SQLite; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED; cancels Cloud Tasks | ← PATCH (status), ← POST (raw log); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
-| **Frontend**             | Listens to Firestore `onSnapshot` (GCP) or polls REST via TanStack Query (local); fetches structured/raw/condensed only when needed                                                                   | ← **Firestore** onSnapshot (GCP) or REST polling (local); ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                         |
+| **API**                  | Stores raw logs in Firestore/SQLite; atomic counter check on completion; runs **aggregation**: walk raw logs a few files at a time, index each game, write `games.json` + mark COMPLETED; cancels Cloud Tasks | ← PATCH (status), ← POST (raw log); → **GET** logs/games, logs/games/:n (when requested) |
+| **Frontend**             | Listens to Firestore `onSnapshot` (GCP) or polls REST via TanStack Query (local); fetches the game list and one game's logs only when needed                                                           | ← **Firestore** onSnapshot (GCP) or REST polling (local); ← GET job; ← GET logs/games, logs/games/:n                                         |
 
 
 ---
@@ -468,7 +374,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Derive job status | `api/lib/condenser/derive-job-status.test.ts` | `deriveJobStatus` from sim states |
 | Game log files | `api/test/game-logs.test.ts` | Local filesystem log utilities |
 | Simulation wins | `api/test/simulation-wins.test.ts` | Simulation win extraction |
-| Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `getRawLogs`, `ingestLogs`, `getCondensedLogs`, `getStructuredLogs` (LOCAL mode, real filesystem + fixtures) |
+| Log store | `api/lib/log-store.test.ts` | `uploadSingleSimulationLog`, `forEachRawGame`, `buildGameIndex`, `getGameIndex`, `getGameLog` (LOCAL mode, real filesystem + fixtures) |
 | Status transition guards | `api/lib/store-guards.test.ts` | `conditionalUpdateSimulationStatus`: state transitions, terminal state rejection, retry paths, concurrent update scenarios |
 | Per-sim claim | `api/lib/claim-sim.test.ts` | `claimNextSim` (SQLite): oldest-first ordering, job promotion QUEUED→RUNNING, sim RUNNING update, skipping terminal jobs; leases: taking over an expired lease, `extendSimLease` extended/cancelled/lost |
 | Sim lease rules | `api/lib/sim-lease.test.ts`, `worker_flutter/test/worker/sim_lease_keeper_test.dart` | Expiry and claimability, lease extension answers, worker-side keeper stops on cancelled/lost and retries failed calls |
@@ -476,9 +382,9 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | Worker presence | `api/test/worker-presence.test.ts`, `worker_flutter/test/worker/worker_presence_test.dart` | Which entries count as online (stale window), mapping to `WorkerInfo`; desktop writes on connect/reconnect and each tick, arms the onDisconnect delete, removes on stop |
 | Flutter log upload | `worker_flutter/test/worker/log_uploader_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Auto-coverage asks | `worker_flutter/test/worker/coverage_requester_test.dart`, `worker_flutter/test/worker/worker_engine_test.dart` | Ask throttling, immediate re-ask after a created job, failures never throw; idle engine asks, claims the new job's sims, and asks again on its tick |
-| Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs, CANCELLED handling, idempotency, FAILED sims not terminal |
+| Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs (game index written, results counted), CANCELLED handling, idempotency, FAILED sims not terminal |
 | Job results per seat | `api/lib/job-results.test.ts`, `api/lib/condenser/deck-match.test.ts`, `api/test/job-decks.test.ts` | Wins and average winning turn per seat, the same deck in two seats, unmatched winners; `seatOfPlayer`; seats filled at job creation and decklists read by seat |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |
 | Pod run standings | `api/test/pod-run-store.test.ts`, `frontend/src/utils/pods.test.ts`, `frontend/src/pages/PodRun.test.tsx` | Saving a run totals jobs that already have results, `applyJob` counts each job once and skips jobs in no run, a job stays in its first run, ranking; the saved run page shows stored standings and loads pods only when asked |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
-| JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button |
+| JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button, detailed logs asking for one picked game |

@@ -486,3 +486,35 @@ describe('JobStatus — Run Again', () => {
     expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Detailed logs load one game at a time
+// ---------------------------------------------------------------------------
+
+describe('JobStatus — detailed game logs', () => {
+  const gameLog = {
+    raw: 'Turn 1: Ai(1)-Deck A\nraw log of the second game',
+    condensed: { keptEvents: [], manaPerTurn: {}, cardsDrawnPerTurn: {}, turnCount: 7 },
+    structured: { totalTurns: 7, players: [], turns: [], decks: [] },
+  };
+
+  it('asks for the picked game only and shows its raw log', () => {
+    setupMocks({ job: completedWithResults.job });
+    vi.mocked(useJobLogs).mockReturnValue({
+      ...emptyLogs,
+      games: [{ winner: 'Ai(1)-Deck A' }, { winner: 'Ai(2)-Deck B' }],
+      game: gameLog,
+    });
+    renderJobStatus();
+
+    fireEvent.click(screen.getByRole('button', { name: /show detailed game logs/i }));
+    expect(vi.mocked(useJobLogs).mock.lastCall?.[2]).toEqual({ enabled: true, selectedGame: 0 });
+
+    fireEvent.change(screen.getByLabelText('Game:'), { target: { value: '1' } });
+    expect(vi.mocked(useJobLogs).mock.lastCall?.[2]).toEqual({ enabled: true, selectedGame: 1 });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Raw Logs' }));
+    expect(screen.getByText('Game 2', { selector: 'h4' })).toBeInTheDocument();
+    expect(screen.getByText(/raw log of the second game/)).toBeInTheDocument();
+  });
+});

@@ -10,6 +10,7 @@ import { cancelRecoveryCheck } from './cloud-tasks';
 import { isSimLeaseExpired, type ClaimOptions, type SimLeaseStatus } from './sim-lease';
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from './logger';
+import type { GameCardSummary } from './card-impact/parse';
 
 import { USE_FIRESTORE, isGcpMode } from './env';
 
@@ -566,7 +567,8 @@ export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | nu
 /**
  * Aggregate results when all simulations are COMPLETED or CANCELLED.
  * FAILED sims are NOT considered terminal — they will be retried by the scanner.
- * Reads incrementally uploaded raw logs, runs ingestion (condense + structure),
+ * Walks the incrementally uploaded raw logs once to build the game index,
+ * results, rating counters and card counters,
  * and sets the job to COMPLETED or CANCELLED.
  */
 export async function aggregateJobResults(jobId: string): Promise<void> {
@@ -584,24 +586,20 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   // Mark that aggregation is in progress — recovery can detect and retry if this crashes
   await setNeedsAggregation(jobId, true);
 
-  // Read raw logs uploaded incrementally by workers
-  const { getRawLogs, ingestLogs, getStructuredLogs } = await import('./log-store');
-  const rawLogs = await getRawLogs(jobId);
-
+  // Walk the raw logs uploaded by workers once, a few files at a time: index
+  // each game (where its log is, who won) and parse its card signals.
+  const { buildGameIndex, saveGameIndex } = await import('./log-store');
+  const { parseGameCards } = await import('./card-impact/parse');
   const deckNames = job.seats.map((s) => s.name);
-  if (rawLogs && rawLogs.length > 0) {
-    const { resolveJobDecks } = await import('./job-decks');
-    const deckLists = (await resolveJobDecks(job))?.map((d) => d.dck);
-    await ingestLogs(jobId, rawLogs, deckNames, deckLists);
-  }
+  const deckIds = job.seats.map((s) => s.deckId);
+  const cardGames: GameCardSummary[] = [];
+  const gameIndex = await buildGameIndex(jobId, deckNames, (game) => cardGames.push(parseGameCards(game)));
 
-  // Load structured games for results computation and per-deck win stats
-  const structuredData = await getStructuredLogs(jobId);
+  if (gameIndex) {
+    await saveGameIndex(jobId, gameIndex);
 
-  // Compute aggregated results from structured games
-  if (structuredData?.games?.length) {
     const { computeJobResults } = await import('./job-results');
-    const results = computeJobResults(structuredData.games, deckNames);
+    const results = computeJobResults(gameIndex.games, deckNames);
     await setJobResults(jobId, results);
 
     // Copy the results up to the job's pod run, if it's in one. The store
@@ -611,23 +609,17 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
       log.error('Pod run standings update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
       Sentry.captureException(err, { tags: { component: 'pod-run-standings', jobId } });
     });
-  }
 
-  const deckIds = job.seats.map((s) => s.deckId);
-
-  // Update per-deck win/game counters
-  if (structuredData?.games?.length) {
+    // Update per-deck win/game counters
     const { processJobForRatings } = await import('./trueskill-service');
-    processJobForRatings(jobId, job.seats, structuredData.games).catch((err) => {
+    processJobForRatings(jobId, job.seats, gameIndex.games).catch((err) => {
       log.error('Rating stats update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
       Sentry.captureException(err, { tags: { component: 'rating-stats', jobId } });
     });
-  }
 
-  // Update per-deck card impact counters from the same raw logs (no extra reads)
-  if (rawLogs && rawLogs.length > 0) {
-    const { processJobForCardStats } = await import('./card-impact/service');
-    processJobForCardStats(jobId, deckIds, deckNames, rawLogs).catch((err) => {
+    // Update per-deck card impact counters from the card signals parsed above
+    const { processJobsForCardStats } = await import('./card-impact/service');
+    processJobsForCardStats([{ jobId, deckIds, deckNames, games: cardGames }]).catch((err) => {
       log.error('Card stats update failed (non-fatal)', { jobId, error: err instanceof Error ? err.message : String(err) });
       Sentry.captureException(err, { tags: { component: 'card-stats', jobId } });
     });

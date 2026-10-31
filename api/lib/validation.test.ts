@@ -79,10 +79,18 @@ async function runTests() {
     assertEqual(result.success, false, 'should fail');
   });
 
+  await test('createJobSchema: accepts simulations at the 1000-game maximum', () => {
+    const result = parseBody(createJobSchema, {
+      deckIds: ['a', 'b', 'c', 'd'],
+      simulations: 1000,
+    });
+    assertEqual(result.success, true, 'should pass');
+  });
+
   await test('createJobSchema: rejects simulations above maximum', () => {
     const result = parseBody(createJobSchema, {
       deckIds: ['a', 'b', 'c', 'd'],
-      simulations: 200,
+      simulations: 1001,
     });
     assertEqual(result.success, false, 'should fail');
   });

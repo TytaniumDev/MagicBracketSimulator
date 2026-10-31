@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { matchesDeckName } from '../utils/deck-match';
 import { seatNames, winsByName, type JobResponse } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
-import type { StructuredGame } from '@shared/types/log';
+import type { GameSummary } from '@shared/types/log';
 
 export interface WinData {
   winTally: Record<string, number> | null;
@@ -102,7 +102,7 @@ export interface StructuredWinResult {
  * Compute win tally from structured game logs.
  */
 export function computeStructuredWins(
-  structuredGames: StructuredGame[] | null,
+  structuredGames: readonly GameSummary[] | null,
   logDeckNames: string[] | null,
 ): StructuredWinResult {
   if (!structuredGames || structuredGames.length === 0) {
@@ -149,7 +149,7 @@ export function resolveEffectiveWins(
   job: Pick<JobResponse, 'seats' | 'results'> | null,
   simResult: SimWinResult,
   structuredResult: StructuredWinResult,
-  structuredGames: StructuredGame[] | null,
+  structuredGames: readonly GameSummary[] | null,
 ): WinData {
   const { structuredWinTally, structuredWinTurns } = structuredResult;
   const { simWinTally, simWinTurns, simGamesCompleted } = simResult;
@@ -185,13 +185,13 @@ export function resolveEffectiveWins(
  *
  * Priority order:
  * 1. job.results (server-aggregated per seat, authoritative)
- * 2. structuredGames winners (parsed from detailed logs)
+ * 2. game list winners (from the job's logs, once a log view is opened)
  * 3. simulation status winners (real-time tracking)
  */
 export function useWinData(
   job: JobResponse | null,
   simulations: SimulationStatus[],
-  structuredGames: StructuredGame[] | null,
+  structuredGames: readonly GameSummary[] | null,
   logDeckNames: string[] | null,
 ): WinData {
   const seats = job?.seats;
