@@ -23,6 +23,30 @@
     <description>Desktop worker for the Magic Bracket Simulator project.</description>
     <language>en</language>
     <item>
+      <title>Version 0.2.264 (Windows)</title>
+      <sparkle:os>windows</sparkle:os>
+      <pubDate>Sat, 31 Oct 2026 17:49:46 +0000</pubDate>
+      <sparkle:version>0.2.264+315</sparkle:version>
+      <sparkle:shortVersionString>0.2.264</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>10.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.264/MagicBracketWorker-Installer.exe"
+                 sparkle:dsaSignature="MEQCIH0D9U5tXJvM+Gj3RuKQ8zrhEfDck1eruKMPbYVJrW1bAiAPwEl8nxAAKb25SFS2kdH6ZDCnpF+JD+LQ/iuSAwELRA=="
+                 length="19683304"
+                 type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 0.2.264 (macOS)</title>
+      <sparkle:os>macos</sparkle:os>
+      <pubDate>Sat, 31 Oct 2026 17:49:46 +0000</pubDate>
+      <sparkle:version>315</sparkle:version>
+      <sparkle:shortVersionString>0.2.264</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/TytaniumDev/MagicBracketSimulator/releases/download/worker-v0.2.264/MagicBracketWorker-macos.zip"
+                 sparkle:edSignature="cT0uMqs0rImqM39wJzCKDmMLxw7olZFII9Fd6zAkDMChjnT6e/QLm/GkAAhie80lpax6MqGHZeHgZofoigELAQ=="
+                 length="43335821"
+                 type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 0.2.263 (Windows)</title>
       <sparkle:os>windows</sparkle:os>
       <pubDate>Sat, 31 Oct 2026 17:10:19 +0000</pubDate>
