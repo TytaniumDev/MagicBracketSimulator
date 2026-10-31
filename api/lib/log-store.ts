@@ -6,16 +6,21 @@
  *
  * Raw logs are kept as the worker uploaded them: one file per simulation,
  * each holding up to GAMES_PER_CONTAINER games (older jobs hold one game per
- * file). Readers get them split into single games. They are kept forever;
- * aggregation only adds the derived condensed and structured data.
+ * file). They are kept forever. Aggregation adds one small file next to
+ * them, `games.json`: the game index, which says where each game's log is
+ * and who won it. Condensed and structured views of a game are built from
+ * its raw log when someone asks for that game.
+ *
+ * Every reader here holds at most a few raw log files at a time, so a
+ * 1000-game job fits in the API's memory.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { isGcpMode } from './env';
 import * as gcs from './gcs-storage';
-import { condenseGames, structureGames, splitConcatenatedGames } from './condenser/index';
-import type { CondensedGame, StructuredGame } from './types';
+import { condenseGame, structureGame, splitConcatenatedGames } from './condenser/index';
+import type { GameLogResponse, GameSummary } from './types';
 import * as Sentry from '@sentry/nextjs';
 
 // Local filesystem storage directory
@@ -28,6 +33,12 @@ const LOGS_DATA_DIR = process.env.LOGS_DATA_DIR ?? path.join(process.cwd(), 'log
  */
 export const MAX_LOG_BYTES = 10 * 1024 * 1024;
 
+/** The game index's file name, next to the raw logs. */
+const GAME_INDEX_FILE = 'games.json';
+
+/** Raw log files read at once while walking a job's games (GCS round trips overlap). */
+const RAW_READ_BATCH = 8;
+
 // Ensure local data directory exists in LOCAL mode
 if (!isGcpMode() && !fs.existsSync(LOGS_DATA_DIR)) {
   fs.mkdirSync(LOGS_DATA_DIR, { recursive: true });
@@ -38,50 +49,18 @@ function getJobDir(jobId: string): string {
   return path.join(LOGS_DATA_DIR, sanitized);
 }
 
-function getMetaPath(jobId: string): string {
-  return path.join(getJobDir(jobId), 'meta.json');
+/** One game of a job: where its raw log is, and its outcome. */
+export interface GameIndexEntry extends GameSummary {
+  /** The raw log file holding the game, as `listRawLogFiles` names it. */
+  file: string;
+  /** The game's position among that file's games. */
+  index: number;
 }
 
-interface StoredMeta {
+/** Every game of a job, in play order. */
+export interface GameIndex {
   deckNames?: string[];
-  deckLists?: string[];
-  ingestedAt: string;
-  condensed?: CondensedGame[];
-  structured?: StructuredGame[];
-}
-
-// ─── Ingest (POST) ──────────────────────────────────────────────────────────
-
-/**
- * Pre-compute condensed and structured data from a job's raw logs (already
- * stored, as uploaded by the worker).
- */
-export async function ingestLogs(
-  jobId: string,
-  gameLogs: string[],
-  deckNames?: string[],
-  deckLists?: string[]
-): Promise<{ gameCount: number }> {
-  const expandedLogs = gameLogs.flatMap(splitConcatenatedGames);
-  const condensed = condenseGames(expandedLogs);
-  const structured = structureGames(expandedLogs, deckNames);
-
-  if (isGcpMode()) {
-    await gcs.uploadJobArtifact(jobId, 'condensed.json', JSON.stringify(condensed));
-    await gcs.uploadJobArtifact(jobId, 'structured.json', JSON.stringify({ games: structured, deckNames }));
-  } else {
-    const meta: StoredMeta = {
-      deckNames,
-      deckLists,
-      ingestedAt: new Date().toISOString(),
-      condensed,
-      structured,
-    };
-    fs.mkdirSync(getJobDir(jobId), { recursive: true });
-    fs.writeFileSync(getMetaPath(jobId), JSON.stringify(meta, null, 2), 'utf-8');
-  }
-
-  return { gameCount: expandedLogs.length };
+  games: GameIndexEntry[];
 }
 
 // ─── Single simulation log upload (incremental) ──────────────────────────────
@@ -115,69 +94,131 @@ export async function uploadSingleSimulationLog(
   }
 }
 
-// ─── Read helpers (GET) ──────────────────────────────────────────────────────
+// ─── Raw logs ────────────────────────────────────────────────────────────────
 
-function readLocalMeta(jobId: string): StoredMeta | null {
-  const metaPath = getMetaPath(jobId);
-  if (!fs.existsSync(metaPath)) return null;
+/** A job's raw log files, in play order. Empty when it has none. */
+async function listRawLogFiles(jobId: string): Promise<string[]> {
+  if (isGcpMode()) {
+    const artifacts = await gcs.listJobArtifacts(jobId);
+    return artifacts.filter((f) => f.startsWith('raw/') && f.endsWith('.txt')).sort();
+  }
+  const jobDir = getJobDir(jobId);
+  if (!fs.existsSync(jobDir)) return [];
+  return fs.readdirSync(jobDir).filter((f) => /^game_\d+\.txt$/.test(f)).sort();
+}
+
+/** One raw log file's text, or null when it is missing. */
+async function readRawLogFile(jobId: string, file: string): Promise<string | null> {
+  if (isGcpMode()) return gcs.getJobArtifact(jobId, file);
+  const filePath = path.join(getJobDir(jobId), file);
+  return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : null;
+}
+
+/**
+ * Visit every game of a job in play order, a few raw log files at a time, so
+ * the job's logs are never all in memory at once. Returns how many games it
+ * visited.
+ */
+export async function forEachRawGame(
+  jobId: string,
+  visit: (game: string, file: string, index: number) => void
+): Promise<number> {
+  const files = await listRawLogFiles(jobId);
+  let count = 0;
+  for (let start = 0; start < files.length; start += RAW_READ_BATCH) {
+    const batch = files.slice(start, start + RAW_READ_BATCH);
+    const texts = await Promise.all(batch.map((file) => readRawLogFile(jobId, file)));
+    for (const [i, text] of texts.entries()) {
+      if (text === null) continue;
+      splitConcatenatedGames(text).forEach((game, index) => {
+        visit(game, batch[i]!, index);
+        count++;
+      });
+      // Parsing a file's games takes a while; let other requests run between files.
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+  return count;
+}
+
+// ─── Game index ──────────────────────────────────────────────────────────────
+
+/**
+ * Build a job's game index from its raw logs. `visit` sees each game's raw
+ * log on the way, so a caller can take what else it needs in the same pass.
+ * Returns null when the job has no logs.
+ */
+export async function buildGameIndex(
+  jobId: string,
+  deckNames?: string[],
+  visit?: (game: string) => void
+): Promise<GameIndex | null> {
+  const games: GameIndexEntry[] = [];
+  await forEachRawGame(jobId, (game, file, index) => {
+    const { winner, winningTurn } = structureGame(game, deckNames);
+    const entry: GameIndexEntry = { file, index };
+    if (winner !== undefined) entry.winner = winner;
+    if (winningTurn !== undefined) entry.winningTurn = winningTurn;
+    games.push(entry);
+    visit?.(game);
+  });
+  return games.length > 0 ? { deckNames, games } : null;
+}
+
+/** Store a job's game index next to its raw logs. */
+export async function saveGameIndex(jobId: string, gameIndex: GameIndex): Promise<void> {
+  const json = JSON.stringify(gameIndex);
+  if (isGcpMode()) {
+    await gcs.uploadJobArtifact(jobId, GAME_INDEX_FILE, json);
+    return;
+  }
+  fs.mkdirSync(getJobDir(jobId), { recursive: true });
+  fs.writeFileSync(path.join(getJobDir(jobId), GAME_INDEX_FILE), json, 'utf-8');
+}
+
+async function readStoredGameIndex(jobId: string): Promise<GameIndex | null> {
   try {
-    return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as StoredMeta;
+    if (isGcpMode()) return await gcs.getJobArtifactJson<GameIndex>(jobId, GAME_INDEX_FILE);
+    const indexPath = path.join(getJobDir(jobId), GAME_INDEX_FILE);
+    if (!fs.existsSync(indexPath)) return null;
+    return JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as GameIndex;
   } catch (err) {
     Sentry.captureException(err, { tags: { component: 'log-store', jobId } });
     return null;
   }
 }
 
-function readLocalRawLogs(jobId: string): string[] | null {
-  const jobDir = getJobDir(jobId);
-  if (!fs.existsSync(jobDir)) return null;
-  const files = fs.readdirSync(jobDir)
-    .filter((f) => /^game_\d+\.txt$/.test(f))
-    .sort();
-  if (files.length === 0) return null;
-  return files.map((f) => fs.readFileSync(path.join(jobDir, f), 'utf-8'));
+/**
+ * A job's game index: the stored one, or one built from the raw logs when
+ * the job was never aggregated (a FAILED job, say). Null when it has no logs.
+ */
+export async function getGameIndex(jobId: string, deckNamesHint?: string[]): Promise<GameIndex | null> {
+  return (await readStoredGameIndex(jobId)) ?? buildGameIndex(jobId, deckNamesHint);
 }
 
-/** The job's raw logs, one entry per game, or null when none were uploaded. */
-export async function getRawLogs(jobId: string): Promise<string[] | null> {
-  const files = isGcpMode() ? await gcs.getRawLogs(jobId) : readLocalRawLogs(jobId);
-  if (!files || files.length === 0) return null;
-  return files.flatMap(splitConcatenatedGames);
-}
-
-export async function getCondensedLogs(jobId: string): Promise<CondensedGame[] | null> {
-  if (isGcpMode()) {
-    const precomputed = await gcs.getJobArtifactJson<CondensedGame[]>(jobId, 'condensed.json');
-    if (precomputed) return precomputed;
-  } else {
-    const meta = readLocalMeta(jobId);
-    if (meta?.condensed) return meta.condensed;
-  }
-  // Fallback: compute from raw logs (e.g. FAILED jobs that were never aggregated)
-  const raw = await getRawLogs(jobId);
-  return raw ? condenseGames(raw) : null;
-}
-
-export async function getStructuredLogs(
+/**
+ * One game's raw log with its condensed and structured views, built on
+ * request. `n` counts from 0 in play order. Null when there is no such game.
+ */
+export async function getGameLog(
   jobId: string,
+  n: number,
   deckNamesHint?: string[]
-): Promise<{ games: StructuredGame[]; deckNames?: string[] } | null> {
-  if (isGcpMode()) {
-    const precomputed = await gcs.getJobArtifactJson<{ games: StructuredGame[]; deckNames?: string[] }>(
-      jobId,
-      'structured.json'
-    );
-    if (precomputed) return precomputed;
-  }
-  const meta = isGcpMode() ? null : readLocalMeta(jobId);
-  if (meta?.structured) return { games: meta.structured, deckNames: meta.deckNames };
-  // Fallback: compute from raw logs (e.g. FAILED jobs that were never aggregated)
-  const raw = await getRawLogs(jobId);
-  if (!raw) return null;
-  const names = deckNamesHint ?? meta?.deckNames;
-  return { games: structureGames(raw, names), deckNames: names };
-}
+): Promise<GameLogResponse | null> {
+  const gameIndex = await getGameIndex(jobId, deckNamesHint);
+  const entry = gameIndex?.games.at(n);
+  if (!gameIndex || !entry || n < 0) return null;
 
+  const text = await readRawLogFile(jobId, entry.file);
+  const raw = text === null ? undefined : splitConcatenatedGames(text).at(entry.index);
+  if (raw === undefined) return null;
+
+  return {
+    raw,
+    condensed: condenseGame(raw),
+    structured: structureGame(raw, gameIndex.deckNames ?? deckNamesHint),
+  };
+}
 
 /**
  * Delete every stored log for a job (raw, condensed, structured).

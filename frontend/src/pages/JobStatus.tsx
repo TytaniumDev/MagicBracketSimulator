@@ -6,6 +6,7 @@ import type { JobResponse } from '@shared/types/job';
 import { getApiBase, fetchWithAuth, deleteJob } from '../api';
 import { ColorIdentity } from '../components/ColorIdentity';
 import { DeckShowcase } from '../components/DeckShowcase';
+import { GameSelect } from '../components/GameSelect';
 import { PodRunLink } from '../components/PodRunLink';
 import { SimulationGrid } from '../components/SimulationGrid';
 import { Spinner } from '../components/Spinner';
@@ -60,9 +61,9 @@ export default function JobStatusPage() {
 
   // Data hooks
   const { job, simulations, error: streamError } = useJobStream(id);
-  const logs = useJobLogs(id, job, { showLogPanel, loadStructured: loadStructuredLogs });
+  const logs = useJobLogs(id, job, { enabled: showLogPanel || loadStructuredLogs, selectedGame });
   const { winTally, winTurns, gamesPlayed, simGamesCompleted } = useWinData(
-    job, simulations, logs.structuredGames, logs.deckNames,
+    job, simulations, logs.games, logs.deckNames,
   );
 
   if (streamError) {
@@ -164,7 +165,12 @@ export default function JobStatusPage() {
     }
   };
 
-  const currentGame = logs.structuredGames?.[selectedGame];
+  const selectGame = (game: number) => {
+    setSelectedGame(game);
+    setSelectedTurn(1);
+  };
+  const gameCount = logs.games?.length ?? 0;
+  const currentGame = logs.game?.structured;
   const maxTurns = Math.max(1, currentGame?.totalTurns ?? 1);
   const isTerminal = job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED';
 
@@ -380,10 +386,10 @@ export default function JobStatusPage() {
         {isTerminal && (
           <div className="pt-4 border-t border-gray-600">
             <h3 className="text-lg font-semibold text-gray-200 mb-4">Deck Actions</h3>
-            {logs.structuredError && (
-              <p className="text-sm text-red-400 mb-2">{logs.structuredError}</p>
+            {(logs.gamesError ?? logs.gameError) && (
+              <p className="text-sm text-red-400 mb-2">{logs.gamesError ?? logs.gameError}</p>
             )}
-            {logs.structuredGames === null && !logs.structuredError && !loadStructuredLogs && (
+            {!loadStructuredLogs && (
               <button
                 type="button"
                 onClick={() => setLoadStructuredLogs(true)}
@@ -392,36 +398,19 @@ export default function JobStatusPage() {
                 Load Deck Actions
               </button>
             )}
-            {logs.structuredGames === null && !logs.structuredError && loadStructuredLogs && (
+            {loadStructuredLogs && (logs.gamesLoading || logs.gameLoading) && (
               <p className="text-sm text-gray-500">Loading deck actions...</p>
             )}
-            {logs.structuredGames && logs.structuredGames.length === 0 && !logs.structuredError && (
+            {loadStructuredLogs && logs.games && logs.games.length === 0 && (
               <p className="text-sm text-gray-500">
                 Logs not available.
               </p>
             )}
-            {logs.structuredGames && logs.structuredGames.length > 0 && (
+            {loadStructuredLogs && currentGame && (
               <div>
                 {/* Game and Turn selector */}
                 <div className="flex flex-wrap gap-4 mb-4 items-center">
-                  {logs.structuredGames.length > 1 && (
-                    <div className="flex items-center gap-2">
-                      <label htmlFor="game-select" className="text-sm text-gray-400">Game:</label>
-                      <select
-                        id="game-select"
-                        value={selectedGame}
-                        onChange={(e) => {
-                          setSelectedGame(Number(e.target.value));
-                          setSelectedTurn(1);
-                        }}
-                        className="bg-gray-700 text-white text-sm rounded px-2 py-1"
-                      >
-                        {logs.structuredGames.map((_, i) => (
-                          <option key={i} value={i}>Game {i + 1}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  <GameSelect id="game-select" count={gameCount} value={selectedGame} onChange={selectGame} />
                   <div className="flex items-center gap-2">
                     <label htmlFor="turn-slider" className="text-sm text-gray-400">Turn:</label>
                     <button
@@ -666,81 +655,64 @@ export default function JobStatusPage() {
                   </button>
                 </div>
 
-                {/* Condensed Logs View */}
-                {logViewTab === 'condensed' && (
-                  <div>
-                    {logs.condensedError && (
-                      <p className="text-sm text-red-400 mb-2">{logs.condensedError}</p>
-                    )}
-                    {logs.condensedLogs && logs.condensedLogs.length === 0 && !logs.condensedError && (
-                      <p className="text-sm text-gray-500">
-                        Condensed logs not available.
-                      </p>
-                    )}
-                    {logs.condensedLogs && logs.condensedLogs.length > 0 && (
-                      <div className="space-y-4">
-                        <p className="text-xs text-gray-400">
-                          This is the condensed data sent to the AI for bracket analysis.
-                        </p>
-                        {logs.condensedLogs.map((game, i) => (
-                          <div key={i} className="bg-gray-900 rounded p-3">
-                            <h4 className="text-xs font-semibold text-gray-500 mb-2">
-                              Game {i + 1}
-                              {game.winner && ` - Winner: ${game.winner}`}
-                              {game.winningTurn && ` (Turn ${game.winningTurn})`}
-                            </h4>
-                            <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-                              <div className="bg-gray-800 rounded p-2">
-                                <span className="text-gray-400">Turn Count: </span>
-                                <span className="text-white">{game.turnCount}</span>
-                              </div>
-                              <div className="bg-gray-800 rounded p-2">
-                                <span className="text-gray-400">Events Kept: </span>
-                                <span className="text-white">{game.keptEvents.length}</span>
-                              </div>
-                            </div>
-                            <div className="space-y-1 max-h-64 overflow-y-auto">
-                              {game.keptEvents.map((event, j) => (
-                                <div
-                                  key={j}
-                                  className="text-xs font-mono py-0.5 border-l-2 pl-2"
-                                  style={{ borderColor: getEventColor(event.type) }}
-                                >
-                                  <span className="text-gray-500">[{event.type}]</span>{' '}
-                                  <span className="text-gray-300">{event.line}</span>
-                                </div>
-                              ))}
-                            </div>
+                <GameSelect id="log-game-select" className="mb-4" count={gameCount} value={selectedGame} onChange={selectGame} />
+                {(logs.gamesError ?? logs.gameError) && (
+                  <p className="text-sm text-red-400 mb-2">{logs.gamesError ?? logs.gameError}</p>
+                )}
+                {(logs.gamesLoading || logs.gameLoading) && (
+                  <p className="text-sm text-gray-500">Loading logs...</p>
+                )}
+                {logs.games && logs.games.length === 0 && (
+                  <p className="text-sm text-gray-500">
+                    Logs not available (job may still be running or logs were cleaned up).
+                  </p>
+                )}
+
+                {/* Condensed Log View */}
+                {logViewTab === 'condensed' && logs.game && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-400">
+                      This is the condensed data sent to the AI for bracket analysis.
+                    </p>
+                    <div className="bg-gray-900 rounded p-3">
+                      <h4 className="text-xs font-semibold text-gray-500 mb-2">
+                        Game {selectedGame + 1}
+                        {logs.game.condensed.winner && ` - Winner: ${logs.game.condensed.winner}`}
+                        {logs.game.condensed.winningTurn && ` (Turn ${logs.game.condensed.winningTurn})`}
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+                        <div className="bg-gray-800 rounded p-2">
+                          <span className="text-gray-400">Turn Count: </span>
+                          <span className="text-white">{logs.game.condensed.turnCount}</span>
+                        </div>
+                        <div className="bg-gray-800 rounded p-2">
+                          <span className="text-gray-400">Events Kept: </span>
+                          <span className="text-white">{logs.game.condensed.keptEvents.length}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-1 max-h-96 overflow-y-auto">
+                        {logs.game.condensed.keptEvents.map((event, j) => (
+                          <div
+                            key={j}
+                            className="text-xs font-mono py-0.5 border-l-2 pl-2"
+                            style={{ borderColor: getEventColor(event.type) }}
+                          >
+                            <span className="text-gray-500">[{event.type}]</span>{' '}
+                            <span className="text-gray-300">{event.line}</span>
                           </div>
                         ))}
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
-                {/* Raw Logs View */}
-                {logViewTab === 'raw' && (
-                  <div>
-                    {logs.rawLogsError && (
-                      <p className="text-sm text-red-400 mb-2">{logs.rawLogsError}</p>
-                    )}
-                    {logs.rawLogs != null && logs.rawLogs.length === 0 && !logs.rawLogsError && (
-                      <p className="text-sm text-gray-500">
-                        Logs not available (job may still be running or logs were cleaned up).
-                      </p>
-                    )}
-                    {logs.rawLogs != null && logs.rawLogs.length > 0 && (
-                      <div className="space-y-4">
-                        {logs.rawLogs.map((log, i) => (
-                          <div key={i} className="bg-gray-900 rounded p-3">
-                            <h4 className="text-xs font-semibold text-gray-500 mb-2">Game {i + 1}</h4>
-                            <pre className="text-xs overflow-auto max-h-64 whitespace-pre-wrap text-gray-400 font-mono">
-                              {log}
-                            </pre>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* Raw Log View */}
+                {logViewTab === 'raw' && logs.game && (
+                  <div className="bg-gray-900 rounded p-3">
+                    <h4 className="text-xs font-semibold text-gray-500 mb-2">Game {selectedGame + 1}</h4>
+                    <pre className="text-xs overflow-auto max-h-96 whitespace-pre-wrap text-gray-400 font-mono">
+                      {logs.game.raw}
+                    </pre>
                   </div>
                 )}
               </div>

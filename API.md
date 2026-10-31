@@ -70,6 +70,8 @@ Creates a new simulation job. Requires user auth.
 }
 ```
 
+`simulations` is the number of games, from 4 to 1000.
+
 **Response:**
 
 ```json
@@ -266,12 +268,6 @@ way the worker stops the sim, and on `lost` it reports nothing.
 
 ## Logs
 
-### Get Combined Logs
-
-`GET /jobs/:id/logs`
-
-Returns all logs for a job (raw and/or structured).
-
 ### Upload Simulation Log (Worker)
 
 `POST /jobs/:id/logs/simulation`
@@ -288,23 +284,20 @@ Uploads the raw log for a completed simulation.
 }
 ```
 
-### Get Raw Logs
+### List Games
 
-`GET /jobs/:id/logs/raw`
+`GET /jobs/:id/logs/games`
 
-Returns raw (unprocessed) game logs for a job.
+Returns every game of a finished job in play order, with its winner:
+`{ deckNames?, games: [{ winner?, winningTurn? }] }`. 404 when the job has no logs.
 
-### Get Condensed Logs
+### Get One Game's Logs
 
-`GET /jobs/:id/logs/condensed`
+`GET /jobs/:id/logs/games/:n`
 
-Returns condensed AI-input logs (processed summary of each game).
-
-### Get Structured Logs
-
-`GET /jobs/:id/logs/structured`
-
-Returns fully parsed, structured game-action logs (deck × turn granularity).
+Returns game `n` (counted from 0): `{ raw, condensed, structured }` — the raw Forge log,
+the condensed AI-input summary, and the parsed deck × turn actions. Built from the raw log
+on each request. 404 past the last game.
 
 ---
 

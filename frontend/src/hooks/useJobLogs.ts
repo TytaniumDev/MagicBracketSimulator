@@ -1,27 +1,26 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { getApiBase, fetchWithAuth } from '../api';
 import { isTerminal } from '../utils/status';
 import type { JobResponse } from '@shared/types/job';
-import type { CondensedGame, StructuredGame } from '@shared/types/log';
+import type { GameListResponse, GameLogResponse, GameSummary } from '@shared/types/log';
 
 interface UseJobLogsOptions {
-  /** Whether the log panel is open (triggers raw + condensed fetching) */
-  showLogPanel: boolean;
-  /** Whether to load structured logs (user-triggered) */
-  loadStructured: boolean;
+  /** Whether the person opened a log view (Deck Actions or the detailed logs). */
+  enabled: boolean;
+  /** The game to load, counted from 0 in play order. */
+  selectedGame: number;
 }
 
 export interface JobLogsData {
-  rawLogs: string[] | null;
-  rawLogsError: string | null;
-  rawLogsLoading: boolean;
-  condensedLogs: CondensedGame[] | null;
-  condensedError: string | null;
-  condensedLoading: boolean;
-  structuredGames: StructuredGame[] | null;
-  structuredError: string | null;
-  structuredLoading: boolean;
-  /** Deck names extracted from structured logs */
+  /** Every game's outcome, in play order. */
+  games: GameSummary[] | null;
+  gamesError: string | null;
+  gamesLoading: boolean;
+  /** The selected game's raw log with its condensed and structured views. */
+  game: GameLogResponse | null;
+  gameError: string | null;
+  gameLoading: boolean;
+  /** Deck names stored with the job's logs */
   deckNames: string[] | null;
   /** Color identity by deck name (server-provided or fetched) */
   colorIdentityByDeckName: Record<string, string[]>;
@@ -30,10 +29,10 @@ export interface JobLogsData {
 /**
  * Manages all log data fetching using TanStack Query.
  *
- * Lazy-loads data based on user interaction:
- * - Raw + condensed logs load when the log panel is opened
- * - Structured logs load when the user clicks "Load Deck Actions"
- * - Color identity is resolved from the job or fetched separately
+ * Lazy-loads data based on user interaction: once a log view is opened it
+ * loads the job's game list, then only the selected game's logs, so a
+ * 1000-game job never downloads every log at once.
+ * Color identity is resolved from the job or fetched separately.
  */
 export function useJobLogs(
   jobId: string | undefined,
@@ -44,50 +43,36 @@ export function useJobLogs(
   const jobStatus = job?.status;
   const terminal = isTerminal(jobStatus);
 
-  const rawLogsQuery = useQuery({
-    queryKey: ['job', jobId, 'logs', 'raw'],
-    queryFn: async () => {
-      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/raw`);
+  const gamesQuery = useQuery({
+    queryKey: ['job', jobId, 'logs', 'games'],
+    queryFn: async (): Promise<GameListResponse> => {
+      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/games`);
       if (!res.ok) {
-        if (res.status === 404) return { gameLogs: [] };
-        throw new Error('Failed to load raw logs');
+        if (res.status === 404) return { games: [] };
+        throw new Error('Failed to load game list');
       }
       return res.json();
     },
-    enabled: !!jobId && terminal && options.showLogPanel,
+    enabled: !!jobId && terminal && options.enabled,
     staleTime: Infinity,
   });
 
-  const condensedQuery = useQuery({
-    queryKey: ['job', jobId, 'logs', 'condensed'],
-    queryFn: async () => {
-      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/condensed`);
-      if (!res.ok) {
-        if (res.status === 404) return { condensed: [] };
-        throw new Error('Failed to load condensed logs');
-      }
+  const gameCount = gamesQuery.data?.games.length ?? 0;
+  const gameQuery = useQuery({
+    queryKey: ['job', jobId, 'logs', 'games', options.selectedGame],
+    queryFn: async (): Promise<GameLogResponse> => {
+      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/games/${options.selectedGame}`);
+      if (!res.ok) throw new Error('Failed to load game logs');
       return res.json();
     },
-    enabled: !!jobId && terminal && options.showLogPanel,
+    enabled: !!jobId && terminal && options.enabled && options.selectedGame < gameCount,
     staleTime: Infinity,
-  });
-
-  const structuredQuery = useQuery({
-    queryKey: ['job', jobId, 'logs', 'structured'],
-    queryFn: async () => {
-      const res = await fetchWithAuth(`${apiBase}/api/jobs/${jobId}/logs/structured`);
-      if (!res.ok) {
-        if (res.status === 404) return { games: [], deckNames: [] };
-        throw new Error('Failed to load structured logs');
-      }
-      return res.json();
-    },
-    enabled: !!jobId && terminal && options.loadStructured,
-    staleTime: Infinity,
+    // Keep showing the last game while the next one loads, so the view doesn't blink.
+    placeholderData: keepPreviousData,
   });
 
   // Collect deck names from all sources
-  const structuredDeckNames: string[] | null = structuredQuery.data?.deckNames ?? null;
+  const structuredDeckNames: string[] | null = gamesQuery.data?.deckNames ?? null;
 
   // Build the names list for color identity lookup
   const allDeckNames = new Set<string>();
@@ -119,15 +104,12 @@ export function useJobLogs(
     : (colorIdentityQuery.data ?? {});
 
   return {
-    rawLogs: rawLogsQuery.data?.gameLogs ?? null,
-    rawLogsError: rawLogsQuery.error?.message ?? null,
-    rawLogsLoading: rawLogsQuery.isLoading && rawLogsQuery.fetchStatus !== 'idle',
-    condensedLogs: condensedQuery.data?.condensed ?? null,
-    condensedError: condensedQuery.error?.message ?? null,
-    condensedLoading: condensedQuery.isLoading && condensedQuery.fetchStatus !== 'idle',
-    structuredGames: structuredQuery.data?.games ?? null,
-    structuredError: structuredQuery.error?.message ?? null,
-    structuredLoading: structuredQuery.isLoading && structuredQuery.fetchStatus !== 'idle',
+    games: gamesQuery.data?.games ?? null,
+    gamesError: gamesQuery.error?.message ?? null,
+    gamesLoading: gamesQuery.isLoading && gamesQuery.fetchStatus !== 'idle',
+    game: gameQuery.data ?? null,
+    gameError: gameQuery.error?.message ?? null,
+    gameLoading: gameQuery.isLoading && gameQuery.fetchStatus !== 'idle',
     deckNames: structuredDeckNames,
     colorIdentityByDeckName,
   };

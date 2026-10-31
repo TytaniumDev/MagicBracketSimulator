@@ -2,7 +2,7 @@
  * Tests for log-store.ts (LOCAL mode only).
  *
  * Uses a temp directory for LOGS_DATA_DIR, loads the real 4-game fixture,
- * and exercises all 5 exported functions.
+ * and exercises the exported functions.
  *
  * Run with: npx tsx lib/log-store.test.ts
  */
@@ -134,170 +134,104 @@ async function runTests() {
     });
 
     // =========================================================================
-    // getRawLogs
+    // forEachRawGame
     // =========================================================================
 
-    await test('getRawLogs: returns null for nonexistent job dir', async () => {
-      const result = await logStore.getRawLogs('nonexistent-job');
-      assertEqual(result, null, 'should return null');
+    const visitAll = async (jobId: string) => {
+      const seen: { game: string; file: string; index: number }[] = [];
+      const count = await logStore.forEachRawGame(jobId, (game, file, index) => seen.push({ game, file, index }));
+      return { count, seen };
+    };
+
+    await test('forEachRawGame: visits nothing for a nonexistent job dir', async () => {
+      const { count } = await visitAll('nonexistent-job');
+      assertEqual(count, 0, 'games visited');
     });
 
-    await test('getRawLogs: returns null when dir has no game_NNN.txt files', async () => {
-      const jobId = 'job-no-games';
-      const jobDir = path.join(tempDir, jobId);
-      fs.mkdirSync(jobDir, { recursive: true });
-      fs.writeFileSync(path.join(jobDir, 'meta.json'), '{}', 'utf-8');
-      const result = await logStore.getRawLogs(jobId);
-      assertEqual(result, null, 'should return null when no game files');
-    });
-
-    await test('getRawLogs: returns sorted game file contents', async () => {
+    await test('forEachRawGame: visits game files in filename order, ignoring other files', async () => {
       const jobId = 'job-sorted-games';
       const jobDir = path.join(tempDir, jobId);
       fs.mkdirSync(jobDir, { recursive: true });
       fs.writeFileSync(path.join(jobDir, 'game_002.txt'), 'game two', 'utf-8');
       fs.writeFileSync(path.join(jobDir, 'game_001.txt'), 'game one', 'utf-8');
-      fs.writeFileSync(path.join(jobDir, 'game_003.txt'), 'game three', 'utf-8');
-      const result = await logStore.getRawLogs(jobId);
-      assert(result !== null, 'should not be null');
-      assertEqual(result!.length, 3, 'should have 3 games');
-      assertEqual(result![0], 'game one', 'first game');
-      assertEqual(result![1], 'game two', 'second game');
-      assertEqual(result![2], 'game three', 'third game');
+      fs.writeFileSync(path.join(jobDir, 'games.json'), '{}', 'utf-8');
+      fs.writeFileSync(path.join(jobDir, 'readme.txt'), 'ignore me', 'utf-8');
+      const { count, seen } = await visitAll(jobId);
+      assertEqual(count, 2, 'games visited');
+      assertEqual(seen.map((s) => s.game).join(','), 'game one,game two', 'order');
     });
 
-    await test("getRawLogs: splits a simulation's file into its games", async () => {
+    await test("forEachRawGame: splits a simulation's file into its games", async () => {
       const jobId = 'job-split-sim';
       await logStore.uploadSingleSimulationLog(jobId, 'raw/game_001.txt', rawLog);
-      const result = await logStore.getRawLogs(jobId);
-      assertEqual(result?.length, 4, 'games');
-      assertEqual(result![0], games[0], 'first game');
-    });
-
-    await test('getRawLogs: ignores non-game files', async () => {
-      const jobId = 'job-ignore-nongame';
-      const jobDir = path.join(tempDir, jobId);
-      fs.mkdirSync(jobDir, { recursive: true });
-      fs.writeFileSync(path.join(jobDir, 'game_001.txt'), 'game one', 'utf-8');
-      fs.writeFileSync(path.join(jobDir, 'meta.json'), '{}', 'utf-8');
-      fs.writeFileSync(path.join(jobDir, 'readme.txt'), 'ignore me', 'utf-8');
-      const result = await logStore.getRawLogs(jobId);
-      assert(result !== null, 'should not be null');
-      assertEqual(result!.length, 1, 'should have 1 game');
+      await logStore.uploadSingleSimulationLog(jobId, 'raw/game_002.txt', games[0]);
+      const { count, seen } = await visitAll(jobId);
+      assertEqual(count, 5, 'games');
+      assertEqual(seen[0].game, games[0], 'first game');
+      assertEqual(seen[3].index, 3, 'fourth game of the first file');
+      assertEqual(seen[4].file, 'game_002.txt', 'second file');
+      assertEqual(seen[4].index, 0, 'first game of the second file');
     });
 
     // =========================================================================
-    // ingestLogs
+    // buildGameIndex / saveGameIndex / getGameIndex
     // =========================================================================
 
-    await test('ingestLogs: returns correct gameCount', async () => {
-      const result = await logStore.ingestLogs('job-ingest-1', games, ['A', 'B', 'C', 'D']);
-      assertEqual(result.gameCount, 4, 'gameCount');
+    await test('buildGameIndex: null when the job has no logs', async () => {
+      assertEqual(await logStore.buildGameIndex('nonexistent-index'), null, 'index');
     });
 
-    await test('ingestLogs: leaves the uploaded raw logs as they are', async () => {
-      const jobId = 'job-ingest-raw';
+    await test('buildGameIndex: one entry per game with its winner, and visits each game', async () => {
+      const jobId = 'job-index-build';
       await logStore.uploadSingleSimulationLog(jobId, 'raw/game_001.txt', rawLog);
-      await logStore.ingestLogs(jobId, games, ['A', 'B', 'C', 'D']);
-      const files = fs.readdirSync(path.join(tempDir, jobId)).filter((f) => f.startsWith('game_'));
-      assertEqual(files.join(','), 'game_001.txt', 'raw files');
-      assertEqual(fs.readFileSync(path.join(tempDir, jobId, 'game_001.txt'), 'utf-8'), rawLog, 'raw log');
+      const visited: string[] = [];
+      const index = await logStore.buildGameIndex(jobId, ['A', 'B', 'C', 'D'], (game) => visited.push(game));
+      assert(index !== null, 'index');
+      assertEqual(index!.games.length, 4, 'games');
+      assertEqual(visited.length, 4, 'visited games');
+      assertEqual(index!.deckNames?.join(','), 'A,B,C,D', 'deck names');
+      assert(index!.games.every((g) => g.file === 'game_001.txt'), 'all in the one file');
+      assert(index!.games.some((g) => typeof g.winner === 'string'), 'winners found');
     });
 
-    await test('ingestLogs: writes meta.json with condensed, structured, deckNames', async () => {
-      const jobId = 'job-ingest-meta';
-      await logStore.ingestLogs(jobId, games, ['A', 'B', 'C', 'D'], ['list-a', 'list-b', 'list-c', 'list-d']);
-      const metaPath = path.join(tempDir, jobId, 'meta.json');
-      assert(fs.existsSync(metaPath), 'meta.json should exist');
-      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-      assert(Array.isArray(meta.condensed), 'meta should have condensed array');
-      assert(Array.isArray(meta.structured), 'meta should have structured array');
-      assertEqual(meta.condensed.length, 4, 'condensed length');
-      assertEqual(meta.structured.length, 4, 'structured length');
-      assert(Array.isArray(meta.deckNames), 'meta should have deckNames');
-      assert(Array.isArray(meta.deckLists), 'meta should have deckLists');
+    await test('getGameIndex: returns the saved index', async () => {
+      const jobId = 'job-index-saved';
+      await logStore.saveGameIndex(jobId, { deckNames: ['A'], games: [{ file: 'game_001.txt', index: 0, winner: 'Ai(1)-A' }] });
+      const index = await logStore.getGameIndex(jobId);
+      assertEqual(index?.games.length, 1, 'games');
+      assertEqual(index?.games[0].winner, 'Ai(1)-A', 'winner');
     });
 
-    await test('ingestLogs: handles concatenated logs (splits internally)', async () => {
-      // Pass the raw log as a single element — ingestLogs should split it
-      const result = await logStore.ingestLogs('job-ingest-concat', [rawLog], ['A', 'B', 'C', 'D']);
-      assertEqual(result.gameCount, 4, 'should split into 4 games');
-    });
-
-    // =========================================================================
-    // getCondensedLogs
-    // =========================================================================
-
-    await test('getCondensedLogs: returns null when no data exists', async () => {
-      const result = await logStore.getCondensedLogs('nonexistent-condensed');
-      assertEqual(result, null, 'should return null');
-    });
-
-    await test('getCondensedLogs: returns precomputed condensed from meta.json', async () => {
-      const jobId = 'job-condensed-pre';
-      await logStore.ingestLogs(jobId, games, ['A', 'B', 'C', 'D']);
-      const result = await logStore.getCondensedLogs(jobId);
-      assert(result !== null, 'should not be null');
-      assertEqual(result!.length, 4, 'should have 4 condensed games');
-      assert(result![0].turnCount > 0, 'first game should have turns');
-    });
-
-    await test('getCondensedLogs: recomputes from raw files when meta.json missing', async () => {
-      const jobId = 'job-condensed-fallback';
-      // Write raw game files directly without meta.json
-      const jobDir = path.join(tempDir, jobId);
-      fs.mkdirSync(jobDir, { recursive: true });
-      games.forEach((g, i) => {
-        fs.writeFileSync(path.join(jobDir, `game_${String(i + 1).padStart(3, '0')}.txt`), g, 'utf-8');
-      });
-      const result = await logStore.getCondensedLogs(jobId);
-      assert(result !== null, 'should not be null (fallback)');
-      assertEqual(result!.length, 4, 'should have 4 condensed games');
+    await test('getGameIndex: builds from raw logs when none is saved, using the deck name hint', async () => {
+      const jobId = 'job-index-fallback';
+      await logStore.uploadSingleSimulationLog(jobId, 'raw/game_001.txt', rawLog);
+      const index = await logStore.getGameIndex(jobId, ['X', 'Y', 'Z', 'W']);
+      assertEqual(index?.games.length, 4, 'games');
+      assertEqual(index?.deckNames?.[0], 'X', 'hint');
+      assert(!fs.existsSync(path.join(tempDir, jobId, 'games.json')), 'a read does not save the index');
     });
 
     // =========================================================================
-    // getStructuredLogs
+    // getGameLog
     // =========================================================================
 
-    await test('getStructuredLogs: returns null when no data exists', async () => {
-      const result = await logStore.getStructuredLogs('nonexistent-structured');
-      assertEqual(result, null, 'should return null');
+    await test('getGameLog: one game with its raw, condensed and structured views', async () => {
+      const jobId = 'job-game-log';
+      await logStore.uploadSingleSimulationLog(jobId, 'raw/game_001.txt', rawLog);
+      await logStore.saveGameIndex(jobId, (await logStore.buildGameIndex(jobId, ['A', 'B', 'C', 'D']))!);
+      const game = await logStore.getGameLog(jobId, 2);
+      assert(game !== null, 'game');
+      assertEqual(game!.raw, games[2], 'raw log of the third game');
+      assert(game!.condensed.turnCount > 0, 'condensed');
+      assert(game!.structured.totalTurns > 0, 'structured');
     });
 
-    await test('getStructuredLogs: returns { games, deckNames } from meta.json', async () => {
-      const jobId = 'job-structured-pre';
-      await logStore.ingestLogs(jobId, games, ['A', 'B', 'C', 'D']);
-      const result = await logStore.getStructuredLogs(jobId);
-      assert(result !== null, 'should not be null');
-      assert(Array.isArray(result!.games), 'should have games array');
-      assertEqual(result!.games.length, 4, 'should have 4 structured games');
-      assert(Array.isArray(result!.deckNames), 'should have deckNames');
-    });
-
-    await test('getStructuredLogs: recomputes from raw files when meta.json missing', async () => {
-      const jobId = 'job-structured-fallback';
-      const jobDir = path.join(tempDir, jobId);
-      fs.mkdirSync(jobDir, { recursive: true });
-      games.forEach((g, i) => {
-        fs.writeFileSync(path.join(jobDir, `game_${String(i + 1).padStart(3, '0')}.txt`), g, 'utf-8');
-      });
-      const result = await logStore.getStructuredLogs(jobId);
-      assert(result !== null, 'should not be null (fallback)');
-      assertEqual(result!.games.length, 4, 'should have 4 structured games');
-    });
-
-    await test('getStructuredLogs: deckNamesHint overrides stored deckNames in fallback', async () => {
-      const jobId = 'job-structured-hint';
-      const jobDir = path.join(tempDir, jobId);
-      fs.mkdirSync(jobDir, { recursive: true });
-      games.forEach((g, i) => {
-        fs.writeFileSync(path.join(jobDir, `game_${String(i + 1).padStart(3, '0')}.txt`), g, 'utf-8');
-      });
-      const hint = ['X', 'Y', 'Z', 'W'];
-      const result = await logStore.getStructuredLogs(jobId, hint);
-      assert(result !== null, 'should not be null');
-      assert(result!.deckNames !== undefined, 'deckNames should be present');
-      assertEqual(result!.deckNames![0], 'X', 'hint should override');
+    await test('getGameLog: null past the last game or before the first', async () => {
+      const jobId = 'job-game-log-range';
+      await logStore.uploadSingleSimulationLog(jobId, 'raw/game_001.txt', rawLog);
+      assertEqual(await logStore.getGameLog(jobId, 4), null, 'past the end');
+      assertEqual(await logStore.getGameLog(jobId, -1), null, 'negative');
+      assertEqual(await logStore.getGameLog('nonexistent-game-log', 0), null, 'no logs');
     });
 
   } finally {

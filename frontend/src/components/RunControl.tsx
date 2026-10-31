@@ -13,7 +13,7 @@ interface RunControlProps {
   podCount: number;
 }
 
-const MAX_GAMES = 100;
+const MAX_GAMES = 1000;
 
 /** The form's submit button, with a gear that opens the games-per-pod setting. */
 export function RunControl({ label, disabled, games, onGamesChange, podCount }: RunControlProps) {

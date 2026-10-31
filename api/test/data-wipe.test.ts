@@ -56,7 +56,7 @@ async function main() {
   const { getRatingStore } = await import('../lib/rating-store-factory');
   const { getCardStatsStore } = await import('../lib/card-stats-store-factory');
   const { saveDeck, listSavedDecks } = await import('../lib/saved-decks');
-  const { ingestLogs } = await import('../lib/log-store');
+  const { uploadSingleSimulationLog } = await import('../lib/log-store');
   const { wipeNextStep } = await import('../lib/data-wipe');
 
   const deck = { name: 'Test Deck', dck: '[Commander]\n1 Sol Ring\n' };
@@ -71,7 +71,7 @@ async function main() {
     await jobStore.initializeSimulations(job.id, 2);
     jobIds.push(job.id);
   }
-  await ingestLogs(jobIds[0], ['game log']);
+  await uploadSingleSimulationLog(jobIds[0], 'raw/game_001.txt', 'game log');
   await (await getPodRunStore()).createPodRun({
     deckIds: ['a', 'b', 'c', 'd'],
     deckNames: ['A', 'B', 'C', 'D'],

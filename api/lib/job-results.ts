@@ -1,12 +1,12 @@
 /**
- * A job's results from its structured games: wins and average winning turn
+ * A job's results from its games' winners: wins and average winning turn
  * per seat.
  */
 import { seatOfPlayer } from './condenser/deck-match';
-import type { JobResults, StructuredGame } from './types';
+import type { GameSummary, JobResults } from './types';
 
 export function computeJobResults(
-  games: readonly Pick<StructuredGame, 'winner' | 'winningTurn'>[],
+  games: readonly GameSummary[],
   seatNames: readonly string[],
 ): JobResults {
   const winTurns: number[][] = seatNames.map(() => []);

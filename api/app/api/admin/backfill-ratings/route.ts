@@ -46,13 +46,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Update per-deck win/game counters and pair game counts
-        const { getStructuredLogs } = await import('@/lib/log-store');
-        const structuredData = await getStructuredLogs(job.id);
+        const { getGameIndex } = await import('@/lib/log-store');
+        const gameIndex = await getGameIndex(job.id, job.seats.map((s) => s.name));
 
-        if (structuredData?.games?.length) {
+        if (gameIndex?.games.length) {
           const { processJobForRatings } = await import('@/lib/trueskill-service');
           // Idempotent: a job already rated is skipped by the store.
-          const applied = await processJobForRatings(job.id, job.seats, structuredData.games);
+          const applied = await processJobForRatings(job.id, job.seats, gameIndex.games);
           (applied ? processed : skipped).push(job.id);
         } else {
           skipped.push(job.id);

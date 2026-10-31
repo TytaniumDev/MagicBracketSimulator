@@ -2,16 +2,16 @@
  * Card impact service: turns a finished job's raw logs into per-deck card
  * counters.
  *
- * Runs from aggregateJobResults, which already holds the job's raw logs,
- * so it costs no extra log reads, and one read plus one write per deck in
- * Firestore. The backfill batches many jobs into that same one write per
- * deck. Idempotent per job (the store records counted job ids).
+ * Runs from aggregateJobResults, which parses each game's card signals
+ * while it walks the job's raw logs, so it costs no extra log reads, and
+ * one read plus one write per deck in Firestore. The backfill batches many
+ * jobs into that same one write per deck. Idempotent per job (the store
+ * records counted job ids).
  */
 import { matchesDeckName } from '../condenser/deck-match';
-import { splitConcatenatedGames } from '../condenser/patterns';
 import { getCardStatsStore } from '../card-stats-store-factory';
 import type { CardStatsJobUpdate } from '../card-stats-store';
-import { parseGameCards, type GameCardSummary } from './parse';
+import type { GameCardSummary } from './parse';
 import { addGame } from './stats';
 
 /**
@@ -27,16 +27,6 @@ export function seatFor(game: GameCardSummary, deckName: string, deckIndex: numb
   );
 }
 
-/** A finished job's logs and decks, for card stats. */
-export interface CardStatsJob {
-  jobId: string;
-  /** The job's 4 deck ids, in seat order. */
-  deckIds: string[];
-  /** The matching deck names, as they appear in the job. */
-  deckNames: string[];
-  rawLogs: string[];
-}
-
 /**
  * A job's games reduced to the card signals card stats need. Much smaller
  * than its raw logs, so a page of jobs fits in memory where their raw logs
@@ -47,11 +37,6 @@ export interface ParsedCardStatsJob {
   deckIds: string[];
   deckNames: string[];
   games: GameCardSummary[];
-}
-
-/** Parse a job's raw logs, so the caller can drop them before reading the next job. */
-export function parseCardStatsJob({ rawLogs, ...job }: CardStatsJob): ParsedCardStatsJob {
-  return { ...job, games: rawLogs.flatMap(splitConcatenatedGames).map(parseGameCards) };
 }
 
 /** Each deck's counter update for one job, or nothing if it holds no games. */
@@ -89,14 +74,4 @@ export async function processJobsForCardStats(jobs: ParsedCardStatsJob[]): Promi
 
   const store = getCardStatsStore();
   await Promise.all([...byDeck].map(([deckId, updates]) => store.addJobs(deckId, updates)));
-}
-
-/** Add one finished job's games to its decks' card counters. */
-export async function processJobForCardStats(
-  jobId: string,
-  deckIds: string[],
-  deckNames: string[],
-  rawLogs: string[],
-): Promise<void> {
-  await processJobsForCardStats([parseCardStatsJob({ jobId, deckIds, deckNames, rawLogs })]);
 }

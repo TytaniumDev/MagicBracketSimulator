@@ -5,15 +5,12 @@ import { DEFAULT_DECK_NAMES } from './factory';
  * Default empty logs — the state before any log data is loaded.
  */
 export const emptyLogs: JobLogsData = {
-  rawLogs: null,
-  rawLogsError: null,
-  rawLogsLoading: false,
-  condensedLogs: null,
-  condensedError: null,
-  condensedLoading: false,
-  structuredGames: null,
-  structuredError: null,
-  structuredLoading: false,
+  games: null,
+  gamesError: null,
+  gamesLoading: false,
+  game: null,
+  gameError: null,
+  gameLoading: false,
   deckNames: null,
   colorIdentityByDeckName: {},
 };

@@ -31,6 +31,9 @@ export type {
   DeckTurnActions,
   DeckHistory,
   StructuredGame,
+  GameSummary,
+  GameListResponse,
+  GameLogResponse,
 } from '@shared/types/log';
 
 export type { WorkerInfo } from '@shared/types/worker';
@@ -88,7 +91,7 @@ export interface CreateJobRequest {
 }
 
 export const SIMULATIONS_MIN = 4;
-export const SIMULATIONS_MAX = 100;
+export const SIMULATIONS_MAX = 1000;
 export const PARALLELISM_MIN = 1;
 export const PARALLELISM_MAX = 16;
 

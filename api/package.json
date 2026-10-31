@@ -22,7 +22,6 @@
     "test:contract": "tsx test/job-store-contract.test.ts",
     "test:state-machine": "tsx test/state-machine.test.ts",
     "test:sim-wins": "tsx test/simulation-wins.test.ts",
-    "recompute-logs": "tsx scripts/recompute-job-logs.ts",
     "backfill-color-identity": "tsx scripts/backfill-deck-color-identity.ts",
     "wipe-data": "tsx scripts/wipe-data.ts"
   },

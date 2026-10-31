@@ -53,7 +53,7 @@ function SimulationForm() {
   const { user } = useAuth();
 
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
-  const [simulations, setSimulations] = useState(100);
+  const [simulations, setSimulations] = useState(200);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Reused across retries of the same submission so the API dedups it.
