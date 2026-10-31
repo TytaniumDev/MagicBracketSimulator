@@ -159,8 +159,10 @@ COMPLETED/CANCELLED count as "done".
 
 - **Cloud Tasks recovery** (`POST /api/jobs/:id/recover`): scheduled at job
 creation (T+10min). If the job is still active when the task fires, runs
-`recoverStaleJob` once and reschedules for 5 more minutes. Replaces the
-former background polling scanner.
+`recoverStaleJob` once and reschedules for 5 more minutes. A check that
+fires after the job finished does nothing; the API never deletes these
+tasks (its service account may only create them). Replaces the former
+background polling scanner.
 - **Job cancellation** (`POST /api/jobs/:id/cancel`): triggers aggregation so
 `structured.json` gets created from whatever sims completed before
 cancellation.
@@ -446,7 +448,7 @@ pairs have sufficient game data for reliable Bayesian win-rate rankings.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Forge**                | Writes raw Forge log to stdout                                                                                                                                     | None                                                                                                                                         |
 | **Worker**               | Reads stdout → one `logText`; splits and extracts winners/turns in memory; retries failed containers locally (2 attempts, 30s backoff)                             | → **PATCH** status (winners, winningTurns, state, durationMs); → **POST** raw `logText`                                                      |
-| **API**                  | Stores raw logs in Firestore/SQLite; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED; cancels Cloud Tasks | ← PATCH (status), ← POST (raw log); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
+| **API**                  | Stores raw logs in Firestore/SQLite; atomic counter check on completion; runs **aggregation**: read raw logs, **condense + structure**, write artifacts + mark COMPLETED | ← PATCH (status), ← POST (raw log); → **GET** logs/raw, logs/condensed, logs/structured (when requested) |
 | **Frontend**             | Listens to Firestore `onSnapshot` (GCP) or polls REST via TanStack Query (local); fetches structured/raw/condensed only when needed                                                                   | ← **Firestore** onSnapshot (GCP) or REST polling (local); ← GET job; ← GET logs/structured, logs/raw, logs/condensed                                         |
 
 

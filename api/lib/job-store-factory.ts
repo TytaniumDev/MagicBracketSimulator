@@ -6,7 +6,6 @@ import { Job, JobStatus, JobResults, JobSeat, SimulationStatus, SimulationState,
 import { isTerminalSimState } from '@shared/types/state-machine';
 import * as firestoreStore from './firestore-job-store';
 import * as workerStore from './worker-store-factory';
-import { cancelRecoveryCheck } from './cloud-tasks';
 import { isSimLeaseExpired, type ClaimOptions, type SimLeaseStatus } from './sim-lease';
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from './logger';
@@ -643,10 +642,6 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   if (allCancelled) {
     await setJobFailed(jobId, 'All simulations were cancelled (likely by stale-sweeper lifetime cap)');
     await setNeedsAggregation(jobId, false);
-    cancelRecoveryCheck(jobId).catch(err => {
-      log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err });
-      Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId } });
-    });
     return;
   }
 
@@ -654,11 +649,5 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
 
   // Clear the flag — aggregation completed successfully
   await setNeedsAggregation(jobId, false);
-
-  // Cancel recovery task
-  cancelRecoveryCheck(jobId).catch(err => {
-    log.warn('Cleanup fire-and-forget failed', { jobId, error: err instanceof Error ? err.message : err });
-    Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId } });
-  });
 }
 
