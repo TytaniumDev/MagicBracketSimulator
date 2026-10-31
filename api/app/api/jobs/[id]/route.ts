@@ -3,7 +3,7 @@ import { verifyAllowedUser, verifyAdmin, unauthorizedResponse, forbiddenResponse
 import * as jobStore from '@/lib/job-store-factory';
 import { deleteJobCompletely } from '@/lib/job-delete';
 import { resolveJobDecks } from '@/lib/job-decks';
-import { GAMES_PER_CONTAINER } from '@/lib/types';
+import { GAMES_PER_CONTAINER, type DeckSlot } from '@/lib/types';
 import { seatNames, type JobResponse } from '@shared/types/job';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -12,10 +12,17 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+/** The `?view=worker` response: what a desktop worker needs to run a sim. */
+interface WorkerJobResponse extends JobResponse {
+  /** Games each sim plays in one Forge run. */
+  gamesPerSim: number;
+  decks?: DeckSlot[];
+}
+
 async function jobToApiResponse(
   job: Awaited<ReturnType<typeof jobStore.getJob>>,
   isWorker: boolean
-): Promise<JobResponse | null> {
+): Promise<JobResponse | WorkerJobResponse | null> {
   if (!job) return null;
   const start = job.startedAt?.getTime() ?? job.createdAt.getTime();
   const end = job.completedAt?.getTime();
@@ -47,17 +54,20 @@ async function jobToApiResponse(
   };
   if (!isWorker) return response;
 
-  // Workers also get each seat's decklist to run the job
+  // Workers also get each seat's decklist, and how many games each sim
+  // plays: the API sizes sims by GAMES_PER_CONTAINER, so the worker must
+  // run that many games per Forge run for the job to reach its game count.
   const decks = await resolveJobDecks(job);
-  return { ...response, ...(decks && { decks }) };
+  return { ...response, gamesPerSim: GAMES_PER_CONTAINER, ...(decks && { decks }) };
 }
 
 /**
  * GET /api/jobs/[id] - Get job details (allowed users).
  *
  * `?view=worker` adds the job's 4 decks with their .dck content
- * (see job-decks.ts). The desktop worker, which signs in as an allowed
- * user, asks for it to run the job's sims.
+ * (see job-decks.ts) and `gamesPerSim`, the games each sim plays in one
+ * Forge run. The desktop worker, which signs in as an allowed user, asks
+ * for it to run the job's sims.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {

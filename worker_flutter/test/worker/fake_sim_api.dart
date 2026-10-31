@@ -108,6 +108,7 @@ class FakeSimApi {
       json.encode({
         'id': jobId,
         'simulations': data['simulations'],
+        'gamesPerSim': 4,
         'decks': data['decks'],
       }),
       200,

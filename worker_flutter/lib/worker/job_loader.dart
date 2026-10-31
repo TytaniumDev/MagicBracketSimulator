@@ -8,7 +8,8 @@ import '../models/sim.dart';
 /// to disk for Forge.
 ///
 /// Calls `GET /api/jobs/:id?view=worker`, which returns the job's 4 decks
-/// with their .dck content (job docs only record deck names and ids). Every
+/// with their .dck content (job docs only record deck names and ids) and
+/// how many games each sim plays. Every
 /// sim of a job needs the same decks, so the response is kept for the last
 /// [cacheSize] jobs.
 class JobLoader {
@@ -37,8 +38,16 @@ class JobLoader {
     return JobInfo(
       jobId: jobId,
       deckFilenames: _writeDecks(data['decks']),
-      simulationsPerJob: (data['simulations'] as num?)?.toInt() ?? 1,
+      gamesPerSim: _gamesPerSim(data['gamesPerSim']),
     );
+  }
+
+  /// The worker view's `gamesPerSim`. Throws when it is missing or not a
+  /// positive whole number: guessing would silently play the wrong number
+  /// of games, so the sim fails and is reported instead.
+  static int _gamesPerSim(Object? raw) {
+    if (raw is int && raw > 0) return raw;
+    throw FormatException('worker view has no valid gamesPerSim: $raw');
   }
 
   Future<Map<String, dynamic>?> _workerView(String jobId) {

@@ -38,7 +38,7 @@ void main() {
   );
 
   http.Response ok({List<Map<String, String>> decks = _decks}) =>
-      http.Response(json.encode({'simulations': 8, 'decks': decks}), 200);
+      http.Response(json.encode({'gamesPerSim': 4, 'decks': decks}), 200);
 
   setUp(() {
     decksDir = Directory.systemTemp.createTempSync('job_loader_test');
@@ -53,7 +53,7 @@ void main() {
 
     expect(requests, ['https://api.test/api/jobs/job-1?view=worker']);
     expect(job!.jobId, 'job-1');
-    expect(job.simulationsPerJob, 8);
+    expect(job.gamesPerSim, 4);
     expect(job.deckFilenames, [
       'Alpha_One.dck',
       'Beta.dck',
@@ -114,10 +114,19 @@ void main() {
   });
 
   test('writes no decks when the API could not resolve them', () async {
-    respond = () => http.Response(json.encode({'simulations': 8}), 200);
+    respond = () => http.Response(json.encode({'gamesPerSim': 4}), 200);
 
     final job = await loader().load('job-1');
 
     expect(job!.deckFilenames, isEmpty);
+  });
+
+  test('throws when the worker view has no games per sim', () async {
+    respond = () => http.Response(json.encode({'decks': _decks}), 200);
+
+    await expectLater(
+      loader().load('job-1'),
+      throwsA(isA<FormatException>()),
+    );
   });
 }

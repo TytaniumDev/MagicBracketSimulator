@@ -57,10 +57,13 @@ class JobInfo {
   JobInfo({
     required this.jobId,
     required this.deckFilenames,
-    required this.simulationsPerJob,
+    required this.gamesPerSim,
   });
 
   final String jobId;
   final List<String> deckFilenames; // 4 .dck filenames
-  final int simulationsPerJob;
+
+  /// Games one sim plays in a single Forge run (`-n`). The API sizes a
+  /// job's sims by this, so running fewer leaves the job short of games.
+  final int gamesPerSim;
 }

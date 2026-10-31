@@ -163,7 +163,8 @@ class OfflineRunner {
       job: JobInfo(
         jobId: 'offline-${sim.jobId}',
         deckFilenames: deckFilenames,
-        simulationsPerJob: 1,
+        // Offline sims each record one game's winner.
+        gamesPerSim: 1,
       ),
       cancelSignal: cancel,
     );
