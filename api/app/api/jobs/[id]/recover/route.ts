@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isInternalRequest } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
-import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
+import { scheduleFollowUpRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -17,7 +17,7 @@ interface RouteParams {
  * X-Worker-Secret header (see isInternalRequest in lib/auth.ts).
  *
  * Logic:
- * 1. If job is terminal → no-op (tasks are never deleted when a job ends)
+ * 1. If job is terminal → no-op (a follow-up check outlived its job)
  * 2. If job is still active → run recoverStaleJob
  * 3. If job is still active after recovery → reschedule in 5 min
  */
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // If still active, reschedule for another check in 5 minutes
     if (stillActive) {
-      scheduleRecoveryCheck(id, 300).catch(err => {
+      scheduleFollowUpRecoveryCheck(id, 300).catch(err => {
         console.warn('[Recovery] Reschedule failed:', err instanceof Error ? err.message : err);
         Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId: id } });
       });
