@@ -18,6 +18,15 @@ const DEFAULT_CONFIG: CoverageConfig = {
   updatedBy: '',
 };
 
+/**
+ * A stored time as an ISO string, or '' when it is not a Timestamp. The
+ * config doc can outlive a schema change (it survived the 2026-10-30 data
+ * reset with a string updatedAt), and the next update rewrites it.
+ */
+function timestampToIso(value: unknown): string {
+  return value instanceof Timestamp ? value.toDate().toISOString() : '';
+}
+
 export const firestoreCoverageStore: CoverageStore = {
   async getConfig(): Promise<CoverageConfig> {
     const doc = await configDoc.get();
@@ -26,7 +35,7 @@ export const firestoreCoverageStore: CoverageStore = {
     return {
       enabled: data.enabled ?? false,
       targetGamesPerPair: data.targetGamesPerPair ?? 400,
-      updatedAt: (data.updatedAt as Timestamp | undefined)?.toDate().toISOString() ?? '',
+      updatedAt: timestampToIso(data.updatedAt),
       updatedBy: data.updatedBy ?? '',
     };
   },
