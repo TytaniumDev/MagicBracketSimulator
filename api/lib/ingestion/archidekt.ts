@@ -47,6 +47,19 @@ interface ArchidektDeckResponse {
   cards: ArchidektCard[];
 }
 
+/** A non-2xx answer from the Archidekt API, with its HTTP status. */
+export class ArchidektHttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ArchidektHttpError';
+  }
+}
+
+/** True when Archidekt asked us to slow down (HTTP 429). */
+export function isArchidektRateLimit(error: unknown): boolean {
+  return error instanceof ArchidektHttpError && error.status === 429;
+}
+
 export async function fetchArchidektDeck(deckId: string): Promise<ParsedDeck> {
   const url = `${ARCHIDEKT_API_BASE}/decks/${deckId}/`;
 
@@ -58,12 +71,15 @@ export async function fetchArchidektDeck(deckId: string): Promise<ParsedDeck> {
 
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error(`Deck not found: ${deckId}`);
+      throw new ArchidektHttpError(`Deck not found: ${deckId}`, 404);
     }
     if (response.status === 403) {
-      throw new Error(`Deck is private or not accessible: ${deckId}`);
+      throw new ArchidektHttpError(`Deck is private or not accessible: ${deckId}`, 403);
     }
-    throw new Error(`Failed to fetch Archidekt deck: ${response.status} ${response.statusText}`);
+    throw new ArchidektHttpError(
+      `Failed to fetch Archidekt deck: ${response.status} ${response.statusText}`,
+      response.status,
+    );
   }
 
   const data: ArchidektDeckResponse = await response.json();

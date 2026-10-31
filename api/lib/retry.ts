@@ -39,8 +39,8 @@ export async function withRetry<T>(
       if (shouldRetry) {
         const waitMs = delayMs * Math.pow(backoffMultiplier, attempt);
         const msg = logContext
-          ? `[Worker] Retry ${attempt + 1}/${maxAttempts} after ${logContext}`
-          : `[Worker] Retry ${attempt + 1}/${maxAttempts}`;
+          ? `[Retry] Attempt ${attempt + 1}/${maxAttempts} after ${logContext}`
+          : `[Retry] Attempt ${attempt + 1}/${maxAttempts}`;
         console.log(msg);
         await sleep(waitMs);
       } else {
