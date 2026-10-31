@@ -5,8 +5,9 @@
 #
 # Native Windows and macOS builds are not run here: they took 10 and 20+
 # minutes per PR and rarely found anything the Dart tests didn't. The
-# release workflow (release-worker.yml) builds and signs both on every push
-# to main, so a native break shows up there as a failed release.
+# release workflow (release-worker.yml) builds and signs both whenever a
+# merge to main changes the worker, so a native break shows up there as a
+# failed release.
 name: Worker Flutter CI
 
 on:

@@ -1,23 +1,40 @@
 name: Release magic-bracket-simulator
 
 # One workflow, two platform builds, one GitHub Release, one appcast
-# update. Runs on every merge to main (auto-bumped patch), on a manual
-# `workflow_dispatch`, or on a hand-pushed `worker-v*` tag (for
-# deliberate minor/major bumps that should jump past the auto-bump).
+# update. Runs when a merge to main changes the worker app or its Forge
+# version (auto-bumped patch), on a manual `workflow_dispatch`, or on a
+# hand-pushed `worker-v*` tag (for deliberate minor/major bumps that
+# should jump past the auto-bump).
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-    # The appcast PR this workflow opens merges back to main. Without
-    # this, that merge starts another release, which opens another
-    # appcast PR, forever.
-    # forge-manifest.json is fetched from main at runtime, so a Forge
-    # bump needs no new app build either.
-    paths-ignore:
-      - "worker_flutter/appcast.xml"
-      - "worker_flutter/forge-manifest.json"
+    # Only merges that change what ships in the app cut a release, so
+    # api/frontend-only merges don't push an update to every worker.
+    # Later patterns override earlier ones, so the `!` lines carve files
+    # back out of worker_flutter/**.
+    paths:
+      - "worker_flutter/**"
+      # Tests and docs don't ship in the app.
+      - "!worker_flutter/test/**"
+      - "!worker_flutter/docs/**"
+      - "!worker_flutter/**/*.md"
+      # The appcast PR this workflow opens merges back to main. Without
+      # this, that merge starts another release, which opens another
+      # appcast PR, forever.
+      - "!worker_flutter/appcast.xml"
+      # The nightly Forge bump (forge-update.yml) stays included on
+      # purpose: the app only reads forge-manifest.json at launch, so a
+      # release makes running workers update, restart and install the
+      # new Forge instead of waiting for a manual restart.
+      # Changes to the release pipeline itself release too, so they're
+      # exercised right away.
+      - ".github/workflows/release-worker.yml"
+      - ".github/scripts/compute_worker_version.py"
+      - ".github/scripts/prepend_appcast_item.py"
+    # Path filters don't apply to tag pushes.
     tags:
       - "worker-v*"
 

@@ -151,8 +151,8 @@ queue and finishes jobs whose sims are all terminal.
 | `worker-flutter-ci.yml` | `flutter analyze` + `flutter test` for the desktop worker |
 | `deploy.yml` | On merge: frontend to Firebase Hosting, Firestore rules + indexes, Realtime Database rules |
 | App Hosting | Builds and rolls out the API from `main`; `rollout-safety-net.yml` forces a rollout if one doesn't appear |
-| `release-worker.yml` | Desktop worker builds, GitHub Release, `appcast.xml` |
-| `forge-update.yml` | Nightly: bumps `worker_flutter/forge-manifest.json` to the latest Forge release in an auto-merging PR; desktop workers install it on their next launch |
+| `release-worker.yml` | Desktop worker builds, GitHub Release, `appcast.xml`; runs only when a merge changes the worker app, its Forge manifest or the release pipeline |
+| `forge-update.yml` | Nightly: bumps `worker_flutter/forge-manifest.json` to the latest Forge release in an auto-merging PR, whose merge also cuts a worker release; desktop workers install the new Forge when they restart into it |
 | `sync-api-secrets.yml` | Copies the API's secrets from Doppler (source of truth) into GCP Secret Manager |
 
 Errors go to Sentry (org `tytaniumdev`): projects `magic-bracket-api`,
