@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
+import { cancelRecoveryCheck } from '@/lib/cloud-tasks';
 import { isTerminalJobState } from '@shared/types/state-machine';
 import { errorResponse, notFoundResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -35,6 +36,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     await jobStore.cancelJob(id);
+
+    // Cancel scheduled recovery task (fire-and-forget)
+    cancelRecoveryCheck(id).catch(err => {
+      console.warn('[Recovery] Cancel check failed:', err instanceof Error ? err.message : err);
+      Sentry.captureException(err, { tags: { component: 'cloud-tasks', jobId: id } });
+    });
 
     // Trigger log aggregation so structured.json gets created from completed sims
     jobStore.aggregateJobResults(id).catch(err => {

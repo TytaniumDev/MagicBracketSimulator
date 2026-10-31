@@ -147,6 +147,14 @@ This syncs the precons from Archidekt into Firestore.
     ```
 - **Local API:** Ensure service account key path is correct and the key’s account has Firestore read/write (e.g. Cloud Datastore User).
 
+### Cloud Tasks permission errors (e.g. `lacks IAM permission "cloudtasks.tasks.delete"`)
+- The API schedules a recovery check per job and deletes it when the job ends, so its service account (App Hosting's `firebase-app-hosting-compute@PROJECT_ID.iam.gserviceaccount.com`) needs **Cloud Tasks Enqueuer** and **Cloud Tasks Task Deleter**:
+  ```bash
+  gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:firebase-app-hosting-compute@PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/cloudtasks.taskDeleter"
+  ```
+
 ### Jobs stuck in QUEUED
 - Ensure a desktop worker is running and signed in with an allowed account (the frontend's worker banner shows online workers)
 - Check the desktop worker's log and Sentry (`magic-bracket-worker`) for errors
