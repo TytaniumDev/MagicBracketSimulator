@@ -1,5 +1,5 @@
 /**
- * Deck selection store contract tests: excluding a deck and including it
+ * Deck selection store contract tests: excluding decks and including them
  * again.
  *
  * Exercises the factory so SQLite and Firestore are held to the same
@@ -50,15 +50,20 @@ async function main() {
   });
 
   await test('excluding decks lists them, and excluding twice keeps one entry', async () => {
-    await store.setDeckExcluded(a.id, true, 'admin@example.com');
-    await store.setDeckExcluded(a.id, true, 'admin@example.com');
-    const ids = await store.setDeckExcluded(b.id, true, 'admin@example.com');
+    await store.setDecksExcluded([a.id], true, 'admin@example.com');
+    await store.setDecksExcluded([a.id], true, 'admin@example.com');
+    const ids = await store.setDecksExcluded([b.id], true, 'admin@example.com');
     assertEqual(mine(ids), [a.id, b.id].sort(), 'excluded');
   });
 
   await test('including a deck again removes it', async () => {
-    const ids = await store.setDeckExcluded(a.id, false, 'admin@example.com');
+    const ids = await store.setDecksExcluded([a.id], false, 'admin@example.com');
     assertEqual(mine(ids), [b.id], 'excluded');
+  });
+
+  await test('several decks change in one call', async () => {
+    assertEqual(mine(await store.setDecksExcluded([a.id, b.id], true, 'admin@example.com')), [a.id, b.id].sort(), 'excluded');
+    assertEqual(mine(await store.setDecksExcluded([a.id, b.id], false, 'admin@example.com')), [], 'included');
   });
 
   fs.rmSync(tmpDir, { recursive: true, force: true });

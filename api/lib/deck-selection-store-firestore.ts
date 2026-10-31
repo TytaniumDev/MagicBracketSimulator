@@ -17,8 +17,12 @@ export const firestoreDeckSelectionStore: DeckSelectionStore = {
 
   // Who excluded the deck isn't recorded here: deck docs are readable by
   // the web app, and the admin's email shouldn't be.
-  async setDeckExcluded(deckId, excluded): Promise<string[]> {
-    await decksCollection.doc(deckId).update({ excluded: excluded ? true : FieldValue.delete() });
+  async setDecksExcluded(deckIds, excluded): Promise<string[]> {
+    const batch = getFirestore().batch();
+    for (const deckId of deckIds) {
+      batch.update(decksCollection.doc(deckId), { excluded: excluded ? true : FieldValue.delete() });
+    }
+    await batch.commit();
     return this.getExcludedDeckIds();
   },
 };

@@ -226,14 +226,14 @@ export async function fetchDeckLibrary(): Promise<DeckLibrary> {
 }
 
 /**
- * Exclude a deck from selection, or include it again (admin only).
- * Returns every excluded deck id.
+ * Exclude decks from selection, or include them again, in one write (admin
+ * only). Returns every excluded deck id.
  */
-export async function setDeckExcluded(deckId: string, excluded: boolean): Promise<string[]> {
+export async function setDecksExcluded(deckIds: string[], excluded: boolean): Promise<string[]> {
   const apiBase = resolveApiBase();
-  const res = await fetchWithAuth(`${apiBase}/api/decks/${encodeURIComponent(deckId)}`, {
+  const res = await fetchWithAuth(`${apiBase}/api/decks`, {
     method: 'PATCH',
-    body: JSON.stringify({ excluded }),
+    body: JSON.stringify({ deckIds, excluded }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

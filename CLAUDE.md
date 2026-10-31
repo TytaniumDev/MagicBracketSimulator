@@ -115,7 +115,7 @@ Areas covered: worker result reporting, API status updates, log upload/storage, 
 - `src/pages/Leaderboard.tsx` — Deck ratings (`/leaderboard`)
 - `src/pages/WorkerSetup.tsx` — Desktop worker downloads (`/worker-setup`)
 - `src/pages/DeckPage.tsx` — Deck page (`/decks/:id`): results plus a compact decklist with Scryfall hover previews
-- `src/pages/Decks.tsx` — Decks page (`/decks`): every deck as a commander card grouped by set, linking to its deck page; excluded decks are faded and admins toggle them
+- `src/pages/Decks.tsx` — Decks page (`/decks`): every deck as a commander card grouped by set, linking to its deck page; excluded decks are faded and admins toggle them. Shares `AddDeckButton` with New Simulation
 - `src/contexts/AuthContext.tsx` — Firebase Auth provider
 - `src/hooks/useJobStream.ts` — Live job + sims (Firestore `onSnapshot`, REST polling in local mode)
 - `src/hooks/useWorkerStatus.ts` — Online workers from Realtime Database presence
@@ -142,7 +142,7 @@ Routes live under `api/app/api/`. Key endpoints:
 - `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Saved pod runs (one job per 4-deck pod); `?jobId=` finds the run a job belongs to
 - `GET /api/decks` — Every deck plus `excludedDeckIds` (decks hidden from the picker and auto-coverage)
 - `GET /api/decks/:id` — Deck page data: metadata, parsed decklist, results
-- `PATCH /api/decks/:id` — Exclude a deck from selection or include it again (admin, `{ excluded }`)
+- `PATCH /api/decks` — Exclude decks from selection or include them again in one write (admin, `{ deckIds, excluded }`); the Decks page updates optimistically
 - `GET /api/decks/:id/card-impact` — Per-card impact scores (most game-swinging cards), from counters built at aggregation
 - Deck and precon CRUD endpoints
 
