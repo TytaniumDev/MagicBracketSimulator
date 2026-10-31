@@ -18,6 +18,8 @@ interface LinkProps extends BaseProps {
 interface ActionProps extends BaseProps {
   onClick: () => void;
   disabled?: boolean;
+  /** Makes it a toggle button: whether it is on. */
+  pressed?: boolean;
 }
 
 const TONE_CLASS: Record<IconButtonTone, string> = {
@@ -38,7 +40,15 @@ export function IconButton(props: LinkProps | ActionProps) {
     );
   }
   return (
-    <button type="button" onClick={props.onClick} disabled={props.disabled} aria-label={label} title={label} className={classes}>
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      aria-pressed={props.pressed}
+      aria-label={label}
+      title={label}
+      className={classes}
+    >
       {children}
     </button>
   );

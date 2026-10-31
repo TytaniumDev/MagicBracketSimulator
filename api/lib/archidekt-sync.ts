@@ -17,13 +17,6 @@ const ARCHIDEKT_OWNER = 'Archidekt_Precons';
 const PAGE_SIZE = 100;
 const RATE_LIMIT_MS = 3000;
 
-/**
- * Precons released before March of the Machine Commander (April 2023) are
- * left out: precons got noticeably stronger from that set on, and fewer
- * decks keeps a full gauntlet of comparisons reasonable.
- */
-export const PRECON_CUTOFF_DATE = '2023-04-01';
-
 interface ArchidektListDeck {
   id: number;
   name: string;
@@ -114,11 +107,6 @@ export function preconReleaseDate(deck: { createdAt: string }): string {
   return deck.createdAt.slice(0, 10);
 }
 
-/** True for precons released on or after PRECON_CUTOFF_DATE. */
-export function isAfterPreconCutoff(deck: { createdAt: string }): boolean {
-  return preconReleaseDate(deck) >= PRECON_CUTOFF_DATE;
-}
-
 /**
  * Generate a stable slug ID from a precon name.
  */
@@ -165,15 +153,14 @@ export async function syncPrecons(): Promise<SyncResult> {
       dedupedByName.set(name, deck);
     }
   }
-  const allArchidektDecks = [...dedupedByName.values()];
-  const archidektDecks = allArchidektDecks.filter(isAfterPreconCutoff);
+  const archidektDecks = [...dedupedByName.values()];
 
   const idDupes = rawArchidektDecks.length - dedupedById.size;
   const nameDupes = dedupedById.size - dedupedByName.size;
   if (idDupes > 0 || nameDupes > 0) {
     console.log(`[PreconSync] Deduplicated ${rawArchidektDecks.length} → ${archidektDecks.length} (${idDupes} duplicate IDs, ${nameDupes} reprint names)`);
   }
-  console.log(`[PreconSync] Found ${allArchidektDecks.length} precons on Archidekt, ${archidektDecks.length} released since ${PRECON_CUTOFF_DATE}`);
+  console.log(`[PreconSync] Found ${archidektDecks.length} precons on Archidekt`);
 
   // 2. Load existing precons from store (indexed by archidektId)
   const existingByArchidektId = new Map<number, { id: string; archidektUpdatedAt: string | null; releasedAt: string | null }>();
@@ -342,11 +329,9 @@ export async function syncPrecons(): Promise<SyncResult> {
     }
   }
 
-  // 4. Remove orphaned precons (legacy hand-imported, wrongly synced, or
-  // released before the cutoff). The completeness check uses the full
-  // Archidekt list, since the cutoff alone can remove most existing precons.
+  // 4. Remove orphaned precons (legacy hand-imported or wrongly synced)
   const orphanIds = [...allExistingPreconIds].filter((id) => !keepPreconIds.has(id));
-  if (orphanIds.length > 0 && allArchidektDecks.length >= allExistingPreconIds.size * 0.5) {
+  if (orphanIds.length > 0 && archidektDecks.length >= allExistingPreconIds.size * 0.5) {
     console.log(`[PreconSync] Removing ${orphanIds.length} orphaned precons...`);
     if (USE_FIRESTORE) {
       try {
@@ -379,7 +364,7 @@ export async function syncPrecons(): Promise<SyncResult> {
       }
     }
   } else if (orphanIds.length > 0) {
-    console.warn(`[PreconSync] Skipping orphan deletion: got ${allArchidektDecks.length} decks but have ${allExistingPreconIds.size} existing — sync may be incomplete`);
+    console.warn(`[PreconSync] Skipping orphan deletion: got ${archidektDecks.length} decks but have ${allExistingPreconIds.size} existing — sync may be incomplete`);
   }
 
   console.log(`[PreconSync] Sync complete: ${result.added} added, ${result.updated} updated, ${result.unchanged} unchanged, ${result.removed} removed, ${result.errors.length} errors`);

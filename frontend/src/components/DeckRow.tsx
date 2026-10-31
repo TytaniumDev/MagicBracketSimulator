@@ -1,21 +1,19 @@
 import type { ScryfallCard } from '../scryfall';
-import { tileBorderClass } from '../utils/deck-tile';
-import { DeckTileHeader, type DeckTileHeaderProps } from './DeckTileHeader';
+import { tileStateClass } from '../utils/deck-tile';
+import { DeckTileHeader, type DeckTileProps } from './DeckTileHeader';
 import { ColorBar } from './ui/ColorBar';
 import { ExpandIcon } from './ui/icons';
 
-interface DeckRowProps extends DeckTileHeaderProps {
-  /** Scryfall data for the deck's commander; undefined while loading or unknown. */
-  commander: ScryfallCard | undefined;
+interface DeckRowProps extends DeckTileProps {
   /** Show the commander's full card (tapping the art). */
   onViewCard: (card: ScryfallCard) => void;
 }
 
-/** A deck in the phone picker list: commander art beside the name and colors. */
-export function DeckRow({ commander, onViewCard, ...header }: DeckRowProps) {
+/** A deck in the phone list: commander art beside the name and colors. */
+export function DeckRow({ commander, dimmed, onViewCard, ...header }: DeckRowProps) {
   return (
     <li
-      className={`group relative grid grid-cols-[64px_1fr] overflow-hidden rounded-[10px] border bg-surface transition-colors ${tileBorderClass(header.selected)}`}
+      className={`group relative grid grid-cols-[64px_1fr] overflow-hidden rounded-[10px] border bg-surface transition-colors ${tileStateClass(header.target, dimmed)}`}
     >
       {commander?.imageUrl ? (
         <button

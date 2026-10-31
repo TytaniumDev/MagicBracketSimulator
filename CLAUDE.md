@@ -87,7 +87,7 @@ Both modes share one work queue: desktop workers poll `GET /api/jobs/claim-sim`.
 - **No migration code**: prod data was reset on 2026-10-29, and schema changes ship without backwards-compat or migration code. The SQLite schema has no migrations: after a schema change, delete `api/data/jobs.db`.
 - **Access control**: users sign in with Google. The API lets a user in when their `users/{uid}` record has `status: 'allowed'` or their email is in `ADMIN_EMAILS` / `ALLOWED_EMAILS` (`api/lib/allowed-users.ts`, `api/lib/user-store.ts`, `api/lib/auth.ts`). New users request access in the app and an admin approves from the email link; `GET /api/me` gives admins and `ALLOWED_EMAILS` accounts an allowed record so the Firestore rules see them. API routes use `verifyAllowedUser`, including the worker routes (the desktop worker sends its user's ID token); only `/api/me` and `/api/access-requests` take any signed-in user. Internal callers (Cloud Tasks, Cloud Scheduler) send `WORKER_SECRET` as `X-Worker-Secret` (`isInternalRequest` in `api/lib/auth.ts`); the same secret signs access-request approval links.
 - **Crash recovery**: each RUNNING sim carries a 3-minute lease that its worker extends about once a minute (`api/lib/sim-lease.ts`); an expired lease makes the sim claimable again. `recoverStaleJob` runs from the per-job Cloud Tasks check (`POST /api/jobs/:id/recover`) and the 15-minute Cloud Scheduler sweep (`POST /api/admin/sweep-stale-jobs`, `api/lib/stale-sweeper.ts`).
-- **Deck resolution**: Supports Moxfield URLs, precon names, and raw deck text. Resolution happens in `api/lib/moxfield-service.ts`; a job's deck ids become its `seats` in `api/lib/job-seats.ts`. The Archidekt precon sync (`api/lib/archidekt-sync.ts`) keeps only precons released since March of the Machine Commander (`PRECON_CUTOFF_DATE`) and deletes older ones. Card names reach Forge as front faces only (`api/lib/forge-card-name.ts`): Forge drops "Front // Back" names for every layout except split cards.
+- **Deck resolution**: Supports Moxfield URLs, precon names, and raw deck text. Resolution happens in `api/lib/moxfield-service.ts`; a job's deck ids become its `seats` in `api/lib/job-seats.ts`. The daily Archidekt precon sync (`api/lib/archidekt-sync.ts`) loads every precon from the Archidekt_Precons account, including new ones as they appear; admins hide unwanted decks on the Decks page. Card names reach Forge as front faces only (`api/lib/forge-card-name.ts`): Forge drops "Front // Back" names for every layout except split cards.
 - **Worker presence**: online workers live in Realtime Database at `presence/{workerId}` (`shared/types/worker-presence.ts`, rules in `database.rules.json`). The desktop worker writes its own entry with an onDisconnect delete; the API and frontend only read presence. Crash recovery uses sim leases (`api/lib/sim-lease.ts`), not presence. Cancellation reaches a worker through its lease extension answer.
 
 ### Data Flow Documentation
@@ -106,7 +106,7 @@ Areas covered: worker result reporting, API status updates, log upload/storage, 
 - `src/App.tsx` — Router setup (react-router-dom v7)
 - `src/index.css` — Design tokens (Tailwind v4 `@theme`): `canvas`, `surface`, `surface-raised`, `line`, `fg`, `fg-muted`, `accent`, `mana-*`. Use these in new and touched UI instead of raw palette colors
 - `src/components/ui/` — Small shared primitives (`ColorBar`, `IconButton`, `Popover`, `MarqueeText`, icons)
-- `src/components/DeckPicker.tsx` — Deck selection grid: `DeckCard` (full commander card, hover to enlarge) on wide screens, `DeckRow` on phones; commander images and set codes come from Scryfall in the browser
+- `src/components/DeckGrid.tsx` — Decks in sections: `DeckCard` (full commander card, hover to enlarge) on wide screens, `DeckRow` on phones; commander images and set codes come from Scryfall in the browser. Each tile's target selects the deck or links to a page (`DeckTileTarget` in `utils/deck-tile.ts`). `DeckPicker.tsx` wraps it for selection on New Simulation; the Decks page uses it with links
 - `src/pages/Browse.tsx` — Home page (`/`): recent jobs and pod runs
 - `src/pages/Home.tsx` — Submit page (`/submit`): Add deck popover, sticky `PodSlots` + `RunControl` (games per pod behind the gear), sort menu (`utils/deck-order.ts`) and the deck picker
 - `src/components/WorkerStatusPill.tsx` — Workers online, in the app bar on every page
@@ -115,7 +115,7 @@ Areas covered: worker result reporting, API status updates, log upload/storage, 
 - `src/pages/Leaderboard.tsx` — Deck ratings (`/leaderboard`)
 - `src/pages/WorkerSetup.tsx` — Desktop worker downloads (`/worker-setup`)
 - `src/pages/DeckPage.tsx` — Deck page (`/decks/:id`): results plus a compact decklist with Scryfall hover previews
-- `src/pages/Decks.tsx` — Decks page (`/decks`): every deck in a grid grouped by set; admins exclude decks from selection
+- `src/pages/Decks.tsx` — Decks page (`/decks`): every deck as a commander card grouped by set, linking to its deck page; excluded decks are faded and admins toggle them
 - `src/contexts/AuthContext.tsx` — Firebase Auth provider
 - `src/hooks/useJobStream.ts` — Live job + sims (Firestore `onSnapshot`, REST polling in local mode)
 - `src/hooks/useWorkerStatus.ts` — Online workers from Realtime Database presence
