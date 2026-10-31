@@ -8,6 +8,7 @@ import { Spinner } from '../components/Spinner';
 import { WinTurnTooltip } from '../components/WinTurnTooltip';
 import { useDeck, useDeckCardImpact, useScryfallCards } from '../hooks/useDeck';
 import { onlyDeckCards } from '../utils/card-impact';
+import { cardLookups, deckDefaultSet } from '../utils/card-printing';
 
 function StatTile({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
@@ -66,13 +67,15 @@ export default function DeckPage() {
     () => (data ? [...data.commanders, ...data.cards].map((c) => c.name) : []),
     [data],
   );
+  // Look cards up in the deck's own printings, so previews show its art.
   // Without a decklist, look up the cards the deck was seen playing instead,
   // so the impact table still gets images and types.
-  const lookupNames = useMemo(
-    () => (data?.decklistAvailable ? cardNames : (cardImpact.data?.cards ?? []).map((c) => c.name)),
-    [data?.decklistAvailable, cardNames, cardImpact.data],
-  );
-  const scryfall = useScryfallCards(lookupNames);
+  const lookups = useMemo(() => {
+    if (!data?.decklistAvailable) return (cardImpact.data?.cards ?? []).map((c) => ({ name: c.name }));
+    const defaultSet = deckDefaultSet(data.deck.isPrecon, data.commanders);
+    return cardLookups([...data.commanders, ...data.cards], defaultSet);
+  }, [data, cardImpact.data]);
+  const scryfall = useScryfallCards(lookups);
   const impactCards = useMemo(
     () => {
       if (!cardImpact.data) return [];

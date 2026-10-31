@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { cardKey, indexByFace, toScryfallCard, type ScryfallCard } from './scryfall';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cardKey, fetchScryfallCards, indexByFace, toScryfallCard, type ScryfallCard } from './scryfall';
 
 describe('cardKey', () => {
   it('keys split cards by their front face, case-insensitively', () => {
@@ -53,5 +53,69 @@ describe('toScryfallCard', () => {
       image_uris: { normal: 'card.jpg' },
     });
     expect(card.manaCost).toBe('{3}{G}{G}');
+  });
+});
+
+describe('fetchScryfallCards', () => {
+  type Identifier = Record<string, string>;
+  const cardJson = (name: string, image: string) => ({ name, image_uris: { normal: image } });
+
+  /** Stubs Scryfall: `answer` maps each identifier to a card, or null when not found. */
+  function stubScryfall(answer: (id: Identifier) => ReturnType<typeof cardJson> | null) {
+    const requests: Identifier[][] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      const { identifiers } = JSON.parse(init.body as string) as { identifiers: Identifier[] };
+      requests.push(identifiers);
+      const data = identifiers.map(answer).filter((c) => c != null);
+      return new Response(JSON.stringify({ data }));
+    }));
+    return requests;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('looks cards up by their printing when the decklist names one', async () => {
+    const requests = stubScryfall((id) =>
+      id.set === 'tdc' && id.collector_number === '121' ? cardJson('Indomitable Ancients', 'tdc-121.jpg') : null,
+    );
+    const lookup = await fetchScryfallCards([{ name: 'Indomitable Ancients', setCode: 'TDC', collectorNumber: '121' }]);
+    expect(requests).toEqual([[{ set: 'tdc', collector_number: '121' }]]);
+    expect(lookup['indomitable ancients'].imageUrl).toBe('tdc-121.jpg');
+  });
+
+  it('falls back to the set, then the name, when the printing is unknown', async () => {
+    const requests = stubScryfall((id) => {
+      if (id.name === 'Sol Ring' && id.set === 'tdc') return cardJson('Sol Ring', 'tdc-sol-ring.jpg');
+      if (id.name === 'Forest' && !id.set) return cardJson('Forest', 'default-forest.jpg');
+      return null;
+    });
+    const lookup = await fetchScryfallCards([
+      { name: 'Sol Ring', setCode: 'tdc', collectorNumber: '999' },
+      { name: 'Forest', setCode: 'tdc' },
+    ]);
+    expect(requests).toEqual([
+      [{ set: 'tdc', collector_number: '999' }],
+      [{ name: 'Sol Ring', set: 'tdc' }, { name: 'Forest', set: 'tdc' }],
+      [{ name: 'Forest' }],
+    ]);
+    expect(lookup['sol ring'].imageUrl).toBe('tdc-sol-ring.jpg');
+    expect(lookup['forest'].imageUrl).toBe('default-forest.jpg');
+  });
+
+  it('ignores a printing that turns out to be a different card', async () => {
+    stubScryfall((id) => (id.collector_number ? cardJson('Arcane Signet', 'wrong.jpg') : cardJson('Sol Ring', 'sol-ring.jpg')));
+    const lookup = await fetchScryfallCards([{ name: 'Sol Ring', setCode: 'c21', collectorNumber: '1' }]);
+    expect(lookup['sol ring'].imageUrl).toBe('sol-ring.jpg');
+    expect(lookup['arcane signet']).toBeUndefined();
+  });
+
+  it('looks up two-part cards by their front face and keys every face', async () => {
+    const requests = stubScryfall(() => cardJson('Fire // Ice', 'fire-ice.jpg'));
+    const lookup = await fetchScryfallCards([{ name: 'Fire // Ice' }]);
+    expect(requests).toEqual([[{ name: 'Fire' }]]);
+    expect(lookup['fire'].imageUrl).toBe('fire-ice.jpg');
+    expect(lookup['ice'].imageUrl).toBe('fire-ice.jpg');
   });
 });

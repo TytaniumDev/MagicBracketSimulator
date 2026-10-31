@@ -3,11 +3,15 @@
  * frontend deck page.
  */
 
-/** One line of a decklist: how many copies of which card. */
+/** One line of a decklist: how many copies of which card, and which printing. */
 export interface DeckCard {
   quantity: number;
   /** Card name without set/collector suffix (e.g. "Sol Ring", not "Sol Ring|C21|263"). */
   name: string;
+  /** Set code of the printing, lower case (e.g. "c21"). Absent when the list doesn't say. */
+  setCode?: string;
+  /** Collector number of the printing within `setCode` (e.g. "263"). */
+  collectorNumber?: string;
 }
 
 /** A deck's results across every recorded game. Null when it has never played. */

@@ -56,10 +56,18 @@ test('splits commanders from the main deck', () => {
   assertEqual(main.map((c) => c.name), ['Sol Ring', 'Forest', 'Fire // Ice'], 'main names');
 });
 
-test('strips set and collector suffix and keeps quantities', () => {
+test('splits the set and collector suffix into the printing and keeps quantities', () => {
   const { main } = parseDckCards(SAMPLE);
-  assertEqual(main[0], { quantity: 1, name: 'Sol Ring' }, 'Sol Ring');
+  assertEqual(main[0], { quantity: 1, name: 'Sol Ring', setCode: 'c21', collectorNumber: '263' }, 'Sol Ring');
   assertEqual(main[1], { quantity: 10, name: 'Forest' }, 'Forest');
+});
+
+test('keeps a set code without a collector number', () => {
+  const { main } = parseDckCards('[main]\n1 Sol Ring|C21\n1 Arcane Signet||');
+  assertEqual(main, [
+    { quantity: 1, name: 'Sol Ring', setCode: 'c21' },
+    { quantity: 1, name: 'Arcane Signet' },
+  ], 'main');
 });
 
 test('ignores metadata and sideboard lines', () => {

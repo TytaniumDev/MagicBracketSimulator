@@ -9,7 +9,8 @@
  *   [main]
  *   1 Sol Ring|C21|263
  *
- * Card lines are "<qty> <name>" with an optional "|SET|collector" suffix.
+ * Card lines are "<qty> <name>" with an optional "|SET|collector" suffix,
+ * which becomes the card's printing (set codes lower-cased, as Scryfall uses).
  * Sections other than [commander] and [main] (e.g. [sideboard]) are ignored.
  */
 import type { DeckCard } from '@shared/types/deck';
@@ -24,9 +25,14 @@ const CARD_LINE = /^(\d+)\s*(?:x\s+)?(.+)$/i;
 function parseCardLine(line: string): DeckCard | null {
   const match = CARD_LINE.exec(line);
   if (!match) return null;
-  const name = match[2].split('|')[0].trim();
-  if (!name) return null;
-  return { quantity: parseInt(match[1], 10), name };
+  const [rawName, rawSet, rawCollector] = match[2].split('|').map((part) => part.trim());
+  if (!rawName) return null;
+  const card: DeckCard = { quantity: parseInt(match[1], 10), name: rawName };
+  if (rawSet) {
+    card.setCode = rawSet.toLowerCase();
+    if (rawCollector) card.collectorNumber = rawCollector;
+  }
+  return card;
 }
 
 export function parseDckCards(dck: string): DckCards {
