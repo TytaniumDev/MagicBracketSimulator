@@ -11,6 +11,7 @@ import { isSimLeaseExpired, type ClaimOptions, type SimLeaseStatus } from './sim
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from './logger';
 import type { GameCardSummary } from './card-impact/parse';
+import { missingGames, reportedGameCount } from './job-utils';
 
 import { USE_FIRESTORE, isGcpMode } from './env';
 
@@ -286,19 +287,26 @@ export async function deleteSimulations(jobId: string): Promise<void> {
 }
 
 /**
- * Atomically increment the completed simulation counter.
- * Returns the updated counter values. GCP mode only (uses Firestore FieldValue.increment).
- * In local mode, falls back to counting simulation statuses.
+ * Count one more finished sim and the [games] it reported, so job progress
+ * shows games actually played. Returns the updated sim counter values.
+ * GCP mode increments Firestore counters atomically; local mode recounts
+ * from the simulation statuses.
  */
 export async function incrementCompletedSimCount(
   jobId: string,
+  games: number,
 ): Promise<{ completedSimCount: number; totalSimCount: number }> {
   if (USE_FIRESTORE) {
-    return firestoreStore.incrementCompletedSimCount(jobId);
+    return firestoreStore.incrementCompletedSimCount(jobId, games);
   }
   // Local mode fallback: count from simulation statuses
-  const sims = (await sqliteStore()).getSimulationStatuses(jobId);
+  const store = await sqliteStore();
+  const sims = store.getSimulationStatuses(jobId);
   const completedSimCount = sims.filter(s => s.state === 'COMPLETED' || s.state === 'CANCELLED').length;
+  const gamesCompleted = sims
+    .filter(s => s.state === 'COMPLETED')
+    .reduce((sum, s) => sum + reportedGameCount(s), 0);
+  store.setGamesCompleted(jobId, gamesCompleted);
   return { completedSimCount, totalSimCount: sims.length };
 }
 
@@ -571,6 +579,23 @@ export function deriveJobStatus(simulations: SimulationStatus[]): JobStatus | nu
  * results, rating counters and card counters,
  * and sets the job to COMPLETED or CANCELLED.
  */
+/**
+ * Report to Sentry when a job's logs hold fewer games than its completed
+ * sims should have played (a worker running too few games per sim, or a
+ * log that never reached storage). The job still aggregates what it has.
+ */
+function reportMissingGames(jobId: string, sims: SimulationStatus[], gamesFound: number): void {
+  const completedSims = sims.filter((s) => s.state === 'COMPLETED').length;
+  const missing = missingGames(completedSims, gamesFound);
+  if (missing === 0) return;
+  log.warn('Job logs are missing games', { jobId, completedSims, gamesFound, missing });
+  Sentry.captureMessage('Job logs are missing games', {
+    level: 'warning',
+    tags: { component: 'aggregation-game-count', jobId },
+    extra: { completedSims, gamesFound, missing },
+  });
+}
+
 export async function aggregateJobResults(jobId: string): Promise<void> {
   const sims = await getSimulationStatuses(jobId);
   if (sims.length === 0) return;
@@ -594,6 +619,7 @@ export async function aggregateJobResults(jobId: string): Promise<void> {
   const deckIds = job.seats.map((s) => s.deckId);
   const cardGames: GameCardSummary[] = [];
   const gameIndex = await buildGameIndex(jobId, deckNames, (game) => cardGames.push(parseGameCards(game)));
+  reportMissingGames(jobId, sims, gameIndex?.games.length ?? 0);
 
   if (gameIndex) {
     await saveGameIndex(jobId, gameIndex);

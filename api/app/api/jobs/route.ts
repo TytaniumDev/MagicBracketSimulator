@@ -90,15 +90,9 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
       cursor: cursorParam ?? undefined,
     });
 
-    // Derive gamesCompleted from atomic counters (O(1) — no subcollection reads)
     const summaries = jobs
       .filter((j): j is NonNullable<typeof j> => j !== null)
-      .map((j) => {
-        const gamesCompleted = (j.completedSimCount != null && j.completedSimCount > 0)
-          ? j.completedSimCount * GAMES_PER_CONTAINER
-          : (j.gamesCompleted ?? 0);
-        return jobToSummary(j, gamesCompleted);
-      })
+      .map((j) => jobToSummary(j, j.gamesCompleted ?? 0))
       .filter((s): s is NonNullable<typeof s> => s !== null);
 
     return NextResponse.json({ jobs: summaries, nextCursor });

@@ -334,12 +334,12 @@ describe('mergeFirestoreJobUpdate', () => {
     expect(result?.durationMs).toBe(5000);
   });
 
-  it('prefers completedSimCount over gamesCompleted when both provided', () => {
+  it('takes games played from gamesCompleted, not finished sims × 4', () => {
+    // A sim that played 1 game counts as 1, whatever the sim count says
     const result = mergeFirestoreJobUpdate(RUNNING_JOB, {
-      completedSimCount: 3, // 3 * GAMES_PER_CONTAINER
-      gamesCompleted: 999,   // stale, should lose
+      completedSimCount: 3,
+      gamesCompleted: 3,
     });
-    // GAMES_PER_CONTAINER is 4 per shared constants
-    expect(result?.gamesCompleted).toBe(12);
+    expect(result?.gamesCompleted).toBe(3);
   });
 });

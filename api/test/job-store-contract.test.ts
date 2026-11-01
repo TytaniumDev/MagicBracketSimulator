@@ -166,12 +166,18 @@ async function runTests() {
   // =========================================================================
 
   await test('incrementCompletedSimCount returns correct shape', async () => {
-    const result = await jobStore.incrementCompletedSimCount(createdJobId);
+    const result = await jobStore.incrementCompletedSimCount(createdJobId, 2);
     assert('completedSimCount' in result, 'should have completedSimCount');
     assert('totalSimCount' in result, 'should have totalSimCount');
     assert(typeof result.completedSimCount === 'number', 'completedSimCount should be number');
     assert(typeof result.totalSimCount === 'number', 'totalSimCount should be number');
     assert(result.completedSimCount >= 1, 'completedSimCount should be >= 1');
+  });
+
+  await test('incrementCompletedSimCount counts the games finished sims reported', async () => {
+    // The one COMPLETED sim above reported 2 winners, so 2 games, not 1 sim × 4
+    const job = await jobStore.getJob(createdJobId);
+    assertEqual(job!.gamesCompleted, 2, 'gamesCompleted');
   });
 
   // =========================================================================

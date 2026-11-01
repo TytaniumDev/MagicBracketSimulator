@@ -10,7 +10,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { RecentPodRuns } from '../components/RecentPodRuns';
 import { formatRelativeDate } from '../utils/format';
 import type { JobSeat, JobStatus, JobSummary } from '@shared/types/job';
-import { GAMES_PER_CONTAINER, seatNames } from '@shared/types/job';
+import { seatNames } from '@shared/types/job';
 import { reportHandledError } from '../errorReporting';
 
 function formatDurationMs(ms: number): string {
@@ -38,11 +38,8 @@ function firestoreDocToJobSummary(id: string, data: Record<string, unknown>): Jo
     }
   }
 
-  const completedSimCount = data.completedSimCount as number | undefined;
-  const gamesCompleted =
-    completedSimCount !== undefined
-      ? completedSimCount * GAMES_PER_CONTAINER
-      : ((data.gamesCompleted as number | undefined) ?? 0);
+  // Games finished sims reported, set from the logs once aggregated
+  const gamesCompleted = (data.gamesCompleted as number | undefined) ?? 0;
 
   return {
     id,

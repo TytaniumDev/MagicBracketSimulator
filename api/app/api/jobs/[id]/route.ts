@@ -28,10 +28,6 @@ async function jobToApiResponse(
   const end = job.completedAt?.getTime();
   const durationMs = end != null ? end - start : null;
 
-  // Derive gamesCompleted from atomic counters (O(1) — no subcollection reads)
-  const gamesCompleted = (job.completedSimCount != null && job.completedSimCount > 0)
-    ? job.completedSimCount * GAMES_PER_CONTAINER
-    : (job.gamesCompleted ?? 0);
 
   const response: JobResponse = {
     id: job.id,
@@ -39,7 +35,8 @@ async function jobToApiResponse(
     seats: job.seats,
     status: job.status,
     simulations: job.simulations,
-    gamesCompleted,
+    // Games finished sims reported, set from the logs once aggregated
+    gamesCompleted: job.gamesCompleted ?? 0,
     parallelism: job.parallelism ?? 4,
     createdAt: job.createdAt.toISOString(),
     errorMessage: job.errorMessage,

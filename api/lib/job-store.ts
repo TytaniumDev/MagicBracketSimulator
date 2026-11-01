@@ -184,8 +184,14 @@ export function setJobFailed(id: string, errorMessage: string, options?: SetJobF
  */
 export function setJobResults(id: string, results: JobResults): void {
   const db = getDb();
-  db.prepare('UPDATE jobs SET result_json = ? WHERE id = ?')
-    .run(JSON.stringify(results), id);
+  // The games found in the logs replace the count workers reported.
+  db.prepare('UPDATE jobs SET result_json = ?, games_completed = ? WHERE id = ?')
+    .run(JSON.stringify(results), results.gamesPlayed, id);
+}
+
+/** Set the games a job's finished sims have reported so far. */
+export function setGamesCompleted(id: string, games: number): void {
+  getDb().prepare('UPDATE jobs SET games_completed = ? WHERE id = ?').run(games, id);
 }
 
 /**
