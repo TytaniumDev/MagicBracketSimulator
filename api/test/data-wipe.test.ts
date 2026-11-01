@@ -3,7 +3,7 @@
  *
  * Seeds jobs with their simulations and logs, a pod run,
  * ratings, card stats and a user deck, then runs the wipe to
- * completion and checks that only the precon is left. Runs in a temp
+ * completion (first keeping decks, then fully) and checks what is left. Runs in a temp
  * directory so it never touches the local dev database.
  *
  * Run with: npx tsx test/data-wipe.test.ts
@@ -102,7 +102,7 @@ async function main() {
   const steps: { kind: string; deleted: number }[] = [];
   await test('wipe runs to completion in bounded steps', async () => {
     for (let i = 0; i < 20; i++) {
-      const step = await wipeNextStep();
+      const step = await wipeNextStep({ keepDecks: true });
       if (!step) return;
       steps.push(step);
     }
@@ -116,16 +116,21 @@ async function main() {
       { kind: 'podRuns', deleted: 1 },
       { kind: 'ratings', deleted: 4 },
       { kind: 'cardStats', deleted: 1 },
-      { kind: 'customDecks', deleted: 1 },
     ], 'steps');
   });
 
-  await test('everything but the precon is gone', () => {
+  await test('keepDecks deletes every run and its stats but keeps decks', () => {
     for (const table of ['jobs', 'simulations', 'pod_runs', 'pod_run_jobs', 'ratings', 'card_stats']) {
       assertEqual(count(table), 0, table);
     }
-    assertEqual(listSavedDecks().length, 0, 'saved decks');
     assertEqual(fs.existsSync(path.join(logsDir, jobIds[0])), false, 'job logs');
+    assertEqual(listSavedDecks().length, 1, 'saved decks');
+    assertEqual(count('precons'), 1, 'precons');
+  });
+
+  await test('a full wipe then deletes custom decks too', async () => {
+    assertEqual(await wipeNextStep(), { kind: 'customDecks', deleted: 1 }, 'step');
+    assertEqual(listSavedDecks().length, 0, 'saved decks');
     assertEqual(count('precons'), 1, 'precons');
   });
 
