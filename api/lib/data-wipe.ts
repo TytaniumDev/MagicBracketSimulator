@@ -1,7 +1,7 @@
 /**
  * Admin data wipe: deletes every job (with its simulations and logs), the
- * records derived from jobs, and every user-imported deck, one bounded step
- * per call so no request runs long or holds much in memory.
+ * records derived from jobs, and (unless kept) every user-imported deck, one
+ * bounded step per call so no request runs long or holds much in memory.
  */
 import { getDataWipeStore } from './data-wipe-store-factory';
 import { LEFTOVER_KINDS, type WipeKind } from './data-wipe-store';
@@ -11,6 +11,11 @@ import { deleteJobCompletely } from './job-delete';
 const JOBS_PER_STEP = 10;
 /** Leftover records per step. */
 const LEFTOVERS_PER_STEP = 500;
+
+export interface WipeOptions {
+  /** Keep user-imported decks: delete only runs and what they fed. */
+  keepDecks?: boolean;
+}
 
 export interface WipeStep {
   kind: WipeKind;
@@ -22,7 +27,7 @@ export interface WipeStep {
  * Returns null once nothing is left. Safe to stop and call again at any
  * point. Throws if a listed job can't be deleted, so it can't loop forever.
  */
-export async function wipeNextStep(): Promise<WipeStep | null> {
+export async function wipeNextStep({ keepDecks = false }: WipeOptions = {}): Promise<WipeStep | null> {
   const store = getDataWipeStore();
 
   const jobIds = await store.listJobIds(JOBS_PER_STEP);
@@ -34,6 +39,7 @@ export async function wipeNextStep(): Promise<WipeStep | null> {
   }
 
   for (const kind of LEFTOVER_KINDS) {
+    if (keepDecks && kind === 'customDecks') continue;
     const deleted = await store.deleteLeftovers(kind, LEFTOVERS_PER_STEP);
     if (deleted > 0) return { kind, deleted };
   }
