@@ -199,6 +199,24 @@ async function runTests() {
     assertEqual(response.podsWithResults, 2, 'podsWithResults');
   });
 
+  await test('removeJob takes a job and its results out of its run', async () => {
+    assertEqual(await store.removeJob(laterJob), true, 'removed');
+    const run = await store.getPodRun(standingsRunId);
+    assertEqual(run!.jobIds.join(','), finishedJob, 'job ids');
+    assertEqual(run!.podsWithResults, 1, 'podsWithResults');
+    assertEqual(run!.standings.d1.pods, 1, 'd1 pods');
+    assertEqual(run!.standings.d1.gamesPlayed, 4, 'd1 games');
+    assertEqual(run!.standings.d5, undefined, 'd5 played no other pod');
+    assertEqual(await store.removeJob(laterJob), false, 'second remove');
+  });
+
+  await test('removeJob deletes every run it leaves empty', async () => {
+    const runIds = (await store.listPodRunsForJob(finishedJob)).map((r) => r.id);
+    assertEqual(runIds.length, 2, 'in two runs');
+    assertEqual(await store.removeJob(finishedJob), true, 'removed');
+    for (const id of runIds) assertEqual(await store.getPodRun(id), null, `run ${id}`);
+  });
+
   console.log('\n--- Test Summary ---');
   const failed = results.filter((r) => !r.passed);
   console.log(`Passed: ${results.length - failed.length}/${results.length}`);

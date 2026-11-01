@@ -7,7 +7,7 @@ import type { DeckCardStats } from '@shared/types/card-impact';
 
 export type { DeckCardStats };
 
-/** One job's contribution to a deck's counters. */
+/** One job's contribution to a deck's counters, to add or take back. */
 export interface CardStatsJobUpdate {
   jobId: string;
   update: (stats: DeckCardStats) => DeckCardStats;
@@ -23,6 +23,13 @@ export interface CardStatsStore {
    * call however many jobs it carries. Returns how many jobs were applied.
    */
   addJobs(deckId: string, jobs: CardStatsJobUpdate[]): Promise<number>;
+
+  /**
+   * Atomically take back a counted job (it is being deleted): apply its
+   * `update`, which subtracts its counters, and drop its job id. Returns
+   * false when the deck's current counters never counted it.
+   */
+  removeJob(deckId: string, job: CardStatsJobUpdate): Promise<boolean>;
 }
 
 /** Apply the jobs `current` hasn't counted yet, in order. Shared by both stores. */
@@ -40,4 +47,10 @@ export function applyJobUpdates(
     applied++;
   }
   return { next, applied };
+}
+
+/** `current` without the job, or null when it never counted it. Shared by both stores. */
+export function removeJobUpdate(current: DeckCardStats | null, { jobId, update }: CardStatsJobUpdate): DeckCardStats | null {
+  if (!current?.jobIds.includes(jobId)) return null;
+  return { ...update(current), jobIds: current.jobIds.filter((id) => id !== jobId) };
 }

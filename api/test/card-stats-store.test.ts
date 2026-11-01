@@ -11,7 +11,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getCardStatsStore } from '../lib/card-stats-store-factory';
-import { processJobsForCardStats } from '../lib/card-impact/service';
+import { processJobsForCardStats, removeJobFromCardStats, countJobCards } from '../lib/card-impact/service';
+import { testSeats } from './seats';
 import { parseGameCards } from '../lib/card-impact/parse';
 import type { DeckCardStats } from '../lib/card-stats-store';
 
@@ -104,6 +105,24 @@ async function main() {
     assertEqual(temur?.games, 2, 'one game per job');
     assertEqual(temur?.wins, 2, 'Temur won both');
     assertEqual(temur?.jobIds, ['page-1', 'page-2'], 'job ids');
+
+    // Deleting a job subtracts its receipt, leaving what the other job added.
+    const seats = testSeats(deckNames).map((seat, i) => ({ ...seat, deckId: deckIds[i]! }));
+    assertEqual(await removeJobFromCardStats('page-2', seats), 4, 'decks changed');
+    const after = await store.get(deckIds[0]);
+    assertEqual({ ...after!, jobIds: [] }, countJobCards(job('page-1')).get(deckIds[0]), 'one job left');
+    assertEqual(after?.jobIds, ['page-1'], 'job ids after removal');
+    assertEqual(await removeJobFromCardStats('page-2', seats), 0, 'second removal');
+    for (const jobId of ['page-1', 'page-2']) fs.rmSync(path.join(process.cwd(), 'logs-data', jobId), { recursive: true, force: true });
+  });
+
+  await test('removeJob takes back a counted job and drops its id', async () => {
+    const removed = await store.removeJob(deckId, { jobId: 'job-2', update: (stats) => ({ ...stats, games: stats.games - 3 }) });
+    assertEqual(removed, true, 'removed');
+    const stats = await store.get(deckId);
+    assertEqual(stats?.games, 6, 'games');
+    assertEqual(stats?.jobIds, ['job-1', 'job-3'], 'job ids');
+    assertEqual(await store.removeJob(deckId, addGames('job-2', -3)), false, 'second remove');
   });
 
   const passed = results.filter((r) => r.passed).length;

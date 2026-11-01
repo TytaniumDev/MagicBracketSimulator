@@ -8,7 +8,8 @@
  * each holding up to GAMES_PER_CONTAINER games (older jobs hold one game per
  * file). They are kept forever. Aggregation adds one small file next to
  * them, `games.json`: the game index, which says where each game's log is
- * and who won it. Condensed and structured views of a game are built from
+ * and who won it. Card stats add `card-stats.json`, what the job added to
+ * each deck's card counters, so deleting the job can take it back. Condensed and structured views of a game are built from
  * its raw log when someone asks for that game.
  *
  * Every reader here holds at most a few raw log files at a time, so a
@@ -141,6 +142,32 @@ export async function forEachRawGame(
   return count;
 }
 
+// ─── Small JSON files next to the raw logs ───────────────────────────────────
+
+/** Store a small JSON file next to a job's raw logs (gzipped in GCS). */
+export async function saveJobJson(jobId: string, file: string, data: unknown): Promise<void> {
+  const json = JSON.stringify(data);
+  if (isGcpMode()) {
+    await gcs.uploadJobArtifact(jobId, file, json);
+    return;
+  }
+  fs.mkdirSync(getJobDir(jobId), { recursive: true });
+  fs.writeFileSync(path.join(getJobDir(jobId), file), json, 'utf-8');
+}
+
+/** A file saved with saveJobJson, or null when it is missing or unreadable (reported to Sentry). */
+export async function readJobJson<T>(jobId: string, file: string): Promise<T | null> {
+  try {
+    if (isGcpMode()) return await gcs.getJobArtifactJson<T>(jobId, file);
+    const filePath = path.join(getJobDir(jobId), file);
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
+  } catch (err) {
+    Sentry.captureException(err, { tags: { component: 'log-store', jobId }, extra: { file } });
+    return null;
+  }
+}
+
 // ─── Game index ──────────────────────────────────────────────────────────────
 
 /**
@@ -167,25 +194,7 @@ export async function buildGameIndex(
 
 /** Store a job's game index next to its raw logs. */
 export async function saveGameIndex(jobId: string, gameIndex: GameIndex): Promise<void> {
-  const json = JSON.stringify(gameIndex);
-  if (isGcpMode()) {
-    await gcs.uploadJobArtifact(jobId, GAME_INDEX_FILE, json);
-    return;
-  }
-  fs.mkdirSync(getJobDir(jobId), { recursive: true });
-  fs.writeFileSync(path.join(getJobDir(jobId), GAME_INDEX_FILE), json, 'utf-8');
-}
-
-async function readStoredGameIndex(jobId: string): Promise<GameIndex | null> {
-  try {
-    if (isGcpMode()) return await gcs.getJobArtifactJson<GameIndex>(jobId, GAME_INDEX_FILE);
-    const indexPath = path.join(getJobDir(jobId), GAME_INDEX_FILE);
-    if (!fs.existsSync(indexPath)) return null;
-    return JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as GameIndex;
-  } catch (err) {
-    Sentry.captureException(err, { tags: { component: 'log-store', jobId } });
-    return null;
-  }
+  await saveJobJson(jobId, GAME_INDEX_FILE, gameIndex);
 }
 
 /**
@@ -193,7 +202,7 @@ async function readStoredGameIndex(jobId: string): Promise<GameIndex | null> {
  * the job was never aggregated (a FAILED job, say). Null when it has no logs.
  */
 export async function getGameIndex(jobId: string, deckNamesHint?: string[]): Promise<GameIndex | null> {
-  return (await readStoredGameIndex(jobId)) ?? buildGameIndex(jobId, deckNamesHint);
+  return (await readJobJson<GameIndex>(jobId, GAME_INDEX_FILE)) ?? buildGameIndex(jobId, deckNamesHint);
 }
 
 /**

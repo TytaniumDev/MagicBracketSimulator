@@ -32,7 +32,7 @@ export async function wipeNextStep({ keepDecks = false }: WipeOptions = {}): Pro
 
   const jobIds = await store.listJobIds(JOBS_PER_STEP);
   if (jobIds.length > 0) {
-    const deleted = await Promise.all(jobIds.map((id) => deleteJobCompletely(id)));
+    const deleted = await Promise.all(jobIds.map((id) => deleteJobCompletely(id, { rollBackStats: false })));
     const stuck = jobIds.filter((_, i) => !deleted[i]);
     if (stuck.length > 0) throw new Error(`Could not read jobs to delete: ${stuck.join(', ')}`);
     return { kind: 'jobs', deleted: jobIds.length };

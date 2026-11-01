@@ -68,6 +68,23 @@ export interface DeckStanding {
  * without games played adds nothing.
  */
 export function addPodResults(totals: PodRunTotals, seats: readonly JobSeat[], results: JobResults): PodRunTotals {
+  return combinePodResults(totals, seats, results, 1);
+}
+
+/**
+ * Take back a pod that addPodResults added (its job was deleted), returning
+ * new totals. A deck left with no pods drops out of the standings.
+ */
+export function removePodResults(totals: PodRunTotals, seats: readonly JobSeat[], results: JobResults): PodRunTotals {
+  return combinePodResults(totals, seats, results, -1);
+}
+
+function combinePodResults(
+  totals: PodRunTotals,
+  seats: readonly JobSeat[],
+  results: JobResults,
+  sign: 1 | -1,
+): PodRunTotals {
   if (results.gamesPlayed <= 0) return totals;
   const next = { ...totals };
   seats.forEach(({ deckId: key, name }, i) => {
@@ -75,13 +92,18 @@ export function addPodResults(totals: PodRunTotals, seats: readonly JobSeat[], r
     const wins = results.seats[i]?.wins ?? 0;
     const avgTurn = results.seats[i]?.avgWinTurn;
     const hasTurns = wins > 0 && typeof avgTurn === 'number' && avgTurn > 0;
+    const pods = entry.pods + sign;
+    if (pods <= 0) {
+      delete next[key];
+      return;
+    }
     next[key] = {
       name: entry.name,
-      pods: entry.pods + 1,
-      gamesPlayed: entry.gamesPlayed + results.gamesPlayed,
-      wins: entry.wins + wins,
-      winTurnSum: entry.winTurnSum + (hasTurns ? avgTurn * wins : 0),
-      winTurnWins: entry.winTurnWins + (hasTurns ? wins : 0),
+      pods,
+      gamesPlayed: entry.gamesPlayed + sign * results.gamesPlayed,
+      wins: entry.wins + sign * wins,
+      winTurnSum: entry.winTurnSum + sign * (hasTurns ? avgTurn * wins : 0),
+      winTurnWins: entry.winTurnWins + sign * (hasTurns ? wins : 0),
     };
   });
   return next;

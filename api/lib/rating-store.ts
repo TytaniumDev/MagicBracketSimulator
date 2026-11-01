@@ -12,7 +12,7 @@ export interface LeaderboardOptions {
   limit?: number;
 }
 
-/** One finished job's contribution to its decks' ratings. */
+/** One finished job's contribution to its decks' ratings, to add or take back. */
 export interface RatingJobUpdate {
   jobId: string;
   /** The job's 4 deck ids, in seat order. */
@@ -21,10 +21,11 @@ export interface RatingJobUpdate {
   gameCount: number;
   /**
    * The decks' next ratings (same order as deckIds) given their stored
-   * ones (null when never rated), or null to leave ratings unchanged.
-   * Called inside the store's transaction, so it must be pure.
+   * ones (null when never rated), or null to leave ratings unchanged; a
+   * null entry leaves that deck's rating unchanged. Called inside the
+   * store's transaction, so it must be pure.
    */
-  update: (stored: (DeckRating | null)[]) => DeckRating[] | null;
+  update: (stored: (DeckRating | null)[]) => (DeckRating | null)[] | null;
 }
 
 export interface RatingStore {
@@ -37,6 +38,14 @@ export interface RatingStore {
    * the job was already applied or no longer exists.
    */
   applyJob(job: RatingJobUpdate): Promise<boolean>;
+
+  /**
+   * Take back a job that applyJob applied (it is being deleted): `update`
+   * subtracts its games from the ratings, and its games come off the pair
+   * counts, atomically, clearing the job's applied mark. Returns false when
+   * the job was never applied or no longer exists.
+   */
+  removeJob(job: RatingJobUpdate): Promise<boolean>;
 
   /** Return ratings of decks with at least one rated game, sorted by conservative rating desc. */
   getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]>;
@@ -57,7 +66,8 @@ export function opponentsBySeat(deckIds: string[]): string[][] {
 
 /**
  * Add `games` played together by the decks of one pod to per-deck pair
- * counts (deck id -> other deck id -> games). Mutates and returns `counts`.
+ * counts (deck id -> other deck id -> games); negative `games` takes them
+ * back, and a pair left with none is dropped. Mutates and returns `counts`.
  */
 export function addPodPairGames(
   counts: Map<string, Record<string, number>>,
@@ -66,7 +76,11 @@ export function addPodPairGames(
 ): Map<string, Record<string, number>> {
   opponentsBySeat(deckIds).forEach((opponents, i) => {
     const deckCounts = counts.get(deckIds[i]!) ?? {};
-    for (const other of opponents) deckCounts[other] = (deckCounts[other] ?? 0) + games;
+    for (const other of opponents) {
+      const next = (deckCounts[other] ?? 0) + games;
+      if (next > 0) deckCounts[other] = next;
+      else delete deckCounts[other];
+    }
     counts.set(deckIds[i]!, deckCounts);
   });
   return counts;

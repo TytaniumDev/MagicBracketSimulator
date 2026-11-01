@@ -31,25 +31,19 @@ export async function POST(request: NextRequest) {
       return badRequestResponse('Maximum 50 jobs per request');
     }
 
-    // ⚡ Bolt Performance Optimization:
-    // Process bulk deletions in parallel to eliminate N+1 network/DB bottlenecks
-    const results = await Promise.all(
-      jobIds.map(async (id: string) => {
-        try {
-          if (!(await deleteJobCompletely(id))) {
-            return { id, deleted: false, error: 'Not found' };
-          }
-          return { id, deleted: true };
-        } catch (err) {
-          Sentry.captureException(err, { tags: { component: 'bulk-delete', jobId: id } });
-          return {
-            id,
-            deleted: false,
-            error: err instanceof Error ? err.message : 'Unknown error',
-          };
-        }
-      })
-    );
+    // One job at a time: each delete takes the job back out of its decks'
+    // stats in transactions, and jobs in one bulk delete usually share decks,
+    // so deleting them in parallel would only make those transactions fight.
+    const results: { id: string; deleted: boolean; error?: string }[] = [];
+    for (const id of jobIds as string[]) {
+      try {
+        const deleted = await deleteJobCompletely(id);
+        results.push(deleted ? { id, deleted: true } : { id, deleted: false, error: 'Not found' });
+      } catch (err) {
+        Sentry.captureException(err, { tags: { component: 'bulk-delete', jobId: id } });
+        results.push({ id, deleted: false, error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    }
 
     const deletedCount = results.filter((r) => r.deleted).length;
     return NextResponse.json({ deletedCount, results });
