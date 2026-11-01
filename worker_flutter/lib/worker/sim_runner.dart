@@ -2,17 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../installer/forge_jar.dart';
 import '../models/sim.dart';
 
 /// Spawns a Forge `sim` invocation as a child Java process and captures the
-/// result. Each call corresponds to one Forge sim invocation (which can run
-/// `simsPerInvocation` games — typically 1 for fine-grained progress).
+/// result. Each call is one Forge run that plays [JobInfo.gamesPerSim]
+/// games back to back: Java and Forge's card database take about 7 s to
+/// start, so a few games per run keeps that overhead to a few percent.
 ///
-/// Verified against Forge 2.0.10 in May 2026:
-///   bash forge.sh sim -d d1 d2 d3 d4 -f Commander -n 1 -c 600
-/// runs one Commander game headlessly on macOS (no xvfb) and writes the
-/// full game log to stdout. Exit 0 on completion.
+/// Verified against Forge 2.0.15 in October 2026:
+///   java -jar forge-gui-desktop-*.jar sim -d d1 d2 d3 d4 -f Commander -n 4 -c 600
+/// plays four Commander games headlessly (macOS needs no xvfb) and writes
+/// every game's log to stdout, one after another. Exit 0 on completion.
+/// `-c` caps each game, not the whole run.
 ///
 /// Decks are read from `config.decksPath` which on macOS is
 /// `~/Library/Application Support/Forge/decks/commander/`. The caller is
@@ -30,9 +34,37 @@ class SimRunner {
   final int maxHeapMb;
   final int timeoutSeconds;
 
-  /// Run one Forge sim. Returns when the process exits or is cancelled via
-  /// [cancelSignal]. The Future never throws — failures are returned as a
-  /// [SimResult] with `success: false` and `errorMessage`.
+  /// The `java` arguments for one Forge run of [job] from [forgeJar]:
+  /// a headless Commander sim of the job's 4 decks playing
+  /// [JobInfo.gamesPerSim] games, each capped at [timeoutSeconds].
+  @visibleForTesting
+  List<String> forgeArgs({required JobInfo job, required String forgeJar}) {
+    return [
+      '-Xmx${maxHeapMb}m',
+      '-Dio.netty.tryReflectionSetAccessible=true',
+      '-Dfile.encoding=UTF-8',
+      if (Platform.isMacOS) '-Dapple.awt.UIElement=true',
+      // NOTE: do NOT add -Djava.awt.headless=true. Forge initialises an
+      // AWT toolkit even in sim mode and that flag causes it to bail
+      // silently with exit 1 and no output. forge.sh ships without it.
+      '-jar',
+      forgeJar,
+      'sim',
+      '-d',
+      ...job.deckFilenames,
+      '-f',
+      'Commander',
+      '-n',
+      '${job.gamesPerSim}',
+      '-c',
+      '$timeoutSeconds',
+    ];
+  }
+
+  /// Run one Forge sim of [JobInfo.gamesPerSim] games. Returns when the
+  /// process exits or is cancelled via [cancelSignal]. The Future never
+  /// throws — failures are returned as a [SimResult] with `success: false`
+  /// and `errorMessage`.
   Future<SimResult> runOne({
     required JobInfo job,
     Future<void>? cancelSignal,
@@ -74,26 +106,7 @@ class SimRunner {
       );
     }
 
-    final args = [
-      '-Xmx${maxHeapMb}m',
-      '-Dio.netty.tryReflectionSetAccessible=true',
-      '-Dfile.encoding=UTF-8',
-      if (Platform.isMacOS) '-Dapple.awt.UIElement=true',
-      // NOTE: do NOT add -Djava.awt.headless=true. Forge initialises an
-      // AWT toolkit even in sim mode and that flag causes it to bail
-      // silently with exit 1 and no output. forge.sh ships without it.
-      '-jar',
-      forgeJar,
-      'sim',
-      '-d',
-      ...job.deckFilenames,
-      '-f',
-      'Commander',
-      '-n',
-      '1',
-      '-c',
-      '$timeoutSeconds',
-    ];
+    final args = forgeArgs(job: job, forgeJar: forgeJar);
 
     final stopwatch = Stopwatch()..start();
     final process = await Process.start(

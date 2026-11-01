@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:worker_flutter/models/sim.dart';
 import 'package:worker_flutter/worker/sim_runner.dart';
 
 /// Tests for the pure parser inside sim_runner.dart.
@@ -151,6 +152,31 @@ Game Result: Game 1 ended in 1000 ms. Ai(1)-Test has won!
               'a 4× multiplication bug would push turn=$t into the hundreds',
         );
       }
+    });
+  });
+
+  group('forgeArgs', () {
+    final runner = SimRunner(javaPath: 'java', forgePath: '/forge');
+    final job = JobInfo(
+      jobId: 'job-1',
+      deckFilenames: const ['a.dck', 'b.dck', 'c.dck', 'd.dck'],
+      gamesPerSim: 4,
+    );
+
+    test('plays the job\'s games per sim in one Forge run', () {
+      final args = runner.forgeArgs(job: job, forgeJar: '/forge/f.jar');
+
+      expect(args[args.indexOf('-n') + 1], '4');
+      expect(args[args.indexOf('-c') + 1], '600');
+    });
+
+    test('runs a Commander sim of the job\'s 4 decks from the jar', () {
+      final args = runner.forgeArgs(job: job, forgeJar: '/forge/f.jar');
+
+      expect(args[args.indexOf('-jar') + 1], '/forge/f.jar');
+      final decksAt = args.indexOf('-d') + 1;
+      expect(args.sublist(decksAt, decksAt + 4), job.deckFilenames);
+      expect(args[args.indexOf('-f') + 1], 'Commander');
     });
   });
 }

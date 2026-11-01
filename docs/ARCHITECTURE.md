@@ -100,7 +100,8 @@ worker presence, so it never lists workers as online.
    QUEUED to RUNNING on its first claim, and returns the sim. The worker
    fetches decklists with `GET /api/jobs/:id?view=worker`, which reads
    each seat's `.dck` by deck id.
-3. **Run and hold the lease.** The worker runs Forge and extends the sim's
+3. **Run and hold the lease.** The worker runs Forge once per sim, playing
+   the worker view's `gamesPerSim` games (4), and extends the sim's
    3-minute lease about once a minute. The answer can tell it the job was
    cancelled or that another worker took the sim over.
 4. **Report.** The worker uploads the raw log

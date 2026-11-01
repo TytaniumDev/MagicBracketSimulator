@@ -35,8 +35,10 @@ delivery. Firestore (or SQLite) is the only work queue.
    a RUNNING sim whose lease has run out counts as claimable, so another
    worker takes it over (see **Crash recovery**).
 4. **Run:** the worker calls `GET /api/jobs/:id?view=worker` for deck data
-   (`JobLoader` keeps the last 8 jobs), runs the simulation as a local
-   Forge process (`SimRunner`),
+   and `gamesPerSim` (`JobLoader` keeps the last 8 jobs), runs the
+   simulation as one local Forge process that plays `gamesPerSim` games
+   (`SimRunner`, `-n`; the API sizes sims by `GAMES_PER_CONTAINER`, so a
+   job of N games has N / 4 sims),
    and reports status via `PATCH /api/jobs/:id/simulations/:simId` (see §2
    below). Job docs list their 4 decks as `seats: [{deckId, name, link,
    colorIdentity}]`, filled from each deck when the job is created
