@@ -237,7 +237,8 @@ export async function setJobFailed(id: string, errorMessage: string): Promise<vo
  * Store aggregated results on the job document.
  */
 export async function setJobResults(jobId: string, results: JobResults): Promise<void> {
-  await jobsCollection.doc(jobId).update({ results });
+  // The games found in the logs replace the count workers reported.
+  await jobsCollection.doc(jobId).update({ results, gamesCompleted: results.gamesPlayed });
 }
 
 /**
@@ -639,6 +640,7 @@ export async function initializeSimulations(
   // Set atomic counters on the job document
   await jobsCollection.doc(jobId).update({
     completedSimCount: 0,
+    gamesCompleted: 0,
     totalSimCount: count,
   });
 
@@ -663,17 +665,19 @@ export async function initializeSimulations(
 }
 
 /**
- * Atomically increment the completed simulation counter.
+ * Atomically count one more finished sim and the [games] it played.
  * Returns the updated job data (including the new counter value).
  */
 export async function incrementCompletedSimCount(
   jobId: string,
+  games: number,
 ): Promise<{ completedSimCount: number; totalSimCount: number }> {
   const jobRef = jobsCollection.doc(jobId);
 
-  // Increment the counter atomically
+  // Increment both counters atomically, in one write
   await jobRef.update({
     completedSimCount: FieldValue.increment(1),
+    gamesCompleted: FieldValue.increment(games),
   });
 
   // Read the updated document to get the new counter value

@@ -4,7 +4,7 @@ import { doc, collection, onSnapshot, getDoc, getDocs, query, orderBy, Timestamp
 import { db, isFirebaseConfigured } from '../firebase';
 import { getApiBase, fetchWithAuth } from '../api';
 import { isTerminal } from '../utils/status';
-import { GAMES_PER_CONTAINER, seatNames } from '@shared/types/job';
+import { seatNames } from '@shared/types/job';
 import type { JobResponse, JobSeat } from '@shared/types/job';
 import type { SimulationStatus } from '@shared/types/simulation';
 import { reportHandledError } from '../errorReporting';
@@ -55,10 +55,8 @@ function firestoreDocToJobResponse(
   const end = completedAt ? new Date(completedAt).getTime() : null;
   const durationMs = end != null ? end - start : null;
 
-  const gamesCompleted =
-    (data.completedSimCount != null && (data.completedSimCount as number) > 0)
-      ? (data.completedSimCount as number) * GAMES_PER_CONTAINER
-      : (data.gamesCompleted as number ?? 0);
+  // Games finished sims reported, set from the logs once aggregated
+  const gamesCompleted = (data.gamesCompleted as number | undefined) ?? 0;
 
   const errorMessage = data.errorMessage as string | undefined;
   const workerId = data.workerId as string | undefined;
@@ -130,9 +128,7 @@ export function mergeFirestoreJobUpdate(
   if (firestoreData.status !== undefined) {
     update.status = firestoreData.status as JobResponse['status'];
   }
-  if (firestoreData.completedSimCount !== undefined) {
-    update.gamesCompleted = (firestoreData.completedSimCount as number) * GAMES_PER_CONTAINER;
-  } else if (firestoreData.gamesCompleted !== undefined) {
+  if (firestoreData.gamesCompleted !== undefined) {
     update.gamesCompleted = firestoreData.gamesCompleted as number;
   }
   if (firestoreData.results !== undefined) {

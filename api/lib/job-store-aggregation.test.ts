@@ -164,6 +164,24 @@ async function runTests() {
         const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
         assertEqual(index.games.length, 4, 'one index entry per game');
         assertEqual(job!.results?.gamesPlayed, 4, 'results count every game');
+        assertEqual(job!.gamesCompleted, 4, 'games completed comes from the logs');
+      } finally {
+        cleanup(jobId);
+      }
+    });
+
+    await test('a sim that played 1 of its 4 games → job counts the 1 game it has', async () => {
+      const jobId = createTestJob(1);
+      try {
+        jobStore.updateJobStatus(jobId, 'RUNNING');
+        jobStore.initializeSimulations(jobId, 1);
+        jobStore.updateSimulationStatus(jobId, 'sim_000', { state: 'COMPLETED' });
+        await uploadRawLogs(jobId, 1);
+        await aggregateJobResults(jobId);
+        const job = jobStore.getJob(jobId);
+        assertEqual(job!.status, 'COMPLETED', 'job still completes with the games it has');
+        assertEqual(job!.results?.gamesPlayed, 1, 'results count the 1 game');
+        assertEqual(job!.gamesCompleted, 1, 'games completed is 1, not 1 sim × 4');
       } finally {
         cleanup(jobId);
       }

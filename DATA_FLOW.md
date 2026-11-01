@@ -151,8 +151,11 @@ store (SQLite or Firestore). Firestore stores every time as a Timestamp
 `SimulationStatus` carry them as ISO strings.
 - Uses an **atomic counter** (`FieldValue.increment(1)` on
 `completedSimCount`) to detect when all sims are done — O(1) instead of
-scanning the entire subcollection. When `completedSimCount >= totalSimCount`,
-triggers `**aggregateJobResults(jobId)`** in the background.
+scanning the entire subcollection. The same write adds the sim's games
+(one per winner it reported, `reportedGameCount` in `api/lib/job-utils.ts`)
+to `gamesCompleted`, so progress shows games actually played. When
+`completedSimCount >= totalSimCount`, triggers
+`**aggregateJobResults(jobId)`** in the background.
 - FAILED sims are **not** terminal for aggregation — stale-job recovery
 (Cloud Tasks or the sweeper) resets them to PENDING for a retry. Only
 COMPLETED/CANCELLED count as "done".
@@ -195,6 +198,11 @@ no lifecycle rule: raw logs are kept forever.
 - **Memory:** the API is one 1 GiB instance and jobs go up to 1000 games, so
   aggregation never holds a job's logs at once. Raw logs are about 100 KB per
   game, and parsing a whole 1000-game job in one pass peaked at about 1.6 GB.
+- **Missing games:** after indexing, aggregation compares the games found
+  with the completed sims × `GAMES_PER_CONTAINER`. A shortfall (a worker
+  playing too few games per sim, or a sim log that never reached storage) is
+  logged and sent to Sentry as a warning (`aggregation-game-count`); the job
+  still aggregates the games it has.
 - **Steps:**
   1. `**buildGameIndex(jobId, deckNames, visit)**` (log-store) walks the raw
     logs with `forEachRawGame`: it reads 8 simulation files at a time (from
@@ -216,7 +224,8 @@ no lifecycle rule: raw logs are kept forever.
      (`api/lib/condenser/deck-match.ts`: deck name match, and the Forge
      player number `Ai(N)` when the same deck sits in two seats), then
      `setJobResults` stores `results: { gamesPlayed, seats: [{ wins,
-     avgWinTurn }] }`, index-aligned with the job's `seats`. The frontend
+     avgWinTurn }] }`, index-aligned with the job's `seats`, and sets
+     `gamesCompleted` to `gamesPlayed`. The frontend
      shows wins by deck name with `winsByName` (`shared/types/job.ts`).
   5. **Per-deck stats (fire-and-forget):**
     - `processJobForRatings` — win/game counters behind the leaderboard and
@@ -318,9 +327,10 @@ stripping the Ai prefix). A frontend copy lives at
   - In GCP mode, Firestore `onSnapshot` overlays real-time field updates on top of the cached REST data.
   - Both modes share the same TanStack Query cache — components are mode-agnostic.
 
-- `gamesCompleted` is **derived** from the atomic `completedSimCount` counter
-  (COMPLETED sims * GAMES_PER_CONTAINER). The stored `job.gamesCompleted`
-  field is only a fallback.
+- `gamesCompleted` is the job's `gamesCompleted` counter: the games its
+  finished sims reported while it runs, replaced by the games found in the
+  logs (`results.gamesPlayed`) when it aggregates. Nothing multiplies sims by
+  `GAMES_PER_CONTAINER`; that constant only plans how many sims a job gets.
 
 **One-off job fetch:**
 

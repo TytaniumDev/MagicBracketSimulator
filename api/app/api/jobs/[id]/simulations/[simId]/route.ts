@@ -6,6 +6,7 @@ import { canSimTransition, isTerminalSimState } from '@shared/types/state-machin
 import * as Sentry from '@sentry/nextjs';
 import { createLogger } from '@/lib/logger';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
+import { reportedGameCount } from '@/lib/job-utils';
 
 const log = createLogger('SimPatch');
 
@@ -112,7 +113,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // Check if all sims are done → trigger aggregation.
     // Uses atomic counter (O(1)) instead of full sim subcollection scan (O(N)).
     if (transitioned && (state === 'COMPLETED' || state === 'CANCELLED')) {
-      const { completedSimCount, totalSimCount } = await jobStore.incrementCompletedSimCount(id);
+      const games = state === 'COMPLETED' ? reportedGameCount({ winner, winners }) : 0;
+      const { completedSimCount, totalSimCount } = await jobStore.incrementCompletedSimCount(id, games);
 
       if (completedSimCount >= totalSimCount && totalSimCount > 0) {
         // Set flag before fire-and-forget aggregation
