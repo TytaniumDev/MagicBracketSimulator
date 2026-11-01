@@ -8,8 +8,8 @@
  * both total the job inside a transaction that reads the job, so a job that
  * finishes while its run is being saved is counted exactly once.
  */
-import { Timestamp, type DocumentSnapshot, type Transaction } from '@google-cloud/firestore';
-import { addPodResults, type PodRunTotals } from '@shared/types/pod-run';
+import { FieldValue, Timestamp, type DocumentSnapshot, type Transaction } from '@google-cloud/firestore';
+import { addPodResults, removePodResults, type PodRunTotals } from '@shared/types/pod-run';
 import type { PodRun, PodRunStore } from './pod-run-store';
 import { getFirestore } from './firestore-client';
 import { finishedPod } from './pod-run-standings';
@@ -128,6 +128,34 @@ export const firestorePodRunStore: PodRunStore = {
       });
       tx.update(jobRef, { 'appliedStats.podRun': true });
       return true;
+    });
+  },
+
+  async removeJob(jobId) {
+    const jobRef = jobsCollection.doc(jobId);
+    return firestore.runTransaction(async (tx) => {
+      const jobSnap = await tx.get(jobRef);
+      const runs = await tx.get(podRunsCollection.where('jobIds', 'array-contains', jobId));
+      // Only the run named on the job holds its results.
+      const countedIn = jobSnap.get('appliedStats.podRun') === true ? (jobSnap.get('podRunId') as string) : null;
+      const pod = countedIn && jobSnap.exists ? finishedPod(jobSnap.data()!) : null;
+
+      for (const run of runs.docs) {
+        const jobIds = ((run.get('jobIds') as string[] | undefined) ?? []).filter((id) => id !== jobId);
+        if (jobIds.length === 0) {
+          tx.delete(run.ref);
+        } else if (pod && run.id === countedIn) {
+          tx.update(run.ref, {
+            jobIds,
+            standings: removePodResults(run.get('standings') ?? {}, pod.seats, pod.results),
+            podsWithResults: Math.max((run.get('podsWithResults') ?? 0) - 1, 0),
+          });
+        } else {
+          tx.update(run.ref, { jobIds });
+        }
+      }
+      if (jobSnap.exists) tx.update(jobRef, { podRunId: FieldValue.delete(), 'appliedStats.podRun': false });
+      return !runs.empty;
     });
   },
 };

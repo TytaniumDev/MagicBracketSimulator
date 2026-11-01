@@ -7,7 +7,7 @@
  * once its results are in the standings.
  */
 import { v4 as uuidv4 } from 'uuid';
-import { addPodResults, type PodRunTotals } from '@shared/types/pod-run';
+import { addPodResults, removePodResults, type PodRunTotals } from '@shared/types/pod-run';
 import type { JobResults } from '@shared/types/job';
 import type { PodRun, PodRunStore } from './pod-run-store';
 import { finishedPod } from './pod-run-standings';
@@ -163,6 +163,37 @@ export const sqlitePodRunStore: PodRunStore = {
       );
       db.prepare('UPDATE jobs SET pod_run_applied = 1 WHERE id = ?').run(jobId);
       return true;
+    })();
+  },
+
+  async removeJob(jobId) {
+    const db = getDb();
+    return db.transaction(() => {
+      const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as JobRow | undefined;
+      const runIds = (
+        db.prepare('SELECT pod_run_id FROM pod_run_jobs WHERE job_id = ?').all(jobId) as { pod_run_id: string }[]
+      ).map((r) => r.pod_run_id);
+      // Only the run named on the job holds its results.
+      const countedIn = job?.pod_run_applied ? job.pod_run_id : null;
+      const pod = countedIn && job ? jobFinishedPod(job) : null;
+
+      for (const runId of runIds) {
+        db.prepare('DELETE FROM pod_run_jobs WHERE pod_run_id = ? AND job_id = ?').run(runId, jobId);
+        const { left } = db.prepare('SELECT COUNT(*) AS left FROM pod_run_jobs WHERE pod_run_id = ?').get(runId) as {
+          left: number;
+        };
+        if (left === 0) {
+          db.prepare('DELETE FROM pod_runs WHERE id = ?').run(runId);
+        } else if (pod && runId === countedIn) {
+          const run = db.prepare('SELECT * FROM pod_runs WHERE id = ?').get(runId) as Row;
+          const standings = removePodResults(JSON.parse(run.standings_json), pod.seats, pod.results);
+          db.prepare(
+            'UPDATE pod_runs SET standings_json = ?, pods_with_results = MAX(pods_with_results - 1, 0) WHERE id = ?',
+          ).run(JSON.stringify(standings), runId);
+        }
+      }
+      db.prepare('UPDATE jobs SET pod_run_id = NULL, pod_run_applied = 0 WHERE id = ?').run(jobId);
+      return runIds.length > 0;
     })();
   },
 };

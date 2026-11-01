@@ -2,7 +2,7 @@
  * SQLite implementation of CardStatsStore (LOCAL mode). Stores each deck's
  * counters as one JSON row.
  */
-import { applyJobUpdates, type CardStatsStore } from './card-stats-store';
+import { applyJobUpdates, removeJobUpdate, type CardStatsStore } from './card-stats-store';
 import { currentDeckCardStats, emptyDeckCardStats } from './card-impact/stats';
 import type { DeckCardStats } from '@shared/types/card-impact';
 
@@ -18,22 +18,33 @@ function read(deckId: string): DeckCardStats | null {
   return row ? (JSON.parse(row.data_json) as DeckCardStats) : null;
 }
 
+function write(deckId: string, stats: DeckCardStats): void {
+  getDb()
+    .prepare(
+      'INSERT INTO card_stats (deck_id, data_json) VALUES (?, ?) ON CONFLICT(deck_id) DO UPDATE SET data_json = excluded.data_json',
+    )
+    .run(deckId, JSON.stringify(stats));
+}
+
 export const sqliteCardStatsStore: CardStatsStore = {
   async get(deckId: string): Promise<DeckCardStats | null> {
     return currentDeckCardStats(read(deckId));
   },
 
   async addJobs(deckId, jobs): Promise<number> {
-    const db = getDb();
-    return db.transaction(() => {
+    return getDb().transaction(() => {
       const current = currentDeckCardStats(read(deckId)) ?? emptyDeckCardStats();
       const { next, applied } = applyJobUpdates(current, jobs);
-      if (applied > 0) {
-        db.prepare(
-          'INSERT INTO card_stats (deck_id, data_json) VALUES (?, ?) ON CONFLICT(deck_id) DO UPDATE SET data_json = excluded.data_json',
-        ).run(deckId, JSON.stringify(next));
-      }
+      if (applied > 0) write(deckId, next);
       return applied;
+    })();
+  },
+
+  async removeJob(deckId, job): Promise<boolean> {
+    return getDb().transaction(() => {
+      const next = removeJobUpdate(currentDeckCardStats(read(deckId)), job);
+      if (next) write(deckId, next);
+      return next !== null;
     })();
   },
 };

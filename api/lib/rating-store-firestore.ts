@@ -7,7 +7,7 @@
  * game. A job is applied once: its doc records `appliedStats.ratings`.
  */
 import { Timestamp } from '@google-cloud/firestore';
-import { addPodPairGames, pairKey, type RatingStore, type LeaderboardOptions } from './rating-store';
+import { addPodPairGames, pairKey, type RatingJobUpdate, type RatingStore, type LeaderboardOptions } from './rating-store';
 import type { DeckRating } from './types';
 import { getFirestore } from './firestore-client';
 import { deckIdOfStats, deckStatsOfKind, deckStatsRef } from './deck-stats-refs';
@@ -61,6 +61,46 @@ function ratingToDoc(r: DeckRating): Record<string, unknown> {
   return doc;
 }
 
+/**
+ * Apply a job to its decks' rating docs, or take it back, in one
+ * transaction that also flips the job's `appliedStats.ratings` mark.
+ */
+async function changeJob(
+  { jobId, deckIds, gameCount, update }: RatingJobUpdate,
+  change: 'apply' | 'remove',
+): Promise<boolean> {
+  const jobRef = firestore.collection('jobs').doc(jobId);
+  const refs = deckIds.map((id) => deckStatsRef(id, 'rating'));
+  const applying = change === 'apply';
+
+  return firestore.runTransaction(async (tx) => {
+    const [jobSnap, ...snaps] = await tx.getAll(jobRef, ...refs);
+    if (!jobSnap.exists || (jobSnap.get('appliedStats.ratings') === true) === applying) return false;
+
+    const stored = snaps.map((s, i) =>
+      s.exists && s.get('gamesPlayed') > 0 ? docToRating(deckIds[i]!, s.data()!) : null,
+    );
+    const next = update(stored);
+    const pairCounts = addPodPairGames(
+      new Map(deckIds.map((id, i) => [id, { ...(snaps[i]!.get('pairGames') ?? {}) }])),
+      deckIds,
+      applying ? gameCount : -gameCount,
+    );
+
+    refs.forEach((ref, i) => {
+      const pairGames = pairCounts.get(deckIds[i]!);
+      const rating = next?.[i];
+      const doc = rating ? { ...ratingToDoc(rating), pairGames } : { kind: 'rating', pairGames };
+      // set+merge would deep-merge pairGames and keep pairs taken down to
+      // none, so a removal replaces the field with update.
+      if (applying) tx.set(ref, doc, { merge: true });
+      else if (snaps[i]!.exists) tx.update(ref, doc);
+    });
+    tx.update(jobRef, { 'appliedStats.ratings': applying });
+    return true;
+  });
+}
+
 export const firestoreRatingStore: RatingStore = {
   async getRating(deckId: string): Promise<DeckRating | null> {
     const doc = await deckStatsRef(deckId, 'rating').get();
@@ -68,32 +108,12 @@ export const firestoreRatingStore: RatingStore = {
     return docToRating(deckId, doc.data()!);
   },
 
-  async applyJob({ jobId, deckIds, gameCount, update }): Promise<boolean> {
-    const jobRef = firestore.collection('jobs').doc(jobId);
-    const refs = deckIds.map((id) => deckStatsRef(id, 'rating'));
+  async applyJob(job): Promise<boolean> {
+    return changeJob(job, 'apply');
+  },
 
-    return firestore.runTransaction(async (tx) => {
-      const [jobSnap, ...snaps] = await tx.getAll(jobRef, ...refs);
-      if (!jobSnap.exists || jobSnap.get('appliedStats.ratings') === true) return false;
-
-      const stored = snaps.map((s, i) =>
-        s.exists && s.get('gamesPlayed') > 0 ? docToRating(deckIds[i]!, s.data()!) : null,
-      );
-      const next = update(stored);
-      const pairCounts = addPodPairGames(
-        new Map(deckIds.map((id, i) => [id, { ...(snaps[i]!.get('pairGames') ?? {}) }])),
-        deckIds,
-        gameCount,
-      );
-
-      refs.forEach((ref, i) => {
-        const pairGames = pairCounts.get(deckIds[i]!);
-        const rating = next?.[i];
-        tx.set(ref, rating ? { ...ratingToDoc(rating), pairGames } : { kind: 'rating', pairGames }, { merge: true });
-      });
-      tx.update(jobRef, { 'appliedStats.ratings': true });
-      return true;
-    });
+  async removeJob(job): Promise<boolean> {
+    return changeJob(job, 'remove');
   },
 
   async getLeaderboard(options?: LeaderboardOptions): Promise<DeckRating[]> {

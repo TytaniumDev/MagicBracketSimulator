@@ -96,6 +96,26 @@ async function main() {
     assertEqual(ids.includes(`rating-test-${run}-e`), false, 'e not listed');
   });
 
+  /** Take back `games` that the first seat won. */
+  const firstSeatLoses = (games: number) => (stored: (DeckRating | null)[]) =>
+    stored.map((r, i) => r && { ...r, gamesPlayed: r.gamesPlayed - games, wins: r.wins - (i === 0 ? games : 0) });
+
+  await test('removeJob takes back a job and its pair counts', async () => {
+    const removed = await store.removeJob({ jobId: job1, deckIds: pod, gameCount: 4, update: firstSeatLoses(4) });
+    assertEqual(removed, true, 'removed');
+    assertEqual(await store.getRating(a), null, 'a has no games left');
+    const counts = await store.getPairGameCounts();
+    assertEqual(counts.get(pairKey(a, b)), 2, 'a|b keeps the other job');
+    assertEqual(counts.has(pairKey(c, d)), false, 'c|d has no games left');
+  });
+
+  await test('removeJob takes back only an applied job, once', async () => {
+    const again = await store.removeJob({ jobId: job1, deckIds: pod, gameCount: 4, update: firstSeatLoses(4) });
+    assertEqual(again, false, 'second remove');
+    assertEqual((await store.getPairGameCounts()).get(pairKey(a, b)), 2, 'pairs unchanged');
+    assertEqual(await store.applyJob({ jobId: job1, deckIds: pod, gameCount: 4, update: firstSeatWins(4) }), true, 'can apply again');
+  });
+
   if (failed > 0) process.exit(1);
   console.log('\nAll tests passed!');
 }

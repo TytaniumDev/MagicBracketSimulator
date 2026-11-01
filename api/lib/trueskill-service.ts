@@ -2,7 +2,8 @@
  * Rating stats service.
  *
  * Applies a finished job's games to per-deck wins/gamesPlayed counters and
- * pair game counts, once per job (see RatingStore.applyJob). The leaderboard then ranks decks with a Bayesian-adjusted win
+ * pair game counts, once per job (see RatingStore.applyJob), and takes them
+ * back when the job is deleted (RatingStore.removeJob). The leaderboard then ranks decks with a Bayesian-adjusted win
  * rate (see api/app/api/leaderboard/route.ts).
  *
  * Historical note: this module previously computed TrueSkill (mu/sigma)
@@ -14,7 +15,7 @@ import type { DeckRating, GameSummary, JobSeat } from './types';
 import { seatOfPlayer } from './condenser/deck-match';
 import { getDeckById } from './deck-store-factory';
 import { getRatingStore } from './rating-store-factory';
-import { addWinTurn, emptyWinTurnAggregate } from './win-turn-aggregate';
+import { addWinTurn, emptyWinTurnAggregate, type WinTurnAggregate } from './win-turn-aggregate';
 import * as Sentry from '@sentry/nextjs';
 
 const MU_DEFAULT = 25;
@@ -52,22 +53,7 @@ export async function processJobForRatings(
   );
 
   // Resolve each game's winner to a seat once, outside the store transaction.
-  const resolved: { winnerIdx: number; winningTurn: number | null }[] = [];
-  games.forEach((game, i) => {
-    const winner = game.winner;
-    const winnerIdx = winner ? seatOfPlayer(winner, seatNames) : -1;
-    if (winnerIdx === -1) {
-      Sentry.addBreadcrumb({
-        category: 'rating-stats',
-        message: `Game ${i} in job ${jobId}: winner "${winner}" could not be resolved to a deck ID`,
-        level: 'warning',
-        data: { jobId, gameIndex: i, winner, seatNames },
-      });
-      return;
-    }
-    resolved.push({ winnerIdx, winningTurn: game.winningTurn ?? null });
-  });
-
+  const resolved = resolveGames(jobId, seatNames, games);
   const jobTimestamp = new Date().toISOString();
   const applied = await getRatingStore().applyJob({
     jobId,
@@ -75,13 +61,9 @@ export async function processJobForRatings(
     gameCount: games.length,
     update: (stored) => {
       if (resolved.length === 0) return null;
-      const ratings = stored.map((rating, idx) => withDeckInfo(rating ?? newRating(deckIds[idx]!), deckInfos[idx]!));
-      for (const { winnerIdx, winningTurn } of resolved) {
-        for (let j = 0; j < ratings.length; j++) {
-          ratings[j] = addGame(ratings[j]!, j === winnerIdx, winningTurn, jobTimestamp);
-        }
-      }
-      return ratings;
+      return stored.map((rating, idx) =>
+        withCounts(withDeckInfo(rating ?? newRating(deckIds[idx]!), deckInfos[idx]!), seatCounts(resolved, idx), 1, jobTimestamp),
+      );
     },
   });
 
@@ -100,6 +82,30 @@ export async function processJobForRatings(
     });
   }
   return applied;
+}
+
+/**
+ * Take a deleted job's games back out of its decks' win/game counters and
+ * pair game counts. The inverse of processJobForRatings, given the same games.
+ *
+ * @returns false when the job's games were never counted.
+ */
+export async function removeJobFromRatings(
+  jobId: string,
+  seats: JobSeat[],
+  games: readonly GameSummary[],
+): Promise<boolean> {
+  const resolved = resolveGames(jobId, seats.map((s) => s.name), games);
+  const at = new Date().toISOString();
+  return getRatingStore().removeJob({
+    jobId,
+    deckIds: seats.map((s) => s.deckId),
+    gameCount: games.length,
+    update: (stored) => {
+      if (resolved.length === 0) return null;
+      return stored.map((rating, idx) => rating && withCounts(rating, seatCounts(resolved, idx), -1, at));
+    },
+  });
 }
 
 interface DeckInfo {
@@ -131,24 +137,63 @@ function withDeckInfo(rating: DeckRating, info: DeckInfo): DeckRating {
   };
 }
 
-/** Count one resolved game for a deck: a game played, and a win with its turn if it won. */
-function addGame(rating: DeckRating, won: boolean, winningTurn: number | null, at: string): DeckRating {
-  const next: DeckRating = {
-    ...rating,
-    gamesPlayed: rating.gamesPlayed + 1,
-    wins: rating.wins + (won ? 1 : 0),
-    lastUpdated: at,
-  };
-  if (!won || winningTurn == null) return next;
+interface ResolvedGame {
+  winnerIdx: number;
+  winningTurn: number | null;
+}
+
+/** Each game's winning seat and turn. Games whose winner matches no seat are left out. */
+function resolveGames(jobId: string, seatNames: string[], games: readonly GameSummary[]): ResolvedGame[] {
+  const resolved: ResolvedGame[] = [];
+  games.forEach((game, i) => {
+    const winner = game.winner;
+    const winnerIdx = winner ? seatOfPlayer(winner, seatNames) : -1;
+    if (winnerIdx === -1) {
+      Sentry.addBreadcrumb({
+        category: 'rating-stats',
+        message: `Game ${i} in job ${jobId}: winner "${winner}" could not be resolved to a deck ID`,
+        level: 'warning',
+        data: { jobId, gameIndex: i, winner, seatNames },
+      });
+      return;
+    }
+    resolved.push({ winnerIdx, winningTurn: game.winningTurn ?? null });
+  });
+  return resolved;
+}
+
+/** What a job's resolved games add to one seat's deck. */
+interface SeatCounts {
+  games: number;
+  wins: number;
+  winTurns: WinTurnAggregate;
+}
+
+function seatCounts(resolved: readonly ResolvedGame[], seat: number): SeatCounts {
+  let winTurns = emptyWinTurnAggregate();
+  let wins = 0;
+  for (const { winnerIdx, winningTurn } of resolved) {
+    if (winnerIdx !== seat) continue;
+    wins++;
+    if (winningTurn != null) winTurns = addWinTurn(winTurns, winningTurn);
+  }
+  return { games: resolved.length, wins, winTurns };
+}
+
+/**
+ * Add a seat's counts to a deck's rating (sign 1), or take them back (-1)
+ * when its job is deleted. Counters never go below zero.
+ */
+function withCounts(rating: DeckRating, counts: SeatCounts, sign: 1 | -1, at: string): DeckRating {
+  const plus = (stored: number | undefined, n: number) => Math.max((stored ?? 0) + sign * n, 0);
+  const histogram = rating.winTurnHistogram ?? emptyWinTurnAggregate().winTurnHistogram;
   return {
-    ...next,
-    ...addWinTurn(
-      {
-        winTurnSum: rating.winTurnSum ?? 0,
-        winTurnWins: rating.winTurnWins ?? 0,
-        winTurnHistogram: rating.winTurnHistogram ?? emptyWinTurnAggregate().winTurnHistogram,
-      },
-      winningTurn,
-    ),
+    ...rating,
+    gamesPlayed: plus(rating.gamesPlayed, counts.games),
+    wins: plus(rating.wins, counts.wins),
+    winTurnSum: plus(rating.winTurnSum, counts.winTurns.winTurnSum),
+    winTurnWins: plus(rating.winTurnWins, counts.winTurns.winTurnWins),
+    winTurnHistogram: histogram.map((n, i) => plus(n, counts.winTurns.winTurnHistogram[i] ?? 0)),
+    lastUpdated: at,
   };
 }

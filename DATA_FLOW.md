@@ -248,6 +248,9 @@ no lifecycle rule: raw logs are kept forever.
      "Rebuild card stats" button pages through it) batches each page of jobs
      into one write per deck, parsing each game with `forEachRawGame` as it
      reads it, so only a few raw log files are in memory at a time.
+     Each counted job also gets a receipt next to its logs,
+     `card-stats.json` (`{ version, decks: { [deckId]: DeckCardStats } }`):
+     what it added to each deck, so deleting it can subtract it (step 8).
      Documents also carry `version`
      (`CARD_STATS_VERSION`); counters from an older parser are discarded on
      read and rebuilt by the next job or the backfill. `GET
@@ -266,6 +269,25 @@ no lifecycle rule: raw logs are kept forever.
      its run is saved counts once.
   7. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
     CANCELLED if it was cancelled).
+  8. **Deleting a job takes it back out** (`DELETE /api/jobs/:id`, `POST
+     /api/jobs/bulk-delete`, both via `deleteJobCompletely` in
+     `api/lib/job-delete.ts`). Before deleting the job, its sims and its
+     logs, `removeJobFromStats` (`api/lib/job-stats-rollback.ts`) undoes
+     steps 5 and 6, each guarded by the same per-job marks so a retry never
+     subtracts twice:
+    - `removeJobFromRatings` re-resolves the job's `games.json` winners and
+     `RatingStore.removeJob` subtracts them and the pair games in one
+     transaction, clearing `appliedStats.ratings`.
+    - `removeJobFromCardStats` subtracts the `card-stats.json` receipt from
+     each deck that lists the job and drops its id
+     (`CardStatsStore.removeJob`). A job counted without a receipt is
+     counted again from its raw logs first.
+    - `PodRunStore.removeJob` subtracts the job's results from its run's
+     `standings` (`removePodResults`), drops it from every run's `jobIds`,
+     and deletes a run left with no jobs.
+     If any of these throws, nothing is deleted and the delete can be retried.
+     The data wipe (`npm run wipe-data`) skips the rollback, since it deletes
+     every stat too; `--keep-decks` keeps imported decks.
 
 So: **condensing and structuring** of logs happens **only in the API**:
 aggregation structures each game once to index it, and the per-game log
@@ -397,6 +419,7 @@ time.
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs (game index written, results counted), CANCELLED handling, idempotency, FAILED sims not terminal |
 | Job results per seat | `api/lib/job-results.test.ts`, `api/lib/condenser/deck-match.test.ts`, `api/test/job-decks.test.ts` | Wins and average winning turn per seat, the same deck in two seats, unmatched winners; `seatOfPlayer`; seats filled at job creation and decklists read by seat |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |
+| Deleting a job | `api/test/job-delete.test.ts`, `api/test/rating-store.test.ts`, `api/test/card-stats-store.test.ts`, `api/test/pod-run-store.test.ts` | Deleting one of two aggregated jobs leaves exactly the other job's ratings, pair counts, card stats and run standings; a job without its receipt is recounted from its logs; empty runs are deleted; each store takes a job back only once |
 | Pod run standings | `api/test/pod-run-store.test.ts`, `frontend/src/utils/pods.test.ts`, `frontend/src/pages/PodRun.test.tsx` | Saving a run totals jobs that already have results, `applyJob` counts each job once and skips jobs in no run, a job stays in its first run, ranking; the saved run page shows stored standings and loads pods only when asked |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button, detailed logs asking for one picked game |

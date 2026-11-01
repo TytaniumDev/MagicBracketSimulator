@@ -100,6 +100,54 @@ export function addGame(stats: DeckCardStats, game: GameCardSummary, player: str
   return stats;
 }
 
+/**
+ * `stats` plus (sign 1) or minus (sign -1) another deck's counters, as new
+ * counters with `stats`' jobIds and version. Taking back a job's own
+ * counters undoes adding them: a card left with no casts drops out, and no
+ * counter goes below zero.
+ */
+export function combineCardStats(stats: DeckCardStats, other: DeckCardStats, sign: 1 | -1): DeckCardStats {
+  const plus = (a: number, b: number) => Math.max(a + sign * b, 0);
+  const plusEach = (a: number[], b: number[]) => a.map((n, i) => plus(n, b[i] ?? 0));
+
+  const cards = { ...stats.cards };
+  for (const [name, theirs] of Object.entries(other.cards)) {
+    const ours = cards[name] ?? {
+      cast: 0,
+      castAt: new Array(TURN_BINS).fill(0),
+      winsAt: new Array(TURN_BINS).fill(0),
+      closesAt: new Array(TURN_BINS).fill(0),
+      damageToPlayers: 0,
+      leftBattlefield: 0,
+      targetedByOpponents: 0,
+    };
+    const cast = plus(ours.cast, theirs.cast);
+    if (cast === 0) {
+      delete cards[name];
+      continue;
+    }
+    cards[name] = {
+      cast,
+      castAt: plusEach(ours.castAt, theirs.castAt),
+      winsAt: plusEach(ours.winsAt, theirs.winsAt),
+      closesAt: plusEach(ours.closesAt, theirs.closesAt),
+      damageToPlayers: plus(ours.damageToPlayers, theirs.damageToPlayers),
+      leftBattlefield: plus(ours.leftBattlefield, theirs.leftBattlefield),
+      targetedByOpponents: plus(ours.targetedByOpponents, theirs.targetedByOpponents),
+    };
+  }
+
+  return {
+    ...stats,
+    games: plus(stats.games, other.games),
+    wins: plus(stats.wins, other.wins),
+    aliveAt: plusEach(stats.aliveAt, other.aliveAt),
+    winsFromAlive: plusEach(stats.winsFromAlive, other.winsFromAlive),
+    closesFromAlive: plusEach(stats.closesFromAlive, other.closesFromAlive),
+    cards,
+  };
+}
+
 /** Observed minus expected, per cast, where expected uses the deck's own rate at each cast turn. */
 function lift(observedAt: number[], castAt: number[], baseline: number[], aliveAt: number[]): number {
   let observed = 0;

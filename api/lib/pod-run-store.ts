@@ -46,4 +46,12 @@ export interface PodRunStore {
    * is in no run, has no results yet, or was already added.
    */
   applyJob(jobId: string): Promise<boolean>;
+
+  /**
+   * Take a job that is being deleted out of its runs: subtract its results
+   * from the standings they were added to, and drop it from every run that
+   * lists it. A run left with no jobs is deleted. Returns false when the job
+   * is in no run.
+   */
+  removeJob(jobId: string): Promise<boolean>;
 }
