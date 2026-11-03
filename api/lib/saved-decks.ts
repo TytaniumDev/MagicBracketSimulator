@@ -6,6 +6,8 @@ export interface SavedDeck {
   id: string;
   name: string;
   filename: string;
+  /** First card of the [Commander] section, or null when there is none. */
+  primaryCommander: string | null;
 }
 
 /** Local mode's saved decks folder (SAVED_DECKS_DIR, default `data/decks`). */
@@ -117,6 +119,7 @@ export function listSavedDecks(): SavedDeck[] {
           id: file, // Use filename as ID
           name,
           filename: file,
+          primaryCommander: parseCommanderFromContent(content) ?? null,
         });
       } catch (err) {
         Sentry.captureException(err, { tags: { component: 'saved-decks' } });
@@ -212,6 +215,7 @@ export function saveDeck(name: string, dckContent: string): SavedDeck {
     id: filename,
     name,
     filename,
+    primaryCommander: parseCommanderFromContent(dckContent) ?? null,
   };
 }
 
