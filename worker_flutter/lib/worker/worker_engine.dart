@@ -8,7 +8,10 @@ import '../api_client.dart';
 import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
+import '../system/system_stats.dart';
 import '../telemetry.dart';
+import 'adaptive_capacity.dart';
+import 'capacity_autopilot.dart';
 import 'coverage_requester.dart';
 import 'job_loader.dart';
 import 'log_uploader.dart';
@@ -24,6 +27,7 @@ class EngineState {
     required this.activeSims,
     required this.lastError,
     required this.completedCount,
+    this.capacity = 0,
   });
 
   final bool running;
@@ -31,23 +35,30 @@ class EngineState {
   final String? lastError;
   final int completedCount;
 
+  /// How many sims the engine runs at once right now: the Max parallel
+  /// sims setting, or in Auto mode the adaptive target.
+  final int capacity;
+
   EngineState copyWith({
     bool? running,
     List<SimDoc>? activeSims,
     String? lastError,
     int? completedCount,
+    int? capacity,
   }) => EngineState(
     running: running ?? this.running,
     activeSims: activeSims ?? this.activeSims,
     lastError: lastError ?? this.lastError,
     completedCount: completedCount ?? this.completedCount,
+    capacity: capacity ?? this.capacity,
   );
 
-  static EngineState initial() => EngineState(
+  static EngineState initial({int capacity = 0}) => EngineState(
     running: false,
     activeSims: const [],
     lastError: null,
     completedCount: 0,
+    capacity: capacity,
   );
 }
 
@@ -62,7 +73,8 @@ class EngineState {
 ///   - the SimRunner (Java child process spawning)
 ///   - the CoverageRequester, which asks for an auto-coverage job when a
 ///     claim finds no work
-///   - a counter on `config.maxCapacity` to bound concurrency
+///   - a counter on [capacity] to bound concurrency, and in Auto mode the
+///     CapacityAutopilot that moves it with live CPU and free RAM
 ///
 /// Lifecycle: [start] kicks everything off. [stop] cancels active sims and
 /// drains. [stateStream] exposes a snapshot of what's running for the UI.
@@ -73,9 +85,13 @@ class WorkerEngine {
     required PresenceSink presenceSink,
     SimRunner? runnerOverride,
     ApiClient? apiClient,
+    SystemStats? systemStats,
     this.leaseInterval = const Duration(seconds: 60),
     this.coverageInterval = const Duration(minutes: 5),
-  }) : _runner =
+    this.autoCapacityInterval = const Duration(seconds: 15),
+    this.autoCapacitySettle = const Duration(seconds: 60),
+  }) : _systemStats = systemStats ?? SystemStats.forPlatform(),
+       _runner =
            runnerOverride ??
            SimRunner(javaPath: config.javaPath, forgePath: config.forgePath),
        _presence = WorkerPresence(
@@ -96,6 +112,14 @@ class WorkerEngine {
   /// fires when sims change, so without this tick an idle worker would
   /// never ask again once the current coverage job finishes.
   final Duration coverageInterval;
+
+  /// How often Auto mode reads CPU and RAM.
+  final Duration autoCapacityInterval;
+
+  /// Least time between Auto mode raises ([AdaptiveCapacity.settle]).
+  final Duration autoCapacitySettle;
+
+  final SystemStats _systemStats;
   final SimRunner _runner;
   final WorkerPresence _presence;
   final ApiClient _api;
@@ -114,8 +138,8 @@ class WorkerEngine {
     minInterval: coverageInterval,
   );
 
-  final _stateSubject = BehaviorSubject<EngineState>.seeded(
-    EngineState.initial(),
+  late final _stateSubject = BehaviorSubject<EngineState>.seeded(
+    EngineState.initial(capacity: capacity),
   );
   Stream<EngineState> get stateStream => _stateSubject.stream;
   EngineState get currentState => _stateSubject.value;
@@ -127,12 +151,21 @@ class WorkerEngine {
   /// can ask the corresponding sim runner to terminate.
   final Map<String, Completer<void>> _cancelByComposite = {};
 
-  /// Cap concurrent sims at config.maxCapacity. We use a simple counter
+  /// Cap concurrent sims at [capacity]. We use a simple counter
   /// (not a wait queue) because new work arrives via the Firestore listener,
   /// so we don't need to block in-process — we just decline to claim when at
   /// capacity and let the next listener tick re-evaluate.
   int _semaphoreActive = 0;
-  int get _semaphoreCapacity => config.maxCapacity;
+
+  /// Runs Auto mode while the engine runs with `config.autoCapacity` on.
+  CapacityAutopilot? _autopilot;
+
+  /// How many sims to run at once: the adaptive target in Auto mode,
+  /// otherwise `config.maxCapacity`.
+  int get capacity => config.autoCapacity
+      ? (_autopilot?.target ??
+            config.maxCapacity.clamp(1, config.capacityLimit))
+      : config.maxCapacity;
 
   bool _stopped = false;
 
@@ -140,6 +173,7 @@ class WorkerEngine {
     if (_stateSubject.value.running) return;
     _stopped = false;
     _emit(currentState.copyWith(running: true, lastError: null));
+    if (config.autoCapacity) _startAutopilot();
 
     try {
       await _presence.start();
@@ -206,6 +240,7 @@ class WorkerEngine {
     _pendingSub = null;
     _idleTick?.cancel();
     _idleTick = null;
+    _stopAutopilot();
     // Signal any running sims to terminate.
     for (final c in _cancelByComposite.values) {
       if (!c.isCompleted) c.complete();
@@ -221,7 +256,46 @@ class WorkerEngine {
   /// no new claims happen until the active count drops below it.
   Future<void> setMaxCapacity(int n) async {
     await config.setCapacity(n);
-    _presence.capacity = n;
+    _capacityChanged();
+  }
+
+  /// Turn Auto mode on or off. Persists the choice; while the engine runs,
+  /// Auto mode starts from the Max parallel sims setting and adapts from
+  /// there, and turning it off goes back to that setting.
+  Future<void> setAutoCapacity(bool on) async {
+    await config.setAutoCapacity(on);
+    if (on && currentState.running) {
+      _startAutopilot();
+    } else {
+      _stopAutopilot();
+    }
+    _capacityChanged();
+  }
+
+  void _startAutopilot() {
+    if (_autopilot != null) return;
+    _autopilot = CapacityAutopilot(
+      stats: _systemStats,
+      controller: AdaptiveCapacity(
+        limit: config.capacityLimit,
+        start: config.maxCapacity,
+        settle: autoCapacitySettle,
+      ),
+      activeSims: () => _semaphoreActive,
+      onTarget: (_) => _capacityChanged(),
+      interval: autoCapacityInterval,
+    )..start();
+  }
+
+  void _stopAutopilot() {
+    _autopilot?.stop();
+    _autopilot = null;
+  }
+
+  /// Advertise the new [capacity], show it, and claim up to it.
+  void _capacityChanged() {
+    _presence.capacity = capacity;
+    _emit(currentState.copyWith(capacity: capacity));
     if (currentState.running) unawaited(_tryClaimLoop());
   }
 
@@ -259,7 +333,7 @@ class WorkerEngine {
   /// NoneAvailable and no coverage job was created. Only called from
   /// [_tryClaimLoop].
   Future<void> _claimUntilFullOrEmpty() async {
-    while (_semaphoreActive < _semaphoreCapacity && !_stopped) {
+    while (_semaphoreActive < capacity && !_stopped) {
       final ClaimResult result;
       try {
         result = await _simApi.claim();

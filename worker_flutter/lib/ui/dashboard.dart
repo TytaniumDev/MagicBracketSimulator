@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -38,12 +39,11 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   late int _capacity;
+  late bool _autoCapacity;
   late final ApiClient _api;
   late final DeckRepo _deckRepo;
   late final AppDb _localDb;
   late final OfflineRunner _localRunner;
-
-
 
   /// Set by `_startCloud`/`_startLocal` before they return so the
   /// follow-up `onJobCreated` callback knows which detail screen to
@@ -106,6 +106,7 @@ class _DashboardState extends State<Dashboard> {
   void initState() {
     super.initState();
     _capacity = widget.config.maxCapacity;
+    _autoCapacity = widget.config.autoCapacity;
     // Single ApiClient (and its underlying http.Client) for the
     // dashboard's lifetime — allocating per-submission leaks socket
     // resources in a long-running tray app.
@@ -228,7 +229,10 @@ class _DashboardState extends State<Dashboard> {
                     child: Tooltip(
                       message: 'View on GitHub',
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1F2937),
                           borderRadius: BorderRadius.circular(12),
@@ -237,7 +241,11 @@ class _DashboardState extends State<Dashboard> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.code, size: 12, color: Color(0xFF60A5FA)),
+                            const Icon(
+                              Icons.code,
+                              size: 12,
+                              color: Color(0xFF60A5FA),
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               _getVersionText(),
@@ -289,9 +297,19 @@ class _DashboardState extends State<Dashboard> {
                       ),
                       const SizedBox(height: 16),
                       _CapacityRow(
-                        current: _capacity,
+                        // In Auto mode the slider shows the engine's live
+                        // target while it runs.
+                        current: _autoCapacity && state.running
+                            ? state.capacity
+                            : _capacity,
+                        limit: widget.config.capacityLimit,
+                        auto: _autoCapacity,
                         onChanged: (v) => setState(() => _capacity = v),
                         onChangeEnd: (v) => widget.engine.setMaxCapacity(v),
+                        onAutoChanged: (on) {
+                          setState(() => _autoCapacity = on);
+                          widget.engine.setAutoCapacity(on);
+                        },
                       ),
                       const SizedBox(height: 8),
                       const _LaunchAtLoginRow(),
@@ -421,13 +439,24 @@ class _StatusCard extends StatelessWidget {
 class _CapacityRow extends StatelessWidget {
   const _CapacityRow({
     required this.current,
+    required this.limit,
+    required this.auto,
     required this.onChanged,
     required this.onChangeEnd,
+    required this.onAutoChanged,
   });
 
   final int current;
+
+  /// This machine's hardware limit ([WorkerConfig.capacityLimit]).
+  final int limit;
+
+  /// Auto mode is on: the engine moves [current] itself, so the slider is
+  /// read-only.
+  final bool auto;
   final ValueChanged<int> onChanged;
   final ValueChanged<int> onChangeEnd;
+  final ValueChanged<bool> onAutoChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -444,14 +473,16 @@ class _CapacityRow extends StatelessWidget {
             style: TextStyle(color: Colors.white70),
           ),
           Expanded(
+            // A slider needs two stops, so a one-sim machine gets a
+            // disabled 1–2 slider showing 1.
             child: Slider(
-              value: current.toDouble(),
+              value: current.clamp(1, math.max(limit, 2)).toDouble(),
               min: 1,
-              max: 8,
-              divisions: 7,
+              max: math.max(limit, 2).toDouble(),
+              divisions: math.max(limit - 1, 1),
               label: '$current',
-              onChanged: (v) => onChanged(v.round()),
-              onChangeEnd: (v) => onChangeEnd(v.round()),
+              onChanged: editable ? (v) => onChanged(v.round()) : null,
+              onChangeEnd: editable ? (v) => onChangeEnd(v.round()) : null,
             ),
           ),
           SizedBox(
@@ -465,10 +496,27 @@ class _CapacityRow extends StatelessWidget {
               textAlign: TextAlign.right,
             ),
           ),
+          const SizedBox(width: 12),
+          Tooltip(
+            message:
+                'Adjust to CPU and free memory, up to $limit for this machine',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: auto,
+                  onChanged: (v) => onAutoChanged(v ?? false),
+                ),
+                const Text('Auto', style: TextStyle(color: Colors.white70)),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+
+  bool get editable => !auto && limit > 1;
 }
 
 /// Toggle that flips the OS's "launch this app at login" registration.
