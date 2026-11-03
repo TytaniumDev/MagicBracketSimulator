@@ -5,9 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:worker_flutter/config.dart';
 import 'package:worker_flutter/models/sim.dart';
+import 'package:worker_flutter/system/system_stats.dart';
 import 'package:worker_flutter/worker/sim_runner.dart';
 import 'package:worker_flutter/worker/worker_engine.dart';
 
+import 'capacity_autopilot_test.dart' show FakeSystemStats;
 import 'fake_sim_api.dart';
 
 /// Integration tests for the cloud-mode `WorkerEngine` against an
@@ -191,6 +193,65 @@ void main() {
       expect(stubRunner.invocations, 3, reason: 'cap of 3 holds');
 
       gate.complete();
+    });
+  });
+
+  group('auto capacity', () {
+    test('ramps up to the hardware limit while there is headroom', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final gate = Completer<void>();
+      stubRunner.gate = gate.future;
+      final stats = FakeSystemStats()
+        ..load = const SystemLoad(cpuBusy: 0.3, availableMemoryMb: 16384);
+      final auto = WorkerConfig(
+        workerId: 'test-auto-worker',
+        workerName: 'auto-test',
+        maxCapacity: 1,
+        forgePath: '/tmp/forge',
+        javaPath: '/usr/bin/java',
+        decksPath: '/tmp/decks',
+        logsPath: '/tmp/logs',
+        apiUrl: 'http://localhost',
+        capacityLimit: 3,
+        autoCapacity: true,
+      );
+      await engine.dispose();
+      engine = WorkerEngine(
+        config: auto,
+        firestore: firestore,
+        apiClient: api.client,
+        presenceSink: FakePresenceSink(),
+        runnerOverride: stubRunner,
+        systemStats: stats,
+        leaseInterval: const Duration(milliseconds: 50),
+        autoCapacityInterval: const Duration(milliseconds: 20),
+        autoCapacitySettle: Duration.zero,
+      );
+
+      await seedJob(jobId: 'job-auto', simCount: 5);
+      await engine.start();
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 3,
+        timeout: const Duration(seconds: 3),
+      );
+      // Give the autopilot time to overshoot if the limit were ignored.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(stubRunner.invocations, 3, reason: 'hardware limit holds');
+      expect(engine.capacity, 3);
+      expect(engine.currentState.capacity, 3);
+
+      gate.complete();
+    });
+
+    test('turning Auto off goes back to the manual setting', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      await engine.setAutoCapacity(true);
+      expect(config.autoCapacity, isTrue);
+      await engine.setAutoCapacity(false);
+      expect(config.autoCapacity, isFalse);
+      expect(engine.capacity, config.maxCapacity);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('worker.capacityAuto'), isFalse);
     });
   });
 

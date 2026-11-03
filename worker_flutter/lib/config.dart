@@ -1,10 +1,13 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'system/system_stats.dart';
+import 'telemetry.dart';
 import 'worker/sim_capacity.dart';
-import 'worker/system_memory.dart';
 
 /// Persistent worker configuration: identity, capacity, paths.
 ///
@@ -21,14 +24,20 @@ class WorkerConfig {
     required this.logsPath,
     required this.apiUrl,
     this.capacityLimit = SimCapacity.fallbackLimit,
+    this.autoCapacity = false,
   });
 
   final String workerId;
   final String workerName;
 
   /// Upper bound on concurrent sims. Mutable so a change from the UI takes
-  /// effect on the running engine without an app restart.
+  /// effect on the running engine without an app restart. In Auto mode it
+  /// is where the adaptive target starts.
   int maxCapacity;
+
+  /// Auto mode: the engine adapts the number of sims to live CPU and free
+  /// RAM (up to [capacityLimit]) instead of holding at [maxCapacity].
+  bool autoCapacity;
 
   /// The most parallel sims this machine's cores and RAM can carry
   /// ([SimCapacity.limitFor]). Detected at launch, never persisted; the
@@ -45,6 +54,7 @@ class WorkerConfig {
   static const _kWorkerId = 'worker.id';
   static const _kWorkerName = 'worker.name';
   static const _kCapacity = 'worker.capacity';
+  static const _kAutoCapacity = 'worker.capacityAuto';
   static const _kForgePath = 'worker.forgePath';
   static const _kJavaPath = 'worker.javaPath';
   static const _kApiUrl = 'worker.apiUrl';
@@ -58,7 +68,7 @@ class WorkerConfig {
     final prefs = await SharedPreferences.getInstance();
     final capacityLimit = SimCapacity.limitFor(
       logicalCores: Platform.numberOfProcessors,
-      totalMemoryMb: await SystemMemory.totalMb(),
+      totalMemoryMb: await _readTotalMemoryMb(),
     );
 
     var workerId = prefs.getString(_kWorkerId);
@@ -93,7 +103,25 @@ class WorkerConfig {
       logsPath: logsPath,
       apiUrl: apiUrl,
       capacityLimit: capacityLimit,
+      autoCapacity: prefs.getBool(_kAutoCapacity) ?? false,
     );
+  }
+
+  /// Physical RAM in MB, or null when it can't be read (reported to
+  /// Sentry), which limits capacity by cores alone.
+  static Future<int?> _readTotalMemoryMb() async {
+    try {
+      return await SystemStats.forPlatform().totalMemoryMb();
+    } catch (e, st) {
+      debugPrint('Reading total RAM failed: $e\n$st');
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.boot,
+        extra: {'phase': 'read_total_memory'},
+      );
+      return null;
+    }
   }
 
   Future<void> setApiUrl(String url) async {
@@ -105,6 +133,12 @@ class WorkerConfig {
     maxCapacity = n;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kCapacity, n);
+  }
+
+  Future<void> setAutoCapacity(bool on) async {
+    autoCapacity = on;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAutoCapacity, on);
   }
 
   Future<void> setForgePath(String path) async {
