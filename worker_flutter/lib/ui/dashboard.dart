@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -290,6 +291,7 @@ class _DashboardState extends State<Dashboard> {
                       const SizedBox(height: 16),
                       _CapacityRow(
                         current: _capacity,
+                        limit: widget.config.capacityLimit,
                         onChanged: (v) => setState(() => _capacity = v),
                         onChangeEnd: (v) => widget.engine.setMaxCapacity(v),
                       ),
@@ -421,11 +423,15 @@ class _StatusCard extends StatelessWidget {
 class _CapacityRow extends StatelessWidget {
   const _CapacityRow({
     required this.current,
+    required this.limit,
     required this.onChanged,
     required this.onChangeEnd,
   });
 
   final int current;
+
+  /// This machine's hardware limit ([WorkerConfig.capacityLimit]).
+  final int limit;
   final ValueChanged<int> onChanged;
   final ValueChanged<int> onChangeEnd;
 
@@ -444,14 +450,16 @@ class _CapacityRow extends StatelessWidget {
             style: TextStyle(color: Colors.white70),
           ),
           Expanded(
+            // A slider needs two stops, so a one-sim machine gets a
+            // disabled 1–2 slider showing 1.
             child: Slider(
               value: current.toDouble(),
               min: 1,
-              max: 8,
-              divisions: 7,
+              max: math.max(limit, 2).toDouble(),
+              divisions: math.max(limit - 1, 1),
               label: '$current',
-              onChanged: (v) => onChanged(v.round()),
-              onChangeEnd: (v) => onChangeEnd(v.round()),
+              onChanged: limit > 1 ? (v) => onChanged(v.round()) : null,
+              onChangeEnd: limit > 1 ? (v) => onChangeEnd(v.round()) : null,
             ),
           ),
           SizedBox(

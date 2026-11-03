@@ -3,6 +3,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'worker/sim_capacity.dart';
+import 'worker/system_memory.dart';
+
 /// Persistent worker configuration: identity, capacity, paths.
 ///
 /// `workerId` is generated once on first launch and persisted. It is the
@@ -17,6 +20,7 @@ class WorkerConfig {
     required this.decksPath,
     required this.logsPath,
     required this.apiUrl,
+    this.capacityLimit = SimCapacity.fallbackLimit,
   });
 
   final String workerId;
@@ -25,6 +29,11 @@ class WorkerConfig {
   /// Upper bound on concurrent sims. Mutable so a change from the UI takes
   /// effect on the running engine without an app restart.
   int maxCapacity;
+
+  /// The most parallel sims this machine's cores and RAM can carry
+  /// ([SimCapacity.limitFor]). Detected at launch, never persisted; the
+  /// Max parallel sims slider stops here.
+  final int capacityLimit;
   final String
   forgePath; // Path to extracted Forge install dir (contains forge-gui-desktop-*.jar)
   final String javaPath; // Absolute path to `java` binary
@@ -42,8 +51,15 @@ class WorkerConfig {
   static const _defaultApiUrl =
       'https://api--magic-bracket-simulator.us-central1.hosted.app';
 
-  static Future<WorkerConfig> loadOrInit({int defaultCapacity = 2}) async {
+  /// Loads the saved config. A machine that never chose a capacity starts
+  /// at its hardware limit; a saved capacity above the limit is lowered
+  /// to it (say, after moving the settings to a smaller machine).
+  static Future<WorkerConfig> loadOrInit() async {
     final prefs = await SharedPreferences.getInstance();
+    final capacityLimit = SimCapacity.limitFor(
+      logicalCores: Platform.numberOfProcessors,
+      totalMemoryMb: await SystemMemory.totalMb(),
+    );
 
     var workerId = prefs.getString(_kWorkerId);
     if (workerId == null || workerId.isEmpty) {
@@ -57,7 +73,10 @@ class WorkerConfig {
       await prefs.setString(_kWorkerName, workerName);
     }
 
-    final capacity = prefs.getInt(_kCapacity) ?? defaultCapacity;
+    final capacity = (prefs.getInt(_kCapacity) ?? capacityLimit).clamp(
+      1,
+      capacityLimit,
+    );
     final forgePath = prefs.getString(_kForgePath) ?? await _defaultForgePath();
     final javaPath = prefs.getString(_kJavaPath) ?? await _defaultJavaPath();
     final decksPath = await _forgeDecksDir();
@@ -73,6 +92,7 @@ class WorkerConfig {
       decksPath: decksPath,
       logsPath: logsPath,
       apiUrl: apiUrl,
+      capacityLimit: capacityLimit,
     );
   }
 
