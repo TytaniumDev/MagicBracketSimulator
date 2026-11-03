@@ -2,7 +2,7 @@
  * Deck store factory: delegates to Firestore when GOOGLE_CLOUD_PROJECT is set,
  * otherwise to SQLite (precons) + filesystem (saved-decks).
  */
-import { listSavedDecks, readSavedDeckContent, saveDeck, deleteSavedDeck } from './saved-decks';
+import { listSavedDecks, readSavedDeckContent, saveDeck, deleteSavedDeck, parseCommanderFromContent } from './saved-decks';
 import { slugify } from './saved-decks';
 import { getColorIdentityByKey } from './deck-metadata';
 import * as firestoreDecks from './firestore-decks';
@@ -105,7 +105,7 @@ export async function listAllDecks(): Promise<DeckListItem[]> {
     id: s.filename,
     name: s.name,
     filename: s.filename,
-    primaryCommander: null,
+    primaryCommander: s.primaryCommander,
     colorIdentity: getColorIdentityByKey(s.filename),
     isPrecon: false,
     link: null,
@@ -137,6 +137,8 @@ async function readStoredDeckContent(id: string): Promise<{ name: string; dck: s
 
 export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> {
   if (USE_FIRESTORE) {
+    // The deck list reads the commander from this field, not from the .dck.
+    const primaryCommander = parseCommanderFromContent(input.dck) ?? null;
     const baseFilename = slugify(input.name) || 'deck';
     let filename = `${baseFilename}.dck`;
     const decks = await firestoreDecks.listAllDecks();
@@ -153,6 +155,7 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
       name: input.name,
       filename,
       dck: input.dck,
+      primaryCommander,
       isPrecon: false,
       link: input.link ?? null,
       ownerId: input.ownerId,
@@ -164,6 +167,7 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
       id: deck.id,
       name: deck.name,
       filename: deck.filename,
+      primaryCommander,
       colorIdentity: deck.colorIdentity,
       isPrecon: false,
       link: deck.link,
@@ -178,6 +182,7 @@ export async function createDeck(input: CreateDeckInput): Promise<DeckListItem> 
     id: saved.filename,
     name: saved.name,
     filename: saved.filename,
+    primaryCommander: saved.primaryCommander,
     isPrecon: false,
     link: null,
     ownerId: null,
