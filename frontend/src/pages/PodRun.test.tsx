@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { renderWithRouter } from '../test/render';
 import PodRunPage from './PodRun';
 import { usePodRun } from '../hooks/usePodRuns';
@@ -37,20 +37,19 @@ describe('PodRun — saved run', () => {
 
   const renderRun = () => renderWithRouter(<PodRunPage />, { route: '/pods/run-1', routePath: '/pods/:id' });
 
-  it("shows the run's own standings without loading its pods", () => {
+  it("shows the run's own standings", () => {
     renderRun();
 
     expect(screen.getByText('1 of 2 pods have results.', { exact: false })).toBeInTheDocument();
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Eldrazi');
     expect(rows[1]).toHaveTextContent('Atraxa');
-    expect(usePodRunJobs).not.toHaveBeenCalled();
   });
 
-  it('loads the pods when asked', () => {
+  it('lists every pod without a toggle', () => {
     renderRun();
-    fireEvent.click(screen.getByRole('button', { name: 'Show all 2 pods' }));
 
+    expect(screen.queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument();
     expect(usePodRunJobs).toHaveBeenCalledWith(['job-1', 'job-2']);
     expect(screen.getAllByRole('link').some((l) => l.getAttribute('href') === '/jobs/job-1')).toBe(true);
   });

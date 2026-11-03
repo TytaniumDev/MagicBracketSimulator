@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { Spinner } from '../components/Spinner';
 import { PodList } from '../components/PodList';
@@ -13,8 +13,8 @@ import type { DeckStanding } from '@shared/types/pod-run';
  * Pod run: every 4-deck pod queued from one selection of more than 4 decks,
  * with standings summed across the pods that have finished.
  *
- * Saved runs live at /pods/:id and keep their own standings, so the page
- * reads one run; its pods load only when asked for. The older
+ * Saved runs live at /pods/:id and keep their own standings; the page lists
+ * every pod below them. The older
  * /pods?jobs=… links (runs queued before runs were saved) still work by
  * loading every pod.
  */
@@ -25,7 +25,6 @@ export default function PodRunPage() {
 
 function SavedPodRun({ id }: { id: string }) {
   const podRun = usePodRun(id);
-  const [showPods, setShowPods] = useState(false);
 
   if (podRun.isLoading) {
     return (
@@ -58,17 +57,7 @@ function SavedPodRun({ id }: { id: string }) {
 
       <section>
         <h2 className="text-lg font-semibold mb-3">Pods</h2>
-        {showPods ? (
-          <LoadedPods jobIds={run.jobIds} />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowPods(true)}
-            className="text-sm text-blue-400 hover:underline"
-          >
-            Show all {run.podCount} pods
-          </button>
-        )}
+        <LoadedPods jobIds={run.jobIds} />
       </section>
     </div>
   );
