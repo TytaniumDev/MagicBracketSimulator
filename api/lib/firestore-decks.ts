@@ -14,7 +14,7 @@ export interface DeckDoc {
   name: string;
   filename: string;
   dck: string;
-  primaryCommander?: string;
+  primaryCommander?: string | null;
   colorIdentity?: string[];
   isPrecon: boolean;
   link?: string | null;
@@ -48,7 +48,7 @@ export interface CreateDeckInput {
   name: string;
   filename: string;
   dck: string;
-  primaryCommander?: string;
+  primaryCommander?: string | null;
   colorIdentity?: string[];
   isPrecon: boolean;
   link?: string | null;
