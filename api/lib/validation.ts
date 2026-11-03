@@ -37,16 +37,15 @@ export const updateSimulationSchema = z.object({
 export type UpdateSimulationInput = z.infer<typeof updateSimulationSchema>;
 
 // ---------------------------------------------------------------------------
-// POST /api/pod-runs — Save a pod run
+// POST /api/pod-runs — Queue a pod run
 // ---------------------------------------------------------------------------
 
 export const createPodRunSchema = z.object({
   deckIds: z
     .array(z.string().min(1))
     .min(REQUIRED_DECK_COUNT + 1, `At least ${REQUIRED_DECK_COUNT + 1} deckIds are required`)
-    .max(MAX_POD_RUN_DECKS, `At most ${MAX_POD_RUN_DECKS} deckIds are allowed`),
-  // C(MAX_POD_RUN_DECKS, 4) = 210 pods at most.
-  jobIds: z.array(z.string().min(1)).min(1).max(210),
+    .max(MAX_POD_RUN_DECKS, `At most ${MAX_POD_RUN_DECKS} deckIds are allowed`)
+    .refine((ids) => new Set(ids).size === ids.length, 'deckIds must not repeat a deck'),
   simulations: z.number().int().min(SIMULATIONS_MIN).max(SIMULATIONS_MAX),
   idempotencyKey: z.string().optional(),
 });

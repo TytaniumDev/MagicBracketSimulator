@@ -92,8 +92,9 @@ worker presence, so it never lists workers as online.
 
 ## A job, end to end
 
-1. **Create.** The frontend posts 4 deck ids to `POST /api/jobs` (or the
-   coverage service picks a pod). The API writes the job with its `seats`,
+1. **Create.** The frontend posts 4 deck ids to `POST /api/jobs`, or 5 to 10
+   to `POST /api/pod-runs`, which queues a job for every 4-deck pod in the
+   same request (or the coverage service picks a pod). The API writes the job with its `seats`,
    creates one PENDING sim doc per container, and schedules a Cloud Tasks
    recovery check.
 2. **Claim.** Desktop workers poll `GET /api/jobs/claim-sim?lease=1`. The API
