@@ -1,7 +1,5 @@
 import 'package:sentry_flutter/sentry_flutter.dart';
 
-import 'worker/request_timeout.dart';
-
 /// Stable tag values are written as snake_case so they're easy to filter
 /// on in Sentry alert rules (e.g. `category:sign_in`).
 enum TelemetryCategory {
@@ -73,9 +71,6 @@ class Telemetry {
     Map<String, String>? tags,
     Map<String, dynamic>? extra,
   }) async {
-    // Expected while the computer sleeps, not a fault; callers already
-    // log it and retry.
-    if (error is SleptDuringRequestException) return;
     await Sentry.captureException(
       error,
       stackTrace: stack,

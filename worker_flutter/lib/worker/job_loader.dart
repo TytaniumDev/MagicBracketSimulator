@@ -3,7 +3,6 @@ import 'dart:io';
 
 import '../api_client.dart';
 import '../models/sim.dart';
-import 'request_timeout.dart';
 
 /// Fetches what the worker needs to run a job's sims and writes its decks
 /// to disk for Forge.
@@ -73,7 +72,7 @@ class JobLoader {
     try {
       return await _api
           .getJson('/api/jobs/$jobId?view=worker')
-          .timeoutAcrossSleep(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 30));
     } on ApiException catch (e) {
       if (e.status == 404) return null;
       rethrow;
