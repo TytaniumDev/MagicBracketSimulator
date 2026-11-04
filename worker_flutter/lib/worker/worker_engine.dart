@@ -8,6 +8,8 @@ import '../api_client.dart';
 import '../app_log.dart';
 import '../config.dart';
 import '../models/sim.dart';
+import '../system/idle_monitor.dart';
+import '../system/sleep_guard.dart';
 import '../system/system_stats.dart';
 import '../telemetry.dart';
 import 'adaptive_capacity.dart';
@@ -18,6 +20,7 @@ import 'log_uploader.dart';
 import 'sim_api.dart';
 import 'sim_lease_keeper.dart';
 import 'sim_runner.dart';
+import 'sleep_coordinator.dart';
 import 'worker_presence.dart';
 
 /// Worker lifecycle state observable from the UI.
@@ -28,6 +31,7 @@ class EngineState {
     required this.lastError,
     required this.completedCount,
     this.capacity = 0,
+    this.pausedForSleep = false,
   });
 
   final bool running;
@@ -39,18 +43,24 @@ class EngineState {
   /// sims setting, or in Auto mode the adaptive target.
   final int capacity;
 
+  /// The computer is due to sleep: the engine takes no new sims and lets
+  /// the running ones finish (see [SleepCoordinator]).
+  final bool pausedForSleep;
+
   EngineState copyWith({
     bool? running,
     List<SimDoc>? activeSims,
     String? lastError,
     int? completedCount,
     int? capacity,
+    bool? pausedForSleep,
   }) => EngineState(
     running: running ?? this.running,
     activeSims: activeSims ?? this.activeSims,
     lastError: lastError ?? this.lastError,
     completedCount: completedCount ?? this.completedCount,
     capacity: capacity ?? this.capacity,
+    pausedForSleep: pausedForSleep ?? this.pausedForSleep,
   );
 
   static EngineState initial({int capacity = 0}) => EngineState(
@@ -75,6 +85,8 @@ class EngineState {
 ///     claim finds no work
 ///   - a counter on [capacity] to bound concurrency, and in Auto mode the
 ///     CapacityAutopilot that moves it with live CPU and free RAM
+///   - the SleepCoordinator, which keeps the computer awake while sims run
+///     and pauses claiming once the computer is due to sleep
 ///
 /// Lifecycle: [start] kicks everything off. [stop] cancels active sims and
 /// drains. [stateStream] exposes a snapshot of what's running for the UI.
@@ -86,11 +98,16 @@ class WorkerEngine {
     SimRunner? runnerOverride,
     ApiClient? apiClient,
     SystemStats? systemStats,
+    SleepGuard? sleepGuard,
+    IdleMonitor? idleMonitor,
     this.leaseInterval = const Duration(seconds: 60),
     this.coverageInterval = const Duration(minutes: 5),
     this.autoCapacityInterval = const Duration(seconds: 15),
     this.autoCapacitySettle = const Duration(seconds: 60),
+    this.sleepCheckInterval = const Duration(seconds: 30),
   }) : _systemStats = systemStats ?? SystemStats.forPlatform(),
+       _sleepGuard = sleepGuard ?? SleepGuard.forPlatform(),
+       _idleMonitor = idleMonitor ?? IdleMonitor.forPlatform(),
        _runner =
            runnerOverride ??
            SimRunner(javaPath: config.javaPath, forgePath: config.forgePath),
@@ -119,7 +136,12 @@ class WorkerEngine {
   /// Least time between Auto mode raises ([AdaptiveCapacity.settle]).
   final Duration autoCapacitySettle;
 
+  /// How often the engine checks whether the computer is due to sleep.
+  final Duration sleepCheckInterval;
+
   final SystemStats _systemStats;
+  final SleepGuard _sleepGuard;
+  final IdleMonitor _idleMonitor;
   final SimRunner _runner;
   final WorkerPresence _presence;
   final ApiClient _api;
@@ -136,6 +158,14 @@ class WorkerEngine {
   late final CoverageRequester _coverage = CoverageRequester(
     api: _api,
     minInterval: coverageInterval,
+  );
+  late final SleepCoordinator _sleep = SleepCoordinator(
+    guard: _sleepGuard,
+    idle: _idleMonitor,
+    keepAwake: () => config.keepAwake,
+    activeSims: () => _semaphoreActive,
+    onPausedChanged: _sleepPauseChanged,
+    interval: sleepCheckInterval,
   );
 
   late final _stateSubject = BehaviorSubject<EngineState>.seeded(
@@ -174,6 +204,7 @@ class WorkerEngine {
     _stopped = false;
     _emit(currentState.copyWith(running: true, lastError: null));
     if (config.autoCapacity) _startAutopilot();
+    await _sleep.start();
 
     try {
       await _presence.start();
@@ -241,6 +272,7 @@ class WorkerEngine {
     _idleTick?.cancel();
     _idleTick = null;
     _stopAutopilot();
+    await _sleep.stop();
     // Signal any running sims to terminate.
     for (final c in _cancelByComposite.values) {
       if (!c.isCompleted) c.complete();
@@ -270,6 +302,19 @@ class WorkerEngine {
       _stopAutopilot();
     }
     _capacityChanged();
+  }
+
+  /// Turn Keep computer awake on or off. Persists the choice. On, the
+  /// computer stays awake whenever the engine runs and claiming never
+  /// pauses for sleep; off, it stays awake only while sims run.
+  Future<void> setKeepAwake(bool on) async {
+    await config.setKeepAwake(on);
+    if (currentState.running) unawaited(_sleep.update());
+  }
+
+  void _sleepPauseChanged(bool paused) {
+    _emit(currentState.copyWith(pausedForSleep: paused));
+    if (!paused && currentState.running) unawaited(_tryClaimLoop());
   }
 
   void _startAutopilot() {
@@ -333,7 +378,7 @@ class WorkerEngine {
   /// NoneAvailable and no coverage job was created. Only called from
   /// [_tryClaimLoop].
   Future<void> _claimUntilFullOrEmpty() async {
-    while (_semaphoreActive < capacity && !_stopped) {
+    while (_semaphoreActive < capacity && !_stopped && !_sleep.paused) {
       final ClaimResult result;
       try {
         result = await _simApi.claim();
@@ -377,6 +422,8 @@ class WorkerEngine {
     final cancelCompleter = Completer<void>();
     _cancelByComposite[sim.compositeId] = cancelCompleter;
     _publishActiveSims();
+    // Keep the computer awake until this sim is done.
+    unawaited(_sleep.syncHold());
 
     // Hold the lease while the sim runs. When the API says the job was
     // cancelled, or another worker took the sim over, stop the sim.
@@ -498,6 +545,8 @@ class WorkerEngine {
       _semaphoreActive--;
       _cancelByComposite.remove(sim.compositeId);
       _publishActiveSims();
+      // Release the computer once the last sim is done.
+      unawaited(_sleep.syncHold());
       // Try to pick up more work immediately.
       unawaited(_tryClaimLoop());
     }
