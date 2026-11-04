@@ -25,6 +25,7 @@ class WorkerConfig {
     required this.apiUrl,
     this.capacityLimit = SimCapacity.fallbackLimit,
     this.autoCapacity = false,
+    this.keepAwake = false,
   });
 
   final String workerId;
@@ -38,6 +39,11 @@ class WorkerConfig {
   /// Auto mode: the engine adapts the number of sims to live CPU and free
   /// RAM (up to [capacityLimit]) instead of holding at [maxCapacity].
   bool autoCapacity;
+
+  /// Keep the computer awake the whole time the engine runs. Off, the
+  /// engine keeps it awake only while sims run, and takes no new sims once
+  /// the computer is due to sleep (`SleepCoordinator`).
+  bool keepAwake;
 
   /// The most parallel sims this machine's cores and RAM can carry
   /// ([SimCapacity.limitFor]). Detected at launch, never persisted; the
@@ -55,6 +61,7 @@ class WorkerConfig {
   static const _kWorkerName = 'worker.name';
   static const _kCapacity = 'worker.capacity';
   static const _kAutoCapacity = 'worker.capacityAuto';
+  static const _kKeepAwake = 'worker.keepAwake';
   static const _kForgePath = 'worker.forgePath';
   static const _kJavaPath = 'worker.javaPath';
   static const _kApiUrl = 'worker.apiUrl';
@@ -104,6 +111,7 @@ class WorkerConfig {
       apiUrl: apiUrl,
       capacityLimit: capacityLimit,
       autoCapacity: prefs.getBool(_kAutoCapacity) ?? false,
+      keepAwake: prefs.getBool(_kKeepAwake) ?? false,
     );
   }
 
@@ -139,6 +147,12 @@ class WorkerConfig {
     autoCapacity = on;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kAutoCapacity, on);
+  }
+
+  Future<void> setKeepAwake(bool on) async {
+    keepAwake = on;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kKeepAwake, on);
   }
 
   Future<void> setForgePath(String path) async {

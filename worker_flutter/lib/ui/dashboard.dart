@@ -40,6 +40,7 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   late int _capacity;
   late bool _autoCapacity;
+  late bool _keepAwake;
   late final ApiClient _api;
   late final DeckRepo _deckRepo;
   late final AppDb _localDb;
@@ -107,6 +108,7 @@ class _DashboardState extends State<Dashboard> {
     super.initState();
     _capacity = widget.config.maxCapacity;
     _autoCapacity = widget.config.autoCapacity;
+    _keepAwake = widget.config.keepAwake;
     // Single ApiClient (and its underlying http.Client) for the
     // dashboard's lifetime — allocating per-submission leaks socket
     // resources in a long-running tray app.
@@ -313,6 +315,14 @@ class _DashboardState extends State<Dashboard> {
                       ),
                       const SizedBox(height: 8),
                       const _LaunchAtLoginRow(),
+                      const SizedBox(height: 8),
+                      _KeepAwakeRow(
+                        value: _keepAwake,
+                        onChanged: (on) {
+                          setState(() => _keepAwake = on);
+                          widget.engine.setKeepAwake(on);
+                        },
+                      ),
                       const SizedBox(height: 16),
                       Expanded(
                         child: _ActiveSimsList(active: state.activeSims),
@@ -386,16 +396,23 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sims = state.activeSims.length;
     final color = !state.running
         ? Colors.grey
-        : state.activeSims.isEmpty
+        : state.pausedForSleep
+        ? Colors.amber
+        : sims == 0
         ? Colors.green
         : Colors.blue;
     final label = !state.running
         ? 'Stopped'
-        : state.activeSims.isEmpty
+        : state.pausedForSleep
+        ? (sims == 0
+              ? 'Paused while the computer sleeps'
+              : 'Finishing $sims sim(s) before sleep')
+        : sims == 0
         ? 'Idle'
-        : 'Running ${state.activeSims.length} sim(s)';
+        : 'Running $sims sim(s)';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -593,6 +610,43 @@ class _LaunchAtLoginRowState extends State<_LaunchAtLoginRow> {
             )
           else
             Switch(value: _enabled!, onChanged: _busy ? null : _toggle),
+        ],
+      ),
+    );
+  }
+}
+
+/// Keep computer awake: on, the computer never idle-sleeps while the
+/// engine runs; off, it stays awake only to finish running sims.
+class _KeepAwakeRow extends StatelessWidget {
+  const _KeepAwakeRow({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Tooltip(
+              message:
+                  'Off: the computer stays awake only to finish running '
+                  'sims, and the worker takes no new ones once the computer '
+                  'would normally sleep.',
+              child: Text(
+                'Keep computer awake',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ),
+          Checkbox(value: value, onChanged: (v) => onChanged(v ?? false)),
         ],
       ),
     );

@@ -11,6 +11,7 @@ import 'package:worker_flutter/worker/worker_engine.dart';
 
 import 'capacity_autopilot_test.dart' show FakeSystemStats;
 import 'fake_sim_api.dart';
+import 'sleep_coordinator_test.dart' show FakeIdleMonitor, FakeSleepGuard;
 
 /// Integration tests for the cloud-mode `WorkerEngine` against an
 /// in-memory fake Firestore. Covers the same code path the real
@@ -388,6 +389,81 @@ void main() {
         timeout: const Duration(seconds: 3),
       );
       expect(api.calls, contains('claim sim-0'));
+    });
+  });
+
+  group('sleep', () {
+    late FakeIdleMonitor idle;
+    late FakeSleepGuard guard;
+    late WorkerEngine sleepy;
+
+    setUp(() {
+      idle = FakeIdleMonitor();
+      guard = FakeSleepGuard();
+      sleepy = WorkerEngine(
+        config: config,
+        firestore: firestore,
+        apiClient: api.client,
+        presenceSink: FakePresenceSink(),
+        runnerOverride: stubRunner,
+        sleepGuard: guard,
+        idleMonitor: idle,
+        leaseInterval: const Duration(milliseconds: 50),
+        sleepCheckInterval: const Duration(milliseconds: 50),
+      );
+    });
+
+    tearDown(() => sleepy.dispose());
+
+    test('takes no sims while the computer is due to sleep, and resumes '
+        'when the user is back', () async {
+      idle.idle = const Duration(hours: 1);
+      await seedJob(jobId: 'sleepy', simCount: 1);
+      await sleepy.start();
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(stubRunner.invocations, 0);
+      expect(api.coverageRequests, 0);
+      expect(sleepy.currentState.pausedForSleep, isTrue);
+
+      idle.idle = Duration.zero;
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 1,
+        timeout: const Duration(seconds: 3),
+      );
+      expect(sleepy.currentState.pausedForSleep, isFalse);
+    });
+
+    test('keeps the computer awake while a sim runs', () async {
+      final gate = Completer<void>();
+      stubRunner.gate = gate.future;
+      await seedJob(jobId: 'awake', simCount: 1);
+      await sleepy.start();
+
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 1 && guard.held,
+        timeout: const Duration(seconds: 3),
+      );
+
+      gate.complete();
+      await _waitForCondition(
+        () async => !guard.held,
+        timeout: const Duration(seconds: 3),
+      );
+    });
+
+    test('Keep computer awake holds while idle', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      await sleepy.start();
+      expect(guard.held, isFalse);
+
+      await sleepy.setKeepAwake(true);
+      await _waitForCondition(
+        () async => guard.held,
+        timeout: const Duration(seconds: 3),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('worker.keepAwake'), isTrue);
     });
   });
 }
