@@ -14,7 +14,7 @@ class CapacityAutopilot {
     required AdaptiveCapacity controller,
     required int Function() activeSims,
     required void Function(int target) onTarget,
-    this.interval = const Duration(seconds: 15),
+    this.interval = const Duration(seconds: 5),
     DateTime Function()? clock,
   }) : _stats = stats,
        _controller = controller,
