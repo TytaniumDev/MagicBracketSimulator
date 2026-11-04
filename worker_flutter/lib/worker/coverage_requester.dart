@@ -3,6 +3,7 @@ import 'dart:async';
 import '../api_client.dart';
 import '../app_log.dart';
 import '../telemetry.dart';
+import 'request_timeout.dart';
 
 /// Asks the API for an auto-coverage job when the worker runs out of work.
 ///
@@ -53,7 +54,7 @@ class CoverageRequester {
     try {
       body = await _api
           .postJson('/api/coverage/next-job', const {})
-          .timeout(_timeout);
+          .timeoutAcrossSleep(_timeout);
     } catch (e, st) {
       AppLog.event(
         TelemetryCategory.engineRuntime,

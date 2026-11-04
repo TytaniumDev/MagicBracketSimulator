@@ -3,6 +3,7 @@ import 'dart:async';
 import '../api_client.dart';
 import '../app_log.dart';
 import '../telemetry.dart';
+import 'request_timeout.dart';
 
 /// Posts a single simulation's raw stdout log to the cloud API.
 ///
@@ -37,7 +38,7 @@ class LogUploader {
             'filename': filename,
             'logText': logText,
           })
-          .timeout(const Duration(seconds: 30));
+          .timeoutAcrossSleep(const Duration(seconds: 30));
       AppLog.event(
         TelemetryCategory.engineRuntime,
         'LogUploader: sim_$simIndex log uploaded '

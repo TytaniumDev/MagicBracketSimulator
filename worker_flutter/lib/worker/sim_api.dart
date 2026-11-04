@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../api_client.dart';
 import '../models/sim.dart';
+import 'request_timeout.dart';
 
 /// Result of a claim attempt.
 sealed class ClaimResult {}
@@ -65,7 +66,7 @@ class SimApi {
     ).query;
     final body = await _api
         .getJson('/api/jobs/claim-sim?$query')
-        .timeout(_timeout);
+        .timeoutAcrossSleep(_timeout);
     // 204 (no work) decodes to an empty map.
     final jobId = body['jobId'];
     final simId = body['simId'];
@@ -89,7 +90,7 @@ class SimApi {
         .postJson('/api/jobs/${sim.jobId}/simulations/${sim.simId}/lease', {
           'workerId': workerId,
         })
-        .timeout(_timeout);
+        .timeoutAcrossSleep(_timeout);
     return switch (body['status']) {
       'extended' => SimLeaseStatus.extended,
       'cancelled' => SimLeaseStatus.cancelled,
@@ -120,6 +121,6 @@ class SimApi {
           'workerId': workerId,
           ...update,
         })
-        .timeout(_timeout);
+        .timeoutAcrossSleep(_timeout);
   }
 }
