@@ -104,14 +104,14 @@ export async function createJob(body: {
 }
 
 /**
- * Save a pod run once all of its jobs are queued. Returns the run's id.
+ * Queue a pod run: the API queues one job per 4-deck pod of `deckIds` and
+ * saves them as one run. Returns the run's id and its jobs.
  */
 export async function createPodRun(body: {
   deckIds: string[];
-  jobIds: string[];
   simulations: number;
   idempotencyKey?: string;
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; jobIds: string[] }> {
   const apiBase = resolveApiBase();
   const res = await fetchWithAuth(`${apiBase}/api/pod-runs`, {
     method: 'POST',
@@ -119,7 +119,7 @@ export async function createPodRun(body: {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || 'Failed to save pod run');
+    throw new Error(data.error || 'Failed to queue pod run');
   }
   return data;
 }

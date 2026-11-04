@@ -12,7 +12,7 @@ import { IconButton } from '../components/ui/IconButton';
 import { ExternalLinkIcon, TrashIcon } from '../components/ui/icons';
 import { LoginButton } from '../components/LoginButton';
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
-import { MAX_POD_RUN_DECKS, podCombinations, podRunPath, savedPodRunPath } from '../utils/pods';
+import { MAX_POD_RUN_DECKS, countPods, savedPodRunPath } from '../utils/pods';
 import { DECK_SORT_OPTIONS, orderDecks, type DeckSort } from '../utils/deck-order';
 import { reportHandledError } from '../errorReporting';
 
@@ -58,7 +58,6 @@ function SimulationForm() {
   // Reused across retries of the same submission so the API dedups it.
   // Tied to the selection and game count: changing either starts fresh.
   const [idempotency, setIdempotency] = useState<{ key: string; signature: string } | null>(null);
-  const [podsQueued, setPodsQueued] = useState(0);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,7 +73,7 @@ function SimulationForm() {
 
   const isPodRun = selectedDeckIds.length > REQUIRED_DECK_COUNT;
   const canSubmit = selectedDeckIds.length >= REQUIRED_DECK_COUNT;
-  const pods = useMemo(() => podCombinations(selectedDeckIds), [selectedDeckIds]);
+  const podCount = countPods(selectedDeckIds.length);
 
   // Every deck that can be selected
   const allDecks = useMemo(() => {
@@ -152,22 +151,6 @@ function SimulationForm() {
     }
   };
 
-  /**
-   * Save the run so it can be found again from its jobs and the front page.
-   * Returns where to go next. If saving fails, the pods are still queued, so
-   * fall back to the unsaved jobs-list link rather than reporting an error.
-   */
-  const savePodRun = async (jobIds: string[], idempotencyKey: string): Promise<string> => {
-    try {
-      const { id } = await createPodRun({ deckIds: selectedDeckIds, jobIds, simulations, idempotencyKey });
-      return savedPodRunPath(id);
-    } catch (err) {
-      console.error('Failed to save pod run:', err);
-      reportHandledError(err, { action: 'savePodRun' });
-      return podRunPath(jobIds);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -181,26 +164,17 @@ function SimulationForm() {
     const key = idempotency?.signature === signature ? idempotency.key : crypto.randomUUID();
     setIdempotency({ key, signature });
     setIsSubmitting(true);
-    setPodsQueued(0);
 
     if (isPodRun) {
-      // One job per pod, created in order. Each pod's idempotency key is
-      // derived from the run's key, so a retry after a partial failure
-      // reuses the pods already queued instead of duplicating them.
-      const jobIds: string[] = [];
+      // The API queues every pod and saves the run in one request. A retry
+      // with the same key reuses the pods already queued.
       try {
-        for (const [i, pod] of pods.entries()) {
-          const { id } = await createJob({ deckIds: pod, simulations, idempotencyKey: `${key}-pod${i}` });
-          jobIds.push(id);
-          setPodsQueued(jobIds.length);
-        }
-        navigate(await savePodRun(jobIds, key));
+        const { id } = await createPodRun({ deckIds: selectedDeckIds, simulations, idempotencyKey: key });
+        navigate(savedPodRunPath(id));
       } catch (err) {
-        reportHandledError(err, { action: 'startPods', podsQueued: jobIds.length, podCount: pods.length });
+        reportHandledError(err, { action: 'startPods', podCount });
         const message = err instanceof Error ? err.message : 'An error occurred';
-        setSubmitError(
-          `Queued ${jobIds.length} of ${pods.length} pods before an error: ${message}. Submit again to queue the rest.`,
-        );
+        setSubmitError(`Couldn't queue the pods: ${message}. Submit again to queue the rest.`);
       } finally {
         setIsSubmitting(false);
       }
@@ -221,10 +195,10 @@ function SimulationForm() {
 
   const runLabel = isSubmitting
     ? isPodRun
-      ? `Queuing pods (${podsQueued}/${pods.length})...`
+      ? `Queuing ${podCount} pods...`
       : 'Submitting...'
     : isPodRun
-      ? `Queue ${pods.length} pods`
+      ? `Queue ${podCount} pods`
       : 'Run simulation';
 
   return (
@@ -242,7 +216,7 @@ function SimulationForm() {
           disabled={isSubmitting || !canSubmit}
           games={simulations}
           onGamesChange={setSimulations}
-          podCount={pods.length}
+          podCount={podCount}
         />
       </div>
 

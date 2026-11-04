@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import { resolveJobSeats } from '@/lib/job-seats';
-import { GAMES_PER_CONTAINER } from '@/lib/types';
 import { parseBody, createJobSchema } from '@/lib/validation';
 import { seatNames, type JobSummary } from '@shared/types/job';
-import { isGcpMode } from '@/lib/job-store-factory';
-import { scheduleRecoveryCheck } from '@/lib/cloud-tasks';
+import { queueJob } from '@/lib/queue-job';
 import * as Sentry from '@sentry/nextjs';
 import { isJobStuck } from '@/lib/job-utils';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
@@ -134,26 +132,11 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
       return badRequestResponse(`Invalid deck IDs: ${errors.join(', ')}`);
     }
 
-    const job = await jobStore.createJob(seats, simulations, {
+    const job = await queueJob(seats, simulations, {
       idempotencyKey,
       parallelism,
       createdBy: user.uid,
     });
-
-    // Each container runs GAMES_PER_CONTAINER games, so we need fewer containers
-    const containerCount = Math.ceil(simulations / GAMES_PER_CONTAINER);
-
-    // Initialize per-simulation tracking. Workers discover these sims via
-    // their GET /api/jobs/claim-sim polling loop; no queue publish needed.
-    await jobStore.initializeSimulations(job.id, containerCount);
-
-    if (isGcpMode()) {
-      // Schedule a recovery check at T+10min as defense-in-depth. The
-      // stale-sweeper runs on a schedule too, so this is redundant but cheap.
-      scheduleRecoveryCheck(job.id, 600).catch(err =>
-        console.warn('[Recovery] Failed to schedule check:', err instanceof Error ? err.message : err),
-      );
-    }
 
     return NextResponse.json(
       { id: job.id, deckNames: seatNames(job.seats), ...(hasDuplicates && { warning: 'Duplicate decks detected. Results may not be meaningful.' }) },

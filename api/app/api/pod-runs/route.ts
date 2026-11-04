@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAllowedUser, unauthorizedResponse, AuthUser } from '@/lib/auth';
 import { getPodRunStore } from '@/lib/pod-run-store-factory';
 import { podRunToSummary } from '@/lib/pod-run-utils';
-import { resolveJobSeats } from '@/lib/job-seats';
+import { queuePodRun } from '@/lib/queue-pod-run';
 import { parseBody, createPodRunSchema } from '@/lib/validation';
 import { errorResponse, badRequestResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
@@ -45,9 +45,10 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
 }
 
 /**
- * POST /api/pod-runs - Save a pod run once its jobs are queued
- * Body: { deckIds, jobIds, simulations, idempotencyKey? }
- * Returns: { id }
+ * POST /api/pod-runs - Queue a pod run: one job for every 4-deck pod of the
+ * selected decks, saved as one run.
+ * Body: { deckIds, simulations, idempotencyKey? }
+ * Returns: { id, jobIds }
  */
 export async function POST(request: NextRequest): Promise<NextResponse | Response> {
   let user: AuthUser;
@@ -63,25 +64,15 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
     if (!parsed.success) {
       return badRequestResponse(parsed.error);
     }
-    const { deckIds, jobIds, simulations, idempotencyKey } = parsed.data;
 
-    const { seats, errors } = await resolveJobSeats(deckIds);
-    if (errors.length > 0) {
-      return badRequestResponse(`Invalid deck IDs: ${errors.join(', ')}`);
+    const result = await queuePodRun({ ...parsed.data, createdBy: user.uid });
+    if (!result.ok) {
+      return badRequestResponse(`Invalid deck IDs: ${result.invalidDeckIds.join(', ')}`);
     }
-
-    const run = await (await getPodRunStore()).createPodRun({
-      deckIds,
-      deckNames: seats.map((s) => s.name),
-      jobIds,
-      simulations,
-      createdBy: user.uid,
-      idempotencyKey,
-    });
-    return NextResponse.json({ id: run.id }, { status: 201 });
+    return NextResponse.json({ id: result.run.id, jobIds: result.run.jobIds }, { status: 201 });
   } catch (error) {
     console.error('POST /api/pod-runs error:', error);
     Sentry.captureException(error, { tags: { component: 'api-route', route: 'POST /api/pod-runs' } });
-    return errorResponse(error instanceof Error ? error.message : 'Failed to save pod run', 500);
+    return errorResponse(error instanceof Error ? error.message : 'Failed to queue pod run', 500);
   }
 }

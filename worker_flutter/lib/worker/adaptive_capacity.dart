@@ -21,7 +21,7 @@ class AdaptiveCapacity {
   AdaptiveCapacity({
     required this.limit,
     required int start,
-    this.settle = const Duration(seconds: 60),
+    this.settle = const Duration(seconds: 10),
   }) : _target = start.clamp(1, limit);
 
   /// The hardware limit ([SimCapacity.limitFor]).

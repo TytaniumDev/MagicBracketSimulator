@@ -139,7 +139,7 @@ Routes live under `api/app/api/`. Key endpoints:
 - `GET /api/me`, `POST /api/access-requests`, `GET /api/access-requests/approve` — Current user's access, request access, admin approval link
 - `POST /api/admin/sweep-stale-jobs` — Stale sweeper (Cloud Scheduler); other `admin/` routes backfill ratings and card stats
 - `GET /api/leaderboard` — Deck ratings
-- `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Saved pod runs (one job per 4-deck pod); `?jobId=` finds the run a job belongs to
+- `GET/POST /api/pod-runs`, `GET /api/pod-runs/:id` — Pod runs (one job per 4-deck pod). `POST` queues every pod and saves the run in one request (`api/lib/queue-pod-run.ts`); `?jobId=` finds the run a job belongs to
 - `GET /api/decks` — Every deck plus `excludedDeckIds` (decks hidden from the picker and auto-coverage)
 - `GET /api/decks/:id` — Deck page data: metadata, parsed decklist, results
 - `PATCH /api/decks` — Exclude decks from selection or include them again in one write (admin, `{ deckIds, excluded }`); the Decks page updates optimistically

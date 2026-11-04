@@ -7,9 +7,17 @@
  */
 import { REQUIRED_DECK_COUNT } from '@shared/types/job';
 import type { JobResponse } from '@shared/types/job';
-import { addPodResults, rankStandings, MAX_POD_RUN_DECKS, type DeckStanding, type PodRunTotals } from '@shared/types/pod-run';
+import {
+  addPodResults,
+  countPods,
+  podCombinations,
+  rankStandings,
+  MAX_POD_RUN_DECKS,
+  type DeckStanding,
+  type PodRunTotals,
+} from '@shared/types/pod-run';
 
-export { MAX_POD_RUN_DECKS };
+export { MAX_POD_RUN_DECKS, countPods, podCombinations };
 
 /**
  * How many deck slots the picker shows: one pod's worth until it's full,
@@ -18,35 +26,6 @@ export { MAX_POD_RUN_DECKS };
 export function slotCount(selected: number): number {
   if (selected < REQUIRED_DECK_COUNT) return REQUIRED_DECK_COUNT;
   return Math.min(MAX_POD_RUN_DECKS, selected + 1);
-}
-
-/** Every way to pick `size` items from `items`, in input order. */
-export function podCombinations<T>(items: readonly T[], size: number = REQUIRED_DECK_COUNT): T[][] {
-  const pods: T[][] = [];
-  const current: T[] = [];
-  const pick = (start: number) => {
-    if (current.length === size) {
-      pods.push([...current]);
-      return;
-    }
-    for (let i = start; i <= items.length - (size - current.length); i++) {
-      current.push(items[i]);
-      pick(i + 1);
-      current.pop();
-    }
-  };
-  pick(0);
-  return pods;
-}
-
-/** Number of pods for `deckCount` decks: C(deckCount, size). */
-export function countPods(deckCount: number, size: number = REQUIRED_DECK_COUNT): number {
-  if (deckCount < size) return 0;
-  let result = 1;
-  for (let i = 0; i < size; i++) {
-    result = (result * (deckCount - i)) / (i + 1);
-  }
-  return Math.round(result);
 }
 
 // ---------------------------------------------------------------------------
