@@ -29,9 +29,9 @@ void main() {
     test('waits for the settle time between raises', () {
       final c = controller();
       c.update(roomy, activeSims: 4, now: t0);
-      final soon = t0.add(const Duration(seconds: 30));
+      final soon = t0.add(const Duration(seconds: 5));
       expect(c.update(roomy, activeSims: 5, now: soon), 5);
-      final later = t0.add(const Duration(seconds: 60));
+      final later = t0.add(const Duration(seconds: 10));
       expect(c.update(roomy, activeSims: 5, now: later), 6);
     });
 
@@ -83,7 +83,7 @@ void main() {
       final c = controller(start: 8);
       const pegged = SystemLoad(cpuBusy: 0.99, availableMemoryMb: 8192);
       c.update(pegged, activeSims: 8, now: t0);
-      final soon = t0.add(const Duration(seconds: 30));
+      final soon = t0.add(const Duration(seconds: 5));
       expect(c.update(roomy, activeSims: 7, now: soon), 7);
     });
   });

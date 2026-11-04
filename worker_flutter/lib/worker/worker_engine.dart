@@ -88,8 +88,8 @@ class WorkerEngine {
     SystemStats? systemStats,
     this.leaseInterval = const Duration(seconds: 60),
     this.coverageInterval = const Duration(minutes: 5),
-    this.autoCapacityInterval = const Duration(seconds: 15),
-    this.autoCapacitySettle = const Duration(seconds: 60),
+    this.autoCapacityInterval = const Duration(seconds: 5),
+    this.autoCapacitySettle = const Duration(seconds: 10),
   }) : _systemStats = systemStats ?? SystemStats.forPlatform(),
        _runner =
            runnerOverride ??
