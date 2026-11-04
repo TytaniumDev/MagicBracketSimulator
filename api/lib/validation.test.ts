@@ -157,8 +157,8 @@ async function runTests() {
   await test('createPodRunSchema: valid input passes', () => {
     const result = parseBody(createPodRunSchema, {
       deckIds: ['a', 'b', 'c', 'd', 'e'],
-      jobIds: ['j1', 'j2', 'j3', 'j4', 'j5'],
       simulations: 8,
+      idempotencyKey: 'run-key',
     });
     assertEqual(result.success, true, 'should succeed');
   });
@@ -166,7 +166,6 @@ async function runTests() {
   await test('createPodRunSchema: rejects a single pod of 4 decks', () => {
     const result = parseBody(createPodRunSchema, {
       deckIds: ['a', 'b', 'c', 'd'],
-      jobIds: ['j1'],
       simulations: 8,
     });
     assertEqual(result.success, false, 'should fail');
@@ -175,16 +174,14 @@ async function runTests() {
   await test('createPodRunSchema: rejects more than 10 decks', () => {
     const result = parseBody(createPodRunSchema, {
       deckIds: Array.from({ length: 11 }, (_, i) => `d${i}`),
-      jobIds: ['j1'],
       simulations: 8,
     });
     assertEqual(result.success, false, 'should fail');
   });
 
-  await test('createPodRunSchema: rejects empty jobIds', () => {
+  await test('createPodRunSchema: rejects a repeated deck', () => {
     const result = parseBody(createPodRunSchema, {
-      deckIds: ['a', 'b', 'c', 'd', 'e'],
-      jobIds: [],
+      deckIds: ['a', 'b', 'c', 'd', 'a'],
       simulations: 8,
     });
     assertEqual(result.success, false, 'should fail');

@@ -15,7 +15,15 @@ delivery. Firestore (or SQLite) is the only work queue.
 
 1. **Job created:** `POST /api/jobs` (or `POST /api/coverage/next-job`) writes
    the job row and then calls `initializeSimulations(jobId, count)` to create
-   one PENDING sim doc per container.
+   one PENDING sim doc per container. User jobs go through `queueJob`
+   (`api/lib/queue-job.ts`), which also schedules the Cloud Tasks recovery
+   check; a reused idempotency key returns the existing job without
+   rewriting its sims. A pod run is queued in one request: `POST
+   /api/pod-runs` with `{ deckIds, simulations, idempotencyKey }` runs
+   `queuePodRun` (`api/lib/queue-pod-run.ts`), which reads the decks once,
+   queues every 4-deck pod with `queueJob` eight at a time (pod `i` keyed
+   `${idempotencyKey}-pod${i}`, so a retry reuses pods already queued), then
+   saves the run.
 2. **Wake-up:** the desktop worker listens (read-only) to Firestore for
    `simulations where state == PENDING`. Each change, a finished sim or a
    capacity change starts its claim loop (`WorkerEngine._tryClaimLoop`).
@@ -264,7 +272,7 @@ no lifecycle rule: raw logs are kept forever.
      `pods_with_results`). One transaction reads the job, adds its seats with
      `addPodResults` (`shared/types/pod-run.ts`) and sets the job's
      `appliedStats.podRun` (SQLite: `jobs.pod_run_applied`). Saving a run
-     (`POST /api/pod-runs`) sets `podRunId` on each of its jobs and totals the
+     (the last step of `POST /api/pod-runs`) sets `podRunId` on each of its jobs and totals the
      ones that already have results in the same way, so a job finishing while
      its run is saved counts once.
   7. `**setJobCompleted(jobId)`** — job status set to COMPLETED (or left
@@ -420,6 +428,7 @@ time.
 | Job results per seat | `api/lib/job-results.test.ts`, `api/lib/condenser/deck-match.test.ts`, `api/test/job-decks.test.ts` | Wins and average winning turn per seat, the same deck in two seats, unmatched winners; `seatOfPlayer`; seats filled at job creation and decklists read by seat |
 | Card impact | `api/lib/card-impact/card-impact.test.ts`, `api/test/card-stats-store.test.ts` | `parseGameCards` on Forge 2.0.10 and 2.0.15 logs (including cards that enter without being cast and stolen cards), `addGame`/`scoreCards` lifts, store idempotency per job and version rebuilds |
 | Deleting a job | `api/test/job-delete.test.ts`, `api/test/rating-store.test.ts`, `api/test/card-stats-store.test.ts`, `api/test/pod-run-store.test.ts` | Deleting one of two aggregated jobs leaves exactly the other job's ratings, pair counts, card stats and run standings; a job without its receipt is recounted from its logs; empty runs are deleted; each store takes a job back only once |
+| Queueing jobs and pod runs | `api/test/queue-pod-run.test.ts` | A job gets one PENDING sim per `GAMES_PER_CONTAINER` games; a reused key returns the job without touching its sims; a pod run queues every distinct 4-deck pod with its sims and links them to one run; a retried run returns the same run and pods; an unknown deck queues nothing |
 | Pod run standings | `api/test/pod-run-store.test.ts`, `frontend/src/utils/pods.test.ts`, `frontend/src/pages/PodRun.test.tsx` | Saving a run totals jobs that already have results, `applyJob` counts each job once and skips jobs in no run, a job stays in its first run, ranking; the saved run page shows stored standings and lists every pod |
 | SimulationGrid resilience | `frontend/src/components/SimulationGrid.test.tsx` | Grid handles undefined `index`, `totalSimulations=0`, `totalSimulations=undefined` |
 | JobStatus page | `frontend/src/pages/JobStatus.test.tsx` | Renders all job states (queued, running, completed, failed, cancelled), admin controls, Run Again button, detailed logs asking for one picked game |

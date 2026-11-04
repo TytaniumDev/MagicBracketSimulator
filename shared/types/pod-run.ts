@@ -3,10 +3,44 @@
 // GET /api/pod-runs, GET /api/pod-runs/:id
 // ---------------------------------------------------------------------------
 
-import type { JobResults, JobSeat } from './job';
+import { REQUIRED_DECK_COUNT, type JobResults, type JobSeat } from './job';
 
 /** Most decks a single pod run may include. C(10, 4) = 210 pods. */
 export const MAX_POD_RUN_DECKS = 10;
+
+/**
+ * Every pod a run queues: each way to pick `size` items from `items`, in
+ * input order. Pods are combinations, not ordered permutations: Forge
+ * decides turn order per game, so seating the same four decks differently is
+ * the same matchup.
+ */
+export function podCombinations<T>(items: readonly T[], size: number = REQUIRED_DECK_COUNT): T[][] {
+  const pods: T[][] = [];
+  const current: T[] = [];
+  const pick = (start: number) => {
+    if (current.length === size) {
+      pods.push([...current]);
+      return;
+    }
+    for (let i = start; i <= items.length - (size - current.length); i++) {
+      current.push(items[i]);
+      pick(i + 1);
+      current.pop();
+    }
+  };
+  pick(0);
+  return pods;
+}
+
+/** Number of pods for `deckCount` decks: C(deckCount, size). */
+export function countPods(deckCount: number, size: number = REQUIRED_DECK_COUNT): number {
+  if (deckCount < size) return 0;
+  let result = 1;
+  for (let i = 0; i < size; i++) {
+    result = (result * (deckCount - i)) / (i + 1);
+  }
+  return Math.round(result);
+}
 
 export interface PodRunSummary {
   id: string;
