@@ -1,6 +1,7 @@
 import Cocoa
 import FlutterMacOS
 import LaunchAtLogin
+import window_manager
 
 class MainFlutterWindow: NSWindow {
   /// Retained reference so the "Check for Updates…" menu item action
@@ -8,6 +9,10 @@ class MainFlutterWindow: NSWindow {
   /// SPUStandardUpdaterController internally and only exposes a Dart
   /// API, so the menu item round-trips Swift → Dart → autoUpdater.
   private var autoUpdaterChannel: FlutterMethodChannel?
+
+  /// Answers Dart's "was this a login launch?" question. Retained so its
+  /// launch observer and channel handler live as long as the window.
+  private var launchOriginBridge: LaunchOriginBridge?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -44,6 +49,10 @@ class MainFlutterWindow: NSWindow {
         result(FlutterMethodNotImplemented)
       }
     }
+
+    launchOriginBridge = LaunchOriginBridge(
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
 
     // Hybrid Dock/menu-bar mode: Dart toggles NSApp.activationPolicy at
     // runtime so the worker behaves like a normal Mac app while the
@@ -139,6 +148,15 @@ class MainFlutterWindow: NSWindow {
     super.awakeFromNib()
   }
 
+  /// Keep the window hidden when AppKit first orders it in at launch;
+  /// Dart shows it through window_manager once it knows the launch
+  /// origin, so a launch at login can start in the menu bar without the
+  /// window flashing up. `hiddenWindowAtLaunch` only acts the first time.
+  override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
+    super.order(place, relativeTo: otherWin)
+    hiddenWindowAtLaunch()
+  }
+
   /// Insert "Check for Updates…" into the app menu, right after
   /// "About <AppName>". The app menu (`MagicBracketWorker`) is always
   /// the first entry in `NSApp.mainMenu` — the system-rendered Apple
@@ -205,5 +223,75 @@ class MainFlutterWindow: NSWindow {
     alert.messageText = "Couldn't check for updates"
     alert.informativeText = detail
     alert.runModal()
+  }
+}
+
+/// Tells Dart whether macOS started the app as a login item.
+///
+/// Login items get no launch arguments, so the only signal is the
+/// "launched as login item" flag on the open-application Apple event.
+/// That event is only readable while AppKit handles it, which is when it
+/// posts `didFinishLaunchingNotification`, so the answer is recorded then
+/// and a Dart call that arrives earlier waits for it. The window is built
+/// from MainMenu.xib before launch finishes, so the observer is in place
+/// in time.
+///
+/// Channel `magic_bracket/launch_origin`, method `launchedAtLogin` → Bool.
+/// Keep in sync with `LaunchOriginDetector` in lib/launch/launch_origin.dart.
+final class LaunchOriginBridge {
+  private let channel: FlutterMethodChannel
+  private var launchObserver: NSObjectProtocol?
+  private var launchedAtLogin: Bool?
+  private var pendingResults: [FlutterResult] = []
+
+  init(binaryMessenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "magic_bracket/launch_origin",
+      binaryMessenger: binaryMessenger
+    )
+    // queue: nil runs the block synchronously while AppKit posts the
+    // notification, so the launch Apple event is still current.
+    launchObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didFinishLaunchingNotification,
+      object: nil,
+      queue: nil
+    ) { [weak self] _ in
+      self?.recordLaunchOrigin()
+    }
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "launchedAtLogin" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let self = self else {
+        result(false)
+        return
+      }
+      if let launchedAtLogin = self.launchedAtLogin {
+        result(launchedAtLogin)
+      } else {
+        self.pendingResults.append(result)
+      }
+    }
+  }
+
+  deinit {
+    if let launchObserver = launchObserver {
+      NotificationCenter.default.removeObserver(launchObserver)
+    }
+  }
+
+  private func recordLaunchOrigin() {
+    let event = NSAppleEventManager.shared().currentAppleEvent
+    let isOpenApplication = event?.eventID == AEEventID(kAEOpenApplication)
+    let launchFlag = event?.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))?.enumCodeValue
+    let atLogin = isOpenApplication && launchFlag == OSType(keyAELaunchedAsLogInItem)
+    launchedAtLogin = atLogin
+    pendingResults.forEach { $0(atLogin) }
+    pendingResults.removeAll()
+    if let launchObserver = launchObserver {
+      NotificationCenter.default.removeObserver(launchObserver)
+      self.launchObserver = nil
+    }
   }
 }

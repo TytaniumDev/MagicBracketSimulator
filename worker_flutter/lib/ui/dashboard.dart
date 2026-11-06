@@ -19,6 +19,7 @@ import '../offline/db/app_db.dart';
 import '../offline/local_job_screen.dart';
 import '../offline/offline_runner.dart';
 import '../sims/simulate_screen.dart';
+import '../telemetry.dart';
 import '../worker/worker_engine.dart';
 
 /// Single dashboard window for the worker.
@@ -537,9 +538,9 @@ class _CapacityRow extends StatelessWidget {
 }
 
 /// Toggle that flips the OS's "launch this app at login" registration.
-/// macOS writes a Login Items entry; Windows drops a .lnk shortcut in
-/// the user's Startup folder. Both are reversible — flipping back
-/// removes the entry.
+/// macOS writes a Login Items entry; Windows writes a registry Run key
+/// entry. Both are reversible — flipping back removes the entry. A
+/// login launch starts hidden in the tray (see `LaunchOrigin`).
 class _LaunchAtLoginRow extends StatefulWidget {
   const _LaunchAtLoginRow();
 
@@ -581,6 +582,12 @@ class _LaunchAtLoginRowState extends State<_LaunchAtLoginRow> {
       // actually went wrong; without it the user just sees the
       // switch silently flip back to its prior value.
       debugPrint('AutoStart toggle failed: $e\n$st');
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.boot,
+        extra: {'phase': 'auto_start_toggle', 'enable': next},
+      );
       await _refresh();
     } finally {
       if (mounted) setState(() => _busy = false);
