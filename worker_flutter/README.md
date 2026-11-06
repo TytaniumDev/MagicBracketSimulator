@@ -42,7 +42,14 @@ one-time, ~40 seconds on broadband). Subsequent launches skip this.
 ## Auto-start at login
 
 Dashboard → Worker tab → **Launch at login** toggle. macOS writes a
-Login Items entry; Windows drops a `.lnk` in the Startup folder.
+Login Items entry; Windows writes a registry Run key entry that passes
+`--launched-at-login`.
+
+A launch at login starts hidden in the tray (menu bar on macOS) and only
+shows the window when you have to act: sign in, pick a mode, or install
+Forge. Click the tray icon to open the dashboard. macOS spots a login
+launch from the launch Apple event (`lib/launch/launch_origin.dart`).
+Opening the app yourself always shows the window.
 
 ## Settings persisted
 

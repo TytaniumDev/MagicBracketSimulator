@@ -4,9 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../macos/activation_policy.dart';
 import '../telemetry.dart';
 import '../worker/worker_engine.dart';
+import 'window_presenter.dart';
 
 /// Sets up the system-tray icon and click-to-open-window behavior.
 ///
@@ -93,20 +93,12 @@ class TraySetup with TrayListener, WindowListener {
     // try/catch so a bridge failure (PlatformException) is at least
     // visible in the log file.
     try {
-      if (Platform.isMacOS) {
-        _log('onWindowClose: hiding window, demoting to accessory');
-        // Hide the window first, then demote to `.accessory` so the
-        // Dock icon and menu bar disappear in a single visual beat.
-        // Tray icon stays around as the way back. Engine keeps running
-        // — the activation policy only affects UI affordances.
-        await windowManager.hide();
-        await MacActivationPolicyBridge.setAccessory();
-      } else if (Platform.isWindows) {
-        _log('onWindowClose: hiding window to tray (Windows)');
-        // On Windows there's no activation-policy equivalent; just
-        // hide the window. The tray icon remains as the sole
-        // affordance. The taskbar entry disappears when hidden.
-        await windowManager.hide();
+      if (Platform.isMacOS || Platform.isWindows) {
+        // macOS also demotes to `.accessory` so the Dock icon and menu
+        // bar disappear; Windows just hides the window, which drops its
+        // taskbar entry. The tray icon stays as the way back.
+        _log('onWindowClose: hiding window to tray');
+        await WindowPresenter.hideToTray();
       } else {
         _log('onWindowClose: destroying window (Linux quit-on-close)');
         await windowManager.destroy();
@@ -205,16 +197,7 @@ class TraySetup with TrayListener, WindowListener {
     if (_showingDashboard) return;
     _showingDashboard = true;
     try {
-      // macOS: promote to `.regular` first so the Dock icon and menu
-      // bar are already in place when the window animates in,
-      // otherwise the user sees a brief flicker where the window is
-      // up but the Dock icon is still missing.
-      // Windows: no activation-policy equivalent; just show + focus.
-      if (Platform.isMacOS) {
-        await MacActivationPolicyBridge.setRegular();
-      }
-      await windowManager.show();
-      await windowManager.focus();
+      await WindowPresenter.show();
     } finally {
       _showingDashboard = false;
     }

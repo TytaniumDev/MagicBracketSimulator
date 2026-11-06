@@ -20,12 +20,14 @@ import 'firebase_options.dart';
 import 'installer/install_progress_app.dart';
 import 'installer/installer.dart';
 import 'launch/auto_start_service.dart';
+import 'launch/launch_origin.dart';
 import 'launch/mode_picker_screen.dart';
 import 'offline/offline_app.dart';
 import 'sentry_setup.dart';
 import 'telemetry.dart';
 import 'ui/dashboard.dart';
 import 'ui/tray_setup.dart';
+import 'ui/window_presenter.dart';
 import 'update/check_for_updates_handler.dart';
 import 'update/quit_for_update_listener.dart';
 import 'update/updater_telemetry.dart';
@@ -42,7 +44,10 @@ import 'worker/worker_presence.dart';
 ///   5. Start the worker engine (Firestore listener + API claims + sim runner
 ///      + Realtime Database presence)
 ///
-/// Hybrid window/tray model: the app launches with a visible window.
+/// Hybrid window/tray model: the app launches with a visible window,
+/// except when the OS starts it at login (see `LaunchOrigin`): then it
+/// starts hidden in the tray and only shows the window when the user has
+/// to act (setup error, install, mode picker, sign-in).
 /// Closing the window is intercepted — `windowManager.setPreventClose(true)`
 /// keeps the engine alive:
 ///   - macOS: `MacActivationPolicyBridge.setAccessory()` drops the Dock
@@ -51,7 +56,7 @@ import 'worker/worker_presence.dart';
 ///     is the only remaining affordance.
 /// The only way to fully quit is the tray icon's right-click → "Quit"
 /// menu item, which stops the engine and destroys the window.
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   await AppLog.init();
   _log('main() started');
 
@@ -83,10 +88,10 @@ Future<void> main() async {
       _log('Sentry capture: $summary');
       return upstream != null ? upstream(event, hint) : event;
     };
-  }, appRunner: _appMain);
+  }, appRunner: () => _appMain(args));
 }
 
-Future<void> _appMain() async {
+Future<void> _appMain(List<String> args) async {
   Telemetry.breadcrumb(TelemetryCategory.boot, 'appMain started');
 
   // Detect placeholder firebase_options.dart values BEFORE calling
@@ -115,12 +120,15 @@ Future<void> _appMain() async {
     }
   }
 
-  // Native window setup. The app launches as `.regular` (default in
-  // Info.plist) so the user sees a Dock icon + menu bar + window
-  // immediately. The close button is intercepted on macOS — see
-  // TraySetup.onWindowClose, which hides the window AND demotes
-  // the app to `.accessory` so the Dock icon disappears while the
-  // worker keeps running behind the tray icon.
+  final origin = await _detectLaunchOrigin(args);
+
+  // Native window setup. The native runners keep the window hidden
+  // until Dart shows it here, so a login launch never flashes it. The
+  // app launches as `.regular` (default in Info.plist) so a user launch
+  // gets a Dock icon + menu bar + window. The close button is
+  // intercepted on macOS — see TraySetup.onWindowClose, which hides the
+  // window AND demotes the app to `.accessory` so the Dock icon
+  // disappears while the worker keeps running behind the tray icon.
   _log('Initializing window_manager');
   await windowManager.ensureInitialized();
   _log('window_manager initialized');
@@ -146,8 +154,13 @@ Future<void> _appMain() async {
   );
   await windowManager.waitUntilReadyToShow(opts, () async {
     _log('waitUntilReadyToShow callback');
-    await windowManager.show();
-    await windowManager.focus();
+    if (origin.startsHidden) {
+      _log('Launched at login: starting hidden in the tray');
+      await _startHidden();
+    } else {
+      await windowManager.show();
+      await windowManager.focus();
+    }
     // Intercept close on macOS and Windows — the tray icon is the
     // user's way back to the window. Pressing X hides the window
     // rather than quitting so the worker engine keeps running.
@@ -156,7 +169,7 @@ Future<void> _appMain() async {
       await windowManager.setPreventClose(true);
     }
   });
-  _log('window ready, shown');
+  _log('window ready (origin=${origin.name})');
 
   // Initialize global system tray on supported platforms (macOS/Windows)
   if (Platform.isMacOS || Platform.isWindows) {
@@ -194,7 +207,7 @@ Future<void> _appMain() async {
 
   if (firebaseInitError != null) {
     // Show a window-only mode with a clear setup message; no engine, no tray.
-    await windowManager.show();
+    await WindowPresenter.show();
     runApp(_SetupRequiredApp(error: firebaseInitError, config: config));
     return;
   }
@@ -212,7 +225,7 @@ Future<void> _appMain() async {
   _log('Installer ready=$ready, jreBin=${await installer.javaBinary()}');
   if (!ready) {
     _log('Showing installer UI');
-    await windowManager.show();
+    await WindowPresenter.show();
     runApp(
       InstallProgressApp(
         installer: installer,
@@ -231,6 +244,42 @@ Future<void> _appMain() async {
   await _routeToMode(config);
 }
 
+/// How this process was started. A detection failure is reported and
+/// treated as a user launch, so the window still shows.
+Future<LaunchOrigin> _detectLaunchOrigin(List<String> args) async {
+  try {
+    final origin = await LaunchOriginDetector.detect(args);
+    _log('Launch origin: ${origin.name}');
+    return origin;
+  } catch (e, st) {
+    _log('Launch origin detection failed, showing window: $e');
+    await Telemetry.captureError(
+      e,
+      st,
+      category: TelemetryCategory.boot,
+      extra: {'phase': 'launch_origin'},
+    );
+    return LaunchOrigin.user;
+  }
+}
+
+/// Keeps a login launch in the tray. On failure the window is shown
+/// instead, so the worker is never left without a way back to it.
+Future<void> _startHidden() async {
+  try {
+    await WindowPresenter.hideToTray();
+  } catch (e, st) {
+    _log('Starting hidden failed, showing window: $e');
+    await Telemetry.captureError(
+      e,
+      st,
+      category: TelemetryCategory.boot,
+      extra: {'phase': 'start_hidden'},
+    );
+    await windowManager.show();
+  }
+}
+
 /// Dispatch into cloud or offline mode based on the user's remembered
 /// choice. If nothing is remembered, show the mode picker first.
 Future<void> _routeToMode(WorkerConfig config) async {
@@ -241,7 +290,7 @@ Future<void> _routeToMode(WorkerConfig config) async {
     return;
   }
   _log('No remembered mode; showing picker');
-  await windowManager.show();
+  await WindowPresenter.show();
   runApp(
     MaterialApp(
       title: 'Magic Bracket',
@@ -274,7 +323,6 @@ Future<void> _bootMode(WorkerConfig config, LaunchMode mode) async {
 
 Future<void> _bootOffline(WorkerConfig config) async {
   _log('Boot offline: launching local-only deck picker + sim runner');
-  await windowManager.show();
   runApp(
     OfflineApp(
       config: config,
@@ -626,6 +674,8 @@ class _WorkerAppState extends State<_WorkerApp> {
         });
         if (user != null) {
           await _onAuthed(user);
+        } else {
+          await _showForSignIn();
         }
       }
     } catch (e, st) {
@@ -635,7 +685,26 @@ class _WorkerAppState extends State<_WorkerApp> {
           _user = null;
           _restoringSession = false;
         });
+        await _showForSignIn();
       }
+    }
+  }
+
+  /// The sign-in screen needs the user, so bring the window up even when
+  /// the worker started hidden at login.
+  Future<void> _showForSignIn() async {
+    try {
+      // A user launch already shows the window; don't steal focus back.
+      if (await windowManager.isVisible()) return;
+      await WindowPresenter.show();
+    } catch (e, st) {
+      _log('Showing window for sign-in failed: $e');
+      await Telemetry.captureError(
+        e,
+        st,
+        category: TelemetryCategory.signIn,
+        extra: {'phase': 'show_window'},
+      );
     }
   }
 
