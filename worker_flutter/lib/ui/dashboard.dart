@@ -623,8 +623,9 @@ class _LaunchAtLoginRowState extends State<_LaunchAtLoginRow> {
   }
 }
 
-/// Keep computer awake: on, the computer never idle-sleeps while the
-/// engine runs; off, it stays awake only to finish running sims.
+/// Keep computer awake: on, the worker keeps taking sims while the user
+/// is away; off, it stops taking new ones once the computer would sleep.
+/// Either way the computer is held awake only while sims run.
 class _KeepAwakeRow extends StatelessWidget {
   const _KeepAwakeRow({required this.value, required this.onChanged});
 
@@ -644,9 +645,10 @@ class _KeepAwakeRow extends StatelessWidget {
           const Expanded(
             child: Tooltip(
               message:
-                  'Off: the computer stays awake only to finish running '
-                  'sims, and the worker takes no new ones once the computer '
-                  'would normally sleep.',
+                  'On: keeps running sims while you are away. Off: takes '
+                  'no new sims once the computer would normally sleep. '
+                  'Either way the computer stays awake only while sims '
+                  'run, and the display can always sleep.',
               child: Text(
                 'Keep computer awake',
                 style: TextStyle(color: Colors.white70),

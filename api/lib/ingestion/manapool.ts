@@ -85,9 +85,13 @@ export async function fetchDeckFromManaPoolUrl(url: string): Promise<ParsedDeck>
     );
   }
 
+  // SvelteKit streams __data.json as newline-delimited JSON: the first line
+  // holds the page data (deck and cards), later lines are `chunk`s that
+  // resolve deferred promises (such as prices), which we don't need.
   let json: unknown;
   try {
-    json = await response.json();
+    const text = await response.text();
+    json = JSON.parse(text.split('\n', 1)[0]);
   } catch {
     throw new Error(
       `ManaPool returned non-JSON response for list ${listId}. ${FORMAT_CHANGE_HINT}`

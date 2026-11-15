@@ -10,16 +10,19 @@ import '../telemetry.dart';
 /// Decides when the worker keeps the computer awake and when it steps
 /// aside so the computer can sleep.
 ///
-/// With Keep computer awake off (the default):
-///   - while any sim runs, the computer is held awake so the sim can
-///     finish and its lease and report requests don't stall mid-flight;
-///   - once the user has been idle as long as the OS sleep timer, the
-///     worker is [paused]: it takes no new sims, lets the running ones
-///     finish, then releases the hold so the computer sleeps;
-///   - when the user is back, the pause ends and claiming resumes.
+/// While any sim runs, the computer is held awake so the sim can finish
+/// and its lease and report requests don't stall mid-flight. With no sim
+/// running the hold is released, so the computer sleeps on its normal
+/// timer. The hold never keeps the display on.
 ///
-/// With Keep computer awake on, the computer is held awake the whole time
-/// the engine runs, and the worker never pauses.
+/// With Keep computer awake off (the default), once the user has been
+/// idle as long as the OS sleep timer the worker is [paused]: it takes no
+/// new sims and lets the running ones finish, so the computer can sleep.
+/// When the user is back, the pause ends and claiming resumes.
+///
+/// With Keep computer awake on, the worker never pauses, so it keeps
+/// taking sims (and holding the computer awake for them) while the user
+/// is away. Between sims the computer can still sleep.
 ///
 /// A computer set to never sleep never pauses either. A failed OS read
 /// leaves the worker running (and is sent to Sentry once per run).
@@ -88,12 +91,13 @@ class SleepCoordinator {
     await _applyHold(_wantHold);
   });
 
-  /// Hold or release for the current sim count and setting, without
-  /// re-reading idle time. Called when a sim starts or ends.
+  /// Hold or release for the current sim count, without re-reading idle
+  /// time. Called when a sim starts or ends.
   Future<void> syncHold() => _serialize(() => _applyHold(_wantHold));
 
-  /// Sims still finishing after [stop] don't take the hold back.
-  bool get _wantHold => _running && (_keepAwake() || _activeSims() > 0);
+  /// Held only while sims run. Sims still finishing after [stop] don't
+  /// take the hold back.
+  bool get _wantHold => _running && _activeSims() > 0;
 
   Future<void> _serialize(Future<void> Function() action) {
     final next = _queue.then((_) => action());
