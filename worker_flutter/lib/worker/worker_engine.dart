@@ -304,9 +304,9 @@ class WorkerEngine {
     _capacityChanged();
   }
 
-  /// Turn Keep computer awake on or off. Persists the choice. On, the
-  /// computer stays awake whenever the engine runs and claiming never
-  /// pauses for sleep; off, it stays awake only while sims run.
+  /// Turn Keep computer awake on or off. Persists the choice. Either way
+  /// the computer is held awake only while sims run. On, claiming never
+  /// pauses for sleep; off, it pauses once the computer is due to sleep.
   Future<void> setKeepAwake(bool on) async {
     await config.setKeepAwake(on);
     if (currentState.running) unawaited(_sleep.update());

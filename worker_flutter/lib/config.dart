@@ -40,9 +40,9 @@ class WorkerConfig {
   /// RAM (up to [capacityLimit]) instead of holding at [maxCapacity].
   bool autoCapacity;
 
-  /// Keep the computer awake the whole time the engine runs. Off, the
-  /// engine keeps it awake only while sims run, and takes no new sims once
-  /// the computer is due to sleep (`SleepCoordinator`).
+  /// Keep taking sims while the user is away. Off, the engine takes no new
+  /// sims once the computer is due to sleep. Either way the computer is
+  /// held awake only while sims run (`SleepCoordinator`).
   bool keepAwake;
 
   /// The most parallel sims this machine's cores and RAM can carry

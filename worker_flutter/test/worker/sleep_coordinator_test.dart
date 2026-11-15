@@ -103,12 +103,21 @@ void main() {
     expect(pauseChanges, [true, false]);
   });
 
-  test('Keep computer awake holds while idle and never pauses', () async {
+  test('Keep computer awake never pauses and holds only for sims', () async {
     keepAwake = true;
     idle.idle = const Duration(hours: 2);
     await coordinator.start();
+    expect(guard.held, isFalse);
+    expect(coordinator.paused, isFalse);
 
+    activeSims = 1;
+    await coordinator.syncHold();
     expect(guard.held, isTrue);
+
+    activeSims = 0;
+    await coordinator.syncHold();
+    await coordinator.update();
+    expect(guard.held, isFalse);
     expect(coordinator.paused, isFalse);
     expect(pauseChanges, isEmpty);
   });
@@ -121,7 +130,7 @@ void main() {
     keepAwake = true;
     await coordinator.update();
     expect(coordinator.paused, isFalse);
-    expect(guard.held, isTrue);
+    expect(guard.held, isFalse);
   });
 
   test('a computer set to never sleep never pauses', () async {

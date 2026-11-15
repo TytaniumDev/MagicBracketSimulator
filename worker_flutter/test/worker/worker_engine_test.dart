@@ -452,18 +452,41 @@ void main() {
       );
     });
 
-    test('Keep computer awake holds while idle', () async {
+    test('Keep computer awake does not hold while no sim runs', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       await sleepy.start();
       expect(guard.held, isFalse);
 
       await sleepy.setKeepAwake(true);
-      await _waitForCondition(
-        () async => guard.held,
-        timeout: const Duration(seconds: 3),
-      );
+      // Several sleep checks pass without taking the hold.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(guard.held, isFalse);
+      expect(guard.holds, 0);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('worker.keepAwake'), isTrue);
+    });
+
+    test('Keep computer awake runs sims while the user is away, holding '
+        'only while they run', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      await sleepy.setKeepAwake(true);
+      idle.idle = const Duration(hours: 1);
+      final gate = Completer<void>();
+      stubRunner.gate = gate.future;
+      await seedJob(jobId: 'away', simCount: 1);
+      await sleepy.start();
+
+      await _waitForCondition(
+        () async => stubRunner.invocations >= 1 && guard.held,
+        timeout: const Duration(seconds: 3),
+      );
+      expect(sleepy.currentState.pausedForSleep, isFalse);
+
+      gate.complete();
+      await _waitForCondition(
+        () async => !guard.held,
+        timeout: const Duration(seconds: 3),
+      );
     });
   });
 }
