@@ -1,11 +1,15 @@
 {
   "rules": {
     "presence": {
-      ".read": "auth != null",
+      ".read": "auth != null && root.child('approved').child(auth.uid).val() === true",
       "$workerId": {
-        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid) && (!newData.exists() || newData.child('uid').val() === auth.uid)",
+        ".write": "auth != null && root.child('approved').child(auth.uid).val() === true && (!data.exists() || data.child('uid').val() === auth.uid) && (!newData.exists() || newData.child('uid').val() === auth.uid)",
         ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'workerName', 'workerType', 'status', 'capacity', 'activeSimulations', 'uptimeMs', 'lastSeen']) && newData.child('workerType').val() === 'flutter' && newData.child('lastSeen').val() <= now)"
       }
+    },
+    "approved": {
+      ".read": false,
+      ".write": false
     }
   }
 }

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAllowedUser, unauthorizedResponse } from '@/lib/auth';
 import * as jobStore from '@/lib/job-store-factory';
 import * as workerStore from '@/lib/worker-store-factory';
 import { getRatingStore } from '@/lib/rating-store-factory';
@@ -11,14 +12,21 @@ interface HealthCheck {
 }
 
 /**
- * GET /api/health — Unauthenticated system health endpoint.
+ * GET /api/health — System health, for approved users only (it lists job
+ * and worker counts).
  *
  * Checks:
  * 1. Stuck jobs: RUNNING in Firestore but all sims done
  * 2. Ratings populated: leaderboard is not empty
  * 3. Worker connected: at least one recent heartbeat
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  try {
+    await verifyAllowedUser(request);
+  } catch {
+    return unauthorizedResponse();
+  }
+
   const checks: Record<string, HealthCheck> = {};
 
   // Check 1: Stuck jobs (RUNNING but all sims done)

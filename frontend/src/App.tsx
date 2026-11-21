@@ -12,7 +12,6 @@ import JobStatus from './pages/JobStatus';
 import PodRun from './pages/PodRun';
 import WorkerSetup from './pages/WorkerSetup';
 import Leaderboard from './pages/Leaderboard';
-import SentryExamplePage from './pages/SentryExamplePage';
 
 function Header() {
   const { user, isAllowed, loading } = useAuth();
@@ -127,7 +126,6 @@ export default function App() {
                   <Route path="/pods/:id" element={<PodRun />} />
                   <Route path="/worker-setup" element={<WorkerSetup />} />
                   <Route path="/leaderboard" element={<Leaderboard />} />
-                  <Route path="/sentry-example-page" element={<SentryExamplePage />} />
                 </Routes>
               )}
             </Sentry.ErrorBoundary>

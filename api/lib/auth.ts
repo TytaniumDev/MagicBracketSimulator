@@ -5,6 +5,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { isLocalMode } from './env';
 import { getFirebaseAdminApp } from './firebase-admin-app';
 import { isInAllowedUsers } from './allowed-users';
+import { mirrorApprovedUser } from './approved-users-mirror';
 
 // Local mode: skip Firebase Auth entirely when GOOGLE_CLOUD_PROJECT is not set
 const IS_LOCAL_MODE = isLocalMode();
@@ -154,6 +155,8 @@ export async function verifyAllowedUser(req: NextRequest): Promise<AuthUser> {
     if (!(await isAllowedAccount(decoded.uid, decoded.email))) {
       throw new Error('User not in allowlist');
     }
+    // Lets the Realtime Database rules see this account as approved.
+    await mirrorApprovedUser(decoded.uid);
 
     return {
       uid: decoded.uid,

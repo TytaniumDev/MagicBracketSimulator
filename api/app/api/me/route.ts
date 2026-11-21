@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, unauthorizedResponse, isAdmin, isAllowedAccount, isPreapprovedEmail, type AuthUser } from '@/lib/auth';
 import { isLocalMode } from '@/lib/env';
 import { ensureAllowed, getUserAccess } from '@/lib/user-store';
+import { mirrorApprovedUser } from '@/lib/approved-users-mirror';
 import { errorResponse } from '@/lib/api-response';
 import * as Sentry from '@sentry/nextjs';
 
@@ -15,7 +16,8 @@ const recordedPreapproved = new Set<string>();
  *
  * A pre-approved account (admin or ALLOWED_EMAILS) gets an allowed
  * users/{uid} record on its first call, since the Firestore rules decide
- * who may read from that record alone.
+ * who may read from that record alone. Every allowed account is also copied
+ * to the Realtime Database (approved-users-mirror.ts) for worker presence.
  */
 export async function GET(req: NextRequest) {
   let user: AuthUser;
@@ -31,6 +33,7 @@ export async function GET(req: NextRequest) {
       await ensureAllowed(user.uid, user.email);
       recordedPreapproved.add(user.uid);
     }
+    if (isAllowed) await mirrorApprovedUser(user.uid);
     const access = isLocalMode() || isAllowed ? null : await getUserAccess(user.uid);
     return NextResponse.json({
       email: user.email,
