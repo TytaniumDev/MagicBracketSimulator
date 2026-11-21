@@ -392,6 +392,44 @@ void main() {
     });
   });
 
+  group('presence', () {
+    late FakePresenceSink sink;
+    late WorkerEngine present;
+
+    setUp(() {
+      sink = FakePresenceSink();
+      present = WorkerEngine(
+        config: config,
+        firestore: firestore,
+        apiClient: api.client,
+        presenceSink: sink,
+        runnerOverride: stubRunner,
+      );
+    });
+
+    tearDown(() => present.dispose());
+
+    test('asks the API about access before writing presence', () async {
+      await present.start();
+      expect(api.accessChecks, 1);
+
+      sink.connectedController.add(true);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(sink.writes, hasLength(1));
+    });
+
+    test('an account that is not approved stays out of presence', () async {
+      api.isAllowed = false;
+      await present.start();
+
+      sink.connectedController.add(true);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(sink.writes, isEmpty);
+      expect(sink.disconnectArms, 0);
+      expect(present.currentState.lastError, contains('not approved'));
+    });
+  });
+
   group('sleep', () {
     late FakeIdleMonitor idle;
     late FakeSleepGuard guard;

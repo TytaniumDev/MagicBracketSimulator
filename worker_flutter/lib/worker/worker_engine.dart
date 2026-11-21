@@ -12,6 +12,7 @@ import '../system/idle_monitor.dart';
 import '../system/sleep_guard.dart';
 import '../system/system_stats.dart';
 import '../telemetry.dart';
+import 'access_check.dart';
 import 'adaptive_capacity.dart';
 import 'capacity_autopilot.dart';
 import 'coverage_requester.dart';
@@ -145,6 +146,7 @@ class WorkerEngine {
   final SimRunner _runner;
   final WorkerPresence _presence;
   final ApiClient _api;
+  late final AccessCheck _accessCheck = AccessCheck(api: _api);
   late final SimApi _simApi = SimApi(
     api: _api,
     workerId: config.workerId,
@@ -206,8 +208,21 @@ class WorkerEngine {
     if (config.autoCapacity) _startAutopilot();
     await _sleep.start();
 
+    // Presence writes need `approved/{uid}`, which the API writes on this
+    // call, so ask before the first write. An unapproved account stays out
+    // of presence; claims would be refused anyway.
+    final access = await _accessCheck.run();
+    if (access == AccessStatus.notApproved) {
+      _emit(
+        currentState.copyWith(
+          lastError:
+              'This account is not approved yet. Request access in '
+              'the web app.',
+        ),
+      );
+    }
     try {
-      await _presence.start();
+      if (access != AccessStatus.notApproved) await _presence.start();
     } catch (e, st) {
       _emit(currentState.copyWith(lastError: 'presence: $e'));
       await Telemetry.captureError(
