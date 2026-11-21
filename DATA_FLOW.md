@@ -71,7 +71,10 @@ once its `workerId` is missing from the 120 s active-workers list.
 **Active workers (presence):** the active-workers list comes from Realtime
 Database `presence/{workerId}` entries (`shared/types/worker-presence.ts`):
 an entry seen within the window counts as online. The desktop worker writes
-its own entry every 60 s with an onDisconnect delete. The API reads presence
+its own entry every 60 s with an onDisconnect delete. Before its first write
+it calls `GET /api/me` (`worker_flutter/lib/worker/access_check.dart`), which
+writes the account's `approved/{uid}` entry that the presence rules check;
+an account that is not approved yet stays out of presence. The API reads presence
 for recovery (FAILED-sim retry, sims without a lease) and health checks; the
 frontend's `useWorkerStatus` subscribes to it.
 None of this touches Firestore.
@@ -421,7 +424,7 @@ time.
 | Per-sim claim | `api/lib/claim-sim.test.ts` | `claimNextSim` (SQLite): oldest-first ordering, job promotion QUEUED→RUNNING, sim RUNNING update, skipping terminal jobs; leases: taking over an expired lease, `extendSimLease` extended/cancelled/lost |
 | Sim lease rules | `api/lib/sim-lease.test.ts`, `worker_flutter/test/worker/sim_lease_keeper_test.dart` | Expiry and claimability, lease extension answers, worker-side keeper stops on cancelled/lost and retries failed calls |
 | Desktop worker API calls | `worker_flutter/test/worker/sim_api_test.dart`, `worker_flutter/test/worker/worker_engine_test.dart` | Claim with `lease=1`, lease and PATCH bodies; engine uploads the log before reporting, reports CANCELLED on a cancelled lease and nothing on a lost one |
-| Worker presence | `api/test/worker-presence.test.ts`, `worker_flutter/test/worker/worker_presence_test.dart` | Which entries count as online (stale window), mapping to `WorkerInfo`; desktop writes on connect/reconnect and each tick, arms the onDisconnect delete, removes on stop |
+| Worker presence | `api/test/worker-presence.test.ts`, `worker_flutter/test/worker/worker_presence_test.dart`, `worker_flutter/test/worker/access_check_test.dart` | Which entries count as online (stale window), mapping to `WorkerInfo`; desktop writes on connect/reconnect and each tick, arms the onDisconnect delete, removes on stop |
 | Flutter log upload | `worker_flutter/test/worker/log_uploader_test.dart` | Endpoint, bearer-token auth, signed-out no-op, non-throwing on errors |
 | Auto-coverage asks | `worker_flutter/test/worker/coverage_requester_test.dart`, `worker_flutter/test/worker/worker_engine_test.dart` | Ask throttling, immediate re-ask after a created job, failures never throw; idle engine asks, claims the new job's sims, and asks again on its tick |
 | Aggregation | `api/lib/job-store-aggregation.test.ts` | `aggregateJobResults`: guard conditions, main flow with real logs (game index written, results counted), CANCELLED handling, idempotency, FAILED sims not terminal |

@@ -13,10 +13,11 @@ import 'package:worker_flutter/worker/worker_presence.dart';
 /// by a [FakeFirebaseFirestore] so tests can seed jobs and read sims back
 /// the way the real API stores them.
 ///
-/// Handles claim-sim, the job worker view, lease extension, sim PATCH, log
-/// upload and coverage requests. Records each sim call in [calls] (e.g.
-/// `patch sim-0 COMPLETED`) so tests can assert on order; coverage requests
-/// are only counted, in [coverageRequests], because an idle engine makes
+/// Handles the access check (`/api/me`), claim-sim, the job worker view,
+/// lease extension, sim PATCH, log upload and coverage requests. Records
+/// each sim call in [calls] (e.g. `patch sim-0 COMPLETED`) so tests can
+/// assert on order; access checks and coverage requests are only counted,
+/// in [accessChecks] and [coverageRequests], because an idle engine makes
 /// them at times that depend on scheduling.
 class FakeSimApi {
   FakeSimApi(this.firestore);
@@ -41,6 +42,12 @@ class FakeSimApi {
     'reason': 'disabled',
   };
 
+  /// What `GET /api/me` answers for `isAllowed`.
+  bool isAllowed = true;
+
+  /// How many times `GET /api/me` was called.
+  int accessChecks = 0;
+
   late final ApiClient client = ApiClient(
     baseUrl: 'https://api.test',
     client: MockClient(_handle),
@@ -53,6 +60,10 @@ class FakeSimApi {
 
   Future<http.Response> _handle(http.Request req) async {
     final segments = req.url.pathSegments;
+    if (req.method == 'GET' && req.url.path == '/api/me') {
+      accessChecks++;
+      return http.Response(json.encode({'isAllowed': isAllowed}), 200);
+    }
     if (req.method == 'GET' && req.url.path == '/api/jobs/claim-sim') {
       return _claim(req.url.queryParameters);
     }

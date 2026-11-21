@@ -77,7 +77,8 @@ desktop worker (`shared/types/worker-presence.ts`, rules in
 with an onDisconnect delete; the API and frontend only read them. It also
 holds `approved/{uid}`, a copy of the approved accounts that the API writes
 whenever it lets an account in (`api/lib/approved-users-mirror.ts`), so the
-rules let only approved accounts read or write presence.
+rules let only approved accounts read or write presence. A desktop worker
+calls `GET /api/me` before its first presence write so that entry exists.
 
 **Cloud Storage** (`magic-bracket-simulator-artifacts`) holds per-game
 facts under `jobs/{jobId}/`: raw logs per sim (`raw/game_NNN.txt`, kept
