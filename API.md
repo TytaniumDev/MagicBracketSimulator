@@ -496,12 +496,6 @@ local mode). The web UI reads the same entries directly.
 }
 ```
 
-### Get Worker Health
-
-`GET /health/workers`
-
-Returns a lightweight check on worker pool health (no auth required).
-
 ---
 
 ## Coverage (Internal / Admin)
@@ -630,7 +624,7 @@ Triggers a re-sync of the preconstructed deck library from the source data.
 
 `GET /health`
 
-Unauthenticated system health check. Evaluates stuck jobs, leaderboard ratings, and worker connectivity.
+System health check for approved users. Evaluates stuck jobs, leaderboard ratings, and worker connectivity.
 
 **Response:**
 

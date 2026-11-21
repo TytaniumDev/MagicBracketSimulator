@@ -74,7 +74,10 @@ strings at the edge.
 **Realtime Database** holds `presence/{workerId}`: an entry per online
 desktop worker (`shared/types/worker-presence.ts`, rules in
 `database.rules.json`). Each worker writes its own entry about once a minute
-with an onDisconnect delete; the API and frontend only read them.
+with an onDisconnect delete; the API and frontend only read them. It also
+holds `approved/{uid}`, a copy of the approved accounts that the API writes
+whenever it lets an account in (`api/lib/approved-users-mirror.ts`), so the
+rules let only approved accounts read or write presence.
 
 **Cloud Storage** (`magic-bracket-simulator-artifacts`) holds per-game
 facts under `jobs/{jobId}/`: raw logs per sim (`raw/game_NNN.txt`, kept

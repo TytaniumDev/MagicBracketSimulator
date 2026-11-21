@@ -47,8 +47,7 @@ See [API.md](../API.md) for full endpoint documentation with request/response sh
 | `/api/deck-color-identity` | GET | Resolve color identity for deck names |
 | `/api/leaderboard` | GET | Win-rate leaderboard across all completed sims |
 | `/api/workers` | GET | List active workers + queue depth |
-| `/api/health` | GET | Unauthenticated system health check |
-| `/api/health/workers` | GET | Lightweight worker pool health check |
+| `/api/health` | GET | System health check (approved users) |
 | `/api/me` | GET | Current user profile + permissions |
 | `/api/moxfield-status` | GET | Whether server-side Moxfield import is enabled |
 | `/api/access-requests` | GET, POST | List / submit access requests |
